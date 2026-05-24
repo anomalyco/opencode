@@ -8,6 +8,7 @@ import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
+import { makeRuntime } from "../effect/runtime"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -58,7 +59,6 @@ export const defaultLayer = Layer.unwrap(
   }),
 ).pipe(Layer.provide(Global.defaultLayer))
 
-export function init(options: { path?: string } = {}) {
-  const filename = options.path ?? path()
-  return Effect.runSync(Service.use(() => Effect.void).pipe(Effect.provide(layerFromPath(filename))))
-}
+const { runSync } = makeRuntime(Service, defaultLayer)
+
+export const init = () => runSync(() => Effect.void)

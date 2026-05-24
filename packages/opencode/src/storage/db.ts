@@ -5,7 +5,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { EffectBridge } from "@/effect/bridge"
 import { init } from "#db"
-import { Effect, Schema } from "effect"
+import { Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 
 export const NotFoundError = NamedError.create("NotFoundError", {
@@ -30,7 +30,7 @@ export const Client = Object.assign(
     const dbPath = getPath()
     log.info("opening database", { path: dbPath })
 
-    Database.init({ path: dbPath })
+    Database.init()
 
     const db = init(dbPath)
 

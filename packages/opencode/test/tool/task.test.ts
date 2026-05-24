@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -65,7 +66,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     model: ref,
     time: { created: Date.now() },
   })
-  const assistant: MessageV2.Assistant = {
+  const assistant: SessionLegacy.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: user.id,
@@ -96,7 +97,7 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
   }
 }
 
-function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithParts {
+function reply(input: SessionPrompt.PromptInput, text: string): SessionLegacy.WithParts {
   const id = MessageID.ascending()
   return {
     info: {

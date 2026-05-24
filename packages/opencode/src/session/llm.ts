@@ -1,4 +1,5 @@
 import { Provider } from "@/provider/provider"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer } from "effect"
@@ -31,7 +32,7 @@ const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
 export type StreamInput = {
-  user: MessageV2.User
+  user: SessionLegacy.User
   sessionID: string
   parentSessionID?: string
   model: Provider.Model

@@ -1,4 +1,5 @@
 import * as Tool from "./tool"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import DESCRIPTION from "./task_status.txt"
 import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
@@ -30,14 +31,14 @@ function format(input: { taskID: SessionID; state: State; text: string }) {
   return [`task_id: ${input.taskID}`, `state: ${input.state}`, "", `<${tag}>`, input.text, `</${tag}>`].join("\n")
 }
 
-function errorText(error: NonNullable<MessageV2.Assistant["error"]>) {
+function errorText(error: NonNullable<SessionLegacy.Assistant["error"]>) {
   const data = Reflect.get(error, "data")
   const message = data && typeof data === "object" ? Reflect.get(data, "message") : undefined
   if (typeof message === "string" && message) return message
   return error.name
 }
 
-function inspectMessage(message: MessageV2.WithParts): InspectResult | undefined {
+function inspectMessage(message: SessionLegacy.WithParts): InspectResult | undefined {
   if (message.info.role !== "assistant") return
   const text = message.parts.findLast((part) => part.type === "text")?.text ?? ""
   if (message.info.error) return { state: "error", text: text || errorText(message.info.error) }

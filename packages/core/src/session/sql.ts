@@ -5,11 +5,13 @@ import type { Snapshot } from "../snapshot"
 import { PermissionV2 } from "../permission"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
-import type { MessageID, PartID } from "./legacy"
+import type { MessageID, PartID, Info as LegacyMessageInfo, Part as LegacyMessagePart } from "./legacy"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
+type LegacyMessageData = Omit<LegacyMessageInfo, "id" | "sessionID">
+type LegacyPartData = Omit<LegacyMessagePart, "id" | "sessionID" | "messageID">
 
 export const SessionTable = sqliteTable(
   "session",
@@ -65,7 +67,7 @@ export const MessageTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull(),
+    data: text({ mode: "json" }).notNull().$type<LegacyMessageData>(),
   },
   (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
@@ -80,7 +82,7 @@ export const PartTable = sqliteTable(
       .references(() => MessageTable.id, { onDelete: "cascade" }),
     session_id: text().$type<SessionSchema.ID>().notNull(),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull(),
+    data: text({ mode: "json" }).notNull().$type<LegacyPartData>(),
   },
   (table) => [
     index("part_message_id_id_idx").on(table.message_id, table.id),

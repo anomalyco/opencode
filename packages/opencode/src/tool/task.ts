@@ -1,4 +1,5 @@
 import * as Tool from "./tool"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
 import { BackgroundJob } from "@/background/job"
@@ -19,8 +20,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
-  prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
-  loop(input: SessionPrompt.LoopInput): Effect.Effect<MessageV2.WithParts>
+  prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionLegacy.WithParts>
+  loop(input: SessionPrompt.LoopInput): Effect.Effect<SessionLegacy.WithParts>
 }
 
 const id = "task"

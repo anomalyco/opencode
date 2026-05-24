@@ -1,4 +1,5 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { CliError, effectCmd } from "../effect-cmd"
@@ -12,8 +13,8 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 
-const decodeMessageInfo = Schema.decodeUnknownSync(MessageV2.Info)
-const decodePart = Schema.decodeUnknownSync(MessageV2.Part)
+const decodeMessageInfo = Schema.decodeUnknownSync(SessionLegacy.Info)
+const decodePart = Schema.decodeUnknownSync(SessionLegacy.Part)
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -187,7 +188,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
   )
 
   for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as MessageV2.Info
+    const msgInfo = decodeMessageInfo(msg.info) as SessionLegacy.Info
     const { id, sessionID: _, ...msgData } = msgInfo
     Database.use((db) =>
       db
@@ -203,7 +204,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     )
 
     for (const part of msg.parts) {
-      const partInfo = decodePart(part) as MessageV2.Part
+      const partInfo = decodePart(part) as SessionLegacy.Part
       const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
       Database.use((db) =>
         db

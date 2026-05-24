@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Cause, Effect, Exit, Layer } from "effect"
@@ -335,7 +336,7 @@ describe("session HttpApi", () => {
         const messages = yield* request(`${pathFor(SessionPaths.messages, { sessionID: parent.id })}?limit=1`, {
           headers,
         })
-        const messagePage = yield* json<MessageV2.WithParts[]>(messages)
+        const messagePage = yield* json<SessionLegacy.WithParts[]>(messages)
         const nextCursor = messages.headers.get("x-next-cursor")
         expect(nextCursor).toBeTruthy()
         expect(messagePage[0]?.parts[0]).toMatchObject({ type: "text" })
@@ -352,7 +353,7 @@ describe("session HttpApi", () => {
         ).toBe(400)
 
         expect(
-          yield* requestJson<MessageV2.WithParts>(
+          yield* requestJson<SessionLegacy.WithParts>(
             pathFor(SessionPaths.message, { sessionID: parent.id, messageID: message.info.id }),
             { headers },
           ),
@@ -737,7 +738,7 @@ describe("session HttpApi", () => {
         const first = yield* createTextMessage(session.id, "first")
         const second = yield* createTextMessage(session.id, "second")
 
-        const updated = yield* requestJson<MessageV2.Part>(
+        const updated = yield* requestJson<SessionLegacy.Part>(
           pathFor(SessionPaths.updatePart, {
             sessionID: session.id,
             messageID: first.info.id,

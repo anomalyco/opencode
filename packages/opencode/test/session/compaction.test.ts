@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { APICallError } from "ai"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -296,7 +297,7 @@ function readCompactionPart(sessionID: SessionID) {
     .messages({ sessionID })
     .pipe(
       Effect.map((messages) =>
-        messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
+        messages.at(-2)?.parts.find((item): item is SessionLegacy.CompactionPart => item.type === "compaction"),
       ),
     )
 }
@@ -623,7 +624,7 @@ describe("session.compaction.prune", () => {
             type: "text",
             text: "first",
           })
-          const b: MessageV2.Assistant = {
+          const b: SessionLegacy.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID: info.id,
@@ -719,7 +720,7 @@ describe("session.compaction.prune", () => {
           type: "text",
           text: "first",
         })
-        const b: MessageV2.Assistant = {
+        const b: SessionLegacy.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
           sessionID: info.id,

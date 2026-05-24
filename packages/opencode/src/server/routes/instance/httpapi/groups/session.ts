@@ -1,4 +1,5 @@
 import { Permission } from "@/permission"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session/session"
@@ -175,7 +176,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("messages", SessionPaths.messages, {
           params: { sessionID: SessionID },
           query: MessagesQuery,
-          success: described(Schema.Array(MessageV2.WithParts), "List of messages"),
+          success: described(Schema.Array(SessionLegacy.WithParts), "List of messages"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -187,7 +188,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("message", SessionPaths.message, {
           params: { sessionID: SessionID, messageID: MessageID },
           query: WorkspaceRoutingQuery,
-          success: described(MessageV2.WithParts, "Message"),
+          success: described(SessionLegacy.WithParts, "Message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -313,7 +314,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: PromptPayload,
-          success: described(MessageV2.WithParts, "Created message"),
+          success: described(SessionLegacy.WithParts, "Created message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -340,7 +341,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: CommandPayload,
-          success: described(MessageV2.WithParts, "Created message"),
+          success: described(SessionLegacy.WithParts, "Created message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -353,7 +354,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: ShellPayload,
-          success: described(MessageV2.WithParts, "Created message"),
+          success: described(SessionLegacy.WithParts, "Created message"),
           error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
@@ -429,8 +430,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
           query: WorkspaceRoutingQuery,
-          payload: MessageV2.Part,
-          success: described(MessageV2.Part, "Successfully updated part"),
+          payload: SessionLegacy.Part,
+          success: described(SessionLegacy.Part, "Successfully updated part"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({

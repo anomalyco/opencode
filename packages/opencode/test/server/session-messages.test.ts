@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Effect } from "effect"
 import { Server } from "../../src/server/server"
 import { Session as SessionNs } from "@/session/session"
@@ -62,14 +63,14 @@ const fill = Effect.fn("SessionMessagesTest.fill")(function* (
           agent: "test",
           model,
           tools: {},
-        } satisfies MessageV2.User)
+        } satisfies SessionLegacy.User)
         yield* session.updatePart({
           id: PartID.ascending(),
           sessionID,
           messageID: id,
           type: "text",
           text: `m${i}`,
-        } satisfies MessageV2.TextPart)
+        } satisfies SessionLegacy.TextPart)
         return id
       }),
   )
@@ -93,7 +94,7 @@ describe("session messages endpoint", () => {
 
         const a = yield* request(`/session/${session.id}/message?limit=2`)
         expect(a.status).toBe(200)
-        const aBody = yield* json<MessageV2.WithParts[]>(a)
+        const aBody = yield* json<SessionLegacy.WithParts[]>(a)
         expect(aBody.map((item) => item.info.id)).toEqual(ids.slice(-2))
         const cursor = a.headers.get("x-next-cursor")
         expect(cursor).toBeTruthy()
@@ -101,7 +102,7 @@ describe("session messages endpoint", () => {
 
         const b = yield* request(`/session/${session.id}/message?limit=2&before=${encodeURIComponent(cursor!)}`)
         expect(b.status).toBe(200)
-        const bBody = yield* json<MessageV2.WithParts[]>(b)
+        const bBody = yield* json<SessionLegacy.WithParts[]>(b)
         expect(bBody.map((item) => item.info.id)).toEqual(ids.slice(-4, -2))
       }),
     ),
@@ -117,7 +118,7 @@ describe("session messages endpoint", () => {
 
         const res = yield* request(`/session/${session.id}/message`)
         expect(res.status).toBe(200)
-        const body = yield* json<MessageV2.WithParts[]>(res)
+        const body = yield* json<SessionLegacy.WithParts[]>(res)
         expect(body.map((item) => item.info.id)).toEqual(ids)
       }),
     ),
@@ -149,7 +150,7 @@ describe("session messages endpoint", () => {
 
         const res = yield* request(`/session/${session.id}/message?limit=510`)
         expect(res.status).toBe(200)
-        const body = yield* json<MessageV2.WithParts[]>(res)
+        const body = yield* json<SessionLegacy.WithParts[]>(res)
         expect(body).toHaveLength(510)
       }),
     ),

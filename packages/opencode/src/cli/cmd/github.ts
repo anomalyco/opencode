@@ -1,4 +1,5 @@
 import path from "path"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
@@ -159,7 +160,7 @@ export { parseGitHubRemote }
  * Returns null for non-text responses (signals summary needed).
  * Throws only for truly empty responses.
  */
-export function extractResponseText(parts: MessageV2.Part[]): string | null {
+export function extractResponseText(parts: SessionLegacy.Part[]): string | null {
   const textPart = parts.findLast((p) => p.type === "text")
   if (textPart) return textPart.text
 

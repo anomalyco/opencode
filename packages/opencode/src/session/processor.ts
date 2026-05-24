@@ -1,4 +1,5 @@
 import { Image } from "@/image/image"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
@@ -35,25 +36,25 @@ const log = Log.create({ service: "session.processor" })
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
-  readonly message: MessageV2.Assistant
+  readonly message: SessionLegacy.Assistant
   readonly updateToolCall: (
     toolCallID: string,
-    update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
-  ) => Effect.Effect<MessageV2.ToolPart | undefined>
+    update: (part: SessionLegacy.ToolPart) => SessionLegacy.ToolPart,
+  ) => Effect.Effect<SessionLegacy.ToolPart | undefined>
   readonly completeToolCall: (
     toolCallID: string,
     output: {
       title: string
       metadata: Record<string, any>
       output: string
-      attachments?: MessageV2.FilePart[]
+      attachments?: SessionLegacy.FilePart[]
     },
   ) => Effect.Effect<void>
   readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
 }
 
 type Input = {
-  assistantMessage: MessageV2.Assistant
+  assistantMessage: SessionLegacy.Assistant
   sessionID: SessionID
   model: Provider.Model
 }
@@ -63,9 +64,9 @@ export interface Interface {
 }
 
 type ToolCall = {
-  partID: MessageV2.ToolPart["id"]
-  messageID: MessageV2.ToolPart["messageID"]
-  sessionID: MessageV2.ToolPart["sessionID"]
+  partID: SessionLegacy.ToolPart["id"]
+  messageID: SessionLegacy.ToolPart["messageID"]
+  sessionID: SessionLegacy.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
   inputEnded: boolean
 }
@@ -76,8 +77,8 @@ interface ProcessorContext extends Input {
   snapshot: string | undefined
   blocked: boolean
   needsCompaction: boolean
-  currentText: MessageV2.TextPart | undefined
-  reasoningMap: Record<string, MessageV2.ReasoningPart>
+  currentText: SessionLegacy.TextPart | undefined
+  reasoningMap: Record<string, SessionLegacy.ReasoningPart>
 }
 
 type StreamEvent = LLMEvent
@@ -151,7 +152,7 @@ export const layer = Layer.effect(
 
       const updateToolCall = Effect.fn("SessionProcessor.updateToolCall")(function* (
         toolCallID: string,
-        update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
+        update: (part: SessionLegacy.ToolPart) => SessionLegacy.ToolPart,
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match) return undefined
@@ -171,7 +172,7 @@ export const layer = Layer.effect(
           title: string
           metadata: Record<string, any>
           output: string
-          attachments?: MessageV2.FilePart[]
+          attachments?: SessionLegacy.FilePart[]
         },
       ) {
         const match = yield* readToolCall(toolCallID)
@@ -266,7 +267,7 @@ export const layer = Layer.effect(
           callID: input.id,
           state: { status: "pending", input: {}, raw: "" },
           metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
-        } satisfies MessageV2.ToolPart)
+        } satisfies SessionLegacy.ToolPart)
         ctx.toolcalls[input.id] = {
           done: yield* Deferred.make<void>(),
           partID: part.id,
@@ -277,11 +278,11 @@ export const layer = Layer.effect(
         return { call: ctx.toolcalls[input.id], part }
       })
 
-      const isFilePart = (value: unknown): value is MessageV2.FilePart => Schema.is(MessageV2.FilePart)(value)
+      const isFilePart = (value: unknown): value is SessionLegacy.FilePart => Schema.is(SessionLegacy.FilePart)(value)
 
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
-      ): { title: string; metadata: Record<string, any>; output: string; attachments?: MessageV2.FilePart[] } => {
+      ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionLegacy.FilePart[] } => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
@@ -461,7 +462,7 @@ export const layer = Layer.effect(
                     ),
                     Effect.exit,
                   )
-                : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
+                : Effect.succeed(Exit.succeed<SessionLegacy.FilePart>(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
@@ -484,7 +485,7 @@ export const layer = Layer.effect(
                     type: "text",
                     text: output.output,
                   },
-                  ...(output.attachments?.map((item: MessageV2.FilePart) => ({
+                  ...(output.attachments?.map((item: SessionLegacy.FilePart) => ({
                     type: "file" as const,
                     uri: item.url,
                     mime: item.mime,
@@ -751,7 +752,7 @@ export const layer = Layer.effect(
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
         const error = parse(e)
-        if (MessageV2.ContextOverflowError.isInstance(error)) {
+        if (SessionLegacy.ContextOverflowError.isInstance(error)) {
           ctx.needsCompaction = true
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return

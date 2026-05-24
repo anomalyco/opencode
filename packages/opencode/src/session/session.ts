@@ -1,4 +1,5 @@
 import { Slug } from "@opencode-ai/core/util/slug"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
@@ -361,9 +362,9 @@ export const Event = {
     "session.error",
     Schema.Struct({
       sessionID: Schema.optional(SessionID),
-      // Reuses MessageV2.Assistant.fields.error (already Schema.optional) so
+      // Reuses SessionLegacy.Assistant.fields.error (already Schema.optional) so
       // the derived zod keeps the same discriminated-union shape on the bus.
-      error: MessageV2.Assistant.fields.error,
+      error: SessionLegacy.Assistant.fields.error,
     }),
   ),
 }
@@ -472,18 +473,18 @@ export interface Interface {
   readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
-  readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[], NotFound>
+  readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionLegacy.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
-  readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
+  readonly updateMessage: <T extends SessionLegacy.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
   readonly getPart: (input: {
     sessionID: SessionID
     messageID: MessageID
     partID: PartID
-  }) => Effect.Effect<MessageV2.Part | undefined>
-  readonly updatePart: <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
+  }) => Effect.Effect<SessionLegacy.Part | undefined>
+  readonly updatePart: <T extends SessionLegacy.Part>(part: T) => Effect.Effect<T>
   readonly updatePartDelta: (input: {
     sessionID: SessionID
     messageID: MessageID
@@ -494,8 +495,8 @@ export interface Interface {
   /** Finds the first message matching the predicate, searching newest-first. */
   readonly findMessage: (
     sessionID: SessionID,
-    predicate: (msg: MessageV2.WithParts) => boolean,
-  ) => Effect.Effect<Option.Option<MessageV2.WithParts>, NotFound>
+    predicate: (msg: SessionLegacy.WithParts) => boolean,
+  ) => Effect.Effect<Option.Option<SessionLegacy.WithParts>, NotFound>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -615,13 +616,13 @@ export const layer: Layer.Layer<
       }
     })
 
-    const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
+    const updateMessage = <T extends SessionLegacy.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         yield* sync.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
-    const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
+    const updatePart = <T extends SessionLegacy.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         yield* sync.run(MessageV2.Event.PartUpdated, {
           sessionID: part.sessionID,
@@ -647,11 +648,11 @@ export const layer: Layer.Layer<
       )
       if (!row) return
       return {
-        ...(row.data as object),
+        ...row.data,
         id: row.id,
         sessionID: row.session_id,
         messageID: row.message_id,
-      } as MessageV2.Part
+      } as SessionLegacy.Part
     })
 
     const create = Effect.fn("Session.create")(function* (input?: {
@@ -703,7 +704,7 @@ export const layer: Layer.Layer<
         })
 
         for (const part of msg.parts) {
-          const p: MessageV2.Part = {
+          const p: SessionLegacy.Part = {
             ...part,
             id: PartID.ascending(),
             messageID: cloned.id,
@@ -770,7 +771,7 @@ export const layer: Layer.Layer<
       }
 
       const size = 50
-      const result = [] as MessageV2.WithParts[]
+      const result = [] as SessionLegacy.WithParts[]
       let before: string | undefined
       while (true) {
         const page = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before })
@@ -833,7 +834,7 @@ export const layer: Layer.Layer<
         if (!page.more || !page.cursor) break
         before = page.cursor
       }
-      return Option.none<MessageV2.WithParts>()
+      return Option.none<SessionLegacy.WithParts>()
     })
 
     return Service.of({

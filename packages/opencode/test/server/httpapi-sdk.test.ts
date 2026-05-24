@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { ConfigProvider, Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpRouter } from "effect/unstable/http"
@@ -312,7 +313,7 @@ function seedMessage(directory: string, sessionID: string) {
             agent: "test",
             model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
             tools: {},
-          } satisfies MessageV2.User)
+          } satisfies SessionLegacy.User)
           const part = yield* svc.updatePart({
             id: PartID.ascending(),
             sessionID: id,

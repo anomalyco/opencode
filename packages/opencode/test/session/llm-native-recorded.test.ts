@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
@@ -392,7 +393,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
         time: { created: 0 },
         agent: agent.name,
         model: { providerID: scenario.providerID, modelID },
-      } satisfies MessageV2.User,
+      } satisfies SessionLegacy.User,
       sessionID,
       model: resolved,
       agent,

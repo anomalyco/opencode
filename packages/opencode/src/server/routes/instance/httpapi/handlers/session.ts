@@ -1,4 +1,5 @@
 import { Agent } from "@/agent/agent"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
@@ -389,10 +390,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const updatePart = Effect.fn("SessionHttpApi.updatePart")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
-      payload: typeof MessageV2.Part.Type
+      payload: typeof SessionLegacy.Part.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      const payload = ctx.payload as MessageV2.Part
+      const payload = ctx.payload as SessionLegacy.Part
       if (
         payload.id !== ctx.params.partID ||
         payload.messageID !== ctx.params.messageID ||

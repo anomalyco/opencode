@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
@@ -121,14 +122,14 @@ describe("step-finish token propagation via Bus event", () => {
           model: { providerID: "test", modelID: "test" },
           tools: {},
           mode: "",
-        } as unknown as MessageV2.Info)
+        } as unknown as SessionLegacy.Info)
 
-        // Bus subscribers receive readonly Schema.Type payloads; `MessageV2.Part`
+        // Bus subscribers receive readonly Schema.Type payloads; `SessionLegacy.Part`
         // is the mutable domain type. Cast bridges the two — safe because the
         // test only reads the value afterwards.
-        const received = yield* Deferred.make<MessageV2.Part>()
+        const received = yield* Deferred.make<SessionLegacy.Part>()
         const unsub = subscribeGlobal(MessageV2.Event.PartUpdated.type, (event) => {
-          Deferred.doneUnsafe(received, Effect.succeed(event.properties.part as MessageV2.Part))
+          Deferred.doneUnsafe(received, Effect.succeed(event.properties.part as SessionLegacy.Part))
         })
         yield* Effect.addFinalizer(() => Effect.sync(unsub))
 
@@ -154,7 +155,7 @@ describe("step-finish token propagation via Bus event", () => {
         const receivedPart = yield* awaitDeferred(received, "timed out waiting for message.part.updated")
 
         expect(receivedPart.type).toBe("step-finish")
-        const finish = receivedPart as MessageV2.StepFinishPart
+        const finish = receivedPart as SessionLegacy.StepFinishPart
         expect(finish.tokens.input).toBe(500)
         expect(finish.tokens.output).toBe(800)
         expect(finish.tokens.reasoning).toBe(200)

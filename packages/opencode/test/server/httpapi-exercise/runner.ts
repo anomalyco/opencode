@@ -1,4 +1,5 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Cause, Duration, Effect } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
@@ -140,7 +141,7 @@ function withContext<A, E>(
             }),
           message: (sessionID, input) =>
             Effect.gen(function* () {
-              const info: MessageV2.User = {
+              const info: SessionLegacy.User = {
                 id: MessageID.ascending(),
                 sessionID,
                 role: "user",
@@ -151,7 +152,7 @@ function withContext<A, E>(
                   modelID: ModelID.make("test"),
                 },
               }
-              const part: MessageV2.TextPart = {
+              const part: SessionLegacy.TextPart = {
                 id: PartID.ascending(),
                 sessionID,
                 messageID: info.id,

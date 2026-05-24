@@ -1,4 +1,5 @@
 import { NotFoundError } from "@/storage/storage"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { eq } from "drizzle-orm"
 import { and } from "drizzle-orm"
 import { sql } from "drizzle-orm"
@@ -21,9 +22,9 @@ function foreign(err: unknown) {
 
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
 
-type Usage = Pick<MessageV2.StepFinishPart, "cost" | "tokens">
+type Usage = Pick<SessionLegacy.StepFinishPart, "cost" | "tokens">
 
-function usage(part: MessageV2.Part | unknown): Usage | undefined {
+function usage(part: SessionLegacy.Part | unknown): Usage | undefined {
   if (typeof part !== "object" || part === null) return undefined
   const value = part as Record<string, unknown>
   if (value.type !== "step-finish") return undefined
@@ -134,9 +135,9 @@ export default [
           id,
           session_id: sessionID,
           time_created,
-          data: rest as never,
+          data: rest,
         })
-        .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest as never } })
+        .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest } })
         .run()
     } catch (err) {
       if (!foreign(err)) throw err

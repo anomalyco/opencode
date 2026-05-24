@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
@@ -130,7 +131,7 @@ describe("revert + compact workflow", () => {
             text: "Hello, please help me",
           })
 
-          const assistantMsg1: MessageV2.Assistant = {
+          const assistantMsg1: SessionLegacy.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID,
@@ -187,7 +188,7 @@ describe("revert + compact workflow", () => {
             text: "What's the capital of France?",
           })
 
-          const assistantMsg2: MessageV2.Assistant = {
+          const assistantMsg2: SessionLegacy.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID,
@@ -292,7 +293,7 @@ describe("revert + compact workflow", () => {
             text: "Hello",
           })
 
-          const assistantMsg: MessageV2.Assistant = {
+          const assistantMsg: SessionLegacy.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID,

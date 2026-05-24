@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
@@ -732,7 +733,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make(vivgridFixture.providerID), modelID: resolved.id, variant: "high" },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -803,7 +804,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         const fiber = yield* drain({
           user,
@@ -873,7 +874,7 @@ describe("session.llm.stream", () => {
           agent: agent.name,
           model: { providerID: ProviderID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
           tools: { question: true },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -975,7 +976,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -1089,7 +1090,7 @@ describe("session.llm.stream", () => {
               time: { created: Date.now() },
               agent: agent.name,
               model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
-            } satisfies MessageV2.User,
+            } satisfies SessionLegacy.User,
             sessionID,
             model: resolved,
             agent,
@@ -1151,7 +1152,7 @@ describe("session.llm.stream", () => {
             time: { created: Date.now() },
             agent: agent.name,
             model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
-          } satisfies MessageV2.User,
+          } satisfies SessionLegacy.User,
           sessionID,
           model: resolved,
           agent,
@@ -1234,7 +1235,7 @@ describe("session.llm.stream", () => {
             time: { created: Date.now() },
             agent: agent.name,
             model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-          } satisfies MessageV2.User,
+          } satisfies SessionLegacy.User,
           sessionID,
           model: resolved,
           agent,
@@ -1322,7 +1323,7 @@ describe("session.llm.stream", () => {
             time: { created: Date.now() },
             agent: agent.name,
             model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-          } satisfies MessageV2.User,
+          } satisfies SessionLegacy.User,
           sessionID,
           model: resolved,
           agent,
@@ -1447,7 +1448,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -1539,7 +1540,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.5") },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -1630,7 +1631,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id, variant: "max" },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         const input = [
           {
@@ -1832,7 +1833,7 @@ describe("session.llm.stream", () => {
           time: { created: Date.now() },
           agent: agent.name,
           model: { providerID: ProviderID.make(geminiFixture.providerID), modelID: resolved.id },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,

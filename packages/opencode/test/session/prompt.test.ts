@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
@@ -90,20 +91,20 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   )
 }
 
-function toolPart(parts: MessageV2.Part[]) {
-  return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+function toolPart(parts: SessionLegacy.Part[]) {
+  return parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
 }
 
-type CompletedToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }
-type ErrorToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateError }
+type CompletedToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateCompleted }
+type ErrorToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateError }
 
-function completedTool(parts: MessageV2.Part[]) {
+function completedTool(parts: SessionLegacy.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("completed")
   return part?.state.status === "completed" ? (part as CompletedToolPart) : undefined
 }
 
-function errorTool(parts: MessageV2.Part[]) {
+function errorTool(parts: SessionLegacy.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("error")
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
@@ -388,7 +389,7 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: strin
 const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { finish?: string }) {
   const session = yield* Session.Service
   const msg = yield* user(sessionID, "hello")
-  const assistant: MessageV2.Assistant = {
+  const assistant: SessionLegacy.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: msg.id,
@@ -748,7 +749,7 @@ it.instance(
         Effect.gen(function* () {
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-          const tool = taskMsg?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+          const tool = taskMsg?.parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
         "timed out waiting for running subtask metadata",
@@ -791,7 +792,7 @@ it.instance(
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
           const tool = assistant?.parts.find(
-            (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
+            (part): part is SessionLegacy.ToolPart => part.type === "tool" && part.tool === "task",
           )
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
@@ -1910,11 +1911,11 @@ noLLMServer.instance(
         "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
       )
       const references = parts.filter(
-        (part): part is MessageV2.TextPartInput =>
+        (part): part is SessionLegacy.TextPartInput =>
           part.type === "text" && part.synthetic === true && part.text.startsWith("Referenced configured reference "),
       )
-      const files = parts.filter((part): part is MessageV2.FilePartInput => part.type === "file")
-      const agents = parts.filter((part): part is MessageV2.AgentPartInput => part.type === "agent")
+      const files = parts.filter((part): part is SessionLegacy.FilePartInput => part.type === "file")
+      const agents = parts.filter((part): part is SessionLegacy.AgentPartInput => part.type === "agent")
       const bare = references.find((part) => part.text.includes("@docs."))
       const missing = references.find((part) => part.text.includes("@docs/missing.md"))
       const guide = files.find((part) => part.filename === "docs/guide")
@@ -1967,7 +1968,7 @@ noLLMServer.instance(
 
       const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
-        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        (part): part is SessionLegacy.TextPart => part.type === "text" && part.synthetic === true,
       )
       const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs."))
 
@@ -2022,7 +2023,7 @@ noLLMServer.instance(
 
       const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
-        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        (part): part is SessionLegacy.TextPart => part.type === "text" && part.synthetic === true,
       )
       const reference = synthetic.find((part) =>
         part.text.startsWith("Referenced configured reference @docs/README.md."),
