@@ -3,21 +3,28 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
+import { Sqlite } from "./sqlite"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
 import { InstallationChannel } from "../installation/version"
-import { makeRuntime } from "../effect/runtime"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
+export type Info = {
+  db: DatabaseShape
+  native: unknown
+  drizzle: Sqlite.DrizzleClient
+}
 
-export class Service extends Context.Service<Service, DatabaseShape>()("@opencode/v2/storage/Database") {}
+export class Service extends Context.Service<Service, Info>()("@opencode/v2/storage/Database") {}
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const native = yield* Sqlite.Native
+    const drizzle = yield* Sqlite.Drizzle
     const db = yield* makeDatabase
 
     yield* db.run("PRAGMA journal_mode = WAL")
@@ -29,12 +36,12 @@ const layer = Layer.effect(
     yield* Effect.log("Applying database migrations")
     yield* DatabaseMigration.apply(db)
 
-    return db
+    return { db, native, drizzle }
   }).pipe(Effect.orDie),
 )
 
 export function layerFromPath(filename: string) {
-  return layer.pipe(Layer.provide(sqliteLayer({ filename })), Layer.orDie)
+  return layer.pipe(Layer.provide(sqliteLayer({ filename })))
 }
 
 export const memoryLayer = layerFromPath(":memory:")
@@ -58,7 +65,3 @@ export const defaultLayer = Layer.unwrap(
     return layerFromPath(path())
   }),
 ).pipe(Layer.provide(Global.defaultLayer))
-
-const { runSync } = makeRuntime(Service, defaultLayer)
-
-export const init = () => runSync(() => Effect.void)

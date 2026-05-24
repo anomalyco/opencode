@@ -171,7 +171,7 @@ function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const db = yield* Database.Service
+    const db = (yield* Database.Service).db
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>

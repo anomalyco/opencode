@@ -1,25 +1,27 @@
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
+import type { TablesRelationalConfig } from "drizzle-orm/relations"
 export * from "drizzle-orm"
 import { LocalContext } from "@/util/local-context"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { EffectBridge } from "@/effect/bridge"
-import { init } from "#db"
 import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { DatabaseMigration } from "@opencode-ai/core/database/migration"
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 
 export const NotFoundError = NamedError.create("NotFoundError", {
   message: Schema.String,
 })
 
 const log = Log.create({ service: "db" })
+const runtime = makeRuntime(Database.Service, Database.defaultLayer)
+const database = await runtime.runPromise((db) => Effect.succeed(db))
 
 export const getPath = () => Database.path()
 
-export type Transaction = SQLiteTransaction<"sync", void>
+export type Transaction = SQLiteTransaction<"sync", void, Record<string, unknown>, TablesRelationalConfig>
 
-type Client = ReturnType<typeof init>
+type Client = Database.Info["drizzle"]
 
 let client: Client | undefined
 let loaded = false
@@ -31,7 +33,7 @@ export const Client = Object.assign(
     const dbPath = getPath()
     log.info("opening database", { path: dbPath })
 
-    const db = init(dbPath)
+    const db = database.drizzle
 
     db.run("PRAGMA journal_mode = WAL")
     db.run("PRAGMA synchronous = NORMAL")
@@ -39,7 +41,6 @@ export const Client = Object.assign(
     db.run("PRAGMA cache_size = -64000")
     db.run("PRAGMA foreign_keys = ON")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
-    Effect.runSync(DatabaseMigration.apply(db))
 
     client = db
     loaded = true
@@ -56,7 +57,6 @@ export const Client = Object.assign(
 
 export function close() {
   if (!Client.loaded()) return
-  client?.$client.close()
   Client.reset()
 }
 
