@@ -170,10 +170,11 @@ export const TaskTool = Tool.define(
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const parentAssistant = msg.info
 
       const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
+        modelID: parentAssistant.modelID,
+        providerID: parentAssistant.providerID,
       }
       const metadata = {
         parentSessionId: ctx.sessionID,
@@ -201,6 +202,10 @@ export const TaskTool = Tool.define(
             providerID: model.providerID,
           },
           agent: next.name,
+          variant:
+            !next.variant && model.providerID === parentAssistant.providerID && model.modelID === parentAssistant.modelID
+              ? parentAssistant.variant
+              : undefined,
           tools: {
             ...(next.permission.some((rule) => rule.permission === "todowrite") ? {} : { todowrite: false }),
             ...(next.permission.some((rule) => rule.permission === id) ? {} : { task: false }),

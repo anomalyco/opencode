@@ -54,7 +54,10 @@ function defer<T>() {
   return { promise, resolve }
 }
 
-const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
+const seed = Effect.fn("TaskToolTest.seed")(function* (
+  title = "Pinned",
+  opts?: { assistantVariant?: string; assistantModel?: typeof ref },
+) {
   const session = yield* Session.Service
   const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
@@ -75,8 +78,9 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     cost: 0,
     path: { cwd: "/tmp", root: "/tmp" },
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    modelID: ref.modelID,
-    providerID: ref.providerID,
+    modelID: opts?.assistantModel?.modelID ?? ref.modelID,
+    providerID: opts?.assistantModel?.providerID ?? ref.providerID,
+    variant: opts?.assistantVariant,
     time: { created: Date.now() },
   }
   yield* session.updateMessage(assistant)
@@ -239,6 +243,177 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.output).toContain(`task_id: ${child.id}`)
       expect(seen?.sessionID).toBe(child.id)
+    }),
+  )
+
+  it.instance("inherits parent variant for same-model subagent without configured variant", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed("Pinned", { assistantVariant: "xhigh" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+
+      yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.variant).toBe("xhigh")
+    }),
+  )
+
+  it.instance(
+    "does not override configured subagent variant with parent variant",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed("Pinned", { assistantVariant: "xhigh" })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "reviewer",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(seen?.variant).toBeUndefined()
+      }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+            variant: "high",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "does not inherit parent variant for explicit different child model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed("Pinned", { assistantVariant: "xhigh" })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "reviewer",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(seen?.model).toEqual({ providerID: ProviderID.make("other"), modelID: ModelID.make("other-model") })
+        expect(seen?.variant).toBeUndefined()
+      }),
+    {
+      config: {
+        agent: {
+          reviewer: {
+            mode: "subagent",
+            model: "other/other-model",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance("persists inherited parent variant in child session history", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed("Pinned", { assistantVariant: "xhigh" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: (input) =>
+                Effect.gen(function* () {
+                  const user = yield* sessions.updateMessage({
+                    id: input.messageID ?? MessageID.ascending(),
+                    role: "user",
+                    sessionID: input.sessionID,
+                    agent: input.agent ?? "general",
+                    model: {
+                      providerID: input.model?.providerID ?? ref.providerID,
+                      modelID: input.model?.modelID ?? ref.modelID,
+                      variant: input.variant,
+                    },
+                    time: { created: Date.now() },
+                  })
+                  const parts = input.parts.map((part) => ({
+                    ...part,
+                    id: part.id ?? PartID.ascending(),
+                    messageID: user.id,
+                    sessionID: input.sessionID,
+                  }))
+                  yield* Effect.forEach(parts, (part) => sessions.updatePart(part), { discard: true })
+                  return reply(input, "done")
+                }),
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const messages = yield* sessions.messages({ sessionID: result.metadata.sessionId })
+      const childUser = messages.find((message) => message.info.role === "user")
+      expect(childUser?.info.role).toBe("user")
+      if (childUser?.info.role === "user") expect(childUser.info.model.variant).toBe("xhigh")
     }),
   )
 

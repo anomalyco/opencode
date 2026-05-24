@@ -315,7 +315,10 @@ export const layer = Layer.effect(
         sessionID,
         mode: task.agent,
         agent: task.agent,
-        variant: lastUser.model.variant,
+        variant:
+          taskModel.providerID === lastUser.model.providerID && taskModel.id === lastUser.model.modelID
+            ? lastUser.model.variant
+            : undefined,
         path: { cwd: ctx.directory, root: ctx.worktree },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -704,7 +707,7 @@ export const layer = Layer.effect(
           .get(),
       )
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
-      const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
+      const same = !ag.model || (model.providerID === ag.model.providerID && model.modelID === ag.model.modelID)
       const full =
         !input.variant && ag.variant && same
           ? yield* provider

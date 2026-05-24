@@ -41,6 +41,7 @@ import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "@/tool/registry"
+import type { Tool } from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -985,7 +986,7 @@ noLLMServer.instance(
       const registry = yield* ToolRegistry.Service
       const { task } = yield* registry.named()
       const original = task.execute
-      task.execute = (_args, ctx) =>
+      task.execute = (_args: unknown, ctx: Tool.Context) =>
         Effect.callback<never>((_resume) => {
           ctx.abort.addEventListener("abort", () => succeedVoid(aborted), { once: true })
           if (ctx.abort.aborted) succeedVoid(aborted)
@@ -2225,6 +2226,135 @@ noLLMServer.instance(
       },
     },
   },
+)
+
+noLLMServer.instance(
+  "applies agent variant to inherited model when supported",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const result = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      if (result.info.role !== "user") throw new Error("expected user message")
+      expect(result.info.model).toEqual({
+        providerID: ProviderID.make("test"),
+        modelID: ModelID.make("test-model"),
+        variant: "xhigh",
+      })
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { xhigh: {}, high: {} },
+            },
+          },
+        },
+      },
+      agent: {
+        build: {
+          variant: "xhigh",
+        },
+      },
+      model: "test/test-model",
+    },
+  },
+)
+
+it.instance(
+  "subtask explicit different model does not copy parent variant",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        provider: {
+          ...providerCfg(url).provider,
+          other: {
+            ...cfg.provider.test,
+            id: "other",
+            name: "Other",
+            models: {
+              "other-model": {
+                ...cfg.provider.test.models["test-model"],
+                id: "other-model",
+                name: "Other Model",
+              },
+            },
+          },
+        },
+      }))
+      const registry = yield* ToolRegistry.Service
+      const sessions = yield* Session.Service
+      const { task } = yield* registry.named()
+      const original = task.execute
+      task.execute = (_args: unknown, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const message = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
+          expect(message.info.role).toBe("assistant")
+          if (message.info.role !== "assistant") return yield* Effect.die("expected assistant message")
+          expect(message.info.modelID).toBe(ModelID.make("other-model"))
+          expect(message.info.providerID).toBe(ProviderID.make("other"))
+          expect(message.info.variant).toBeUndefined()
+          return {
+            title: "inspect bug",
+            output: "done",
+            metadata: {
+              parentSessionId: ctx.sessionID,
+              sessionId: ctx.sessionID,
+              model: {
+                providerID: message.info.providerID,
+                modelID: message.info.modelID,
+              },
+            },
+          }
+        })
+      yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
+
+      const { prompt, chat } = yield* boot()
+      const parent = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: { ...ref, variant: "xhigh" },
+        time: { created: Date.now() },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: parent.id,
+        sessionID: chat.id,
+        type: "subtask",
+        prompt: "look into the cache key path",
+        description: "inspect bug",
+        agent: "general",
+        model: { providerID: ProviderID.make("other"), modelID: ModelID.make("other-model") },
+      })
+
+      yield* llm.text("done")
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+
+      const messages = yield* MessageV2.filterCompactedEffect(chat.id)
+      const taskMessage = messages.find(
+        (message) => message.info.role === "assistant" && message.info.agent === "general",
+      )
+      expect(taskMessage?.info.role).toBe("assistant")
+      if (taskMessage?.info.role === "assistant") expect(taskMessage.info.variant).toBeUndefined()
+    }),
 )
 
 // Agent / command resolution errors
