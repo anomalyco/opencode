@@ -157,6 +157,14 @@ function mediaKindFromPath(p: string | undefined): { kind: MediaKind; mimes: str
   return null
 }
 
+// FORK: pdf-like 检测(PDF + Office) — ContextMenuHost data-slot 条件性 wrap 用
+// 用 wrapper 替代直接改 packages/ui/.../pdf.tsx(后者在 R4 黑名单)。等价效果。
+// [feat: office-选中加聊天] 2026-05-24
+function isPdfLikePath(p: string | undefined): boolean {
+  if (!p) return false
+  return p.toLowerCase().endsWith(".pdf") || isOfficeDocument(p)
+}
+
 function rangeAt(source: string, offset: number, len: number) {
   const before = source.slice(0, offset)
   const inner = source.slice(offset, offset + len)
@@ -1461,7 +1469,12 @@ export function FileTabContent(props: {
   )
 
   // FORK: 默认渲染路径(@pierre/diffs / fileComponent)— 提取成独立 helper 以便 HTML 源码视图复用 2026-05-05
-  const renderDefault = (source: string) => (
+  //
+  // FORK: PDF/office 文件外层加 data-slot="pdf-viewer" wrap,让 ContextMenuHost 识别预览区
+  // 接管右键(capture 阶段 preventDefault,mdMenu 走 bubble 不会触发)。
+  // wrap 用 display:contents 不影响布局。[feat: office-选中加聊天] 2026-05-24
+  const renderDefault = (source: string) => {
+    const inner = (
     <div class="relative overflow-hidden pb-40" onMouseDown={handlePreContextCapture} onContextMenu={handleSelectionContextMenu}>
       <Dynamic
         component={fileComponent}
@@ -1563,7 +1576,12 @@ export function FileTabContent(props: {
         }}
       />
     </div>
-  )
+    )
+    if (isPdfLikePath(path())) {
+      return <div data-slot="pdf-viewer" class="contents">{inner}</div>
+    }
+    return inner
+  }
 
   // FORK: HTML 预览 — iframe 占满,无顶部 toolbar;右键 → 编辑 进 CodeMirror html 源码模式
   // sandbox: allow-same-origin + allow-scripts(parent 跨 origin,MDN 警告不适用,详 html-viewer-allow-scripts)
