@@ -1228,3 +1228,37 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+// Regression test for https://github.com/anomalyco/opencode/issues/20902 —
+// running a command that spawns a long-lived background grandchild used to
+// hang the shell tool until the 2-minute timeout, because the grandchild
+// kept the inherited stdout/stderr file descriptors open.
+describe("tool.shell background children", () => {
+  if (process.platform === "win32") return
+  it.live(
+    "returns promptly when command backgrounds a long-lived child",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const start = Date.now()
+          // `sleep 30 &` spawns a backgrounded sleep that inherits stdout/stderr.
+          // The redirect on disown keeps it alive past the parent shell exit.
+          // `disown` removes it from the shell's job table; `sleep 30 &` alone
+          // would also work on most shells.
+          const result = yield* run({
+            command: "sleep 30 & disown; echo backgrounded",
+            description: "Background child regression test",
+            timeout: 15000,
+          })
+          const elapsed = Date.now() - start
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain("backgrounded")
+          // Before the fix this took the full timeout (~15s) or longer.
+          // Allow generous headroom for slow CI but well under the timeout.
+          expect(elapsed).toBeLessThan(10_000)
+        }),
+      ),
+    20_000,
+  )
+})

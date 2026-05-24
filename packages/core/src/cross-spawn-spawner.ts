@@ -267,17 +267,26 @@ export const make = Effect.gen(function* () {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
       let end = false
-      let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
+      const settle = (args: readonly [code: number | null, signal: NodeJS.Signals | null]) => {
+        if (end) return
+        end = true
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
+      }
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
+      // Resolve on `exit` rather than `close`. The `close` event only fires
+      // once all stdio descriptors are released, which can hang indefinitely
+      // when the spawned process forks a background grandchild that inherits
+      // those descriptors (e.g. `command &`, daemonized servers, gradle, etc).
+      // The `exit` event fires when the direct child exits regardless of
+      // inherited-fd lifetime, which is what we actually care about here.
+      // See https://github.com/anomalyco/opencode/issues/20902.
       proc.on("exit", (...args) => {
-        exit = args
+        settle(args)
       })
       proc.on("close", (...args) => {
-        if (end) return
-        end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        settle(args)
       })
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))
