@@ -4,7 +4,7 @@ import { ModelV2 } from "../model"
 import { NonNegativeInt } from "../schema"
 import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
-import { SessionV2 } from "./index"
+import { SessionV2 } from "../session"
 import { FileAttachment, Prompt } from "./prompt"
 
 export { FileAttachment }

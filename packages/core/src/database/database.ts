@@ -1,7 +1,7 @@
 export * as Database from "./database"
 
-import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
@@ -31,7 +31,7 @@ const layer = Layer.effect(
 )
 
 export function layerFromPath(filename: string) {
-  return layer.pipe(Layer.provide(SqliteClient.layer({ filename })))
+  return layer.pipe(Layer.provide(sqliteLayer({ filename })))
 }
 
 export const defaultLayer = Layer.unwrap(

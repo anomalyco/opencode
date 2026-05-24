@@ -1,11 +1,5 @@
 import { Option, Schema, SchemaGetter } from "effect"
 
-export const AbsolutePath = Schema.String.pipe(Schema.brand("AbsolutePath"))
-export type AbsolutePath = typeof AbsolutePath.Type
-
-export const RelativePath = Schema.String.pipe(Schema.brand("RelativePath"))
-export type RelativePath = typeof RelativePath.Type
-
 /**
  * Integer greater than zero.
  */

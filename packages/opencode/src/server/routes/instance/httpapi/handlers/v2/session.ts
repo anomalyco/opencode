@@ -1,5 +1,5 @@
 import { WorkspaceID } from "@/control-plane/schema"
-import { SessionV2 } from "@opencode-ai/core/session/index"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"

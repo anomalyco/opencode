@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { SessionV2 } from "@opencode-ai/core/session/index"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { withStatics } from "@opencode-ai/core/schema"
 
 export const SessionID = SessionV2.ID

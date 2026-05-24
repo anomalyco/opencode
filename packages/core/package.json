@@ -18,7 +18,13 @@
   "exports": {
     "./*": "./src/*.ts"
   },
-  "imports": {},
+  "imports": {
+    "#sqlite": {
+      "bun": "./src/database/sqlite.bun.ts",
+      "node": "./src/database/sqlite.node.ts",
+      "default": "./src/database/sqlite.bun.ts"
+    }
+  },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
