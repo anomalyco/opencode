@@ -730,6 +730,48 @@ describe("requireMention enforcement (feat: feishu-group-mention-policy)", () =>
     await new Promise((r) => setTimeout(r, 50))
     expect(fakes.ackedMessages).toEqual(["om_test_1"])
   })
+
+  // [bug-repro: LLM 收到原始 @_user_1 占位符 — 应改传 stripMentions 后的 cleaned text]
+  // user 2026-05-24 实测:群里 @bot 说"@_user_1 说句话",bot reply 含"我不是 @_user_1..."
+  // 因为 pipeline runOpencode 传 raw text 进 LLM,占位符没 strip,LLM 误当另一个联系人
+  test("group + bot @ → LLM 收到的 text 已 strip mention 占位符(bug-repro)", async () => {
+    const pipeline = makePipeline({ requireMention: true, botName: "DeskFox-Mac" })
+    let capturedText: string | undefined
+    fakes.opencodeClient.session.promptAsync = async (args: any) => {
+      capturedText = args.body?.parts?.[0]?.text
+      return { data: {} } as any
+    }
+    void pipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "@_user_1 说句话" }),
+        mentions: [{ key: "_user_1", name: "DeskFox-Mac", openId: "ou_bot" }],
+      }),
+    )
+    // 给 fire-and-forget promptAsync 一点时间被调到
+    await new Promise((r) => setTimeout(r, 100))
+    expect(capturedText).toBe("说句话")
+    expect(capturedText).not.toContain("@_user_1")
+  })
+
+  test("p2p + LLM 收到的 text 也 strip mention 占位符(bug-repro 私聊场景)", async () => {
+    // p2p 一般不带 mention,但万一带也要 strip
+    const pipeline = makePipeline({ requireMention: true, botName: "灵狐🦊-Mac" })
+    let capturedText: string | undefined
+    fakes.opencodeClient.session.promptAsync = async (args: any) => {
+      capturedText = args.body?.parts?.[0]?.text
+      return { data: {} } as any
+    }
+    void pipeline.testHandle(
+      makeEvent({
+        chatType: "p2p",
+        content: JSON.stringify({ text: "@_user_1  说句话" }),
+        mentions: [{ key: "_user_1", name: "灵狐🦊-Mac", openId: "ou_bot" }],
+      }),
+    )
+    await new Promise((r) => setTimeout(r, 100))
+    expect(capturedText).toBe("说句话")
+  })
 })
 
 // ============================================================
