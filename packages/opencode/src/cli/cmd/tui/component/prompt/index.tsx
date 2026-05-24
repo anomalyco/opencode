@@ -630,6 +630,7 @@ export function Prompt(props: PromptProps) {
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
+      "prompt.skills",
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",
