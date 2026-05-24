@@ -300,8 +300,8 @@ function HomeProjectColumn(props: {
   const layout = useLayout()
   const projects = createMemo(() => layout.projects.list())
   return (
-    <aside class="flex min-w-0 flex-col lg:pt-[52px] gap-4" aria-label={props.language.t("home.projects")}>
-      <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
+    <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14" aria-label={props.language.t("home.projects")}>
+      <div class="flex h-7 min-w-0 items-center justify-between pl-3">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <IconButtonV2
           data-action="home-add-project"
