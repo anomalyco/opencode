@@ -19,7 +19,9 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `4c038e179` | docs: 1-spec + 2-plan |
 | `cdcf77cd2` | feat: isBotMentioned helper + pipeline requireMention enforcement + 13 单测(helper 7 + 集成 6)|
 | `b106f7286` | feat: chat.create 默认 chat_type "public" → "private"(secondary deliverable)+ 测试 |
-| `2c7a63c1c` | feat: 全链路扩 requireMention 字段 + dialog checkbox + i18n + 3 单测 |
+| `2c7a63c1c` | feat: 全链路扩 requireMention 字段 + dialog checkbox + i18n + 3 新单测 |
+| `20507184d` | docs: 3-changelog + INDEX + 改动日志 (原始版本) |
+| `cb53d34e5` | **hot fix**: isBotMentioned 改用 botName 匹配修群里 @ bot 没响应 + i18n hint 加 6 步具体操作 [bug-repro: 群里 @ bot 没响应 — 原 openId 维度错配] |
 
 ## 改动文件
 
@@ -157,6 +159,39 @@ build dev .app 后:
 3. **chat_type 改 private 只对新建群生效**:老的 DeskFox 创建的公开群保持公开状态。无迁移逻辑
 4. **大群里 bot 全量响应可能刷屏**:理论上 requireMention=false + 大群 → bot 每条消息都响应,在 50 人群里可能造成 spam。本 feat 不加"群成员数 ≤ N 才免 @"硬规则(留 backlog `feishu-group-size-threshold-policy`)— user 自己掂量
 5. **跨平台 (Win) 未测**:本 feat 仅 Mac 端开发 + 实测;Win 端等下次双端协作再验
+
+## Hot fix follow-up — 2026-05-24(commit `cb53d34e5`)
+
+**测试一发现 bug**:user 实测 @ bot 在群里也不响应。日志显示
+"group msg without bot @" — 原始 isBotMentioned 永远返 false。
+
+**根因**(设计错误):
+- `account.openId` 是 **OAuth 主用户**(绑账号的人)的 openId,不是 bot 的
+- `mentions[].openId` 是被 @ 实体的 openId(@ bot 时是 bot 自己的)
+- 两者维度不同,openId 比较**永远不命中**
+
+**修法**:改用 `botName` 匹配 `mentions[].name === botName`:
+- `account.botName` 是 `fetchBotName` 拉的 bot display name(已在 schema)
+- 飞书 `mentions[].name` 是被 @ 实体的 display name
+- 维度一致,可靠匹配
+
+**fail open 设计变更**:botName 缺失(fetchBotName 失败)→ 返 true(当作被 @,
+不早退,user 体验优先)。代替之前 botOpenId 缺失返 false 的"保守"路径 —
+原设计会吞所有群消息,体验更差。
+
+**长期 backlog**:扩 `fetchBotInfo` 拉 bot 自己的 open_id 存 `account.botOpenId`,
+helper 优先 openId 匹配,fallback botName。当前 botName 已覆盖 95%+ 场景。
+
+**i18n hint 同步加具体 6 步操作指南**(user 反馈"具体怎么改飞书后台不知道"):
+- 1) open.feishu.cn → 应用管理选 bot
+- 2) 事件与回调 → 事件配置 → `im.message.receive_v1`
+- 3) 订阅范围改"全部群消息"
+- 4) 权限管理申请 `im:message`
+- 5) 重新发布
+- 6) 老群:bot 退出再加回
+
+**测试**:isBotMentioned 7 单测全部重写按 botName 匹配语义 + pipeline 7 集成测
+更新(+加 fail open 测 + 加多 @ 含 bot 测)→ 483/483 全过。
 
 ## 回退方法
 
