@@ -25,6 +25,7 @@ import {
   listAccounts,
   saveAccount,
   updateAccountModel,
+  updateAccountSettings,
   type SaveAccountInput,
 } from "./feishu/account-store"
 import { fetchBotName } from "./feishu/bot-info"
@@ -305,6 +306,7 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
     }
 
     // POST /accounts/update-model — body: { accountId, model: {providerID, modelID} | null }
+    // 向后兼容旧 callsite(Tauri feishu_update_account_model 等)— 委派给 /accounts/update-settings。
     if (req.method === "POST" && url.pathname === "/accounts/update-model") {
       let body: {
         accountId?: string
@@ -334,6 +336,72 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
         console.warn("[server] onAccountsChanged after update-model:", err)
       }
       return jsonResponse({ updated: true, model: cleanModel }, 200)
+    }
+
+    // POST /accounts/update-settings — body: { accountId, model?, enableAutoGroupCreate? }
+    // [feat: feishu-create-group-toggle-gui] 2026-05-24
+    // partial update:任一字段子集都接受,空 patch reject 防 noop,未知字段 reject 防 schema injection。
+    if (req.method === "POST" && url.pathname === "/accounts/update-settings") {
+      let body: {
+        accountId?: string
+        model?: { providerID?: string; modelID?: string } | null
+        enableAutoGroupCreate?: boolean
+      } & Record<string, unknown>
+      try {
+        body = (await req.json()) as typeof body
+      } catch {
+        return jsonResponse({ error: "invalid_json" }, 400)
+      }
+      if (!body.accountId) {
+        return jsonResponse({ error: "missing_account_id" }, 400)
+      }
+      // 白名单字段校验 — 拒绝未知字段防 schema injection
+      const allowed = new Set(["accountId", "model", "enableAutoGroupCreate"])
+      const unknown = Object.keys(body).filter((k) => !allowed.has(k))
+      if (unknown.length > 0) {
+        return jsonResponse(
+          { error: "unknown_fields", fields: unknown },
+          400,
+        )
+      }
+      // partial:必须至少一项 settings(单 accountId 不算改动)
+      const hasModel = "model" in body
+      const hasFlag = "enableAutoGroupCreate" in body
+      if (!hasModel && !hasFlag) {
+        return jsonResponse(
+          { error: "empty_patch", message: "至少需要 model 或 enableAutoGroupCreate 之一" },
+          400,
+        )
+      }
+      // 类型校验
+      if (hasFlag && typeof body.enableAutoGroupCreate !== "boolean") {
+        return jsonResponse(
+          { error: "invalid_field", field: "enableAutoGroupCreate", expected: "boolean" },
+          400,
+        )
+      }
+      const patch: Parameters<typeof updateAccountSettings>[1] = {}
+      if (hasModel) {
+        const m = body.model
+        patch.model =
+          m && m.providerID && m.modelID
+            ? { providerID: m.providerID, modelID: m.modelID }
+            : null
+      }
+      if (hasFlag) {
+        patch.enableAutoGroupCreate = body.enableAutoGroupCreate!
+      }
+      const r = updateAccountSettings(body.accountId, patch)
+      if (!r) {
+        return jsonResponse({ error: "account_not_found" }, 404)
+      }
+      // 触发 onAccountsChanged,plugin 重建 MessagePipeline 让新 settings hot 生效
+      try {
+        await options.onAccountsChanged?.()
+      } catch (err) {
+        console.warn("[server] onAccountsChanged after update-settings:", err)
+      }
+      return jsonResponse({ updated: true, patch }, 200)
     }
 
     // GET /debug/fetch-messages?accountId=xxx&sessionID=ses_xxx — 调 SDK session.messages
