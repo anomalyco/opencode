@@ -504,42 +504,44 @@ describe("extractGroupName", () => {
 // [feat: feishu-group-mention-policy] 2026-05-24
 // ============================================================
 
-describe("isBotMentioned", () => {
-  function m(openId: string, key = "_user_1"): MentionRef {
-    return { key, name: "bot", openId }
+describe("isBotMentioned (botName 匹配)", () => {
+  // [feat: feishu-group-mention-policy] hot fix 2026-05-24 —
+  // 原 openId 匹配是错维度,改用 botName 匹配 mentions[].name
+  function mn(name: string, key = "_user_1"): MentionRef {
+    return { key, name, openId: `ou_${name}` }
   }
 
-  test("mentions 含 bot openId → true", () => {
-    expect(isBotMentioned([m("ou_bot_xyz")], "ou_bot_xyz")).toBe(true)
+  test("mentions 含 botName → true", () => {
+    expect(isBotMentioned([mn("DeskFox-Mac")], "DeskFox-Mac")).toBe(true)
   })
 
-  test("mentions 不含 bot openId(只 @ 其他人)→ false", () => {
-    expect(isBotMentioned([m("ou_other_user")], "ou_bot_xyz")).toBe(false)
+  test("mentions 含其他人但不含 bot → false", () => {
+    expect(isBotMentioned([mn("alice"), mn("bob")], "DeskFox-Mac")).toBe(false)
   })
 
   test("多 mention 含 bot → true", () => {
     expect(
-      isBotMentioned(
-        [m("ou_user_1", "_user_1"), m("ou_bot_xyz", "_user_2"), m("ou_user_3", "_user_3")],
-        "ou_bot_xyz",
-      ),
+      isBotMentioned([mn("alice"), mn("DeskFox-Mac"), mn("bob")], "DeskFox-Mac"),
     ).toBe(true)
   })
 
   test("空 mentions → false", () => {
-    expect(isBotMentioned([], "ou_bot_xyz")).toBe(false)
+    expect(isBotMentioned([], "DeskFox-Mac")).toBe(false)
   })
 
-  test("botOpenId 空串 → false(防御性,OAuth 数据异常时保守拒响应)", () => {
-    expect(isBotMentioned([m("ou_anything")], "")).toBe(false)
+  test("botName 空串 → true(fail open,fetchBotName 失败时避免吞群消息)", () => {
+    expect(isBotMentioned([mn("anyone")], "")).toBe(true)
   })
 
-  test("mentions 含 openId 但跟 bot 不同 → false(防 false-positive)", () => {
-    expect(isBotMentioned([m("ou_bot_xyz")], "ou_bot_OTHER")).toBe(false)
+  test("botName 大小写不匹配 → false(精准比较)", () => {
+    expect(isBotMentioned([mn("DeskFox-Mac")], "deskfox-mac")).toBe(false)
   })
 
-  test("mention 缺 openId(老 schema 数据)→ false(逐条 some 不命中)", () => {
-    const noOpenId: MentionRef = { key: "_user_1", name: "bot" } // openId undefined
-    expect(isBotMentioned([noOpenId], "ou_bot_xyz")).toBe(false)
+  test("中文/emoji bot 名也工作", () => {
+    expect(isBotMentioned([mn("灵狐🦊-Mac")], "灵狐🦊-Mac")).toBe(true)
+  })
+
+  test("@ alice + bot 都在 → true(只要 bot 名出现)", () => {
+    expect(isBotMentioned([mn("alice"), mn("DeskFox-Mac")], "DeskFox-Mac")).toBe(true)
   })
 })

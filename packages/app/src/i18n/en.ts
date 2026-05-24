@@ -1085,7 +1085,7 @@ export const dict = {
   // FORK: [feat: feishu-group-mention-policy] 2026-05-24
   "settings.feishu.edit.requireMention.label": "Require @ mention to respond in groups",
   "settings.feishu.edit.requireMention.hint":
-    "On by default: bot only responds to messages that @ it in groups (prevents bot from flooding the chat).\n⚠️ Before turning off, configure your Lark Open Platform event subscription to \"all group messages\" mode; otherwise Lark server won't push non-@ messages and this toggle has no effect.",
+    "On by default: bot only responds to messages that @ it in groups (prevents bot from flooding the chat).\n⚠️ Before turning off, configure your Lark Open Platform — otherwise Lark server won't push non-@ messages and this toggle has no effect:\n  1. Go to open.larksuite.com → \"App management\" → select your bot app\n  2. Left sidebar \"Events & Callbacks\" → find `im.message.receive_v1`\n  3. Change subscription scope to \"All group messages\" (default is \"@ only\")\n  4. \"Permissions & Scopes\" → request `im:message` (receive group messages) scope\n  5. Re-publish a new version (top right)\n  6. For existing groups: remove bot then re-add (new subscription only applies to new groups otherwise)",
   "settings.feishu.edit.saving": "Saving...",
   "settings.feishu.edit.providerLabel": "Provider",
   "settings.feishu.edit.modelLabel": "Model",

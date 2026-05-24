@@ -1064,7 +1064,7 @@ export const dict = {
   // FORK: [feat: feishu-group-mention-policy] 2026-05-24
   "settings.feishu.edit.requireMention.label": "群組裡需要 @ 後再回應",
   "settings.feishu.edit.requireMention.hint":
-    "預設開啟:bot 在群組裡只回覆 @ 自己的訊息(避免搶話刷屏)。\n⚠️ 關閉前請先在 Lark 開放平台改訂閱模式為「全量群組訊息」,否則 Lark server 不會推送非 @ 訊息,本開關無效。",
+    "預設開啟:bot 在群組裡只回覆 @ 自己的訊息(避免搶話刷屏)。\n⚠️ 關閉前請先在 Lark 開放平台改訂閱模式,否則 Lark server 不推非 @ 訊息,本開關無效:\n  1. 打開 open.larksuite.com → 「應用管理」選你的 bot 應用\n  2. 左側「事件與回調」→「事件設定」找 `im.message.receive_v1`\n  3. 訂閱範圍改為「全部群組訊息」(預設是「僅 @ 觸發」)\n  4. 「權限管理」申請 `im:message` 接收群組訊息權限\n  5. 重新發布版本(右上角)\n  6. 老群組:bot 退出再加入(讓新訂閱模式對老群生效)",
   "settings.feishu.edit.saving": "儲存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

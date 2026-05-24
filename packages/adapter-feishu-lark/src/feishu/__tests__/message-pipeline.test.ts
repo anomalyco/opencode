@@ -613,12 +613,12 @@ describe("requireMention enforcement (feat: feishu-group-mention-policy)", () =>
 
   function makePipeline(opts: {
     requireMention: boolean
-    openId?: string
+    botName?: string
   }): MessagePipeline {
     return new MessagePipeline({
       account: makeAccount({
         requireMention: opts.requireMention,
-        openId: opts.openId ?? "ou_bot_xyz",
+        botName: opts.botName ?? "DeskFox-Mac",
       } as any),
       accountId: "acc1",
       opencodeClient: fakes.opencodeClient,
@@ -628,7 +628,7 @@ describe("requireMention enforcement (feat: feishu-group-mention-policy)", () =>
     })
   }
 
-  test("group + requireMention=true + bot 没被 @ → 早退,0 promptAsync 0 ack", async () => {
+  test("group + requireMention=true + bot 没被 @(只 @ alice)→ 早退,0 promptAsync 0 ack", async () => {
     const pipeline = makePipeline({ requireMention: true })
     let promptAsyncCalled = false
     fakes.opencodeClient.session.promptAsync = async () => {
@@ -648,13 +648,14 @@ describe("requireMention enforcement (feat: feishu-group-mention-policy)", () =>
     expect(fakes.sentTexts).toHaveLength(0)
   })
 
-  test("group + requireMention=true + bot 被 @ → 正常流程(ack 触发)", async () => {
-    const pipeline = makePipeline({ requireMention: true })
+  test("group + requireMention=true + bot 被 @(mention.name = botName)→ 正常流程(ack 触发)", async () => {
+    const pipeline = makePipeline({ requireMention: true, botName: "DeskFox-Mac" })
     void pipeline.testHandle(
       makeEvent({
         chatType: "group",
         content: JSON.stringify({ text: "@_user_1 你好" }),
-        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot_xyz" }],
+        // mention.name 匹配 botName → bot 被 @
+        mentions: [{ key: "_user_1", name: "DeskFox-Mac", openId: "ou_bot_actual" }],
       }),
     )
     await new Promise((r) => setTimeout(r, 50))
@@ -675,12 +676,12 @@ describe("requireMention enforcement (feat: feishu-group-mention-policy)", () =>
   })
 
   test("group + requireMention=false + bot 被 @ → 也正常响应(不重复触发)", async () => {
-    const pipeline = makePipeline({ requireMention: false })
+    const pipeline = makePipeline({ requireMention: false, botName: "DeskFox-Mac" })
     void pipeline.testHandle(
       makeEvent({
         chatType: "group",
         content: JSON.stringify({ text: "@_user_1 你好" }),
-        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot_xyz" }],
+        mentions: [{ key: "_user_1", name: "DeskFox-Mac", openId: "ou_bot_actual" }],
       }),
     )
     await new Promise((r) => setTimeout(r, 50))
@@ -699,22 +700,35 @@ describe("requireMention enforcement (feat: feishu-group-mention-policy)", () =>
     expect(fakes.ackedMessages).toEqual(["om_test_1"])
   })
 
-  test("group + requireMention=true + bot openId 缺失(防御性)→ 早退保守", async () => {
-    const pipeline = makePipeline({ requireMention: true, openId: "" })
-    let promptAsyncCalled = false
-    fakes.opencodeClient.session.promptAsync = async () => {
-      promptAsyncCalled = true
-      return { data: {} } as any
-    }
-    await pipeline.testHandle(
+  test("group + requireMention=true + botName 空(fetchBotName 失败)→ fail open 正常响应", async () => {
+    // [feat hot fix] botName 缺失 → isBotMentioned 返 true → 不早退,正常响应
+    // 设计:避免吞掉所有群消息,user 体验优先
+    const pipeline = makePipeline({ requireMention: true, botName: "" })
+    void pipeline.testHandle(
       makeEvent({
         chatType: "group",
         content: JSON.stringify({ text: "@_user_1 你好" }),
-        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot_xyz" }],
+        mentions: [{ key: "_user_1", name: "anyone", openId: "ou_anyone" }],
       }),
     )
-    expect(promptAsyncCalled).toBe(false)
-    expect(fakes.ackedMessages).toHaveLength(0)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+  })
+
+  test("group + requireMention=true + 多 @(含 bot 名)→ 命中,正常响应", async () => {
+    const pipeline = makePipeline({ requireMention: true, botName: "DeskFox-Mac" })
+    void pipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "@_user_1 @_user_2 你们好" }),
+        mentions: [
+          { key: "_user_1", name: "alice", openId: "ou_alice" },
+          { key: "_user_2", name: "DeskFox-Mac", openId: "ou_bot_actual" },
+        ],
+      }),
+    )
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
   })
 })
 

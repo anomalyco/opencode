@@ -417,7 +417,7 @@ export class MessagePipeline {
     if (
       event.chatType !== "p2p" &&
       this.opts.account.requireMention &&
-      !isBotMentioned(event.mentions, this.opts.account.openId)
+      !isBotMentioned(event.mentions, this.opts.account.botName ?? "")
     ) {
       console.log(
         `[pipeline ${this.opts.accountId}] group msg without bot @ ` +
