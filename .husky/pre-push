@@ -18,3 +18,45 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 '
 bun typecheck
+
+# ============================================================
+# FORK: Phase 1 e2e gate(fork 自加)
+# [feat: e2e-pre-push-gate] 2026-05-23
+#
+# 只在 push 目标含 main 时触发(feat 分支 push 不卡 — 日常迭代 / 备份不付 e2e 成本)。
+# vite mock 必须已跑在 :3000(开发时通常在另一终端 `bun run dev:e2e-mock` 常驻)。
+# 不自动 spawn vite:跨平台 pid 管理 / 子进程清理在 Git Bash on Win 不可靠,简单失败 + 清楚指引更稳。
+# 跳过:`git push --no-verify` + commit / 改动日志加 [override-pre-push: 理由]。
+# ============================================================
+push_to_main=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main) push_to_main=1 ;;
+  esac
+done
+
+if [ "$push_to_main" = "1" ] || [ "$FORCE_E2E_GATE" = "1" ]; then
+  echo ""
+  echo "[pre-push] e2e gate — push 目标含 main(或 FORCE_E2E_GATE=1)"
+
+  if ! curl -s -o /dev/null --connect-timeout 2 http://127.0.0.1:3000/; then
+    echo ""
+    echo "❌ [pre-push] e2e gate 失败:vite mock dev server 没在 :3000 跑"
+    echo ""
+    echo "请在另一终端启动:"
+    echo "    cd packages/app && bun run dev:e2e-mock"
+    echo ""
+    echo "或跳过 gate(需 commit/改动日志加 [override-pre-push: 理由]):"
+    echo "    git push --no-verify"
+    exit 1
+  fi
+
+  echo "[pre-push] vite mock OK,跑 Phase 1 e2e..."
+  if ! (cd packages/app && bunx playwright test --reporter=line); then
+    echo ""
+    echo "❌ [pre-push] e2e fail — push 被拦截"
+    echo "(修 fail 测试,或 git push --no-verify [override-pre-push: 理由] 跳过)"
+    exit 1
+  fi
+  echo "✅ [pre-push] e2e all pass"
+fi

@@ -40,6 +40,22 @@ export default function e2eMockPlugin() {
         define: {
           "import.meta.env.VITE_E2E_MOCK": JSON.stringify("true"),
         },
+        // FORK: vite 启动时主动预编译热文件,缓解冷启动 + 多 worker 并行时第 1 批 spec timeout
+        // [feat: e2e-vite-warmup] 2026-05-23 — 双保险方案 D(globalSetup 走方案 A)
+        server: {
+          warmup: {
+            clientFiles: [
+              "./src/entry.tsx",
+              "./src/pages/session.tsx",
+              "./src/pages/session/session-side-panel.tsx",
+              "./src/pages/session/file-tabs.tsx",
+              "./src/components/file-tree.tsx",
+              "./src/components/prompt-input.tsx",
+              "./src/components/file-too-large.tsx",
+              "./src/context/file.tsx",
+            ],
+          },
+        },
       }
     },
   }
