@@ -48,6 +48,7 @@ import { openCollabPullRequest } from "./github-pr"
 import { toggleReaction, isAllowedEmoji } from "./reactions"
 import { mentionsToEvents } from "./mentions"
 import { insertNote, listRecentNotes } from "./notes"
+import { nativeFetch } from "./native-api"
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -185,8 +186,8 @@ async function ensureNativeSession(
     mkdirSync(workspacePath, { recursive: true })
 
     console.log("[collab] creating native session for directory:", workspacePath)
-    const createRes = await fetch(
-      `http://localhost:4096/session?directory=${encodeURIComponent(workspacePath)}`,
+    const createRes = await nativeFetch(
+      `/session?directory=${encodeURIComponent(workspacePath)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -292,8 +293,8 @@ async function sendSeedPrompt(
   ].join("\n")
 
   try {
-    const res = await fetch(
-      `http://localhost:4096/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
+    const res = await nativeFetch(
+      `/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -327,8 +328,8 @@ async function executePromptOnNativeSession(
   }
 
   console.log("[collab] sending prompt to native session:", nativeSessionId)
-  const promptRes = await fetch(
-    `http://localhost:4096/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
+  const promptRes = await nativeFetch(
+    `/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

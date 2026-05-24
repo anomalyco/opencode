@@ -4,6 +4,7 @@ import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "e
 import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
 import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
 import { isPublicUIPath } from "@/server/shared/public-ui"
+import { cookieAuthorizesRequest } from "@/collab/cookie-auth"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
@@ -39,6 +40,22 @@ function validateCredential<A, E, R>(
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
     if (isPublicUIPath(request.method, url.pathname)) return yield* effect
+
+    // Cookie-based auth (the GitHub OAuth path).  See CONTEXT.md →
+    // "Cookie Authorization Scope" + ADR-0001.  A valid cookie scoped to
+    // the addressed workspace/native session passes the gate without ever
+    // touching basic auth — that's why OAuth users don't see the browser's
+    // basic-auth dialog from the iframe's API calls.
+    const cookieDecision = cookieDecisionFromHttpRequest(request, url)
+    if (cookieDecision === "allow") return yield* effect
+    if (cookieDecision === "deny") {
+      // Cookie was valid but didn't scope to this resource.  Do NOT fall
+      // through to basic-auth — that would leak the existence of a server
+      // password to an unscoped user.
+      return yield* new HttpApiError.Unauthorized({})
+    }
+    // fallthrough → basic-auth path
+
     if (!ServerAuth.authorized(credential, config)) {
       yield* HttpEffect.appendPreResponseHandler((_request, response) =>
         Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
@@ -47,6 +64,26 @@ function validateCredential<A, E, R>(
     }
     return yield* effect
   })
+}
+
+/**
+ * Bridge from the Effect HttpServerRequest to the standard `Request` shape
+ * `cookieAuthorizesRequest` wants.  We only need URL + headers + method,
+ * not the body — so we synthesise a body-less Request directly from the
+ * available fields rather than going through `HttpServerRequest.toWeb` (which
+ * is an effect and would force this helper to be effectful).
+ */
+function cookieDecisionFromHttpRequest(
+  request: HttpServerRequest.HttpServerRequest,
+  url: URL,
+): "allow" | "deny" | "fallthrough" {
+  const headers = new Headers()
+  for (const [k, v] of Object.entries(request.headers)) {
+    if (typeof v === "string") headers.set(k, v)
+    else if (Array.isArray(v)) headers.set(k, v.join(","))
+  }
+  const synthetic = new Request(url.toString(), { method: request.method, headers })
+  return cookieAuthorizesRequest(synthetic)
 }
 
 function decodeCredential(input: string) {
@@ -106,6 +143,20 @@ export const authorizationRouterMiddleware = HttpRouter.middleware()(
         const url = new URL(request.url, "http://localhost")
         if (isPublicUIPath(request.method, url.pathname)) return yield* effect
         if (hasPtyConnectTicketURL(url)) return yield* effect
+
+        const cookieDecision = cookieDecisionFromHttpRequest(request, url)
+        if (cookieDecision === "allow") return yield* effect
+        if (cookieDecision === "deny") {
+          // Same rationale as in validateCredential — scoped-cookie miss
+          // must not fall through to basic-auth.
+          return yield* Effect.succeed(
+            HttpServerResponse.empty({
+              status: UNAUTHORIZED,
+              headers: { "www-authenticate": WWW_AUTHENTICATE },
+            }),
+          )
+        }
+        // fallthrough → basic-auth path
         return yield* credentialFromURL(url, request).pipe(
           Effect.flatMap((credential) => validateRawCredential(effect, credential, config)),
         )

@@ -24,6 +24,7 @@
 import { connect as netConnect } from "node:net"
 import type { IncomingMessage } from "node:http"
 import type { Socket } from "node:net"
+import { lookupCookieIdentityFromHeaders } from "./cookie-auth"
 
 const PREVIEW_PREFIX = "/preview/"
 
@@ -136,6 +137,20 @@ export function attachPreviewUpgrade(server: {
     if (!parsed) {
       // Not ours — leave the socket alone so other upgrade listeners (e.g.
       // opencode's own WebSocket routes) can claim it.
+      return
+    }
+
+    // Authenticate the WebSocket upgrade BEFORE the handshake completes.
+    // The browser sees a clean 403 (vs a successful WS that immediately
+    // closes with code 1008) and we never touch the WS framing layer for
+    // unauthorised callers.  Cookie-only check — see ADR-0001; v1 doesn't
+    // bind port to a specific session.
+    const cookieHeader = (req.headers["cookie"] as string | undefined) ?? ""
+    if (!lookupCookieIdentityFromHeaders(cookieHeader)) {
+      try {
+        clientSocket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n")
+      } catch {}
+      try { clientSocket.destroy() } catch {}
       return
     }
 

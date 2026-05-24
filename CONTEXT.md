@@ -266,6 +266,28 @@ into the `collab_auth_session` table along with the user's GitHub
 access token, login, id and avatar URL.  Survives container restarts
 (was in-memory in the original code).
 
+**Cookie Authorization Scope**
+A valid `collab_sid` is a **scoped** credential, not a server-admin
+credential.  Three rules decide whether the cookie alone is enough
+to pass the auth gate:
+
+1. **Public path** (e.g. SPA shell, `/global/health`, assets) — allow.
+2. **Workspace-addressing request** (header `x-opencode-directory`,
+   query `directory=…`, or query `location[directory]=…`) — allow
+   only if the directory resolves to a `Workspace Directory` of a
+   `Collab Session` the cookie's user is a `Participant` of.
+3. **Native-session-addressing request** (e.g. `/event/<sessionId>`)
+   — allow only if the `Native Session ID` resolves (via
+   `collab_session.session_id`) to a `Collab Session` the user is
+   a `Participant` of.
+
+Anything else (e.g. `/global/event`, `/global/config`,
+`/global/dispose`, `/global/upgrade`, or an HttpApi route with no
+workspace/native-session identifier) the cookie does not gate.  Those
+routes still accept the server's basic-auth credential (used by
+internal self-fetches) but reject cookies — they're server-admin or
+cross-tenant by nature.
+
 **Invite Link**
 `https://<host>/collab/invite/<uuid-token>`.  Rows in `collab_invite`
 carry `role`, `created_by`, `expires_at` (default 72 h), and `used_at`

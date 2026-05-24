@@ -2,6 +2,7 @@ import "./init-projectors"
 
 import { handleCollabRequest } from "@/collab/router"
 import { parsePreviewPath, handlePreviewHttp, attachPreviewUpgrade } from "@/collab/preview-router"
+import { cookieAuthorizesRequest } from "@/collab/cookie-auth"
 import { Database } from "@/storage/db"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
@@ -45,6 +46,17 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
     const previewParsed = parsePreviewPath(pathname)
     if (previewParsed) {
       const webRequest = yield* HttpServerRequest.toWeb(req)
+      // Gate the preview proxy on a valid collab cookie.  Without this,
+      // any internet client can hit /preview/<port>/ and reach a dev
+      // server inside the container — that's the ADR-0001 hole PR #2
+      // didn't close.  Cookie alone is enough (no port↔session binding
+      // for v1 — see preview-router.ts:17-22 on the shell-trust model).
+      if (cookieAuthorizesRequest(webRequest) !== "allow") {
+        return HttpServerResponse.raw(new TextEncoder().encode("Forbidden"), {
+          status: 403,
+          headers: new Headers({ "content-type": "text/plain" }),
+        })
+      }
       const webResponse = yield* Effect.promise(() =>
         handlePreviewHttp(webRequest, previewParsed.port, previewParsed.rest),
       )
