@@ -520,6 +520,14 @@ export const layer: Layer.Layer<
     const sync = yield* SyncEvent.Service
     const flags = yield* RuntimeFlags.Service
 
+    const normalizeDirectory = (directory: string) => {
+      const normalized = directory.replaceAll("\\", "/")
+      if (/^\/+$/.test(normalized)) return normalized
+      const driveMatch = normalized.match(/^([A-Za-z]:)\/+$/)
+      if (driveMatch) return `${driveMatch[1]}/`
+      return normalized.replace(/\/+$/, "")
+    }
+
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
@@ -537,7 +545,7 @@ export const layer: Layer.Layer<
         slug: Slug.create(),
         version: InstallationVersion,
         projectID: ctx.project.id,
-        directory: input.directory,
+        directory: normalizeDirectory(input.directory),
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
