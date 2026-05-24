@@ -3,6 +3,7 @@
  * Called once at server startup after the main opencode migrations run.
  */
 import { Database } from "@/storage/db"
+import { assertUsableSessionSecret, encryptToken, isEncrypted } from "./crypto"
 
 const SQL = `
   CREATE TABLE IF NOT EXISTS collab_session (
@@ -92,6 +93,11 @@ const SQL = `
 `
 
 export function runCollabMigrations() {
+  // ADR-0004 — refuse to start with a placeholder SESSION_SECRET in production.
+  // The OPENCODE_ALLOW_UNAUTHENTICATED=1 escape hatch bypasses this for local
+  // dev; everything else throws and the process exits.
+  assertUsableSessionSecret(process.env["SESSION_SECRET"] ?? "")
+
   Database.use((db) => {
     db.$client.exec(SQL)
 
@@ -102,5 +108,41 @@ export function runCollabMigrations() {
     if (!cols.some((c) => c.name === "branch")) {
       db.$client.exec("ALTER TABLE collab_session ADD COLUMN branch TEXT")
     }
+
+    // ADR-0004 — one-shot re-encryption of legacy plaintext access tokens.
+    // Idempotent: rows already `enc:v1:...` are skipped.  Rows that fail to
+    // decrypt under the current key are NOT touched here — they're cleaned
+    // up at read time by getSession() per the decrypt-failure policy.
+    encryptLegacyAuthSessionTokens(db)
   })
+}
+
+/** Re-encrypt any `collab_auth_session.github_access_token` rows still in
+ *  plaintext.  Batched at 1000 rows per pass so a huge backlog can't
+ *  starve the rest of startup; falls through cleanly once no rows match. */
+function encryptLegacyAuthSessionTokens(db: any) {
+  const secret = process.env["SESSION_SECRET"] ?? ""
+  let total = 0
+  // Bound the loop defensively; ~1M rows is far beyond anything realistic.
+  for (let i = 0; i < 1000; i++) {
+    const rows = db.$client
+      .prepare(`SELECT token, github_access_token FROM collab_auth_session LIMIT 1000`)
+      .all() as Array<{ token: string; github_access_token: string }>
+    const plaintext = rows.filter((r) => !isEncrypted(r.github_access_token))
+    if (plaintext.length === 0) break
+    const update = db.$client.prepare(
+      `UPDATE collab_auth_session SET github_access_token = ? WHERE token = ?`,
+    )
+    const tx = db.$client.transaction((batch: Array<{ token: string; github_access_token: string }>) => {
+      for (const r of batch) {
+        update.run(encryptToken(r.github_access_token, secret), r.token)
+      }
+    })
+    tx(plaintext)
+    total += plaintext.length
+    if (plaintext.length < 1000) break
+  }
+  if (total > 0) {
+    console.log(`[collab.crypto] migrated ${total} plaintext auth-session token(s) → enc:v1`)
+  }
 }

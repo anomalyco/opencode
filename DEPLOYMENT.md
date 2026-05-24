@@ -157,6 +157,14 @@ aws secretsmanager create-secret --name opencode/anthropic_api_key         --sec
 aws secretsmanager create-secret --name opencode/session_secret            --secret-string "$(openssl rand -hex 32)"
 ```
 
+`SESSION_SECRET` is load-bearing in production — it's the master key
+for encrypting `collab_auth_session.github_access_token` at rest
+(ADR-0004).  Rotating it intentionally invalidates every active
+cookie, forcing each user to re-OAuth.  If you must rotate without a
+forced sign-out, decrypt with the old secret then re-encrypt with the
+new one via a SQL transaction; document the per-row format in
+`packages/opencode/src/collab/crypto.ts`.
+
 Optional: `aws secretsmanager create-secret --name opencode/openai_api_key --secret-string "..."` for OpenAI fallback.
 
 Copy each secret's ARN for the next step.

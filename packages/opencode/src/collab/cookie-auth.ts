@@ -20,12 +20,18 @@
 
 import { Database } from "@/storage/db"
 import { eq, and, isNull } from "drizzle-orm"
-import { join } from "path"
 import {
   CollabAuthSessionTable,
   CollabSessionTable,
   CollabParticipantTable,
 } from "./schema.sql"
+
+// NOTE: the auth gate only needs the cookie holder's identity
+// (github_id, github_login) for the participation check.  The encrypted
+// github_access_token column is read & decrypted only in router.ts's
+// getSession(), which is where the decrypt-failure-then-delete policy
+// lives.  Don't import crypto here — keeping the auth-gate path
+// independent of SESSION_SECRET availability avoids accidental coupling.
 
 /**
  * Parse a `Cookie:` header into a key→value map.  Single source of truth so

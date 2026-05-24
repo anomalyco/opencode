@@ -49,6 +49,7 @@ import { toggleReaction, isAllowedEmoji } from "./reactions"
 import { mentionsToEvents } from "./mentions"
 import { insertNote, listRecentNotes } from "./notes"
 import { nativeFetch } from "./native-api"
+import { encryptToken, decryptToken, isEncrypted } from "./crypto"
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -395,8 +396,26 @@ function getSession(req: Request): CookieSession | null {
       db.delete(CollabAuthSessionTable).where(eq(CollabAuthSessionTable.token, sid)).run()
       return null
     }
+    // Decrypt the at-rest token (ADR-0004).  Plaintext rows from a
+    // pre-migration boot fall through to .github_access_token directly.
+    let accessToken = row.github_access_token
+    if (isEncrypted(accessToken)) {
+      const plain = decryptToken(accessToken, cfg().sessionSecret)
+      if (plain === null) {
+        // Decrypt-failure policy (CONTEXT.md → Cookie Authorization Scope):
+        // treat as "session not found", delete the row defensively, and
+        // log a single WARN line.  Rotating SESSION_SECRET intentionally
+        // invalidates every active cookie — re-OAuth recovers.
+        console.warn(
+          `[collab.auth] decrypt failed for ${row.github_login}; deleting row, user must re-OAuth`,
+        )
+        db.delete(CollabAuthSessionTable).where(eq(CollabAuthSessionTable.token, sid)).run()
+        return null
+      }
+      accessToken = plain
+    }
     return {
-      githubAccessToken: row.github_access_token,
+      githubAccessToken: accessToken,
       githubId: row.github_id,
       githubLogin: row.github_login,
       githubAvatarUrl: row.github_avatar_url,
@@ -408,13 +427,16 @@ function setSession(session: CookieSession): { token: string; header: string } {
   const token = randomBytes(32).toString("hex")
   const now = Date.now()
   const expiresAt = now + 7 * 24 * 3600 * 1000
+  // Encrypt the at-rest token (ADR-0004).  In-memory the plaintext stays
+  // available via getSession() so GitHub API calls keep working unchanged.
+  const encryptedAccessToken = encryptToken(session.githubAccessToken, cfg().sessionSecret)
   Database.use((db) => {
     db.insert(CollabAuthSessionTable).values({
       token,
       github_id: session.githubId,
       github_login: session.githubLogin,
       github_avatar_url: session.githubAvatarUrl,
-      github_access_token: session.githubAccessToken,
+      github_access_token: encryptedAccessToken,
       created_at: now,
       expires_at: expiresAt,
     }).run()
