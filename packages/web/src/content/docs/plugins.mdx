@@ -43,6 +43,34 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
+### From file URLs
+
+Load a specific local plugin file by adding a `file://` URL to your config.
+Use an absolute path so OpenCode can resolve the plugin from any project.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///Users/me/opencode-plugins/my-plugin.ts"]
+}
+```
+
+---
+
+### From Git URLs
+
+Install a plugin directly from a Git repository with npm's `git+` spec.
+Include the package name before the URL so OpenCode can register the plugin package.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-scheduler@git+https://github.com/different-ai/opencode-scheduler.git"]
+}
+```
+
+---
+
 ### How plugins are installed
 
 **npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
