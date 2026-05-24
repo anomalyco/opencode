@@ -12,7 +12,7 @@ import {
 } from "@/server/shared/pty-ticket"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import * as ApiError from "../errors"
@@ -46,33 +46,67 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     })
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
-      const info = yield* pty.get(ctx.params.ptyID)
-      if (!info) return yield* ApiError.notFound("Session not found")
-      return info
+      return yield* pty.get(ctx.params.ptyID).pipe(
+        Effect.catchTag("Pty.NotFoundError", (error) =>
+          Effect.fail(
+            new ApiError.PtyNotFoundError({
+              ptyID: error.ptyID,
+              message: `PTY session not found: ${error.ptyID}`,
+            }),
+          ),
+        ),
+      )
     })
 
     const update = Effect.fn("PtyHttpApi.update")(function* (ctx: {
       params: { ptyID: PtyID }
       payload: typeof Pty.UpdateInput.Type
     }) {
-      const info = yield* pty.update(ctx.params.ptyID, {
-        ...ctx.payload,
-        size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
-      })
-      if (!info) return yield* ApiError.notFound("Session not found")
-      return info
+      return yield* pty
+        .update(ctx.params.ptyID, {
+          ...ctx.payload,
+          size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
+        })
+        .pipe(
+          Effect.catchTag("Pty.NotFoundError", (error) =>
+            Effect.fail(
+              new ApiError.PtyNotFoundError({
+                ptyID: error.ptyID,
+                message: `PTY session not found: ${error.ptyID}`,
+              }),
+            ),
+          ),
+        )
     })
 
     const remove = Effect.fn("PtyHttpApi.remove")(function* (ctx: { params: { ptyID: PtyID } }) {
-      yield* pty.remove(ctx.params.ptyID)
+      yield* pty.remove(ctx.params.ptyID).pipe(
+        Effect.catchTag("Pty.NotFoundError", (error) =>
+          Effect.fail(
+            new ApiError.PtyNotFoundError({
+              ptyID: error.ptyID,
+              message: `PTY session not found: ${error.ptyID}`,
+            }),
+          ),
+        ),
+      )
       return true
     })
 
     const connectToken = Effect.fn("PtyHttpApi.connectToken")(function* (ctx: { params: { ptyID: PtyID } }) {
       const request = yield* HttpServerRequest.HttpServerRequest
       if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
-        return yield* new HttpApiError.Forbidden({})
-      if (!(yield* pty.get(ctx.params.ptyID))) return yield* ApiError.notFound("Session not found")
+        return yield* new ApiError.PtyForbiddenError({ message: "Invalid PTY connect token request" })
+      yield* pty.get(ctx.params.ptyID).pipe(
+        Effect.catchTag("Pty.NotFoundError", (error) =>
+          Effect.fail(
+            new ApiError.PtyNotFoundError({
+              ptyID: error.ptyID,
+              message: `PTY session not found: ${error.ptyID}`,
+            }),
+          ),
+        ),
+      )
       return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
     })
 
@@ -97,7 +131,11 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
       PtyPaths.connect,
       Effect.gen(function* () {
         const params = yield* HttpRouter.schemaPathParams(Params)
-        if (!(yield* pty.get(params.ptyID))) return HttpServerResponse.empty({ status: 404 })
+        const exists = yield* pty.get(params.ptyID).pipe(
+          Effect.as(true),
+          Effect.catchTag("Pty.NotFoundError", () => Effect.succeed(false)),
+        )
+        if (!exists) return HttpServerResponse.empty({ status: 404 })
 
         const query = yield* HttpServerRequest.schemaSearchParams(CursorQuery)
         const request = yield* HttpServerRequest.HttpServerRequest
@@ -147,11 +185,14 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
             writeScoped(write(new Socket.CloseEvent(code, reason)))
           },
         }
-        const handler = yield* pty.connect(params.ptyID, adapter, cursor)
-        if (!handler) {
-          yield* closeAccepted(new Socket.CloseEvent(4404, "session not found"))
-          return HttpServerResponse.empty()
-        }
+        const handler = yield* pty
+          .connect(params.ptyID, adapter, cursor)
+          .pipe(
+            Effect.catchTag("Pty.NotFoundError", () =>
+              closeAccepted(new Socket.CloseEvent(4404, "session not found")).pipe(Effect.as(undefined)),
+            ),
+          )
+        if (!handler) return HttpServerResponse.empty()
 
         // No `pending[]`-style early-frame buffer (the legacy handler had one).
         // `request.upgrade` returns a Socket without running the WS handshake; the

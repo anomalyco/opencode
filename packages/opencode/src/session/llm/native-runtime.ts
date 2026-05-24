@@ -70,6 +70,14 @@ export function stream(input: StreamInput): StreamResult {
 
   // Integration point with @opencode-ai/llm: native-request lowers session data
   // into an LLMRequest, then LLMClient handles route selection and transport.
+  //
+  // ProviderTransform.providerOptions builds AI-SDK-shaped options for the
+  // selected SDK key (e.g. "openai") and the native LLM SDK reads the same
+  // keys via OpenAIOptions.* (store, reasoningEffort, reasoningSummary,
+  // include, textVerbosity, promptCacheKey). Both sides intentionally use
+  // OpenAI's official wire field names, so this is identity, not translation
+  // — if a field ever needs to differ between the two surfaces, the
+  // translation belongs here, not split across both packages.
   const stream = input.llmClient.stream({
     request: LLMNative.request({
       model: input.model,

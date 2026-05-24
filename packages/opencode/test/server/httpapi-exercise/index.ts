@@ -178,6 +178,15 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .patch("/project/{projectID}", "project.update.missing")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/project/{projectID}", { projectID: "project_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { name: "Missing Project" },
+    }))
+    .json(404, object, "status"),
+  http.protected
     .post("/project/git/init", "project.initGit")
     .mutating()
     .inProject({ git: false })
@@ -404,9 +413,7 @@ const scenarios: Scenario[] = [
     .delete("/pty/{ptyID}", "pty.remove")
     .mutating()
     .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "PTY remove should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .get("/pty/{ptyID}/connect", "pty.connect")
     .at((ctx) => ({ path: route("/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))

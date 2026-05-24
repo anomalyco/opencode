@@ -15,6 +15,7 @@ type ServiceUse<Identifier, Shape> = {
 }
 
 export const serviceUse = <Identifier, Shape>(tag: Context.Service<Identifier, Shape>) => {
+  const cache = new Map<string, (...args: unknown[]) => Effect.Effect<unknown, unknown, unknown>>()
   // This is the only dynamic boundary: TypeScript knows the accessor shape,
   // but Proxy property names are runtime values.
   const access = new Proxy(
@@ -22,7 +23,9 @@ export const serviceUse = <Identifier, Shape>(tag: Context.Service<Identifier, S
     {
       get: (_, key) => {
         if (typeof key !== "string") return undefined
-        return (...args: unknown[]) =>
+        const cached = cache.get(key)
+        if (cached) return cached
+        const accessor = (...args: unknown[]) =>
           tag.use((service) => {
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Proxy keys are checked at runtime.
             const method = service[key as keyof Shape]
@@ -30,6 +33,8 @@ export const serviceUse = <Identifier, Shape>(tag: Context.Service<Identifier, S
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- ServiceUse exposes only Effect-returning methods.
             return (method as (...args: unknown[]) => Effect.Effect<unknown, unknown, unknown>)(...args)
           })
+        cache.set(key, accessor)
+        return accessor
       },
     },
   )
