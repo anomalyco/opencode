@@ -19,6 +19,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `90857b4dd` | docs: 1-spec + 2-plan |
 | `1df6c0392` | feat: isGroupCreationIntent helper(中文 regex + 英文 substring)+ 14 单测 |
 | `74e4a5860` | feat: pipeline 集成硬拦截路径 + 6 集成测 |
+| `d6c6e13b9` | docs: 3-changelog + INDEX + 改动日志(原始版本)|
+| `383933973` | **follow-up**: direct dispatch — flag=true 时也 bypass LLM 走 confirm card(2026-05-24 user 实测 New-name claude-code flag=true 仍不工作)|
 
 ## 改动文件
 
@@ -114,6 +116,40 @@ build dev .app 后:
 2. **目前覆盖 zh + en 两语言** — backlog:日韩等需求出现时再扩
 3. **正则边界 max 20 字符** — `[^群]{0,20}` 限制动词到群之间不能太远,避免"建议解决问题群发邮件"误命中(20 字符外的"群")。理论上 20 字符够覆盖正常建群表达,长描述场景(如"建一个超过 20 个字的非常长名称的群")会漏判 — 暂不优化
 4. **flag=true 时跳过硬拦截** — 设计决策(让 LLM 走 marker confirm 路径),但若 user 同时撞 claude-code provider + flag=true,LLM 不能输出 marker(soft prompt 被吃),会试图自己建群撞权限卡。这种 corner case 不在本 feat 范围,backlog:**flag=true 时是否也加硬拦截 + 引导 user 切到 native provider**?
+
+## direct dispatch follow-up — 2026-05-24 加 flag=true 路径(commit `383933973`)
+
+**测试 3 暴露问题**:user 实测 New-name(claude-code provider)flag=true 时,
+发"帮我建群叫 test 006",**LLM 回复 "很抱歉,我无法直接帮你创建这个飞书群"** —
+没走 marker 路径,fallback 给方案 1/2/3 让 user 自行处理。
+
+**根因**:跟 hard-block 同根,claude-code plugin 跳过 `role=system` 消息,
+`CREATE_GROUP_MARKER_PROMPT` 没到 LLM → LLM 不知道 `[CREATE_GROUP:]` marker 协议。
+
+**修法**:扩 pipeline `handle()` 早退分支,flag=true 时也走 provider-agnostic 路径:
+- `isGroupCreationIntent(cleaned)` + `extractGroupName(cleaned)` 成功 → 直发 confirm card
+  (复用 `confirmController.start` + `executeGroupCreate` 既有逻辑),不调 LLM
+- intent 命中但 extract 失败 → 友好提示 `"好的,要建群。请告诉我群叫什么名字?"`,不调 LLM
+
+**新 helper `extractGroupName(text)`**:
+- 中文 regex 覆盖 `叫 / 叫做 / 名字叫 / 名字为 / 名为 / 命名 / 命名为` 7 引导词
+- 英文 regex 覆盖 `called / named` 2 引导词
+- 锚到分隔符 `[,，。;；\n]` 或 `$` 防贪婪吞后续句("建群叫 Foo, 把人拉进来" → "Foo")
+- 18 单测覆盖中英主流表达 / 分隔符锚定 / 边界 / trim
+
+**Pipeline 三路径(flag × extract 矩阵)**:
+| 条件 | 行为 |
+|---|---|
+| flag=false + p2p + intent | hard-block → GUI 引导(原已实现)|
+| flag=true + p2p + intent + extract 成功 | direct-dispatch → confirm card,不调 LLM(新加)|
+| flag=true + p2p + intent + extract 失败 | ask-name → "请告诉我群名",不调 LLM(新加)|
+| 群聊 / 非 intent | 走 LLM 正常流程(不变)|
+
+**UX 统一**:claude-code / MiniMax / Anthropic 任何 provider 同样行为(0 LLM 调用,直接 confirm card 或 ask name)。
+
+**测试**:helper 18 单测 + pipeline 集成测更新(原 `enabled + p2p + '帮我建群'` 测试改成验 ask-name 行为)+ 新加 direct-dispatch confirm card 测试 → 全 adapter 套件 448/448 通过 + 16/16 typecheck。
+
+**flag=true 时 marker 路径还在不在**?— 仍在(`processGroupMarkers` 既有逻辑),但实际只有 native provider(LLM 看得到 `CREATE_GROUP_MARKER_PROMPT`)才能输出 marker 触发它。direct dispatch 覆盖了绝大多数显式建群表达,marker 路径作为 LLM 隐式提取(如"咱们建个项目讨论组吧,叫 X")的 backup。
 
 ## 回退方法
 
