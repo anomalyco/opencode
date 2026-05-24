@@ -1068,7 +1068,7 @@ export const dict = {
   // FORK: [feat: feishu-group-mention-policy] 2026-05-24
   "settings.feishu.edit.requireMention.label": "群里需要 @ 后再响应",
   "settings.feishu.edit.requireMention.hint":
-    "默认开启:bot 在群里只回复 @ 自己的消息(避免抢话刷屏)。\n⚠️ 关闭前请先在飞书开放平台改订阅模式,否则飞书 server 不推非 @ 消息,本开关无效:\n  1. 打开 open.feishu.cn → 「应用管理」选你的 bot 应用\n  2. 左侧「事件与回调」→「事件配置」找 `im.message.receive_v1`\n  3. 订阅范围改为「全部群消息」(默认是「仅 @ 触发」)\n  4. 「权限管理」申请 `im:message` 接收群消息权限\n  5. 重新发布版本(右上角)\n  6. 老群:bot 退出再加回(让新订阅模式对老群生效)",
+    "默认开启:bot 群里只回 @ 自己的消息。\n⚠️ 关闭前需在飞书后台改:open.feishu.cn → 选 bot → 事件配置 `im.message.receive_v1` 订阅范围改「全部群消息」+ 权限管理申请 `im:message` + 重新发布。否则飞书不推非 @ 消息,本开关无效。",
   "settings.feishu.edit.saving": "保存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

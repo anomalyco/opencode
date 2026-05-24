@@ -126,7 +126,11 @@ export const FeishuEditAccountDialog: Component<{
       title={language.t("settings.feishu.edit.title")}
       description={language.t("settings.feishu.edit.description", { account: props.accountId })}
     >
-      <div class="flex flex-col gap-6 px-5 pb-5">
+      {/* [feat: feishu-group-mention-policy] 2026-05-24 hot fix
+        * 限制最大高度 + 内容溢出滚动,避免高级能力 hint 文案多 dialog 撑超屏 user
+        * 看不到保存按钮。70vh 给 dialog 上下边距留 30vh,主流屏幕都能滚到底。
+        */}
+      <div class="flex flex-col gap-6 px-5 pb-5 max-h-[70vh] overflow-y-auto">
         <Show
           when={!loading()}
           fallback={
