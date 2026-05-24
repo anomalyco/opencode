@@ -32,7 +32,11 @@ export async function createGroup(
   const res = await client.im.v1.chat.create({
     data: {
       name,
-      chat_type: "public",
+      // [feat: feishu-group-mention-policy] 2026-05-24 默认 private(私密群)
+      // user 通过 DeskFox 流程主动建群,等同私聊衍生 transactional 操作 — 默认应只
+      // 让 user 邀请的人能进(`chat.link` 一周邀请链接 + 后续可手动 add user)。
+      // private 群飞书企业内部成员搜不到,符合 user 心理预期(我建的群我决定谁加入)。
+      chat_type: "private",
       user_id_list: userOpenIds.length > 0 ? [...userOpenIds] : undefined,
     },
     params: { user_id_type: "open_id" },

@@ -78,6 +78,8 @@ export interface AccountSummary {
   bot_name?: string | null
   /** [feat: feishu-create-group-toggle-gui] 2026-05-24 当前 enableAutoGroupCreate flag */
   enable_auto_group_create?: boolean | null
+  /** [feat: feishu-group-mention-policy] 2026-05-24 当前 requireMention flag */
+  require_mention?: boolean | null
 }
 
 /** opencode `/config/providers` 响应形状(Rust JSON value 直传) */
@@ -144,6 +146,8 @@ export interface UpdateAccountSettingsPatch {
   model?: ModelRef | null
   /** undefined 不动 / true|false 改 */
   enableAutoGroupCreate?: boolean
+  /** [feat: feishu-group-mention-policy] 2026-05-24 — undefined 不动 / true|false 改 */
+  requireMention?: boolean
 }
 
 export async function feishuUpdateAccountSettings(
@@ -160,6 +164,9 @@ export async function feishuUpdateAccountSettings(
   }
   if (patch.enableAutoGroupCreate !== undefined) {
     request.enable_auto_group_create = patch.enableAutoGroupCreate
+  }
+  if (patch.requireMention !== undefined) {
+    request.require_mention = patch.requireMention
   }
   return await invoke<boolean>("feishu_update_account_settings", { request })
 }

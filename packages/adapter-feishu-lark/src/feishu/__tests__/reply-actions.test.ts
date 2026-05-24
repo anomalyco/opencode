@@ -8,6 +8,7 @@ import {
   classifyAttachment,
   extractGroupName,
   FEISHU_WORKSPACE_ROOT,
+  isBotMentioned,
   isGroupCreationIntent,
   parseAttachMarkers,
   parseCreateGroupMarkers,
@@ -495,5 +496,52 @@ describe("extractGroupName", () => {
 
   test("'建群讨论这个 bug' → null(无空格分隔)", () => {
     expect(extractGroupName("建群讨论这个 bug")).toBeNull()
+  })
+})
+
+// ============================================================
+// isBotMentioned — bot @ 检测
+// [feat: feishu-group-mention-policy] 2026-05-24
+// ============================================================
+
+describe("isBotMentioned (botName 匹配)", () => {
+  // [feat: feishu-group-mention-policy] hot fix 2026-05-24 —
+  // 原 openId 匹配是错维度,改用 botName 匹配 mentions[].name
+  function mn(name: string, key = "_user_1"): MentionRef {
+    return { key, name, openId: `ou_${name}` }
+  }
+
+  test("mentions 含 botName → true", () => {
+    expect(isBotMentioned([mn("DeskFox-Mac")], "DeskFox-Mac")).toBe(true)
+  })
+
+  test("mentions 含其他人但不含 bot → false", () => {
+    expect(isBotMentioned([mn("alice"), mn("bob")], "DeskFox-Mac")).toBe(false)
+  })
+
+  test("多 mention 含 bot → true", () => {
+    expect(
+      isBotMentioned([mn("alice"), mn("DeskFox-Mac"), mn("bob")], "DeskFox-Mac"),
+    ).toBe(true)
+  })
+
+  test("空 mentions → false", () => {
+    expect(isBotMentioned([], "DeskFox-Mac")).toBe(false)
+  })
+
+  test("botName 空串 → true(fail open,fetchBotName 失败时避免吞群消息)", () => {
+    expect(isBotMentioned([mn("anyone")], "")).toBe(true)
+  })
+
+  test("botName 大小写不匹配 → false(精准比较)", () => {
+    expect(isBotMentioned([mn("DeskFox-Mac")], "deskfox-mac")).toBe(false)
+  })
+
+  test("中文/emoji bot 名也工作", () => {
+    expect(isBotMentioned([mn("灵狐🦊-Mac")], "灵狐🦊-Mac")).toBe(true)
+  })
+
+  test("@ alice + bot 都在 → true(只要 bot 名出现)", () => {
+    expect(isBotMentioned([mn("alice"), mn("DeskFox-Mac")], "DeskFox-Mac")).toBe(true)
   })
 })

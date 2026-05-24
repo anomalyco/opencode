@@ -1065,6 +1065,10 @@ export const dict = {
   "settings.feishu.edit.enableAutoGroupCreate.label": "允许 AI 自动创建新群",
   "settings.feishu.edit.enableAutoGroupCreate.hint":
     "开后私聊说「帮我建群」AI 会发飞书确认卡片,你点准才真建。默认关 防 prompt injection 诱导 AI 建群。",
+  // FORK: [feat: feishu-group-mention-policy] 2026-05-24
+  "settings.feishu.edit.requireMention.label": "群里需要 @ 后再响应",
+  "settings.feishu.edit.requireMention.hint":
+    "默认开启:bot 群里只回 @ 自己的消息。\n⚠️ 关闭前需在飞书后台改:open.feishu.cn → 选 bot → 事件配置 `im.message.receive_v1` 订阅范围改「全部群消息」+ 权限管理申请 `im:message` + 重新发布。否则飞书不推非 @ 消息,本开关无效。",
   "settings.feishu.edit.saving": "保存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

@@ -1082,6 +1082,10 @@ export const dict = {
   "settings.feishu.edit.enableAutoGroupCreate.label": "Allow AI to auto-create groups",
   "settings.feishu.edit.enableAutoGroupCreate.hint":
     "When on, saying \"create a group\" in DM makes AI send a confirmation card — group is only created after you tap confirm. Off by default to prevent prompt-injection-induced group creation.",
+  // FORK: [feat: feishu-group-mention-policy] 2026-05-24
+  "settings.feishu.edit.requireMention.label": "Require @ mention to respond in groups",
+  "settings.feishu.edit.requireMention.hint":
+    "On by default: bot only replies to @ messages in groups.\n⚠️ Before turning off: open.larksuite.com → your bot → Events: change `im.message.receive_v1` scope to \"All group messages\" + request `im:message` permission + re-publish. Otherwise Lark won't push non-@ messages and this toggle has no effect.",
   "settings.feishu.edit.saving": "Saving...",
   "settings.feishu.edit.providerLabel": "Provider",
   "settings.feishu.edit.modelLabel": "Model",

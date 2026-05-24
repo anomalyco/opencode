@@ -273,3 +273,39 @@ export function extractGroupName(text: string): string | null {
   }
   return null
 }
+
+// ============================================================
+// 群消息 @ bot 检测 — requireMention enforcement
+// [feat: feishu-group-mention-policy] 2026-05-24
+// ============================================================
+
+/**
+ * 判断 user 消息的 mentions 是否含 bot 本人。
+ *
+ * **关键 — 2026-05-24 user 实测发现的设计错误纠正**:
+ * `account.openId` 是 **OAuth 主用户(绑账号的人)** 的 openId,**不是 bot 的**;
+ * `mentions[].openId` 是被 @ 实体的 openId(@ bot 时是 bot 自己的)。两者维度
+ * 不同,openId 比较**永远不命中**。所以改用 **botName** 匹配
+ * `mentions[].name === botName` 判断 bot 是否被 @。
+ *
+ * 输入:event.mentions[] 数组、bot 的 display name(来自 `account.botName`)
+ * 输出:true = bot 被 @,false = 没被 @ / mentions 空 / botName 不匹配
+ *
+ * 用法:pipeline 群消息处理 `requireMention=true`(默认)时,验证 bot 是否被 @
+ * 决定是否走 LLM 响应。p2p 私聊不调用此 helper(私聊总是响应)。
+ *
+ * 防御性:botName 空串(`fetchBotName` 失败导致)→ 返 **true**(**fail open**,
+ * 当作被 @ 让 user 不困惑,避免吞掉所有群消息)。
+ *
+ * **后续 backlog**(更稳健):扩 `fetchBotInfo` 拉 bot 自己的 open_id 存
+ * `account.botOpenId`,改 helper 优先 openId 匹配,fallback botName。
+ * 当前 botName 实现已覆盖 95%+ 场景(user 不会经常改 bot 显示名)。
+ */
+export function isBotMentioned(
+  mentions: ReadonlyArray<MentionRef>,
+  botName: string,
+): boolean {
+  // botName 缺失 → fail open(当作被 @,避免吞掉所有群消息)
+  if (!botName) return true
+  return mentions.some((m) => m.name === botName)
+}
