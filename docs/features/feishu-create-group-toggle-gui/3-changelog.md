@@ -21,6 +21,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `773b710c4` | feat: server POST /accounts/update-settings endpoint(payload 白名单 + partial 校验)|
 | `f812e2d2a` | feat: Tauri feishu_update_account_settings 命令(nested Option 表达 model 三态)|
 | `ffbfd2ae2` | feat: dialog 加 checkbox + i18n + AccountSummary 扩字段(全链路 wire 改完)|
+| `76d3cf713` | docs: 3-changelog + INDEX + 改动日志(原始版,等待 user 实测)|
+| `c5366a856` | **follow-up**: disabled 路径加 soft constraint system prompt 防 LLM 找替代建群路径(实测发现 + user 反馈,2026-05-24)|
 
 ## 改动文件
 
@@ -121,12 +123,41 @@ build dev .app 后:
 | → main merge user 同意 | (待 user 拍)|
 | → origin/main push user 同意 | (待 user 拍)|
 
+## 实测 follow-up — 2026-05-24 加 soft constraint(commit `c5366a856`)
+
+**测试 4 暴露问题**:user 关 flag + 在飞书私聊里说"再帮我创建一个新群,名字叫 test 002"
+→ LLM(灵狐 / MiniMax)**未走 fallback "我不能建群" reply 路径**,而是**主动翻 fork 源码**
+找到 `packages/adapter-feishu-lark/src/feishu/group-creator.ts` 想自己调,撞 imbot
+read permission ask 卡 + user 在飞书收到 "需要权限: 访问项目目录之外的文件" 卡片。
+
+**根因**:原设计"关 flag = 不教 marker 协议",但 LLM 仍有动机帮 user 达成"建群"诉求,
+会尝试替代路径(翻源码 / 调 SDK / 装 MCP / 让 user 提供凭证)。**关闭 ≠ 阻止,只是不引导**。
+
+**修法**:`getSystemPrompt()` 在 `enableAutoGroupCreate=false` 时主动拼一段
+`CREATE_GROUP_DISABLED_PROMPT`,内容含:
+- 明确告知 LLM 此账号未启用 + 引导 user 走 GUI 路径(DeskFox 设置 → 飞书桥接 → 编辑 → 高级能力)
+- **明确禁止**替代路径:不要读源码 / 不要尝试调飞书 SDK / 不要装 MCP / 不要让 user 提供 appSecret 凭证
+- 解释原因:opt-in 用户主动选择不允许,LLM 应当尊重
+
+**约束类型**:soft constraint(prompt 层 — LLM 听话率高,但 prompt injection 可绕)。
+**第二道闸**:imbot agent 受限的 tool 默认权限 + user 在飞书看到权限卡能即时拒绝。
+
+**测试**:既有 enableAutoGroupCreate=false / =true 测试更新加 prompt 内容验证,新加
+1 个测试明确验"不要尝试通过其他途径建群" / "不要读源码" / "不要尝试调飞书 SDK" / "飞书桥接" /
+"高级能力" / "appSecret" 几个关键词都在禁令段里。49/49 message-pipeline tests 全过 +
+402/402 全 adapter 套件全过。
+
+**留 backlog**(可选硬约束 — 若 soft 不够再做):pipeline 层加"建群"关键词检测,
+flag off 时不让 user msg 进 LLM,直接系统回复"未启用 + GUI 引导"。当前 soft constraint
+预期能覆盖 95%+ 场景,真撞 prompt injection / LLM 不听话再上硬拦截。
+
 ## 风险 / 已知限制
 
 1. **测试期间发现 Bun 缓存 `os.homedir()`** — 已 documented 在 changelog 测试段,**留 backlog**:未来加 sidecar-level config watcher 或测试 mock 策略 attack surface backlog
 2. **JSON 直接编辑 + sidecar 重启**仍可用(不破坏旧路径),但 user 建议走 GUI(GUI 才能 hot-reload)
 3. **现役 user 升级路径**:`enableAutoGroupCreate` 字段已在 schema 中默认 false,无需迁移
 4. **e2e test 没补**(目前 e2e 框架还在 Phase 1 — `e2e-phase1-mock-mode`,尚不覆盖 Settings 流程)
+5. **disabled 路径仍是 soft constraint**(prompt 层)— prompt injection 可能绕过让 LLM 仍尝试替代路径,但有 imbot agent 受限 tool 默认权限 + 飞书权限卡两道闸兜底
 
 ## 回退方法
 
