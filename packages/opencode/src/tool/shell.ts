@@ -415,10 +415,20 @@ export const ShellTool = Tool.define(
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      return {
+      const env: NodeJS.ProcessEnv = {
         ...process.env,
         ...extra.env,
       }
+      if (process.platform === "darwin") {
+        const standardPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+        const currentPath = env.PATH ?? ""
+        const existingPaths = currentPath.split(path.delimiter)
+        const missingPaths = standardPaths.filter((p) => !existingPaths.includes(p))
+        if (missingPaths.length > 0) {
+          env.PATH = [...missingPaths, ...(currentPath ? currentPath.split(path.delimiter) : [])].join(path.delimiter)
+        }
+      }
+      return env
     })
 
     const run = Effect.fn("ShellTool.run")(function* (
