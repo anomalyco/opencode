@@ -139,9 +139,12 @@ Two file systems (or one with two access points) so the SQLite DB stays separate
 aws efs create-file-system --creation-token opencode-data       --region $REGION
 aws efs create-file-system --creation-token collab-workspaces   --region $REGION
 # Create mount targets in each subnet your ECS service runs in.
-# Create access points (uid/gid 0, root path "/data" each) so the task can mount
-# them at /root/.local/share/opencode and /var/opencode/workspaces respectively.
 ```
+
+Access points use **uid/gid 10001** (ADR-0003 — the `opencode` user).
+The exact `create-access-point` commands and the one-time chown of
+existing data live in "One-time EFS migration to uid 10001" inside
+Step 5 below.
 
 Lower-spend alternative for early days: a single EC2 instance with EBS works fine — workspace dirs rarely exceed a few GB unless you clone monorepos.
 
@@ -191,11 +194,16 @@ Fargate, 2 vCPU / 4 GB.  Replace `<…>` placeholders with the ARNs and IDs you 
       { "name": "SESSION_SECRET",             "valueFrom": "<arn of opencode/session_secret>" }
     ],
     "mountPoints": [
-      { "sourceVolume": "opencode-data",      "containerPath": "/root/.local/share/opencode" },
+      { "sourceVolume": "opencode-data",      "containerPath": "/home/opencode/.local/share/opencode" },
       { "sourceVolume": "collab-workspaces",  "containerPath": "/var/opencode/workspaces" }
     ],
+    "linuxParameters": {
+      "capabilities": { "drop": ["ALL"] }
+    },
+    "readonlyRootFilesystem": false,
+    "user": "10001:10001",
     "healthCheck": {
-      "command": ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""],
+      "command": ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""],
       "interval": 15, "timeout": 5, "retries": 5, "startPeriod": 30
     },
     "logConfiguration": {
@@ -208,11 +216,94 @@ Fargate, 2 vCPU / 4 GB.  Replace `<…>` placeholders with the ARNs and IDs you 
     }
   }],
   "volumes": [
-    { "name": "opencode-data",     "efsVolumeConfiguration": { "fileSystemId": "<fs-id>", "rootDirectory": "/opencode-data"     } },
-    { "name": "collab-workspaces", "efsVolumeConfiguration": { "fileSystemId": "<fs-id>", "rootDirectory": "/collab-workspaces" } }
+    {
+      "name": "opencode-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "<fs-id>",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": { "accessPointId": "<fsap-id-data>", "iam": "ENABLED" }
+      }
+    },
+    {
+      "name": "collab-workspaces",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "<fs-id>",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": { "accessPointId": "<fsap-id-workspaces>", "iam": "ENABLED" }
+      }
+    }
   ]
 }
 ```
+
+#### One-time EFS migration to uid 10001 (ADR-0003)
+
+Existing deployments wrote EFS files as uid 0.  Before the new task
+definition above is deployed, the on-disk data has to be chowned —
+otherwise the new container (uid 10001) can't read its own SQLite file
+or write to workspace clones.
+
+**Step 1 — chown the existing data** with the *current* image (still
+root), using an entrypoint override on a one-off ECS task:
+
+```bash
+aws ecs run-task --cluster <cluster> \
+  --task-definition <current-revision> \
+  --launch-type FARGATE \
+  --network-configuration 'awsvpcConfiguration={subnets=[...],securityGroups=[...]}' \
+  --overrides '{
+    "containerOverrides":[{
+      "name":"opencode",
+      "command":["chown","-R","10001:10001",
+                 "/var/opencode/workspaces",
+                 "/root/.local/share/opencode"]
+    }]
+  }'
+
+# Wait for it to finish
+aws ecs wait tasks-stopped --cluster <cluster> --tasks <task-arn-from-above>
+```
+
+This runs once, typically completes in under a minute.
+
+**Step 2 — create EFS Access Points** so future writes are forced to
+uid 10001 regardless of in-container uid drift:
+
+```bash
+aws efs create-access-point \
+  --file-system-id <fs-id-data> \
+  --posix-user 'Uid=10001,Gid=10001' \
+  --root-directory 'Path=/,CreationInfo={OwnerUid=10001,OwnerGid=10001,Permissions=0755}' \
+  --tags 'Key=Name,Value=opencode-data-ap'
+
+aws efs create-access-point \
+  --file-system-id <fs-id-workspaces> \
+  --posix-user 'Uid=10001,Gid=10001' \
+  --root-directory 'Path=/,CreationInfo={OwnerUid=10001,OwnerGid=10001,Permissions=0755}' \
+  --tags 'Key=Name,Value=collab-workspaces-ap'
+```
+
+**Step 3 — IAM** — the task role needs EFS client perms on the AP ARNs:
+
+```jsonc
+{
+  "Effect": "Allow",
+  "Action": ["elasticfilesystem:ClientMount", "elasticfilesystem:ClientWrite"],
+  "Resource": ["<arn of fsap-data>", "<arn of fsap-workspaces>"]
+}
+```
+
+`ClientRootAccess` is NOT needed after step 1; the chown is the only
+operation that requires it.
+
+**Step 4 — deploy the new task definition** (the one with `"user": "10001:10001"`).
+ECS rolls it in.  If the chown was successful, the container starts;
+if not, you'll see "Permission denied" errors on the SQLite open and
+the task crashes — re-run step 1.
+
+> Local docker-compose is unaffected: named volumes inherit their uid
+> from the container that first writes to them; a fresh
+> `docker compose up -d --build` creates `opencode-data` as uid 10001.
 
 Key points vs. the local `docker-compose.yml`:
 

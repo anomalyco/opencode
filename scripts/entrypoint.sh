@@ -17,10 +17,17 @@
 
 set -eu
 
+# Resolve the home dir from $HOME (set by the Dockerfile to /home/opencode
+# under ADR-0003).  Falls back to /home/opencode if unset, which is the
+# only correct path post-ADR.  /root/... would mean we're still root —
+# entrypoint logs would show a chown error and the credential write would
+# 500 the auth plugin until ECS replaces the task.
+HOME_DIR="${HOME:-/home/opencode}"
+
 if [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
-  mkdir -p /root/.claude
-  printf '%s' "$CLAUDE_CREDENTIALS_JSON" > /root/.claude/.credentials.json
-  chmod 0600 /root/.claude/.credentials.json
+  mkdir -p "$HOME_DIR/.claude"
+  printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$HOME_DIR/.claude/.credentials.json"
+  chmod 0600 "$HOME_DIR/.claude/.credentials.json"
 fi
 
 # Hand off to the real server.  $@ propagates whatever args ECS / CMD passed.

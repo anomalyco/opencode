@@ -72,8 +72,16 @@ RUN --mount=type=cache,target=/root/.npm \
     echo "WARNING: opencode-claude-auth pre-install failed; will install lazily at runtime"
 
 # Pre-create directories that opencode and the collab workspace need at runtime.
-RUN mkdir -p /var/opencode/workspaces /root/.local/share/opencode /root/.config/opencode && \
-    printf '{"plugin":["opencode-claude-auth@latest"]}\n' > /root/.config/opencode/opencode.json
+# Paths live under /home/opencode (ADR-0003) — the opencode user owns them and
+# they're created here so the final-stage chown is one shallow walk.
+RUN mkdir -p /var/opencode/workspaces \
+             /home/opencode/.local/share/opencode \
+             /home/opencode/.config/opencode \
+             /home/opencode/.cache/opencode/packages \
+             /home/opencode/.claude && \
+    printf '{"plugin":["opencode-claude-auth@latest"]}\n' > /home/opencode/.config/opencode/opencode.json && \
+    # Carry the pre-installed plugin tree across from /root.
+    cp -r /root/.cache/opencode/packages/. /home/opencode/.cache/opencode/packages/ 2>/dev/null || true
 
 # Bring in ONLY manifests, then install workspace deps.
 # Cache mount on /root/.bun/install/cache keeps the bun package store between builds.
@@ -104,7 +112,23 @@ RUN --mount=type=cache,target=/app/packages/app/node_modules/.vite \
 COPY scripts/entrypoint.sh /usr/local/bin/opencode-entrypoint
 RUN chmod +x /usr/local/bin/opencode-entrypoint
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Non-root user (ADR-0003).
+#
+# Until this stage everything ran as root for build speed.  Now we create the
+# `opencode` user (uid 10001) and hand the runtime tree over to it.  The
+# container's working set after this point — /app, /home/opencode, and the
+# data mount at /var/opencode — is owned by uid 10001.  Drops the
+# blast-radius of any future RCE / PTY abuse from "read every secret" to
+# "stuff the unprivileged user can see".
+# ─────────────────────────────────────────────────────────────────────────────
+RUN useradd --uid 10001 --create-home --shell /bin/bash --home-dir /home/opencode opencode 2>/dev/null || true && \
+    chown -R 10001:10001 /app /home/opencode /var/opencode /usr/local/bin/opencode-entrypoint
+
 ENV NODE_ENV=production
+ENV HOME=/home/opencode
 EXPOSE 4096
+
+USER opencode
 
 ENTRYPOINT ["/usr/local/bin/opencode-entrypoint"]

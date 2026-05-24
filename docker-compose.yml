@@ -43,16 +43,18 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
 
     volumes:
-      # Persistent SQLite database
-      - opencode-data:/root/.local/share/opencode
+      # Persistent SQLite database — owned by uid 10001 (ADR-0003).
+      - opencode-data:/home/opencode/.local/share/opencode
       # Persistent server-side repo workspaces
       - collab-workspaces:/var/opencode/workspaces
       # Claude Code credentials for opencode-claude-auth plugin (bind-mount from host)
       # To populate: security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.credentials.json
-      - ${HOME}/.claude/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${HOME}/.claude/.credentials.json:/home/opencode/.claude/.credentials.json:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""]
+      # /healthz returns 503 when SQLite is unreachable — finer-grained than
+      # GET / (which only fails on a fully-dead Bun process).  See ADR-0008.
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
