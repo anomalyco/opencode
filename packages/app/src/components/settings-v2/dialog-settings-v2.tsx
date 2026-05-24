@@ -6,7 +6,7 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
-import { SettingsProviders } from "../settings-providers"
+import { SettingsProvidersV2 } from "./providers"
 import { SettingsModels } from "../settings-models"
 import "./settings-v2.css"
 
@@ -68,8 +68,8 @@ export const DialogSettings: Component = () => {
         <TabsV2.Content value="shortcuts" class="settings-v2-panel settings-v2-legacy-panel">
           <SettingsKeybinds />
         </TabsV2.Content>
-        <TabsV2.Content value="providers" class="settings-v2-panel settings-v2-legacy-panel">
-          <SettingsProviders />
+        <TabsV2.Content value="providers" class="settings-v2-panel">
+          <SettingsProvidersV2 />
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel settings-v2-legacy-panel">
           <SettingsModels />
