@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 
 type State = Record<string, string | undefined>
