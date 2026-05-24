@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "[fork-only] DeskFox 飞书 / Lark IM 桥接 adapter — OAuth Device Flow 扫码绑定 + WSS 长连接 + opencode session 转发,不与 sst/opencode 上游同步",
+  "description": "[fork-only] DeskFox 飞书 / Lark IM 桥接 adapter — OAuth Device Flow 扫码绑定 + WSS 长连接 + opencode session 转发,不与 anomalyco/opencode 上游同步",
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",

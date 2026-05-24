@@ -86,7 +86,7 @@ Emoji 测试:Hello 😀 World 🎉 测试 ✓ 失败 ✗ 上箭头 ↑ 下箭头
 
 ## 链接
 
-外链:[DeskFox 主页](https://deskfox.ai) / [上游 opencode](https://github.com/sst/opencode)
+外链:[DeskFox 主页](https://deskfox.ai) / [上游 opencode](https://github.com/anomalyco/opencode)
 
 ## 标题层级
 

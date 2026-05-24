@@ -5,7 +5,7 @@
 把 opencode 桌面 app 的文件查看器（File Tab Content）从只读 + 行评论，改造成**真正可编辑的编辑器**，改完能写回磁盘。最终产出是**稳定可分发的 exe**，面向自己 + 小范围人群（朋友 / 同事 / 内部团队）。
 
 双轨策略（已确定）：
-- **轨道 1**：在 sst/opencode 提 issue 探官方态度，争取 PR 合入，长期零维护。
+- **轨道 1**：在 anomalyco/opencode 提 issue 探官方态度，争取 PR 合入，长期零维护。
 - **轨道 2**：fork 做自用版本，立刻能用、立刻能分享。
 
 ## 当前状态（2026-04-24）— 🎉 MVP v1.2 达成(含 Save 安全护栏)
@@ -80,7 +80,7 @@
 
 ## 本仓库的角色（2026-04-28 更新）
 
-**本仓库 `opencode-fork`(发行版品牌 DeskFox) = sst/opencode 的 fork**，承担规划 + 治理 + 历史 + 真实 fork 代码,**全部统一在一个 git 仓内**。
+**本仓库 `opencode-fork`(发行版品牌 DeskFox) = anomalyco/opencode 的 fork**，承担规划 + 治理 + 历史 + 真实 fork 代码,**全部统一在一个 git 仓内**。
 
 | 内容 | 位置 | 性质 |
 |---|---|---|

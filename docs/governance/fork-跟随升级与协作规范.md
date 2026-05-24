@@ -2,13 +2,13 @@
 
 > 目标:用最少的规则,把"长期跟住上游"和"持续自有开发"两件事的总成本压到最低。**稳定压一切。**
 >
-> 适用:`D:\project\opencode-fork`(sst/opencode 衍生项目)
+> 适用:`D:\project\opencode-fork`(anomalyco/opencode 衍生项目)
 
 ---
 
 ## Context
 
-我们既要长期吸纳上游 sst/opencode 的迭代,又要持续做自有开发(可编辑文件查看器、Markdown 渲染、媒体预览、Office 预览、文件树右键菜单、品牌定制、主题等)。这是经典的**开源衍生项目治理**问题。
+我们既要长期吸纳上游 anomalyco/opencode 的迭代,又要持续做自有开发(可编辑文件查看器、Markdown 渲染、媒体预览、Office 预览、文件树右键菜单、品牌定制、主题等)。这是经典的**开源衍生项目治理**问题。
 
 调研发现:11 笔 commit 已经让 3 个上游热区文件累积 600+ 行侵入式改动:
 
@@ -107,7 +107,7 @@
 
 `feat/<name>` 是**一次性容器**:从最新 main 切出来,做完合 main 后**立刻销毁**(本地 + 远端),**新项目用新名字,绝不复用**。Win / Mac 双端同时开发的具体步骤(谁先合 / 谁后 rebase / 命令清单 / 常见坑)详见 [`双端协作-SOP.md`](./双端协作-SOP.md)。
 
-> **主分支名注**:2026-05-21 起本仓主分支 `dev` → `main`(对齐 GitHub 默认 + 跟 installer channel `dev` 解耦)。上游 sst/opencode 主分支仍是 `dev`,所以 `upstream/dev` 字面量在 SOP 命令里保留。
+> **主分支名注**:2026-05-21 起本仓主分支 `dev` → `main`(对齐 GitHub 默认 + 跟 installer channel `dev` 解耦)。上游 anomalyco/opencode 主分支仍是 `dev`,所以 `upstream/dev` 字面量在 SOP 命令里保留。
 
 > R5 是 v2 分支模型的操作落地,与 R1-R4 正交(R1-R4 讲"哪些文件能改",R5 讲"分支怎么走")。
 
@@ -118,7 +118,7 @@
 | 指标 | 目标 | 超阈值动作 |
 |---|---|---|
 | **上游侵入率** = 修改上游文件数 / 总文件数 | < 5% | 评估能否退化部分改动到 wrapper |
-| **漂移 commit 数** = `main..upstream/dev`(本仓 main / 上游 sst/opencode 仍是 dev) | ≤ 100 | 触发 ad-hoc 中期 sync |
+| **漂移 commit 数** = `main..upstream/dev`(本仓 main / 上游 anomalyco/opencode 仍是 dev) | ≤ 100 | 触发 ad-hoc 中期 sync |
 | **override 累计笔数** | 每季 ≤ 2 笔 | 红色警报,追溯 R4 是否走过 |
 
 > **关于"上游侵入率"**:测的是"我们对上游做了多少侵入式改动"。**纯新增 fork-only 文件不算侵入**(P1 隔离原则鼓励的就是这种),只算"改上游文件占比"。新文件多反而稀释这个比例,是健康信号(代码总量大 ≠ 偏离上游)。

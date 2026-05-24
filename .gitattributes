@@ -1,7 +1,7 @@
 # ============================================================
 # opencode-fork 跨平台 .gitattributes
 # 管理者：lizhe666@gmail.com (gitee.com/zoulukuang)
-# upstream: github.com/sst/opencode (该文件不会回流上游)
+# upstream: github.com/anomalyco/opencode (该文件不会回流上游)
 # ============================================================
 
 * text=auto eol=lf

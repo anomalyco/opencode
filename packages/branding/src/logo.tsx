@@ -1,4 +1,4 @@
-/* [fork-only] DeskFox 品牌 logo,不与 sst/opencode 上游同步 */
+/* [fork-only] DeskFox 品牌 logo,不与 anomalyco/opencode 上游同步 */
 /* SVG 路径数据 verbatim 来自 D:\Kbase\奇思妙想\opencode\品牌设计\{icon-naked,icon-primary,icon-mono,icon-favicon,loading,wordmark}.svg */
 /* viewBox 跟 user 原 SVG 一致(256×256 / 200×200 / 300×100 / 64×64),内容占满 viewBox 100%; */
 /* fill 全部走 css var(在 theme.css 定义),light/dark 自动切;严禁 filter:invert(1)(珊瑚 #FF9A7A 会被染青) */

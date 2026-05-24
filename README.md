@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://github.com/zoulukuang/deskfox/releases"><img src="https://img.shields.io/github/v/release/zoulukuang/deskfox?display_name=tag&label=latest&style=flat-square" alt="latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
-  <a href="https://github.com/sst/opencode"><img src="https://img.shields.io/badge/forked%20from-sst%2Fopencode-black?style=flat-square" alt="forked from sst/opencode" /></a>
+  <a href="https://github.com/anomalyco/opencode"><img src="https://img.shields.io/badge/forked%20from-sst%2Fopencode-black?style=flat-square" alt="forked from anomalyco/opencode" /></a>
 </p>
 
 ---
@@ -31,7 +31,7 @@
 ## ✨ Why DeskFox
 
 - 🔓 **Open & local-first** — All code public, your data stays on your machine
-- 🌍 **From the sst/opencode community** — Forked from a project audited daily by global developers; our job is to translate it for office users
+- 🌍 **From the anomalyco/opencode community** — Forked from a project audited daily by global developers; our job is to translate it for office users
 - 🎁 **Zero-setup onboarding** — OpenCode Zen free models (MiniMax / Hy3 / Nemotron) bundled — install and chat. No top-up, no API signup
 - 🤖 **One-click model switching** — Claude / GPT / Gemini / Chinese models + Zen gateway, all in one UI; your API keys stay on your machine
 
@@ -114,7 +114,7 @@ Right-click any `.md` file tab → **"Export to Word"** converts your Markdown n
 
 ## 🌱 Project provenance
 
-**DeskFox.Ai** is a fork of [`sst/opencode`](https://github.com/sst/opencode). The upstream is an AI coding tool for developers; we forked it and **repositioned it as a daily AI work companion for office users**. We've done:
+**DeskFox.Ai** is a fork of [`anomalyco/opencode`](https://github.com/anomalyco/opencode). The upstream is an AI coding tool for developers; we forked it and **repositioned it as a daily AI work companion for office users**. We've done:
 
 - 🎨 **UI simplification** — removed coding-specific surfaces, reorganized chat and file operations
 - 🦊 **Brand rebuild** — DeskFox visual identity (Bundle ID / icons / copy), zero namespace overlap with upstream
@@ -132,12 +132,12 @@ Full change index: [`改动日志.md`](改动日志.md) · Governance: [`docs/go
 | 🇨🇳 Gitee mirror | [zoulukuang/deskfox](https://gitee.com/zoulukuang/deskfox) |
 | 🐛 Issues | [github.com/zoulukuang/deskfox/issues](https://github.com/zoulukuang/deskfox/issues) |
 | 🔒 Privacy policy | [English](docs/legal/PRIVACY.md) · [中文](docs/legal/隐私协议.md) |
-| ⬆️ Upstream | [sst/opencode](https://github.com/sst/opencode) |
+| ⬆️ Upstream | [anomalyco/opencode](https://github.com/anomalyco/opencode) |
 
 ## 📄 License
 
-[MIT](LICENSE) — same as upstream [`sst/opencode`](https://github.com/sst/opencode). All changes are public on GitHub, and we follow upstream upgrades.
+[MIT](LICENSE) — same as upstream [`anomalyco/opencode`](https://github.com/anomalyco/opencode). All changes are public on GitHub, and we follow upstream upgrades.
 
 ---
 
-<p align="center"><sub>© 2026 DeskFox.Ai · MIT-licensed · forked from sst/opencode</sub></p>
+<p align="center"><sub>© 2026 DeskFox.Ai · MIT-licensed · forked from anomalyco/opencode</sub></p>

@@ -22,7 +22,7 @@ This Software is **fully open source**. The source code is hosted on two public 
 
 **You can audit the code yourself** to verify whether what we say in this policy is true — what we collect, what we don't, and how data leaves your machine. This is a stronger privacy guarantee than any legal promise.
 
-The Software is licensed under the [**MIT License**](../../LICENSE) (same as upstream [sst/opencode](https://github.com/sst/opencode)). You may use, modify, and distribute it freely, subject to keeping the copyright and license text.
+The Software is licensed under the [**MIT License**](../../LICENSE) (same as upstream [anomalyco/opencode](https://github.com/anomalyco/opencode)). You may use, modify, and distribute it freely, subject to keeping the copyright and license text.
 
 ### Our Core Commitment
 
@@ -219,9 +219,9 @@ For DeskFox installed via the **Microsoft Store** (MSIX package), upgrades are *
 - DeskFox **does not** send any request to DeskFox's update endpoint
 - Update behavior follows Microsoft Store rules, with the Store performing silent updates or prompts per its own policy
 
-#### Difference from Upstream sst/opencode
+#### Difference from Upstream anomalyco/opencode
 
-DeskFox **has disabled the upstream sst/opencode official auto-update channel** (see [`改动日志.md`](../../改动日志.md) entry "禁自动升级") because the upstream channel would overwrite DeskFox with the upstream binary. The update check described here is DeskFox's **own** channel, used only to notify of DeskFox's own version updates, unrelated to the upstream channel.
+DeskFox **has disabled the upstream anomalyco/opencode official auto-update channel** (see [`改动日志.md`](../../改动日志.md) entry "禁自动升级") because the upstream channel would overwrite DeskFox with the upstream binary. The update check described here is DeskFox's **own** channel, used only to notify of DeskFox's own version updates, unrelated to the upstream channel.
 
 ---
 
@@ -233,7 +233,7 @@ DeskFox uses WebView2 to render its UI. This is a Windows system component maint
 
 ### 4.2 Open-Source Upstream Dependencies
 
-DeskFox is forked from the open-source project [sst/opencode](https://github.com/sst/opencode) under MIT license, and depends on a series of frontend / Rust third-party libraries. These libraries **run as code on your local machine** and do not independently transmit your data. Full dependency manifest in source `package.json` and `Cargo.toml`.
+DeskFox is forked from the open-source project [anomalyco/opencode](https://github.com/anomalyco/opencode) under MIT license, and depends on a series of frontend / Rust third-party libraries. These libraries **run as code on your local machine** and do not independently transmit your data. Full dependency manifest in source `package.json` and `Cargo.toml`.
 
 ### 4.3 AI Model Providers You Connect
 
@@ -278,7 +278,7 @@ This is a **privacy advantage** of this Software relative to typical SaaS tools,
 |---|---|---|
 | GitHub | https://github.com/zoulukuang/deskfox | Primary / Issues / PRs |
 | Gitee | https://gitee.com/zoulukuang/deskfox | China mirror / two-way sync |
-| Upstream | https://github.com/sst/opencode | We fork from this (MIT) |
+| Upstream | https://github.com/anomalyco/opencode | We fork from this (MIT) |
 
 ### 6.2 What You Can Verify
 
@@ -330,7 +330,7 @@ Full-disk encryption ensures that even if your computer is stolen or its drive r
 
 The Software is **provided free of charge, on an "AS IS" basis**, without warranty of any kind, express or implied, including but not limited to warranties of **merchantability, fitness for a particular purpose, and non-infringement**.
 
-DeskFox, the Software's authors, the upstream sst/opencode authors, and all contributors **make no warranty** that:
+DeskFox, the Software's authors, the upstream anomalyco/opencode authors, and all contributors **make no warranty** that:
 - The Software is bug-free, fault-free, or uninterrupted
 - The Software is suitable for your specific use case
 - The Software's output is accurate, reliable, or up-to-date
@@ -498,11 +498,11 @@ Update-check local cache: `~/.cache/opencode/update_check.json` (corresponding p
 
 ### About the Path Name (Why `opencode/` instead of `deskfox/`?)
 
-DeskFox **currently reuses the upstream sst/opencode directory name `opencode/`**, for compatibility with upstream config (users coming from opencode get their chat history and model settings automatically without migration). Migrating to a dedicated `deskfox/` directory is on the technical-debt list (it constitutes an upstream-modifying change requiring R3 review).
+DeskFox **currently reuses the upstream anomalyco/opencode directory name `opencode/`**, for compatibility with upstream config (users coming from opencode get their chat history and model settings automatically without migration). Migrating to a dedicated `deskfox/` directory is on the technical-debt list (it constitutes an upstream-modifying change requiring R3 review).
 
-### Coexistence: Both Upstream sst/opencode and DeskFox Installed
+### Coexistence: Both Upstream anomalyco/opencode and DeskFox Installed
 
-If you have **both** upstream sst/opencode and DeskFox installed on the same machine, please note:
+If you have **both** upstream anomalyco/opencode and DeskFox installed on the same machine, please note:
 
 - They **share the same config directory** (including the `install_id` file, `config.json`, chat history, model API keys, MCP configs, etc.)
 - A change in either side is read by the other on next startup

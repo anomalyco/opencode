@@ -11,7 +11,7 @@
 |---|---|---|
 | Git 分支 | `main` | 本仓主分支(原 `dev`,2026-05-21 重命名)|
 | Git 分支 | `feat/<name>` | feat 分支,合 main 即销毁 |
-| Git 分支 | `upstream/dev` | 上游 sst/opencode 主分支(他们仍叫 `dev`)|
+| Git 分支 | `upstream/dev` | 上游 anomalyco/opencode 主分支(他们仍叫 `dev`)|
 | Installer channel | `prod` | 稳定版(发布物,无版本号后缀)|
 | Installer channel | `beta` | 测试版(预发,保留 AppId 备用,日常不主动 ship)|
 | Installer channel | `dev` | 预览版(可对外发,版本号 `-dev` 后缀)|
@@ -20,6 +20,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [upstream-rename-sst-to-anomalyco](./upstream-rename-sst-to-anomalyco/) | done | forward-looking docs 统一改 `sst/opencode` → `anomalyco/opencode`(2026-05-24 user 拍板对齐:sst 已 transfer 到 anomalyco,GitHub 自动 redirect,以后讲"opencode 官方/上游"一律指 anomalyco)— 27 文件 / 净 +2 行(主要 1:1 文本替换 + CLAUDE.md 1 行历史注);历史 archive / 旧 feat changelog / `docs/STATUS.md` / `改动日志.md` / `docs/installer-versions.md` 保留原 sst 字眼作为历史快照不动;memory 加 `reference_upstream_opencode_owner.md` 防未来 agent 再犯"二级 fork"误判 |
 | [e2e-pre-push-gate](./e2e-pre-push-gate/) | done | 测试纪律自动化最后一公里 — `.husky/pre-push` 在原 bun 版本 + typecheck 后追加 Phase 1 e2e gate 段:**只在 push 含 main 时触发**(feat 分支 push 仍只 typecheck,不付 ~24s e2e 成本);vite mock 必须已在 :3000(不自动 spawn,避开 Win Git Bash 跨平台 pid 管理坑,fail 时清楚指引);通过 `git push --no-verify` + `[override-pre-push: 理由]` tag 跳过;3 种场景手动验证全过(无 vite+main→fail / 无 vite+feat→skip e2e / vite+main→11 passed 24.1s)|
 | [e2e-vite-warmup](./e2e-vite-warmup/) | done | R5 v4 flaky 48h 内修首次履约 — vite mock 冷启动 + Playwright 多 worker 并行 → 第 1 批 2-3 spec timeout 偶发 fail;双保险方案:① `vite/e2e-mock.js` server.warmup.clientFiles 8 个核心 SolidJS 组件(启动时主动预编)② 新建 `e2e/global-setup.ts` 跑测试前真 chromium 加载 `/` 一次让 module 编完(`playwright.config.ts` 接 globalSetup);4 次连跑(含真冷启动)全 11 passed / 0 flaky / 20.4-24.0s;Tiny+ 58 代码 + 80 文档;同时删 `OPENCODE-PLAN/需求池/e2e-vite-cold-start-flaky.md` backlog(闭环)|
 | [e2e-bug-repro-3case](./e2e-bug-repro-3case/) | done | Phase 1 e2e 首批 bug-repro 示范用例落地 — A6 large-file-preview-guard(100MB+ txt → FileTooLarge 卡 + 2 按钮)/ A5 chat-drop-overlay-stuck-fix(dragover 激活 → drop+stopPropagation → window capture-phase 兜底清 overlay)/ A4 auto-save-debounce-flush(D1 降级路径:invoke write_text_file → memfs 同步 + mtime 自增 + 0 误 toast + mtime 冲突保护);实施中暴露 Phase 1 fixture infra 4 bug(mock timing / shape 转换 / memfs.list root prefix / Playwright glob query string)全数顺手修;~640 行(266 代码 + 24 fixture/memfs + 350 文档),Medium 4h 实施;全套 e2e 11 passed / 1 skipped / 14s,0 回归;R5 v4 bug-repro 提级到 Phase 1 e2e 的首批履约 |
@@ -59,7 +60,7 @@
 | [macos-pack-installer](./macos-pack-installer/) | done | macOS 一键打 .app/.dmg 脚本(pack-installer.sh + bump-installer-version.sh)+ icon.icns 加 .gitignore + 4 个 sh +x 权限(Tiny) |
 | [office-installer-macos](./office-installer-macos/) | done | LibreOffice 自动安装 macOS 适配 — DMG 下载 + hdiutil 挂载 + cp -R 到 ~/Applications + soffice 检测路径(Tiny,fork-only,纯增量) |
 | [prod-bundle-id-fix](./prod-bundle-id-fix/) | done | macOS prod / beta Bundle ID 独立 override(prod=ai.opencode.desktop,beta=...beta),修应用程序网格搜不到 .dev Bundle ID 应用的问题(Tiny) |
-| [bundle-id-debrand](./bundle-id-debrand/) | done | 完整品牌切割 — Bundle ID 三档全去 `opencode` 字眼,改 `ai.deskfox.app` 系列(prod/.beta/.dev),与 sst/opencode 上游 0 命名空间共享(Tiny) |
+| [bundle-id-debrand](./bundle-id-debrand/) | done | 完整品牌切割 — Bundle ID 三档全去 `opencode` 字眼,改 `ai.deskfox.app` 系列(prod/.beta/.dev),与 anomalyco/opencode 上游 0 命名空间共享(Tiny) |
 | [分支策略-v2](./分支策略-v2/) | done | dev 单一稳定主干 + 上游同步分离 + 三档环境正交分支 — feat → dev 一次性 merge 切换(`fae01d2a8`,187 文件 / +19721 行),废除 4.3 节"禁止直 push 到 dev",origin 双 push 临时改单推 gitee |
 | [win-tri-env-appid](./win-tri-env-appid/) | done | Windows 三档 AppId 同机共存 — `DeskFox.iss` 加 `#if AppEnv` 切档(beta `{86413DCA-...}` + dev `{4C5D29F2-...}` 新生成,prod GUID 锁死不变);`pack-installer.ps1` 加 `-Env` 参数;Mac/Win 三档共存能力对齐 |
 | [数据目录-deskfox-隔离](./数据目录-deskfox-隔离/) | spec | DeskFox 与上游 opencode 共用全部数据目录(auth/sessions/config/cache/install_id),两档实施:Phase 1 install_id 独立(fork-only,3 行)/ Phase 2 全量隔离(改上游 R3);从隐私协议 v0.5 待办挪入。**2026-05-04 评估暂搁(deferred)** — 当前主受众非工程并行使用场景,99% 用户 0 收益;触发条件(并发冲突 / schema 破坏 / 商业化 / 10w+ 用户)未出现前继续 backlog,详见 1-spec.md "评估决策" 段 |

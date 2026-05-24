@@ -1,6 +1,6 @@
 # @opencode-ai/branding — DeskFox 品牌层
 
-> **[fork-only]** 本包不与 sst/opencode 上游同步,rebase 时永远保留。
+> **[fork-only]** 本包不与 anomalyco/opencode 上游同步,rebase 时永远保留。
 >
 > 见 [`docs/governance/DeskFox-品牌替换.md`](../../docs/governance/DeskFox-品牌替换.md)。
 

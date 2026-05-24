@@ -58,7 +58,7 @@ DeskFox 前端启动后会立刻 fetch `127.0.0.1:4096`(opencode server)。当�
 
 ## 上游 `todo.spec.ts`
 
-是上游 sst/opencode 留下的占位 fixme,**fork 不动**(避免 sync 冲突)。本次新加的测试文件命名以 `smoke.spec.ts` / `<feature>.spec.ts` 形式,与上游不重叠。
+是上游 anomalyco/opencode 留下的占位 fixme,**fork 不动**(避免 sync 冲突)。本次新加的测试文件命名以 `smoke.spec.ts` / `<feature>.spec.ts` 形式,与上游不重叠。
 
 ## 测试金字塔提示
 

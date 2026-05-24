@@ -1,7 +1,9 @@
 # opencode-fork — Claude Code 协作约束
 
-> sst/opencode 的衍生项目,目标:改造成非编码人员可用的日常工作工具。
+> anomalyco/opencode 的衍生项目,目标:改造成非编码人员可用的日常工作工具。
 > 此文件是 fork 自加,Claude Code 启动时自动加载。**任何在本项目工作的 agent 必读必守。**
+>
+> **上游 owner 历史**:`anomalyco/opencode` 即原 `sst/opencode`(GitHub 自动 redirect)。2026-05-24 user 拍板对齐:讲"opencode 官方/上游"一律指 anomalyco/opencode;forward-looking 文档统一改名,历史 archive(`docs/history/` / 旧 feat changelog / `docs/STATUS.md` / `改动日志.md` / `docs/installer-versions.md`)保留原 `sst/opencode` 字眼作为历史快照。
 
 ## 元原则
 
@@ -108,7 +110,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 
 ### 规划 / 治理 / 历史档案 — 全部收口于 `docs/`
 
-> **2026-04-28 起**:opencode-plan 仓所有 fork 相关文档已迁入本仓 `docs/`,与上游 sst/opencode 0 路径冲突(上游无 `docs/` 目录)。
+> **2026-04-28 起**:opencode-plan 仓所有 fork 相关文档已迁入本仓 `docs/`,与上游 anomalyco/opencode 0 路径冲突(上游无 `docs/` 目录)。
 > opencode-plan 仓只剩 prototype 原型代码 + 历史快照,不再维护。
 > 完整导航见 [`docs/README.md`](./docs/README.md)。
 
@@ -116,7 +118,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 |---|---|---|
 | 治理总纲 | `docs/governance/fork-跟随升级与协作规范.md` | 完整原则 / 规范 / SOP |
 | 改动规则细则 | `docs/governance/改动规则.md` | 白黑名单 / baseline tag / diff 阈值 / hook 体系 |
-| **上游 merge SOP**(本次新增) | `docs/governance/UPSTREAM-MERGE-GUIDE.md` | 与 sst/opencode 合并的完整 checklist + 自动化辅助 |
+| **上游 merge SOP**(本次新增) | `docs/governance/UPSTREAM-MERGE-GUIDE.md` | 与 anomalyco/opencode 合并的完整 checklist + 自动化辅助 |
 | DeskFox 品牌替换 | `docs/governance/DeskFox-品牌替换.md` | 已落地 |
 | 应用身份命名规则 | `docs/governance/应用身份-命名规则.md` | 两端规则统一:Mac Bundle ID 三档(已落地,与 `deskfox.ai` 域名对齐)+ Win AppId 三档(已落地 2026-04-30,commit `21c3f80f9`),merge upstream 维护规则 |
 | **版本号与发布渠道规范** | `docs/governance/版本号与发布渠道规范.md` | 3-tier 体系:Tier 1 稳定版(prod 无后缀)/ Tier 2 预览版(dev `-dev` 后缀,可对外发)/ Tier 3 本地测试版(raw exe 不发布);版本号 `YYYY.M.D.N[-env-suffix]` + N 序列双维度独立(平台 × env);Tier 1/2 ship 完整 SOP |
@@ -142,7 +144,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 
 每层把关给 user 一次刹车机会。例外:开 feat 分支 / feat 分支内 commit / feat 分支 push origin(私有 work,不影响 main)agent 可自主。
 
-- **默认分支**:`main` — **单一稳定主干**,不自动跟随 `upstream/dev`(上游主分支还叫 dev,这是 sst/opencode 命名,跟我们解耦),合上游是主动决策(不是被动跟随)
+- **默认分支**:`main` — **单一稳定主干**,不自动跟随 `upstream/dev`(上游主分支还叫 dev,这是 anomalyco/opencode 命名,跟我们解耦),合上游是主动决策(不是被动跟随)
 - **功能分支**:`feat/<name>` — **一次性容器**,合 main = 销毁,**新项目用新名字,绝不复用**。`<name>` **全小写 + kebab-case**(中划线分词,行业常规),中英混合 OK 但英文部分必须小写。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + 命名规范 + Win/Mac 双端协作流程)
 - **🌿 开任何新分支前必先拉最新 main**(硬规则,无例外):`git checkout -b feat/<name>` / `chore/<name>` / `sync/<日期>` 之前,**必须**先 `git checkout main && git pull --rebase`。理由:Win/Mac 双端协作 + 远端持续推进,基于 stale main 起 feat = 注定 rebase / 大概率冲突。实施超 30 min 时,合 main 前再 `git fetch && git log main..origin/main` 确认远端没新动。
 - **上游同步**:临时分支 `sync/upstream-<日期>`,merge 完即删
@@ -153,7 +155,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 - **远端**:
   - `origin` → GitHub 主仓(开源协作主平台,所有 PR / Issue / Star 在这里;国内 push 走 SSH + 代理)
   - `gitee` → Gitee 镜像(国内用户快速 clone;Gitee 后台定时从 GitHub 自动同步,无需手动 push)
-  - `upstream` 只读指 sst/opencode
+  - `upstream` 只读指 anomalyco/opencode
 
 > 完整模型与切换逻辑见 [`docs/features/分支策略-v2/1-spec.md`](docs/features/分支策略-v2/1-spec.md)。
 
@@ -185,7 +187,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 指标 | 目标 |
 |---|---|
 | **上游侵入率** = 修改上游文件数 / 总文件数 | < 5% |
-| **漂移 commit 数** = `main..upstream/dev`(我们主分支 main / 上游 sst/opencode 主分支仍叫 dev)| ≤ 100 |
+| **漂移 commit 数** = `main..upstream/dev`(我们主分支 main / 上游 anomalyco/opencode 主分支仍叫 dev)| ≤ 100 |
 | **override 累计笔数**(按 commit 算) | 每季 ≤ 2 笔 |
 
 > 上游侵入率:纯新增 fork-only 文件不算侵入(P1 鼓励),只算改上游文件占比。新文件多反而稀释比例,是健康信号。

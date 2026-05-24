@@ -1,6 +1,6 @@
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
-- The default branch in this repo is `main` (renamed from `dev` on 2026-05-21; upstream sst/opencode still uses `dev`).
+- The default branch in this repo is `main` (renamed from `dev` on 2026-05-21; upstream anomalyco/opencode still uses `dev`).
 - Use `main` or `origin/main` for diffs. Upstream comparisons go against `upstream/dev`.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
