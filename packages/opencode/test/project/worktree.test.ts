@@ -5,7 +5,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
-import { Instance } from "../../src/project/instance"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
@@ -41,7 +41,10 @@ const waitReady = Effect.fn("WorktreeTest.waitReady")(function* () {
 const removeCreatedWorktree = (directory: string) =>
   Effect.gen(function* () {
     const svc = yield* Worktree.Service
-    const ctx = yield* Effect.sync(() => Instance.current).pipe(provideInstance(directory))
+    const ctx = yield* Effect.gen(function* () {
+      return yield* InstanceRef
+    }).pipe(provideInstance(directory))
+    if (!ctx) return yield* Effect.die(new Error("missing test instance"))
     yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
     const ok = yield* svc.remove({ directory })
     if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))

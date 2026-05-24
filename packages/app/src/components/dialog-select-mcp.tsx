@@ -13,6 +13,7 @@ const statusLabels = {
   connected: "mcp.status.connected",
   failed: "mcp.status.failed",
   needs_auth: "mcp.status.needs_auth",
+  needs_client_registration: "mcp.status.needs_client_registration",
   disabled: "mcp.status.disabled",
 } as const
 
@@ -31,8 +32,16 @@ export const DialogSelectMcp: Component = () => {
 
   const toggle = useMutation(() => ({
     mutationFn: async (name: string) => {
-      if (sync.data.mcp[name]?.status === "connected") await sdk.client.mcp.disconnect({ name })
-      else await sdk.client.mcp.connect({ name })
+      const status = sync.data.mcp[name]
+      if (status?.status === "connected") {
+        await sdk.client.mcp.disconnect({ name })
+        return
+      }
+      if (status?.status === "needs_auth") {
+        await sdk.client.mcp.auth.authenticate({ name })
+        return
+      }
+      await sdk.client.mcp.connect({ name })
     },
     onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
   }))
@@ -67,7 +76,7 @@ export const DialogSelectMcp: Component = () => {
           }
           const error = () => {
             const s = mcpStatus()
-            return s?.status === "failed" ? s.error : undefined
+            if (s?.status === "failed" || s?.status === "needs_client_registration") return s.error
           }
           const enabled = () => status() === "connected"
           return (
@@ -77,9 +86,6 @@ export const DialogSelectMcp: Component = () => {
                   <span class="truncate">{i.name}</span>
                   <Show when={statusLabel()}>
                     <span class="text-11-regular text-text-weaker">{statusLabel()}</span>
-                  </Show>
-                  <Show when={toggle.isPending && toggle.variables === i.name}>
-                    <span class="text-11-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>
                   </Show>
                 </div>
                 <Show when={error()}>

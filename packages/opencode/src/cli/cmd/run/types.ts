@@ -34,6 +34,7 @@ export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provide
 export type RunPrompt = {
   text: string
   parts: RunPromptPart[]
+  mode?: "shell"
   command?: {
     name: string
     arguments: string
@@ -52,6 +53,8 @@ export type RunInput = {
   sessionID: string
   sessionTitle?: string
   resume?: boolean
+  replay?: boolean
+  replayLimit?: number
   agent: string | undefined
   model: PromptModel | undefined
   variant: string | undefined
@@ -160,6 +163,7 @@ export type FooterView =
 
 export type FooterPromptRoute =
   | { type: "composer" }
+  | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
   | { type: "model" }
@@ -300,6 +304,10 @@ export type StreamCommit = {
   interrupted?: boolean
   toolState?: StreamToolState
   toolError?: string
+  shell?: {
+    callID: string
+    command: string
+  }
 }
 
 // The public contract between the stream transport / prompt queue and

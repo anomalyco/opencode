@@ -5,7 +5,6 @@ import type {
   PermissionRequest,
   Project,
   ProviderAuthResponse,
-  ProviderListResponse,
   QuestionRequest,
   Session,
   Todo,
@@ -20,6 +19,7 @@ import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery } from "../global-sync"
+import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 
 type GlobalStore = {
   ready: boolean
@@ -28,7 +28,7 @@ type GlobalStore = {
   session_todo: {
     [sessionID: string]: Todo[]
   }
-  provider: ProviderListResponse
+  provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
@@ -208,7 +208,7 @@ export async function bootstrapDirectory(input: {
     config: Config
     path: Path
     project: Project[]
-    provider: ProviderListResponse
+    provider: NormalizedProviderListResponse
   }
   queryClient: QueryClient
 }) {

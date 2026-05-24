@@ -28,7 +28,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       isBedrock
         ? `${providerApi}/model/${isBedrockModelArn ? encodeURIComponent(providerModel) : providerModel}/${isStream ? "invoke-with-response-stream" : "invoke"}`
         : providerApi + "/messages",
-    modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+    modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
       if (isBedrock || isDatabricks) {
         headers.set("Authorization", `Bearer ${apiKey}`)
       } else {
