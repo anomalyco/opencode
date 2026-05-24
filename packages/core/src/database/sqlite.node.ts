@@ -1,3 +1,3 @@
-import { NodeSqliteClient } from "@opencode-ai/effect-drizzle-sqlite/node-sqlite"
+import { NodeSqliteClient } from "@opencode-ai/effect-sqlite-node"
 
 export const layer = NodeSqliteClient.layer

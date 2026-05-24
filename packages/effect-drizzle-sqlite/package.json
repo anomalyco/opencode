@@ -14,7 +14,6 @@
     ".": "./src/index.ts",
     "./effect-sqlite": "./src/effect-sqlite/index.ts",
     "./effect-sqlite/migrator": "./src/effect-sqlite/migrator.ts",
-    "./node-sqlite": "./src/node-sqlite/index.ts",
     "./sqlite-core/effect": "./src/sqlite-core/effect/index.ts"
   },
   "devDependencies": {

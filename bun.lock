@@ -225,6 +225,7 @@
         "@npmcli/arborist": "9.4.0",
         "@npmcli/config": "10.8.1",
         "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
+        "@opencode-ai/effect-sqlite-node": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.8.1",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/context-async-hooks": "2.6.1",
@@ -322,6 +323,18 @@
         "@effect/sql-sqlite-bun": "catalog:",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
+    "packages/effect-sqlite-node": {
+      "name": "@opencode-ai/effect-sqlite-node",
+      "version": "1.15.10",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
       },
     },
@@ -532,7 +545,6 @@
         "@types/which": "3.0.4",
         "@types/yargs": "17.0.33",
         "@typescript/native-preview": "catalog:",
-        "drizzle-kit": "catalog:",
         "drizzle-orm": "catalog:",
         "prettier": "3.6.2",
         "typescript": "catalog:",
@@ -1573,6 +1585,8 @@
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
 
     "@opencode-ai/effect-drizzle-sqlite": ["@opencode-ai/effect-drizzle-sqlite@workspace:packages/effect-drizzle-sqlite"],
+
+    "@opencode-ai/effect-sqlite-node": ["@opencode-ai/effect-sqlite-node@workspace:packages/effect-sqlite-node"],
 
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
 

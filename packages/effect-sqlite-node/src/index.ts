@@ -17,8 +17,8 @@ import * as Statement from "effect/unstable/sql/Statement"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
-export const TypeId: TypeId = "~@opencode-ai/effect-drizzle-sqlite/NodeSqliteClient"
-export type TypeId = "~@opencode-ai/effect-drizzle-sqlite/NodeSqliteClient"
+export const TypeId: TypeId = "~@opencode-ai/effect-sqlite-node/NodeSqliteClient"
+export type TypeId = "~@opencode-ai/effect-sqlite-node/NodeSqliteClient"
 
 export interface SqliteClient extends Client.SqlClient {
   readonly [TypeId]: TypeId
@@ -27,7 +27,7 @@ export interface SqliteClient extends Client.SqlClient {
   readonly updateValues: never
 }
 
-export const SqliteClient = Context.Service<SqliteClient>("@opencode-ai/effect-drizzle-sqlite/NodeSqliteClient")
+export const SqliteClient = Context.Service<SqliteClient>("@opencode-ai/effect-sqlite-node/NodeSqliteClient")
 
 export interface SqliteClientConfig {
   readonly filename: string
@@ -76,7 +76,11 @@ export const make = (
           try {
             return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
           } catch (cause) {
-            return Effect.fail(new SqlError({ reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }) }))
+            return Effect.fail(
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+            )
           }
         })
 
@@ -90,7 +94,11 @@ export const make = (
               statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
             )
           } catch (cause) {
-            return Effect.fail(new SqlError({ reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }) }))
+            return Effect.fail(
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+            )
           }
         })
 
@@ -114,7 +122,9 @@ export const make = (
           Effect.try({
             try: () => db.loadExtension(path),
             catch: (cause) =>
-              new SqlError({ reason: classifySqliteError(cause, { message: "Failed to load extension", operation: "loadExtension" }) }),
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to load extension", operation: "loadExtension" }),
+              }),
           }),
       })
     })
