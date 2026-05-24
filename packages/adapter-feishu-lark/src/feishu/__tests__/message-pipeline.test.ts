@@ -537,7 +537,10 @@ describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () =>
     expect(promptAsyncCalled).toBe(false)
     expect(fakes.sentTexts).toHaveLength(1)
     expect(fakes.sentTexts[0]!.text).toContain("好的,要建群")
-    expect(fakes.sentTexts[0]!.text).toContain("群叫什么名字")
+    expect(fakes.sentTexts[0]!.text).toContain("请在一条消息里告诉我群名")
+    // 应含多个口令示例
+    expect(fakes.sentTexts[0]!.text).toContain("帮我建群叫")
+    expect(fakes.sentTexts[0]!.text).toContain("群名是")
     // direct-dispatch 早退,ack 不应触发(ackMessage 在 dispatch 之后)
     expect(fakes.ackedMessages).toHaveLength(0)
   })

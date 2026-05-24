@@ -393,7 +393,14 @@ export class MessagePipeline {
       )
       await this.sendFeishuText(
         event.chatId,
-        "好的,要建群。请告诉我群叫什么名字?例如:「帮我建群叫 项目讨论」",
+        [
+          "好的,要建群。请在一条消息里告诉我群名,例如:",
+          "• 帮我建群叫 **项目讨论**",
+          "• 建群,群名是 **项目讨论**",
+          "• 帮我建群,名字叫 **项目讨论**",
+          "• 建群 **项目讨论**(动词后空格 + 群名)",
+          "• create group called **project-talk**",
+        ].join("\n"),
       )
       return
     }

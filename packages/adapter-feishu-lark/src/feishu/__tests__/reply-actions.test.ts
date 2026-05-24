@@ -425,4 +425,75 @@ describe("extractGroupName", () => {
   test("群名前后空格 → trim", () => {
     expect(extractGroupName("建群叫   test  ,然后...")).toBe("test")
   })
+
+  // [follow-up 2026-05-24] 扩展 introducer:群名 / 名称 / 起名 三组
+  test("'建个群 群名是012' → '012'", () => {
+    expect(extractGroupName("建个群 群名是012")).toBe("012")
+  })
+
+  test("'帮我建个群,群名是012' → '012'", () => {
+    expect(extractGroupName("帮我建个群,群名是012")).toBe("012")
+  })
+
+  test("'帮我建群,群名叫 X' → 'X'", () => {
+    expect(extractGroupName("帮我建群,群名叫 X")).toBe("X")
+  })
+
+  test("'建群,群名为 工作组' → '工作组'", () => {
+    expect(extractGroupName("建群,群名为 工作组")).toBe("工作组")
+  })
+
+  test("'建群,名字是 我的群' → '我的群'(名字是)", () => {
+    expect(extractGroupName("建群,名字是 我的群")).toBe("我的群")
+  })
+
+  test("'建群,名称叫 工作组' → '工作组'(名称叫)", () => {
+    expect(extractGroupName("建群,名称叫 工作组")).toBe("工作组")
+  })
+
+  test("'建群,名称是 X' → 'X'", () => {
+    expect(extractGroupName("建群,名称是 X")).toBe("X")
+  })
+
+  test("'建群名叫 团队会' → '团队会'(名叫)", () => {
+    expect(extractGroupName("建群名叫 团队会")).toBe("团队会")
+  })
+
+  test("'建群名是 工作组' → '工作组'(名是)", () => {
+    expect(extractGroupName("建群名是 工作组")).toBe("工作组")
+  })
+
+  test("'拉个群起名 项目讨论' → '项目讨论'(起名)", () => {
+    expect(extractGroupName("拉个群起名 项目讨论")).toBe("项目讨论")
+  })
+
+  test("'拉个群起名叫 项目讨论' → '项目讨论'(起名叫)", () => {
+    expect(extractGroupName("拉个群起名叫 项目讨论")).toBe("项目讨论")
+  })
+
+  // [follow-up 2026-05-24] short form:动词+群+空格+名字
+  test("'帮我建群 012' → '012'(短形式,动词后空格)", () => {
+    expect(extractGroupName("帮我建群 012")).toBe("012")
+  })
+
+  test("'建群 项目讨论' → '项目讨论'(短形式)", () => {
+    expect(extractGroupName("建群 项目讨论")).toBe("项目讨论")
+  })
+
+  test("'拉个群 我们组' → '我们组'(拉+群+空格+名字)", () => {
+    expect(extractGroupName("拉个群 我们组")).toBe("我们组")
+  })
+
+  test("'创建讨论群 X' → 'X'(动词+字符+群+空格+名字)", () => {
+    expect(extractGroupName("创建讨论群 X")).toBe("X")
+  })
+
+  // 短形式不应误吞:动词+群+无空格 → 不匹配
+  test("'建群讨论' → null(无空格,'讨论' 应被当延续不是名字)", () => {
+    expect(extractGroupName("建群讨论")).toBeNull()
+  })
+
+  test("'建群讨论这个 bug' → null(无空格分隔)", () => {
+    expect(extractGroupName("建群讨论这个 bug")).toBeNull()
+  })
 })

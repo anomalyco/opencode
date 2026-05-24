@@ -209,15 +209,25 @@ export function isGroupCreationIntent(text: string): boolean {
 }
 
 /**
- * 中文群名提取 — 关键字"叫" / "叫做" / "名字叫" / "名为" / "命名" 等 + 后续字符。
+ * 中文群名提取 — 双 pattern 策略覆盖自然语言表达:
  *
- * 锚到分隔符(逗号 / 句号 / 行尾)避免吞掉后续语句:
- *   "建群叫 X 把所有人拉进来" → 应只提到"X"(理论上,但当前 regex 简化会贪婪)
+ * **Pattern 1 (introducer)**:命名引导词 + 群名
+ *   - `群名(是|叫|为)` / `名字(叫|是|为)` / `名(叫|是|为)`
+ *   - `名称(是|叫|为)` / `命名(为)?` / `叫做` / `叫` / `起名(叫|为)?`
  *
- * 简化策略:non-greedy + 停在 [,，。;\n] 或行尾。复杂多句场景 user 自己分开说。
+ * **Pattern 2 (short form)**:动词 + '群' + 空格 + 群名(无 introducer)
+ *   - `建群 012` / `拉个群 我们组` / `创建群 项目组`
+ *   - 必须 '群' 后**显式空格分隔**(防误判 "建群讨论" 的 "讨论" 被当群名)
+ *
+ * 锚到分隔符([,，。;；\n] 或 EOL)避免贪婪吞后续语句。
+ *
+ * [feat: feishu-create-group-hard-block] direct-dispatch follow-up 2026-05-24
  */
-const ZH_NAME_PATTERN =
-  /(?:命名为|命名|名字叫|名字为|名为|叫做|叫)\s*["「『'"`]?([^"「『」』'"`,，。;；\n]{1,40}?)["」』'"`]?\s*(?:$|[,，。;；])/
+const ZH_NAME_PATTERN_INTRODUCER =
+  /(?:群名(?:是|叫|为)|名字(?:叫|是|为)|名(?:为|是|叫)|名称(?:是|叫|为)|命名(?:为)?|起名(?:叫|为)?|叫做|叫)\s*["「『'"`]?([^"「『」』'"`,，。;；\n]{1,40}?)["」』'"`]?\s*(?:$|[,，。;；])/
+
+const ZH_NAME_PATTERN_SHORT_FORM =
+  /(?:开|建|创建|新建|拉|搞|做)[^群]{0,20}群\s+["「『'"`]?([^"「『」』'"`,，。;；\s\n]{1,40})["」』'"`]?\s*(?:$|[,，。;；])/
 
 const EN_NAME_PATTERN =
   /(?:called|named?)\s+["'`]?([^"'`,;\n]{1,40}?)["'`]?\s*(?:$|[,;.])/i
@@ -231,20 +241,34 @@ const EN_NAME_PATTERN =
  * 用法:配合 isGroupCreationIntent() 在 pipeline 检测到建群意图后,提取群名
  * 直接走 confirm card 流程(bypass LLM,provider-agnostic)。
  *
- * 误判权衡:支持中文 "叫 X" / "叫做 X" / "名字叫 X" / "名字为 X" / "名为 X" /
- * "命名 X" / "命名为 X",和英文 "called X" / "named X"。不支持的表达(如
- * "起名 X" / "title X")返 null,fallback 路径会回复"群名是什么?"提示 user。
+ * 支持表达:
+ *   中文 introducer:`群名是 X` / `群名叫 X` / `群名为 X` / `名字叫 X` / `名字是 X` /
+ *     `名字为 X` / `名叫 X` / `名为 X` / `名是 X` / `名称叫 X` / `命名 X` /
+ *     `命名为 X` / `起名 X` / `叫做 X` / `叫 X`
+ *   中文 short form:`建群 X` / `帮我建群 X` / `拉个群 X` / `创建讨论群 X`(需空格分隔)
+ *   英文:`called X` / `named X`
+ *
+ * 不支持(返 null):没引导词且无空格分隔的纯意图("帮我建群"/"create a group")。
+ * fallback:pipeline 回复"请告诉我群叫什么名字"提示 user 重发。
  */
 export function extractGroupName(text: string): string | null {
   if (!text || typeof text !== "string") return null
-  const zhMatch = text.match(ZH_NAME_PATTERN)
-  if (zhMatch && zhMatch[1]) {
-    const name = zhMatch[1].trim()
+  // Pattern 1:introducer 优先(更可靠,避免短形式误吞 introducer 之后的名字)
+  const m1 = text.match(ZH_NAME_PATTERN_INTRODUCER)
+  if (m1 && m1[1]) {
+    const name = m1[1].trim()
     if (name.length > 0) return name
   }
-  const enMatch = text.match(EN_NAME_PATTERN)
-  if (enMatch && enMatch[1]) {
-    const name = enMatch[1].trim()
+  // Pattern 2:short form fallback(动词+群+空格+名字)
+  const m2 = text.match(ZH_NAME_PATTERN_SHORT_FORM)
+  if (m2 && m2[1]) {
+    const name = m2[1].trim()
+    if (name.length > 0) return name
+  }
+  // 英文
+  const m3 = text.match(EN_NAME_PATTERN)
+  if (m3 && m3[1]) {
+    const name = m3[1].trim()
     if (name.length > 0) return name
   }
   return null
