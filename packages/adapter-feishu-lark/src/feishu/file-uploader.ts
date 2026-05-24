@@ -1,44 +1,133 @@
 // [fork-only] file-uploader — 飞书 image / file 上传 + 发送 IO 包装
 // [feat: feishu-bridge-light] 2026-05-23
-// [feat: feishu-attach-upload-robustness] 2026-05-24 — Buffer + retry + timeout
-// [feat: feishu-attach-upload-robustness iter 3] 2026-05-24 — Readable.from → raw Buffer
+// [feat: feishu-attach-upload-robustness] 2026-05-24 — 总主题
+// [feat: feishu-attach-upload-robustness iter 4] 2026-05-24 — 绕开 SDK,Bun-native fetch + FormData + Blob
 //
 // 收纳跟飞书 SDK 直连的 IO,跟 reply-actions(纯函数)+ message-pipeline(状态/路由)分层:
 //   - uploadImage / uploadFile:本地路径 → 上传 → 返回 key
 //   - sendImageMessage / sendFileMessage:用 key 发到 chatId
 //
-// size 限制(SDK 文档):
+// size 限制(飞书 API 文档):
 //   - image:≤ 10MB
 //   - file:≤ 30MB
 //
 // 上传前 statSync 预检 size,超限直接抛(避免大文件浪费内存读)。
 //
-// **重要架构决策**(feishu-attach-upload-robustness 2026-05-24):
+// **iter 4 关键架构决策**(2026-05-24):
 //
-// iter 1(createReadStream → readFileSync Buffer):构建时报 stream.on 兼容噪声。
-// iter 2(Readable.from(buffer)):SDK 不再 crash,但 form-data 库**算不出
-// Content-Length**(Readable.from 无 path / _lengthRetrievers),只能用
-// `Transfer-Encoding: chunked` 发请求 → Feishu `/im/v1/files` 实测会 hang →
-// 30s timeout × 3 retry 全失败(2026-05-24 user log 复现)。
-// 参考:https://github.com/larksuite/node-sdk/issues/121
+// 之前迭代全部死在 Bun runtime + axios + form-data 互操作:
+//   - iter 0(createReadStream):"socket connection closed unexpectedly"(Bun fetch 跟 chunked
+//     上传配合 fail)
+//   - iter 2(Readable.from(buffer)):form-data 算不出 Content-Length → chunked → Feishu
+//     /im/v1/files server hang 30s × 3 retry
+//   - iter 1+3(raw Buffer):**plugin bundle 里 `Buffer.isBuffer(buffer) === false`** —
+//     bun build 把 form-data CJS 打成 bundle 时 `Buffer` 引用跟 runtime 的 `node:fs`
+//     返回的 Buffer 不是同一个 class(Bun bundle interop 怪相)。**isStreamLike(buffer)
+//     返 true** → form-data 当 stream 处理 → `source.on is not a function` 直 crash。
 //
-// iter 3(本版):**直接传 raw Buffer**:SDK 类型签名 `Buffer | fs.ReadStream`
-// 明确支持(SDK v1.50 types/index.d.ts:226151),form-data 内部 `Buffer.isBuffer`
-// 分支可直接拿到 length → 标准 Content-Length 头,非 chunked。OpenClaw 同款方案
-// (`/Volumes/ExtSSD/备份/.openclaw_副本/extensions/feishu/src/media.ts:193-195`
-// 注释明确:"Using Readable.from(buffer) causes issues with form-data library")。
+// **iter 4 解法**:**完全绕开 SDK 的 image.create / file.create 调用**,改用 Bun-native
+// `fetch + FormData + Blob`。
+//   - Bun-native FormData 用标准 Blob 处理 binary,无 Node form-data 的"Buffer vs stream"
+//     歧义,无 DelayedStream wrapper,无 chunked encoding 选择问题
+//   - 飞书 multipart endpoint 直接拿到标准 `Content-Disposition` + `Content-Length`,
+//     正常 200 OK 返 file_key / image_key
+//   - tenant_access_token 从 SDK client 内部 `tokenManager` 拿(SDK 内部 cached,免 boilerplate)
+//   - SDK 仍然用于 `message.create`(非 multipart,工作正常)— 这是 sendImageMessage /
+//     sendFileMessage 保留不动的原因
 //
-// 同时新增 `sanitizeFileNameForUpload`:中文 / 全角符号 / em-dash 等非 ASCII
-// 字符直传会让飞书服务端**静默失败**(无报错只是不返 file_key)。RFC 5987
-// percent-encoding 保 header 7-bit clean,飞书 server 端解码恢复显示名。
-// 参考:OpenClaw media.ts:228-237。
+// **不依赖 OpenClaw 任何包**(2026-05-08 立的强约束),只参考其文件名净化思路。
 //
-// 内存代价:30MB 上限 ≪ VM 默认 4GB,short-lived 占用可忽略。
+// 同时保留 `sanitizeFileNameForUpload`:中文 / 全角 / em-dash 等非 ASCII 文件名 RFC 5987
+// percent-encoding 保 Content-Disposition header 7-bit clean(飞书 server 端 decode 还原)。
+//
+// 内存代价:30MB 上限 ≪ VM 默认 4GB,short-lived 可忽略。
 
 import { readFileSync, statSync } from "node:fs"
 import { basename } from "node:path"
 import type { Client } from "@larksuiteoapi/node-sdk"
 import type { LarkFileType } from "./reply-actions"
+
+/**
+ * 从 SDK Client 取 tenant_access_token + domain URL。
+ *
+ * 利用 SDK 内部 `tokenManager` cache(2h 自动刷新),免我们自己做 auth boilerplate。
+ * 字段全部 internal 但稳定 — SDK v1.50 至今未改这两个名字(verified
+ * `node_modules/.../lib/index.js:81550-81553`)。
+ */
+async function getClientAuthContext(client: Client): Promise<{
+  token: string
+  domain: string
+}> {
+  const internal = client as unknown as {
+    domain: string
+    tokenManager: { getTenantAccessToken: (opts: object) => Promise<string> }
+  }
+  if (!internal.tokenManager?.getTenantAccessToken) {
+    throw new Error("[file-uploader] SDK Client 缺 tokenManager — 升级 SDK 后内部字段可能改了")
+  }
+  if (!internal.domain) {
+    throw new Error("[file-uploader] SDK Client 缺 domain — 升级 SDK 后内部字段可能改了")
+  }
+  const token = await internal.tokenManager.getTenantAccessToken({})
+  if (!token) throw new Error("[file-uploader] tokenManager 返空 token,鉴权可能失败")
+  return { token, domain: internal.domain }
+}
+
+/**
+ * Bun-native 上传 — 用 fetch + FormData + Blob,绕开 axios + form-data 全部坑。
+ *
+ * 输入:
+ *   - endpoint:完整 URL(`<domain>/open-apis/im/v1/files` 或 `.../images`)
+ *   - token:tenant_access_token
+ *   - fields:multipart 字段 dict(string)+ file 字段(Buffer + filename)
+ *   - keyField:返 JSON 中提 key 的字段名(`file_key` 或 `image_key`)
+ *
+ * 输出:飞书返回的 key 字符串
+ */
+export async function uploadMultipartViaFetch(opts: {
+  endpoint: string
+  token: string
+  /** multipart 非文件字段(string)— image_type / file_type / file_name 等 */
+  fields: Record<string, string>
+  /** multipart 文件字段名 — `/files` 用 "file" / `/images` 用 "image" */
+  fileFieldName: "file" | "image"
+  fileBuffer: Buffer
+  fileName: string
+  /** 返回 JSON 中提取 key 的字段名 */
+  keyField: "file_key" | "image_key"
+}): Promise<string> {
+  const form = new FormData()
+  for (const [k, v] of Object.entries(opts.fields)) {
+    form.append(k, v)
+  }
+  // Bun-native Blob — 包成 Uint8Array view 避开 Buffer 跟 BlobPart 的 ArrayBufferLike vs ArrayBuffer 类型不兼容
+  // (Buffer.buffer 类型是 ArrayBufferLike,可能是 SharedArrayBuffer;new Uint8Array(buf) 强制走 ArrayBuffer)
+  form.append(
+    opts.fileFieldName,
+    new Blob([new Uint8Array(opts.fileBuffer)]),
+    opts.fileName,
+  )
+  const res = await fetch(opts.endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${opts.token}` },
+    body: form,
+  })
+  if (!res.ok) {
+    throw new Error(`upload HTTP ${res.status} ${res.statusText}`)
+  }
+  const json = (await res.json()) as {
+    code?: number
+    msg?: string
+    data?: Record<string, string>
+  }
+  if (json.code !== 0) {
+    // 飞书业务错误带 code + msg,丢进 Error.message 给上层 isRecoverableError 判断
+    throw new Error(`feishu code=${json.code} msg=${json.msg ?? "unknown"}`)
+  }
+  const key = json.data?.[opts.keyField]
+  if (!key) throw new Error(`未返回 ${opts.keyField}`)
+  return key
+}
 
 /**
  * 把非 ASCII 文件名做 RFC 5987 percent-encoding。
@@ -197,6 +286,9 @@ export async function retryUpload<T>(
 
 /**
  * 上传图片 → 返回 image_key
+ *
+ * iter 4:走 Bun-native fetch 绕 SDK image.create(SDK 路径死在 form-data 兼容)
+ *
  * @param retryOptions 可选 — 测试用快退避(prod 用 RETRY_DELAYS_MS 默认)
  */
 export async function uploadImage(
@@ -210,26 +302,31 @@ export async function uploadImage(
       `image ${basename(path)} ${humanSize(size)} 超过 ${humanSize(MAX_IMAGE_BYTES)} 限制`,
     )
   }
-  // [iter 3] 直接传 raw Buffer — SDK 类型签名 Buffer | fs.ReadStream 明确支持,
-  // form-data 内部走 Buffer.isBuffer 分支可拿到 length → 标准 Content-Length 头
-  // (避开 iter 2 Readable.from 触发的 chunked-encoding hang)。
   const buffer = readFileSync(path)
-  // Buffer 是不可变值,retry 每次复用同一个 buffer 即可(无 stream consumed 问题)
-  const res = await retryUpload(
-    () =>
-      client.im.v1.image.create({
-        data: { image_type: "message", image: buffer },
-      }),
-    `image ${basename(path)}`,
+  const fileName = basename(path)
+  return retryUpload(
+    async () => {
+      const { token, domain } = await getClientAuthContext(client)
+      return uploadMultipartViaFetch({
+        endpoint: `${domain}/open-apis/im/v1/images`,
+        token,
+        fields: { image_type: "message" },
+        fileFieldName: "image",
+        fileBuffer: buffer,
+        fileName,
+        keyField: "image_key",
+      })
+    },
+    `image ${fileName}`,
     retryOptions,
   )
-  const key = (res as { image_key?: string } | null)?.image_key
-  if (!key) throw new Error("image.create 未返回 image_key")
-  return key
 }
 
 /**
  * 上传文件 → 返回 file_key
+ *
+ * iter 4:走 Bun-native fetch 绕 SDK file.create
+ *
  * @param retryOptions 可选 — 测试用快退避
  */
 export async function uploadFile(
@@ -244,24 +341,25 @@ export async function uploadFile(
       `file ${basename(path)} ${humanSize(size)} 超过 ${humanSize(MAX_FILE_BYTES)} 限制`,
     )
   }
-  // [iter 3] 直接传 raw Buffer + filename 净化(非 ASCII 字符飞书服务端会静默失败)
   const buffer = readFileSync(path)
-  const safeName = sanitizeFileNameForUpload(basename(path))
-  const res = await retryUpload(
-    () =>
-      client.im.v1.file.create({
-        data: {
-          file_type: fileType,
-          file_name: safeName,
-          file: buffer,
-        },
-      }),
-    `file ${basename(path)}`,
+  const fileName = basename(path)
+  const safeName = sanitizeFileNameForUpload(fileName)
+  return retryUpload(
+    async () => {
+      const { token, domain } = await getClientAuthContext(client)
+      return uploadMultipartViaFetch({
+        endpoint: `${domain}/open-apis/im/v1/files`,
+        token,
+        fields: { file_type: fileType, file_name: safeName },
+        fileFieldName: "file",
+        fileBuffer: buffer,
+        fileName: safeName,
+        keyField: "file_key",
+      })
+    },
+    `file ${fileName}`,
     retryOptions,
   )
-  const key = (res as { file_key?: string } | null)?.file_key
-  if (!key) throw new Error("file.create 未返回 file_key")
-  return key
 }
 
 /** 用 image_key 发图片消息 */

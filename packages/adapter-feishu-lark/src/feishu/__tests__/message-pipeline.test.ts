@@ -793,28 +793,23 @@ interface AttachFakeMessageCall {
   content: string
 }
 
+/**
+ * [feishu-attach-upload-robustness iter 4] 2026-05-24
+ * uploadImage / uploadFile 改走 Bun-native fetch → 这里加 fetch mock,
+ * 让原 imageCalls / fileCalls 断言面继续工作(image_type / file_type / file_name 都从 FormData 提)。
+ */
 function makeAttachFakes(opts: { imageError?: Error; fileError?: Error } = {}) {
   const imageCalls: AttachFakeImageCall[] = []
   const fileCalls: AttachFakeFileCall[] = []
   const messageCalls: AttachFakeMessageCall[] = []
 
   const larkClient = {
+    domain: "https://open.feishu.cn",
+    tokenManager: {
+      getTenantAccessToken: async (_o: object) => "fake_tenant_token",
+    },
     im: {
       v1: {
-        image: {
-          create: async (args: any) => {
-            if (opts.imageError) throw opts.imageError
-            imageCalls.push({ image_type: args.data.image_type })
-            return { image_key: `img_${imageCalls.length}` }
-          },
-        },
-        file: {
-          create: async (args: any) => {
-            if (opts.fileError) throw opts.fileError
-            fileCalls.push({ file_type: args.data.file_type, file_name: args.data.file_name })
-            return { file_key: `file_${fileCalls.length}` }
-          },
-        },
         message: {
           create: async (args: any) => {
             messageCalls.push({
@@ -830,8 +825,58 @@ function makeAttachFakes(opts: { imageError?: Error; fileError?: Error } = {}) {
     },
   } as any
 
+  const originalFetch = globalThis.fetch
+  const installFetchMock = () => {
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const url = typeof input === "string" ? input : input?.url ?? String(input)
+      const isImage = url.includes("/open-apis/im/v1/images")
+      const isFile = url.includes("/open-apis/im/v1/files")
+      if (!isImage && !isFile) {
+        throw new Error(`makeAttachFakes: unexpected fetch URL ${url}`)
+      }
+      const form = init?.body as FormData | undefined
+      const fields: Record<string, string> = {}
+      if (form && typeof form.entries === "function") {
+        for (const [k, v] of form.entries()) {
+          if (typeof v !== "object") fields[k] = String(v)
+          else if (v === null) continue
+          else if (!("size" in (v as object))) fields[k] = String(v)
+        }
+      }
+      if (isImage) {
+        if (opts.imageError) throw opts.imageError
+        imageCalls.push({ image_type: fields.image_type ?? "" })
+        return new Response(
+          JSON.stringify({ code: 0, msg: "ok", data: { image_key: `img_${imageCalls.length}` } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      } else {
+        if (opts.fileError) throw opts.fileError
+        fileCalls.push({
+          file_type: fields.file_type ?? "",
+          file_name: fields.file_name ?? "",
+        })
+        return new Response(
+          JSON.stringify({ code: 0, msg: "ok", data: { file_key: `file_${fileCalls.length}` } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+    }) as unknown as typeof fetch
+  }
+  const uninstallFetchMock = () => {
+    globalThis.fetch = originalFetch
+  }
+
   const opencodeClient = { session: { create: async () => ({}) } } as any
-  return { imageCalls, fileCalls, messageCalls, larkClient, opencodeClient }
+  return {
+    imageCalls,
+    fileCalls,
+    messageCalls,
+    larkClient,
+    opencodeClient,
+    installFetchMock,
+    uninstallFetchMock,
+  }
 }
 
 describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
@@ -852,6 +897,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
     store = new ChatSessionStore(join(tmpDir, "sessions.json"))
     dispatcher = new PromptDispatcher()
     fakes = makeAttachFakes()
+    fakes.installFetchMock()
     pipeline = new MessagePipeline({
       account: makeAccount(),
       accountId: "acc1",
@@ -864,6 +910,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
   })
 
   afterEach(() => {
+    fakes.uninstallFetchMock()
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
@@ -940,7 +987,9 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
   test("上传抛错 → 不阻断,append warning", async () => {
     // [feat: feishu-attach-upload-robustness] 2026-05-24
     // 用 non-recoverable 错(401)避免 retry 3 次拖慢测试(1s+3s prod delay)
+    fakes.uninstallFetchMock() // 拆掉 beforeEach 的默认 mock,换装 imageError 版
     fakes = makeAttachFakes({ imageError: new Error("401 Unauthorized") })
+    fakes.installFetchMock()
     pipeline = new MessagePipeline({
       account: makeAccount(),
       accountId: "acc1",

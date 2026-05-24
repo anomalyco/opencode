@@ -1,5 +1,6 @@
 // [fork-only] file-uploader 单测
 // [feat: feishu-bridge-light] 2026-05-23
+// [feat: feishu-attach-upload-robustness iter 4] 2026-05-24 — 测试切换 SDK mock → fetch mock
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -18,12 +19,15 @@ import {
   withTimeout,
 } from "../file-uploader"
 
-interface ImageCreateCall {
-  image_type: string
-}
-interface FileCreateCall {
-  file_type: string
-  file_name: string
+interface UploadCall {
+  /** 命中的 endpoint URL */
+  endpoint: string
+  /** multipart 字段值(string) */
+  fields: Record<string, string>
+  /** file/image 字段的 filename(从 Blob 元数据取) */
+  fileName: string
+  /** file/image 字段的字节数 */
+  fileSize: number
 }
 interface MessageCreateCall {
   receive_id: string
@@ -31,54 +35,40 @@ interface MessageCreateCall {
   content: string
 }
 
+/**
+ * fakeClient 跟 fetch mock 联合 setup。
+ *
+ * iter 4 起,uploadImage / uploadFile 不再走 SDK 的 image.create / file.create,
+ * 而是直接 Bun-native `fetch(POST /open-apis/im/v1/{images,files})` + FormData + Blob。
+ * 因此测试需要:
+ *   - fakeClient 提供 `tokenManager.getTenantAccessToken` + `domain`(给 iter 4 的
+ *     `getClientAuthContext` 读)
+ *   - 拦截 globalThis.fetch,按 URL 分流 image / file,按 sequence error 配置抛错
+ *
+ * 仍保留 `client.im.v1.message.create` mock — sendImageMessage / sendFileMessage 还走 SDK。
+ */
 function makeFakeClient(opts: {
   imageKey?: string | null
   fileKey?: string | null
   imageError?: Error
   fileError?: Error
-  /** [feishu-attach-upload-robustness] 多次调用行为:每次调用按 index 取 errors[index],undefined 表示成功 */
+  /** 多次调用行为:每次按 index 取,undefined 表示成功 */
   imageErrorsPerCall?: ReadonlyArray<Error | undefined>
   fileErrorsPerCall?: ReadonlyArray<Error | undefined>
 } = {}) {
-  const imageCalls: ImageCreateCall[] = []
-  const fileCalls: FileCreateCall[] = []
+  const imageCalls: UploadCall[] = []
+  const fileCalls: UploadCall[] = []
   const messageCalls: MessageCreateCall[] = []
   let imageCallIdx = 0
   let fileCallIdx = 0
 
   const client = {
+    domain: "https://open.feishu.cn",
+    tokenManager: {
+      getTenantAccessToken: async (_opts: object): Promise<string> => "fake_tenant_token_xyz",
+    },
     im: {
       v1: {
-        image: {
-          create: async (args: any) => {
-            // 多次调用 sequence error 优先
-            if (opts.imageErrorsPerCall) {
-              const err = opts.imageErrorsPerCall[imageCallIdx]
-              imageCallIdx++
-              if (err) throw err
-            } else if (opts.imageError) {
-              throw opts.imageError
-            }
-            imageCalls.push({ image_type: args.data.image_type })
-            // 默认返 image_key,显式 null 时返 null(测错误路径)
-            if (opts.imageKey === null) return null
-            return { image_key: opts.imageKey ?? "img_key_fake" }
-          },
-        },
-        file: {
-          create: async (args: any) => {
-            if (opts.fileErrorsPerCall) {
-              const err = opts.fileErrorsPerCall[fileCallIdx]
-              fileCallIdx++
-              if (err) throw err
-            } else if (opts.fileError) {
-              throw opts.fileError
-            }
-            fileCalls.push({ file_type: args.data.file_type, file_name: args.data.file_name })
-            if (opts.fileKey === null) return null
-            return { file_key: opts.fileKey ?? "file_key_fake" }
-          },
-        },
         message: {
           create: async (args: any) => {
             messageCalls.push({
@@ -93,19 +83,105 @@ function makeFakeClient(opts: {
     },
   } as any
 
-  return { client, imageCalls, fileCalls, messageCalls }
+  // fetch mock:install via beforeEach; cleanup via afterEach
+  const originalFetch = globalThis.fetch
+  const installFetchMock = () => {
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const url = typeof input === "string" ? input : input?.url ?? String(input)
+      const isImage = url.includes("/open-apis/im/v1/images")
+      const isFile = url.includes("/open-apis/im/v1/files")
+      if (!isImage && !isFile) {
+        throw new Error(`fakeClient: unexpected fetch URL ${url}`)
+      }
+
+      // 提 FormData 内容(Bun-native FormData,直接 entries)
+      const form = init?.body as FormData | undefined
+      const fields: Record<string, string> = {}
+      let fileName = ""
+      let fileSize = 0
+      if (form && typeof form.entries === "function") {
+        for (const [k, v] of form.entries()) {
+          // FormData.entries 返 [string, FormDataEntryValue] — File / string;TS lib 缺 Blob 分支判断,用 duck type
+          if (typeof v === "object" && v !== null && "size" in v) {
+            const blob = v as Blob & { name?: string }
+            fileSize = blob.size
+            // Bun 把 FormData 第三参 filename attach 到 File 子类的 name
+            fileName = blob.name ?? ""
+          } else {
+            fields[k] = String(v)
+          }
+        }
+      }
+
+      // 触发对应路径的 sequence error / 单次 error
+      if (isImage) {
+        if (opts.imageErrorsPerCall) {
+          const err = opts.imageErrorsPerCall[imageCallIdx]
+          imageCallIdx++
+          if (err) throw err
+        } else if (opts.imageError) {
+          throw opts.imageError
+        }
+        imageCalls.push({ endpoint: url, fields, fileName, fileSize })
+        const body =
+          opts.imageKey === null
+            ? { code: 0, msg: "ok", data: {} }
+            : { code: 0, msg: "ok", data: { image_key: opts.imageKey ?? "img_key_fake" } }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      } else {
+        if (opts.fileErrorsPerCall) {
+          const err = opts.fileErrorsPerCall[fileCallIdx]
+          fileCallIdx++
+          if (err) throw err
+        } else if (opts.fileError) {
+          throw opts.fileError
+        }
+        fileCalls.push({ endpoint: url, fields, fileName, fileSize })
+        const body =
+          opts.fileKey === null
+            ? { code: 0, msg: "ok", data: {} }
+            : { code: 0, msg: "ok", data: { file_key: opts.fileKey ?? "file_key_fake" } }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+    }) as unknown as typeof fetch
+  }
+  const uninstallFetchMock = () => {
+    globalThis.fetch = originalFetch
+  }
+
+  return { client, imageCalls, fileCalls, messageCalls, installFetchMock, uninstallFetchMock }
 }
 
 /** Fast retry options 用 10ms 退避而非 prod 1s/3s,让单测不慢 */
 const FAST_RETRY = { delaysMs: [10, 10] as const, timeoutMs: 5000 }
 
 let tmpDir: string
+/** 当前 active mock client — afterEach 用来 uninstall fetch 钩子 */
+let activeMockClient: ReturnType<typeof makeFakeClient> | null = null
+
+/** makeFakeClient 包装:自动 install fetch mock + 注册 cleanup */
+function makeMock(opts?: Parameters<typeof makeFakeClient>[0]) {
+  const m = makeFakeClient(opts)
+  m.installFetchMock()
+  activeMockClient = m
+  return m
+}
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "file-uploader-test-"))
 })
 
 afterEach(() => {
+  if (activeMockClient) {
+    activeMockClient.uninstallFetchMock()
+    activeMockClient = null
+  }
   rmSync(tmpDir, { recursive: true, force: true })
 })
 
@@ -118,23 +194,23 @@ function makeFile(name: string, size: number): string {
 describe("uploadImage", () => {
   test("小于 10MB 正常上传 → 返回 image_key", async () => {
     const p = makeFile("a.png", 1024)
-    const { client, imageCalls } = makeFakeClient({ imageKey: "img_TEST_1" })
+    const { client, imageCalls } = makeMock({ imageKey: "img_TEST_1" })
     const key = await uploadImage(client, p)
     expect(key).toBe("img_TEST_1")
     expect(imageCalls).toHaveLength(1)
-    expect(imageCalls[0]!.image_type).toBe("message")
+    expect(imageCalls[0]!.fields.image_type).toBe("message")
   })
 
   test("超 10MB → 抛 size 错(预检拦截,不调 SDK)", async () => {
     const p = makeFile("big.png", MAX_IMAGE_BYTES + 1)
-    const { client, imageCalls } = makeFakeClient()
+    const { client, imageCalls } = makeMock()
     await expect(uploadImage(client, p)).rejects.toThrow(/超过/)
     expect(imageCalls).toHaveLength(0)
   })
 
   test("SDK 返 null → 抛", async () => {
     const p = makeFile("a.png", 100)
-    const { client } = makeFakeClient({ imageKey: null })
+    const { client } = makeMock({ imageKey: null })
     await expect(uploadImage(client, p)).rejects.toThrow(/未返回 image_key/)
   })
 
@@ -142,7 +218,7 @@ describe("uploadImage", () => {
     // 改用 401(不在 RECOVERABLE_ERROR_PATTERNS),避免 retry 3 次拖慢测试
     // [feat: feishu-attach-upload-robustness] 2026-05-24
     const p = makeFile("a.png", 100)
-    const { client } = makeFakeClient({ imageError: new Error("401 Unauthorized") })
+    const { client } = makeMock({ imageError: new Error("401 Unauthorized") })
     await expect(uploadImage(client, p)).rejects.toThrow(/401 Unauthorized/)
   })
 })
@@ -150,45 +226,45 @@ describe("uploadImage", () => {
 describe("uploadFile", () => {
   test("小于 30MB 正常上传 → 返回 file_key + 带 file_name basename", async () => {
     const p = makeFile("report.pdf", 1024)
-    const { client, fileCalls } = makeFakeClient({ fileKey: "file_TEST_1" })
+    const { client, fileCalls } = makeMock({ fileKey: "file_TEST_1" })
     const key = await uploadFile(client, p, "pdf")
     expect(key).toBe("file_TEST_1")
     expect(fileCalls).toHaveLength(1)
-    expect(fileCalls[0]).toEqual({ file_type: "pdf", file_name: "report.pdf" })
+    expect(fileCalls[0]!.fields).toEqual({ file_type: "pdf", file_name: "report.pdf" })
   })
 
   test("stream fileType 也工作(兜底)", async () => {
     const p = makeFile("a.docx", 100)
-    const { client, fileCalls } = makeFakeClient()
+    const { client, fileCalls } = makeMock()
     await uploadFile(client, p, "stream")
-    expect(fileCalls[0]!.file_type).toBe("stream")
+    expect(fileCalls[0]!.fields.file_type).toBe("stream")
   })
 
   test("中文名 → file_name 走 percent-encode(避飞书服务端静默失败)", async () => {
     // [feat: feishu-attach-upload-robustness iter 3] 2026-05-24
     const p = makeFile("中文报告.pdf", 1024)
-    const { client, fileCalls } = makeFakeClient({ fileKey: "file_zh" })
+    const { client, fileCalls } = makeMock({ fileKey: "file_zh" })
     await uploadFile(client, p, "pdf")
-    expect(fileCalls[0]!.file_name).toBe("%E4%B8%AD%E6%96%87%E6%8A%A5%E5%91%8A.pdf")
+    expect(fileCalls[0]!.fields.file_name).toBe("%E4%B8%AD%E6%96%87%E6%8A%A5%E5%91%8A.pdf")
   })
 
   test("超 30MB → 抛 size 错", async () => {
     const p = makeFile("big.mp4", MAX_FILE_BYTES + 1)
-    const { client, fileCalls } = makeFakeClient()
+    const { client, fileCalls } = makeMock()
     await expect(uploadFile(client, p, "mp4")).rejects.toThrow(/超过/)
     expect(fileCalls).toHaveLength(0)
   })
 
   test("SDK 返 null → 抛", async () => {
     const p = makeFile("a.pdf", 100)
-    const { client } = makeFakeClient({ fileKey: null })
+    const { client } = makeMock({ fileKey: null })
     await expect(uploadFile(client, p, "pdf")).rejects.toThrow(/未返回 file_key/)
   })
 })
 
 describe("sendImageMessage / sendFileMessage", () => {
   test("sendImageMessage:msg_type=image + content image_key JSON", async () => {
-    const { client, messageCalls } = makeFakeClient()
+    const { client, messageCalls } = makeMock()
     await sendImageMessage(client, "oc_chat_x", "img_KEY_1")
     expect(messageCalls).toHaveLength(1)
     expect(messageCalls[0]!.receive_id).toBe("oc_chat_x")
@@ -197,7 +273,7 @@ describe("sendImageMessage / sendFileMessage", () => {
   })
 
   test("sendFileMessage:msg_type=file + content file_key JSON", async () => {
-    const { client, messageCalls } = makeFakeClient()
+    const { client, messageCalls } = makeMock()
     await sendFileMessage(client, "oc_chat_y", "file_KEY_1")
     expect(messageCalls).toHaveLength(1)
     expect(messageCalls[0]!.msg_type).toBe("file")
@@ -353,7 +429,7 @@ describe("retryUpload", () => {
 describe("uploadImage with retry (集成)", () => {
   test("socket 失败 1 次后成功 → 返 key,2 次 SDK 调用", async () => {
     const p = makeFile("a.png", 100)
-    const { client, imageCalls } = makeFakeClient({
+    const { client, imageCalls } = makeMock({
       imageErrorsPerCall: [new Error("socket connection closed unexpectedly"), undefined],
     })
     const key = await uploadImage(client, p, FAST_RETRY)
@@ -364,7 +440,7 @@ describe("uploadImage with retry (集成)", () => {
   test("3 次 socket 失败 → throw,3 次 SDK 调用", async () => {
     const p = makeFile("a.png", 100)
     const err = new Error("socket connection closed unexpectedly")
-    const { client, imageCalls } = makeFakeClient({
+    const { client, imageCalls } = makeMock({
       imageErrorsPerCall: [err, err, err],
     })
     await expect(uploadImage(client, p, FAST_RETRY)).rejects.toThrow(/socket connection closed/)
@@ -373,14 +449,14 @@ describe("uploadImage with retry (集成)", () => {
 
   test("size 超限 → 0 次 SDK 调用(预检拦截,不进 retry)", async () => {
     const p = makeFile("big.png", MAX_IMAGE_BYTES + 1)
-    const { client, imageCalls } = makeFakeClient()
+    const { client, imageCalls } = makeMock()
     await expect(uploadImage(client, p, FAST_RETRY)).rejects.toThrow(/超过/)
     expect(imageCalls).toHaveLength(0)
   })
 
   test("非可恢复(401)→ 1 次调用立即失败", async () => {
     const p = makeFile("a.png", 100)
-    const { client, imageCalls } = makeFakeClient({
+    const { client, imageCalls } = makeMock({
       imageErrorsPerCall: [new Error("401 Unauthorized")],
     })
     await expect(uploadImage(client, p, FAST_RETRY)).rejects.toThrow(/401/)
@@ -421,7 +497,7 @@ describe("sanitizeFileNameForUpload", () => {
 describe("uploadFile with retry (集成)", () => {
   test("socket 失败 1 次后成功 → 返 key,2 次 SDK 调用", async () => {
     const p = makeFile("a.pdf", 100)
-    const { client, fileCalls } = makeFakeClient({
+    const { client, fileCalls } = makeMock({
       fileErrorsPerCall: [new Error("socket closed"), undefined],
     })
     const key = await uploadFile(client, p, "pdf", FAST_RETRY)
@@ -432,7 +508,7 @@ describe("uploadFile with retry (集成)", () => {
   test("3 次 socket 失败 → throw", async () => {
     const p = makeFile("a.pdf", 100)
     const err = new Error("socket closed")
-    const { client } = makeFakeClient({
+    const { client } = makeMock({
       fileErrorsPerCall: [err, err, err],
     })
     await expect(uploadFile(client, p, "pdf", FAST_RETRY)).rejects.toThrow(/socket closed/)
