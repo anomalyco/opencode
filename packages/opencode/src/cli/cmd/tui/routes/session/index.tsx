@@ -1084,6 +1084,81 @@ export function Session() {
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
+  const [stickyUserID, setStickyUserID] = createSignal<string>()
+  const [stickyExpanded, setStickyExpanded] = createSignal(false)
+  const userMessageIDs = createMemo(
+    () =>
+      new Set(
+        messages()
+          .filter((message) => message.role === "user")
+          .map((x) => x.id),
+      ),
+  )
+  const stickyTurn = createMemo(() => {
+    const userID = stickyUserID()
+    if (!userID) return
+    const user = messages().find((message): message is UserMessage => message.id === userID && message.role === "user")
+    if (!user) return
+    const assistant = messages().find(
+      (message): message is AssistantMessage => message.role === "assistant" && message.parentID === user.id,
+    )
+    const fallbackAssistant = messages()
+      .slice(messages().findIndex((message) => message.id === user.id) + 1)
+      .find((message): message is AssistantMessage => message.role === "assistant")
+    const target = assistant ?? fallbackAssistant
+    if (!target) return
+    return {
+      user,
+      parts: sync.data.part[user.id] ?? [],
+      target,
+    }
+  })
+
+  createEffect(
+    on(stickyUserID, () => {
+      setStickyExpanded(false)
+    }),
+  )
+
+  function messageContentY(child: { y: number }) {
+    return scroll.scrollTop + child.y - scroll.viewport.y
+  }
+
+  function syncStickyUser() {
+    if (!scroll || scroll.isDestroyed) return
+    const users = scroll
+      .getChildren()
+      .filter((child) => {
+        if (!child.id) return false
+        return userMessageIDs().has(child.id)
+      })
+      .map((child) => ({ child, contentY: messageContentY(child) }))
+      .sort((left, right) => left.contentY - right.contentY)
+    const current = users.findLast((item) => item.contentY + item.child.height <= scroll.scrollTop + 1)
+    if (stickyUserID() === current?.child.id) return
+    setStickyUserID(current?.child.id)
+  }
+
+  function scrollNodeToTop(node: { y: number }, offset = 0) {
+    const delta = node.y - scroll.viewport.y
+    scroll.scrollBy(delta - offset)
+  }
+
+  function scrollToAssistantStart(turn: NonNullable<ReturnType<typeof stickyTurn>>) {
+    requestAnimationFrame(() => {
+      if (!scroll || scroll.isDestroyed) return
+      const parts = sync.data.part[turn.target.id] ?? []
+      const text = parts.find((part) => part.type === "text" && part.text.trim())
+      const target =
+        (text ? scroll.getChildren().find((child) => child.id === "text-" + text.id) : undefined) ??
+        scroll.getChildren().find((child) => {
+          if (!child.id?.startsWith("text-")) return false
+          return parts.some((part) => child.id === "text-" + part.id)
+        })
+      if (target) scrollNodeToTop(target)
+    })
+  }
+
   return (
     <PathFormatterProvider path={session()?.directory}>
       <context.Provider
@@ -1107,6 +1182,16 @@ export function Session() {
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
+              <Show when={stickyTurn()}>
+                {(turn) => (
+                  <StickyUserPrompt
+                    turn={turn()}
+                    expanded={stickyExpanded()}
+                    onExpand={() => setStickyExpanded((prev) => !prev)}
+                    onJump={() => scrollToAssistantStart(turn())}
+                  />
+                )}
+              </Show>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{
@@ -1124,6 +1209,7 @@ export function Session() {
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
+                renderBefore={syncStickyUser}
               >
                 <box height={1} />
                 <For each={messages()}>
@@ -1396,6 +1482,153 @@ function UserMessage(props: {
         />
       </Show>
     </>
+  )
+}
+
+function stickyPromptCharWidth(char: string) {
+  if (/[\u0300-\u036f]/.test(char)) return 0
+  if (
+    /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/.test(
+      char,
+    )
+  )
+    return 2
+  return 1
+}
+
+function wrapStickyPromptText(text: string, width: number) {
+  return text.split(/\r?\n/).flatMap((line) => {
+    const lines: string[] = []
+    let current = ""
+    let currentWidth = 0
+    for (const char of line) {
+      const charWidth = stickyPromptCharWidth(char)
+      if (current && currentWidth + charWidth > width) {
+        lines.push(current)
+        current = char
+        currentWidth = charWidth
+        continue
+      }
+      current += char
+      currentWidth += charWidth
+    }
+    return current ? [...lines, current] : lines
+  })
+}
+
+function StickyUserPrompt(props: {
+  turn: {
+    user: UserMessage
+    parts: Part[]
+    target: AssistantMessage
+  }
+  expanded: boolean
+  onExpand: () => void
+  onJump: () => void
+}) {
+  const ctx = use()
+  const local = useLocal()
+  const renderer = useRenderer()
+  const { theme } = useTheme()
+  const [hoverJump, setHoverJump] = createSignal(false)
+  const [hoverExpand, setHoverExpand] = createSignal(false)
+  const text = createMemo(() =>
+    props.turn.parts
+      .map((part) => {
+        if (part.type !== "text") return
+        if (part.synthetic) return
+        return part.text
+      })
+      .filter(Boolean)
+      .join("\n\n")
+      .trim(),
+  )
+  const files = createMemo(() => props.turn.parts.flatMap((part) => (part.type === "file" ? [part] : [])))
+  const lines = createMemo(() => wrapStickyPromptText(text(), Math.max(20, ctx.width - 24)))
+  const overflow = createMemo(() => lines().length > 2)
+  const shown = createMemo(() => lines().slice(0, props.expanded ? 8 : 2))
+  const color = createMemo(() => local.agent.color(props.turn.user.agent))
+  const buttonBg = createMemo(() => (hoverJump() ? theme.backgroundMenu : theme.backgroundElement))
+  const expandBg = createMemo(() => (hoverExpand() ? theme.backgroundMenu : theme.backgroundElement))
+
+  return (
+    <Show when={text()}>
+      <box
+        border={["left"]}
+        borderColor={color()}
+        customBorderChars={SplitBorder.customBorderChars}
+        backgroundColor={theme.backgroundPanel}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        marginTop={1}
+        marginBottom={1}
+        flexShrink={0}
+        zIndex={10}
+      >
+        <box flexDirection="row" gap={1}>
+          <box flexGrow={1} minWidth={0}>
+            <For each={shown()}>
+              {(line) => (
+                <text fg={theme.text} wrapMode="none" truncate>
+                  {line}
+                </text>
+              )}
+            </For>
+            <Show when={props.expanded && files().length}>
+              <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+                <For each={files()}>
+                  {(file) => (
+                    <text fg={theme.text}>
+                      <span style={{ bg: theme.secondary, fg: theme.background }}>
+                        {" "}
+                        {MIME_BADGE[file.mime] ?? file.mime}{" "}
+                      </span>
+                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                    </text>
+                  )}
+                </For>
+              </box>
+            </Show>
+            <Show when={props.expanded && ctx.showTimestamps()}>
+              <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(props.turn.user.time.created)}</text>
+            </Show>
+          </box>
+          <box flexShrink={0} flexDirection="row" gap={1}>
+            <Show when={overflow() || props.expanded}>
+              <text
+                fg={theme.textMuted}
+                bg={expandBg()}
+                paddingLeft={1}
+                paddingRight={1}
+                onMouseOver={() => setHoverExpand(true)}
+                onMouseOut={() => setHoverExpand(false)}
+                onMouseUp={() => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  props.onExpand()
+                }}
+              >
+                {props.expanded ? "[-]" : "[+]"}
+              </text>
+            </Show>
+            <text
+              fg={theme.text}
+              bg={buttonBg()}
+              paddingLeft={1}
+              paddingRight={1}
+              onMouseOver={() => setHoverJump(true)}
+              onMouseOut={() => setHoverJump(false)}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                props.onJump()
+              }}
+            >
+              [^]
+            </text>
+          </box>
+        </box>
+      </box>
+    </Show>
   )
 }
 
