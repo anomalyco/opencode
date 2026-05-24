@@ -1,6 +1,6 @@
 ---
 feat-id: feishu-create-group-toggle-gui
-status: spec
+status: done
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
@@ -107,4 +107,18 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## 实施中决策点(开发中 append 到本文档)
 
-(空 — 开发中遇到再补)
+### 2026-05-24 — server endpoint 集成测试取舍 + Bun homedir 缓存教训
+
+**问题发现**:Phase 3 加 server HTTP endpoint 集成测试时,beforeEach 用
+`process.env.HOME = tmpHome` 想隔离 user 真实 `~/.opencode/`,但发现 saveAccount 仍写到 user 真实 home。PoC 验证:**Bun 缓存 `os.homedir()` 首次调用返值**,后续 HOME 改了不生效(Node.js 同样测试是 live 读)。
+
+**测试污染事故**:测试 saveAccount 调用导致 user 真实 `~/.opencode/feishu-config.json` 多了 `acc1` 账号 + `~/.opencode/feishu-secrets/acc1.key` 等 11 个 secret 文件。**已立即清理**(只删测试用 ID,真实 `cli_a969*` / `cli_aa98*` 3 个 account 保留)。这是项目 latent issue:既有 `account-store.test.ts` 也是同样 pattern(`writeSecret` 走 homedir 写真实路径),长期污染但低危(test ID 不撞真实 account)。
+
+**取舍**:撤掉 server endpoint HTTP 集成测试 describe 块,依赖 account-store 10 单测覆盖核心逻辑。R5 Medium ≥ 3 unit 远超达标。HTTP 层是薄壳无独立业务逻辑,留 backlog:可抽 `validateUpdateSettingsBody()` 纯函数 helper extract 独立单测,或后续真做 e2e 框架时通过浏览器/Tauri 端覆盖完整链路。
+
+**沉淀**:
+1. Bun `os.homedir()` 缓存行为是项目级隐患 — 任何依赖 HOME override 的测试都不可靠,需走 `mock.module("node:os")` 路径
+2. `account-store.test.ts` pre-existing 污染问题留 backlog,不在本 feat 范围
+3. 单测调 `saveAccount` 时必须传 explicit `configPath` arg,但 `writeSecret` 没相应 arg → 长期看应该改 `writeSecret` 加 `path` option 或 `homedir` 抽 IO 边界
+
+详细沉淀写在 3-changelog.md 测试取舍说明段。
