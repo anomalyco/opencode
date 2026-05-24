@@ -199,6 +199,8 @@ function createFakeAgent() {
     updates.set(sessionId, list)
   }
 
+  const connectionAbort = new AbortController()
+
   const connection = {
     async sessionUpdate(params: SessionUpdateParams) {
       sessionUpdates.push(params)
@@ -214,6 +216,13 @@ function createFakeAgent() {
     },
     async requestPermission(_params: RequestPermissionParams): Promise<RequestPermissionResult> {
       return { outcome: { outcome: "selected", optionId: "once" } } as RequestPermissionResult
+    },
+    async writeTextFile(_params: any): Promise<void> {},
+    get signal() {
+      return connectionAbort.signal
+    },
+    get closed(): Promise<void> {
+      return new Promise(() => {})
     },
   } as unknown as AgentSideConnection
 
@@ -324,6 +333,7 @@ function createFakeAgent() {
   const stop = () => {
     controller.close()
     ;(agent as any).eventAbort.abort()
+    connectionAbort.abort()
   }
 
   return { agent, controller, calls, updates, chunks, sessionUpdates, stop, sdk, connection }

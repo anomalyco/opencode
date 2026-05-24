@@ -119,4 +119,40 @@ export class ACPSessionManager {
     this.sessions.delete(sessionId)
     return session
   }
+
+  /**
+   * Remove all tracked sessions. Called when the ACP connection closes
+   * to prevent stale state from persisting.
+   */
+  clear(): void {
+    this.sessions.clear()
+  }
+
+  /**
+   * Abort all tracked OpenCode sessions and clear state.
+   * Called when the ACP connection closes unexpectedly.
+   */
+  async abortAll(): Promise<void> {
+    const sessions = [...this.sessions.values()]
+    this.sessions.clear()
+
+    await Promise.allSettled(
+      sessions.map((session) =>
+        this.sdk.session
+          .abort(
+            {
+              sessionID: session.id,
+              directory: session.cwd,
+            },
+            { throwOnError: true },
+          )
+          .catch((error) => {
+            log.error("failed to abort session on disconnect", {
+              error,
+              sessionID: session.id,
+            })
+          }),
+      ),
+    )
+  }
 }

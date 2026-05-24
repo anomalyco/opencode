@@ -56,18 +56,25 @@ export const AcpCommand = effectCmd({
     const stream = ndJsonStream(input, output)
     const agent = ACP.init({ sdk })
 
-    new AgentSideConnection((conn) => {
+    const connection = new AgentSideConnection((conn) => {
       return agent.create(conn, { sdk })
     }, stream)
 
     log.info("setup connection")
     process.stdin.resume()
-    yield* Effect.promise(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          process.stdin.on("end", () => resolve())
-          process.stdin.on("error", reject)
-        }),
-    )
+
+    // Wait for either the ACP connection to close or stdin to end.
+    // This ensures the process exits when the client disconnects,
+    // preventing orphaned sessions and event subscriptions.
+    yield* Effect.promise(async () => {
+      const connectionClosed = connection.closed.catch(() => undefined)
+      const stdinEnded = new Promise<void>((resolve) => {
+        process.stdin.on("end", () => resolve())
+        process.stdin.on("error", () => resolve())
+      })
+
+      await Promise.race([connectionClosed, stdinEnded])
+      log.info("ACP connection or stdin ended, shutting down")
+    })
   }),
 })
