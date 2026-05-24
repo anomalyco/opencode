@@ -695,6 +695,28 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
     headers: { "Content-Type": "text/event-stream" },
   })
 }
+function createUnclosedEventResponse(chunks: unknown[], includeDone = false, hangOnCancel = false, closeLastEvent = true) {
+  const lines = chunks.map((chunk) => `data: ${typeof chunk === "string" ? chunk : JSON.stringify(chunk)}`)
+  if (includeDone) {
+    lines.push("data: [DONE]")
+  }
+  const payload = lines.join("\n\n") + (closeLastEvent ? "\n\n" : "")
+  const encoder = new TextEncoder()
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(payload))
+      },
+      cancel() {
+        if (hangOnCancel) return new Promise(() => {})
+      },
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    },
+  )
+}
 
 describe("session.llm.stream", () => {
   const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }
@@ -1000,6 +1022,72 @@ describe("session.llm.stream", () => {
       }),
     { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
   )
+  it.instance(
+    "finishes OpenAI Responses streams when terminal event remains open without a final frame delimiter",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture("openai", "gpt-5.2").model
+        const request = waitRequest(
+          "/responses",
+          createUnclosedEventResponse([
+            {
+              type: "response.created",
+              response: {
+                id: "resp-terminal-open",
+                created_at: Math.floor(Date.now() / 1000),
+                model: model.id,
+                service_tier: null,
+              },
+            },
+            {
+              type: "response.completed",
+              response: {
+                incomplete_details: null,
+                usage: {
+                  input_tokens: 1,
+                  input_tokens_details: null,
+                  output_tokens: 0,
+                  output_tokens_details: null,
+                },
+                service_tier: null,
+              },
+            },
+          ], false, true, false),
+        )
+
+        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-openai-terminal-open")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-openai-terminal-open"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const exit = yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        }).pipe(Effect.timeout("1 second"), Effect.exit)
+
+        yield* Effect.promise(() => request)
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+    { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
+  )
+
 
   it.instance(
     "keeps supported OpenAI models on AI SDK path when native flag is off",

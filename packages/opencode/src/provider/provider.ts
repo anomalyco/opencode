@@ -84,6 +84,71 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
     statusText: res.statusText,
   })
 }
+function isTerminalSSEData(data: string) {
+  const trimmed = data.trim()
+  if (trimmed === "[DONE]") return true
+  try {
+    const parsed = JSON.parse(trimmed) as { type?: unknown }
+    return (
+      parsed.type === "response.completed" || parsed.type === "response.incomplete" || parsed.type === "response.failed"
+    )
+  } catch {
+    return false
+  }
+}
+function isTerminalSSELine(line: string) {
+  if (!line.startsWith("data:")) return false
+  return isTerminalSSEData(line.slice(5).trimStart())
+}
+
+function wrapTerminalSSE(res: Response) {
+  if (!res.body) return res
+  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let pending = ""
+
+  const body = new ReadableStream<Uint8Array>({
+    async pull(ctrl) {
+      const part = await reader.read()
+      if (part.done) {
+        ctrl.close()
+        return
+      }
+
+      ctrl.enqueue(part.value)
+      pending += decoder.decode(part.value, { stream: true }).replaceAll("\r\n", "\n")
+
+      let offset = 0
+      while (true) {
+        const index = pending.indexOf("\n", offset)
+        if (index === -1) break
+        if (isTerminalSSELine(pending.slice(offset, index))) {
+          ctrl.close()
+          void reader.cancel("terminal SSE event received")
+          return
+        }
+        offset = index + 1
+      }
+      pending = pending.slice(offset)
+      if (isTerminalSSELine(pending)) {
+        ctrl.close()
+        void reader.cancel("terminal SSE event received")
+        return
+      }
+    },
+    cancel(reason) {
+      void reader.cancel(reason)
+    },
+  })
+
+  return new Response(body, {
+    headers: new Headers(res.headers),
+    status: res.status,
+    statusText: res.statusText,
+  })
+}
 
 function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
   if (!project) return
@@ -1641,8 +1706,7 @@ export const layer = Layer.effect(
             timeout: false,
           })
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          return wrapTerminalSSE(chunkAbortCtl ? wrapSSE(res, chunkTimeout, chunkAbortCtl) : res)
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
