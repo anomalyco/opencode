@@ -19,6 +19,8 @@ jobs:
           persist-credentials: false
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: opencode/deepseek-v4-flash
           use_github_token: true
