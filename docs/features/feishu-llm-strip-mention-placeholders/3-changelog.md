@@ -7,7 +7,7 @@ related: ./3-changelog.md
 # feishu-llm-strip-mention-placeholders — 3-changelog
 
 > **状态**:✅ 已落地(2026-05-24)
-> **commit hash**:`<本笔>`
+> **commit hash**:`97b104b2b`
 > **规模**:Tiny(1 行代码改 + 2 单测 + 注释,纯 bug fix)
 
 ## 一句话
