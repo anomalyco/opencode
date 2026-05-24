@@ -113,7 +113,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: "Inter Variable";
+    font-family: var(--font-family-sans);
     font-size: 13px;
     font-style: normal;
     font-weight: 530;
@@ -128,7 +128,7 @@
     text-wrap-style: pretty;
     overflow-wrap: anywhere;
     word-break: break-word;
-    font-family: "Inter Variable";
+    font-family: var(--font-family-sans);
     font-size: 13px;
     font-style: normal;
     font-weight: 440;
@@ -147,7 +147,7 @@
 
   [data-slot="toast-v2-actions"] [data-component="button-v2"] {
     min-height: 24px;
-    font-family: "Inter Variable";
+    font-family: var(--font-family-sans);
     font-size: 13px;
     font-style: normal;
     font-weight: 530;
