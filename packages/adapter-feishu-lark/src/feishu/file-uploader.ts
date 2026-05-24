@@ -12,17 +12,35 @@
 //
 // 上传前 statSync 预检 size,超限直接抛(避免大文件浪费内存读)。
 //
-// **重要架构决策**(feishu-attach-upload-robustness 2026-05-24):
-// 用 `readFileSync` Buffer 替代 `createReadStream` Node Readable stream。
-// 原因:Bun runtime fetch 处理 Node Readable stream + multipart 编码有兼容
-// 性问题,实测 4.7KB 小文件都会撞 `socket connection closed unexpectedly`。
-// Buffer 上传简化(SDK 内部转 multipart 不依赖 stream pipe),绕开兼容性。
+// **重要架构决策**(feishu-attach-upload-robustness 2026-05-24,iter 2):
+//
+// 第一次尝试(iter 1):createReadStream → readFileSync Buffer
+// 失败原因:Lark SDK 内部期望 `source.on("error", ...)` Stream API,Buffer 没
+// `.on` 方法 → `source.on is not a function` 直接 crash。
+//
+// 第二次尝试(iter 2,本版):readFileSync 读到 Buffer,然后用 Readable.from
+// 包成 in-memory stream:
+//   - SDK 看到 stream API 满足(.on / pipe / 等)— 不再 crash
+//   - 数据已完整在内存,stream 同步 emit chunk,**无文件 IO 异步等待**
+//   - Bun fetch 处理 in-memory stream **理论上比 file stream 稳**(无背压 / 无慢读)
+//
 // 内存代价:30MB 上限 ≪ VM 默认 4GB,short-lived 占用可忽略。
+//
+// 如果 iter 2 仍然 socket disconnect,需要 iter 3(绕开 SDK,自实现 fetch + FormData)。
 
 import { readFileSync, statSync } from "node:fs"
 import { basename } from "node:path"
+import { Readable } from "node:stream"
 import type { Client } from "@larksuiteoapi/node-sdk"
 import type { LarkFileType } from "./reply-actions"
+
+/**
+ * 把 Buffer 包成 in-memory Readable stream — 满足 Lark SDK `source.on` API,
+ * 同时避免 Bun fetch 处理文件 stream 的兼容性问题(数据已在内存,无 IO 异步)。
+ */
+function bufferToStream(buffer: Buffer): Readable {
+  return Readable.from(buffer)
+}
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const MAX_FILE_BYTES = 30 * 1024 * 1024
@@ -175,12 +193,14 @@ export async function uploadImage(
       `image ${basename(path)} ${humanSize(size)} 超过 ${humanSize(MAX_IMAGE_BYTES)} 限制`,
     )
   }
-  // [feishu-attach-upload-robustness] readFileSync Buffer + retry
+  // [feishu-attach-upload-robustness iter 2] Readable.from(buffer) — SDK 要 stream API,
+  // 我们读到 buffer 再包成 in-memory stream(数据已在内存,Bun fetch 不需文件 IO)
   const buffer = readFileSync(path)
+  // 注意:retry 每次需要新的 stream(stream consumed 后不能重用)
   const res = await retryUpload(
     () =>
       client.im.v1.image.create({
-        data: { image_type: "message", image: buffer },
+        data: { image_type: "message", image: bufferToStream(buffer) },
       }),
     `image ${basename(path)}`,
     retryOptions,
@@ -206,15 +226,16 @@ export async function uploadFile(
       `file ${basename(path)} ${humanSize(size)} 超过 ${humanSize(MAX_FILE_BYTES)} 限制`,
     )
   }
-  // [feishu-attach-upload-robustness] readFileSync Buffer + retry
+  // [feishu-attach-upload-robustness iter 2] Readable.from(buffer) — SDK 要 stream API
   const buffer = readFileSync(path)
+  // 注意:retry 每次需要新的 stream(stream consumed 后不能重用)
   const res = await retryUpload(
     () =>
       client.im.v1.file.create({
         data: {
           file_type: fileType,
           file_name: basename(path),
-          file: buffer,
+          file: bufferToStream(buffer),
         },
       }),
     `file ${basename(path)}`,
