@@ -5,8 +5,9 @@ import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { EffectBridge } from "@/effect/bridge"
 import { init } from "#db"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 
 export const NotFoundError = NamedError.create("NotFoundError", {
   message: Schema.String,
@@ -30,8 +31,6 @@ export const Client = Object.assign(
     const dbPath = getPath()
     log.info("opening database", { path: dbPath })
 
-    Database.init()
-
     const db = init(dbPath)
 
     db.run("PRAGMA journal_mode = WAL")
@@ -40,6 +39,7 @@ export const Client = Object.assign(
     db.run("PRAGMA cache_size = -64000")
     db.run("PRAGMA foreign_keys = ON")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    Effect.runSync(DatabaseMigration.apply(db))
 
     client = db
     loaded = true
@@ -56,7 +56,7 @@ export const Client = Object.assign(
 
 export function close() {
   if (!Client.loaded()) return
-  Client().$client.close()
+  client?.$client.close()
   Client.reset()
 }
 
