@@ -303,6 +303,7 @@ describe("session.message-v2.toModelMessage", () => {
         role: "user",
         content: [
           { type: "text", text: "hello" },
+          { type: "text", text: "[image]" },
           {
             type: "file",
             mediaType: "image/png",

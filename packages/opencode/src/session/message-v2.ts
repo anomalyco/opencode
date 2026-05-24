@@ -714,6 +714,18 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
             })
           } else {
+            if (isMedia(part.mime)) {
+              const filename = part.filename ?? ""
+              const lower = filename.toLowerCase()
+              let trigger = "image"
+              if (lower.includes("screenshot")) trigger = "screenshot"
+              else if (lower.includes("clipboard")) trigger = "clipboard"
+              else if (lower.includes("photo")) trigger = "photo"
+              userMessage.parts.push({
+                type: "text",
+                text: `[${trigger}]`,
+              })
+            }
             userMessage.parts.push({
               type: "file",
               url: part.url,
