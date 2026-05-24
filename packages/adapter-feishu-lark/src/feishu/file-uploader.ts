@@ -1,6 +1,7 @@
 // [fork-only] file-uploader — 飞书 image / file 上传 + 发送 IO 包装
 // [feat: feishu-bridge-light] 2026-05-23
 // [feat: feishu-attach-upload-robustness] 2026-05-24 — Buffer + retry + timeout
+// [feat: feishu-attach-upload-robustness iter 3] 2026-05-24 — Readable.from → raw Buffer
 //
 // 收纳跟飞书 SDK 直连的 IO,跟 reply-actions(纯函数)+ message-pipeline(状态/路由)分层:
 //   - uploadImage / uploadFile:本地路径 → 上传 → 返回 key
@@ -12,34 +13,50 @@
 //
 // 上传前 statSync 预检 size,超限直接抛(避免大文件浪费内存读)。
 //
-// **重要架构决策**(feishu-attach-upload-robustness 2026-05-24,iter 2):
+// **重要架构决策**(feishu-attach-upload-robustness 2026-05-24):
 //
-// 第一次尝试(iter 1):createReadStream → readFileSync Buffer
-// 失败原因:Lark SDK 内部期望 `source.on("error", ...)` Stream API,Buffer 没
-// `.on` 方法 → `source.on is not a function` 直接 crash。
+// iter 1(createReadStream → readFileSync Buffer):构建时报 stream.on 兼容噪声。
+// iter 2(Readable.from(buffer)):SDK 不再 crash,但 form-data 库**算不出
+// Content-Length**(Readable.from 无 path / _lengthRetrievers),只能用
+// `Transfer-Encoding: chunked` 发请求 → Feishu `/im/v1/files` 实测会 hang →
+// 30s timeout × 3 retry 全失败(2026-05-24 user log 复现)。
+// 参考:https://github.com/larksuite/node-sdk/issues/121
 //
-// 第二次尝试(iter 2,本版):readFileSync 读到 Buffer,然后用 Readable.from
-// 包成 in-memory stream:
-//   - SDK 看到 stream API 满足(.on / pipe / 等)— 不再 crash
-//   - 数据已完整在内存,stream 同步 emit chunk,**无文件 IO 异步等待**
-//   - Bun fetch 处理 in-memory stream **理论上比 file stream 稳**(无背压 / 无慢读)
+// iter 3(本版):**直接传 raw Buffer**:SDK 类型签名 `Buffer | fs.ReadStream`
+// 明确支持(SDK v1.50 types/index.d.ts:226151),form-data 内部 `Buffer.isBuffer`
+// 分支可直接拿到 length → 标准 Content-Length 头,非 chunked。OpenClaw 同款方案
+// (`/Volumes/ExtSSD/备份/.openclaw_副本/extensions/feishu/src/media.ts:193-195`
+// 注释明确:"Using Readable.from(buffer) causes issues with form-data library")。
+//
+// 同时新增 `sanitizeFileNameForUpload`:中文 / 全角符号 / em-dash 等非 ASCII
+// 字符直传会让飞书服务端**静默失败**(无报错只是不返 file_key)。RFC 5987
+// percent-encoding 保 header 7-bit clean,飞书 server 端解码恢复显示名。
+// 参考:OpenClaw media.ts:228-237。
 //
 // 内存代价:30MB 上限 ≪ VM 默认 4GB,short-lived 占用可忽略。
-//
-// 如果 iter 2 仍然 socket disconnect,需要 iter 3(绕开 SDK,自实现 fetch + FormData)。
 
 import { readFileSync, statSync } from "node:fs"
 import { basename } from "node:path"
-import { Readable } from "node:stream"
 import type { Client } from "@larksuiteoapi/node-sdk"
 import type { LarkFileType } from "./reply-actions"
 
 /**
- * 把 Buffer 包成 in-memory Readable stream — 满足 Lark SDK `source.on` API,
- * 同时避免 Bun fetch 处理文件 stream 的兼容性问题(数据已在内存,无 IO 异步)。
+ * 把非 ASCII 文件名做 RFC 5987 percent-encoding。
+ *
+ * **为什么需要**:飞书 multipart upload 走 form-data 库,filename 字段直接拼到
+ * `Content-Disposition` header,**非 ASCII 字符会让飞书服务端静默失败**(返
+ * 200 + 空 file_key,SDK 抛 "未返回 file_key")。Encoding 后 header 7-bit clean,
+ * 服务端解码还原显示名,user 看到的还是原中文名。
+ *
+ * 参考:OpenClaw `media.ts:228-237` 同款实现(经实测验证)。
  */
-function bufferToStream(buffer: Buffer): Readable {
-  return Readable.from(buffer)
+export function sanitizeFileNameForUpload(fileName: string): string {
+  const ASCII_ONLY = /^[\x20-\x7E]+$/
+  if (ASCII_ONLY.test(fileName)) return fileName
+  return encodeURIComponent(fileName)
+    .replace(/'/g, "%27")
+    .replace(/\(/g, "%28")
+    .replace(/\)/g, "%29")
 }
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -193,14 +210,15 @@ export async function uploadImage(
       `image ${basename(path)} ${humanSize(size)} 超过 ${humanSize(MAX_IMAGE_BYTES)} 限制`,
     )
   }
-  // [feishu-attach-upload-robustness iter 2] Readable.from(buffer) — SDK 要 stream API,
-  // 我们读到 buffer 再包成 in-memory stream(数据已在内存,Bun fetch 不需文件 IO)
+  // [iter 3] 直接传 raw Buffer — SDK 类型签名 Buffer | fs.ReadStream 明确支持,
+  // form-data 内部走 Buffer.isBuffer 分支可拿到 length → 标准 Content-Length 头
+  // (避开 iter 2 Readable.from 触发的 chunked-encoding hang)。
   const buffer = readFileSync(path)
-  // 注意:retry 每次需要新的 stream(stream consumed 后不能重用)
+  // Buffer 是不可变值,retry 每次复用同一个 buffer 即可(无 stream consumed 问题)
   const res = await retryUpload(
     () =>
       client.im.v1.image.create({
-        data: { image_type: "message", image: bufferToStream(buffer) },
+        data: { image_type: "message", image: buffer },
       }),
     `image ${basename(path)}`,
     retryOptions,
@@ -226,16 +244,16 @@ export async function uploadFile(
       `file ${basename(path)} ${humanSize(size)} 超过 ${humanSize(MAX_FILE_BYTES)} 限制`,
     )
   }
-  // [feishu-attach-upload-robustness iter 2] Readable.from(buffer) — SDK 要 stream API
+  // [iter 3] 直接传 raw Buffer + filename 净化(非 ASCII 字符飞书服务端会静默失败)
   const buffer = readFileSync(path)
-  // 注意:retry 每次需要新的 stream(stream consumed 后不能重用)
+  const safeName = sanitizeFileNameForUpload(basename(path))
   const res = await retryUpload(
     () =>
       client.im.v1.file.create({
         data: {
           file_type: fileType,
-          file_name: basename(path),
-          file: bufferToStream(buffer),
+          file_name: safeName,
+          file: buffer,
         },
       }),
     `file ${basename(path)}`,

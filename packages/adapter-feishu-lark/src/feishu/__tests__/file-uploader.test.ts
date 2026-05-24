@@ -10,6 +10,7 @@ import {
   MAX_FILE_BYTES,
   MAX_IMAGE_BYTES,
   retryUpload,
+  sanitizeFileNameForUpload,
   sendFileMessage,
   sendImageMessage,
   uploadFile,
@@ -161,6 +162,14 @@ describe("uploadFile", () => {
     const { client, fileCalls } = makeFakeClient()
     await uploadFile(client, p, "stream")
     expect(fileCalls[0]!.file_type).toBe("stream")
+  })
+
+  test("中文名 → file_name 走 percent-encode(避飞书服务端静默失败)", async () => {
+    // [feat: feishu-attach-upload-robustness iter 3] 2026-05-24
+    const p = makeFile("中文报告.pdf", 1024)
+    const { client, fileCalls } = makeFakeClient({ fileKey: "file_zh" })
+    await uploadFile(client, p, "pdf")
+    expect(fileCalls[0]!.file_name).toBe("%E4%B8%AD%E6%96%87%E6%8A%A5%E5%91%8A.pdf")
   })
 
   test("超 30MB → 抛 size 错", async () => {
@@ -376,6 +385,36 @@ describe("uploadImage with retry (集成)", () => {
     })
     await expect(uploadImage(client, p, FAST_RETRY)).rejects.toThrow(/401/)
     expect(imageCalls).toHaveLength(0)
+  })
+})
+
+describe("sanitizeFileNameForUpload", () => {
+  // [feat: feishu-attach-upload-robustness iter 3] RFC 5987 percent-encoding
+  test("纯 ASCII 名 → 原样不动", () => {
+    expect(sanitizeFileNameForUpload("report.pdf")).toBe("report.pdf")
+    expect(sanitizeFileNameForUpload("a-b_c 1.txt")).toBe("a-b_c 1.txt")
+  })
+
+  test("中文名 → percent-encode", () => {
+    expect(sanitizeFileNameForUpload("报告.pdf")).toBe("%E6%8A%A5%E5%91%8A.pdf")
+  })
+
+  test("中英混 → 整串 encode(保 ASCII 子串还是 7-bit)", () => {
+    const out = sanitizeFileNameForUpload("第3版-final.docx")
+    // 关键:含 % 序列,且服务端 decode 后能恢复原名
+    expect(out).toContain("%")
+    expect(decodeURIComponent(out)).toBe("第3版-final.docx")
+  })
+
+  test("含括号 / 引号 → 转 %28 / %29 / %27(form-data 兼容)", () => {
+    const out = sanitizeFileNameForUpload("文件(v1)'old'.pdf")
+    expect(out).toContain("%28")
+    expect(out).toContain("%29")
+    expect(out).toContain("%27")
+  })
+
+  test("em-dash / 全角符号 → encode 保护", () => {
+    expect(sanitizeFileNameForUpload("a—b.pdf")).toMatch(/^a%E2%80%94b\.pdf$/)
   })
 })
 

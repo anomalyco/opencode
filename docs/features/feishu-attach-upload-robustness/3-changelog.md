@@ -6,23 +6,62 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 # feishu-attach-upload-robustness — 3-changelog
 
-> **状态**:✅ 代码落地(2026-05-24,等用户实测)
-> **commit 链**:2 commits(spec/plan + 主实施 + 27 单测)
-> **规模**:Medium-(~200 行代码 + ~250 行测试,纯 fork-only,0 上游侵入)
+> **状态**:✅ iter 3 代码落地(2026-05-24,等用户再次实测)
+> **commit 链**:3 commits(spec/plan + iter 2 实施 + iter 3 修正)
+> **规模**:Medium-(~200 行代码 + ~280 行测试,纯 fork-only,0 上游侵入)
 
 ## commit 链
 
 | hash | 内容 |
 |---|---|
 | `983f54646` | docs: 1-spec + 2-plan |
-| `645bf2a31` | feat: file-uploader stream→Buffer + retryUpload + withTimeout + 27 单测 |
+| `645bf2a31` | feat (iter 2): file-uploader stream→Buffer + retryUpload + withTimeout + 27 单测 |
+| (待 commit) | fix (iter 3): Readable.from(buffer) → raw Buffer + sanitizeFileNameForUpload + 6 单测 |
+
+## iter 2 → iter 3 修正(2026-05-24)
+
+### 触发
+
+user 装 iter 2 .app 实测仍失败,日志显示 ATTACH `notes.md` (4.7KB) 上传:
+```
+[file-uploader] file notes.md 第 1 次失败,1000ms 后重试: file notes.md timeout after 30000ms
+[file-uploader] file notes.md 重试 2 次最终失败: file notes.md timeout after 30000ms
+```
+30s 超时 × 3 retry 全失败 → 请求**完全 hang**,不是 socket 断。
+
+### 根因(参考 OpenClaw 反查)
+
+OpenClaw `extensions/feishu/src/media.ts:193-195` 明确注释:
+> "SDK accepts Buffer directly or fs.ReadStream for file paths. **Using Readable.from(buffer) causes issues with form-data library**. See: https://github.com/larksuite/node-sdk/issues/121"
+
+机制:`Readable.from(buffer)` 包出来的 stream **无 `path` 字段、无 `_lengthRetrievers` 可计算长度** → `form-data` 库算不出 Content-Length → 写 `Transfer-Encoding: chunked` → 飞书 `/im/v1/files` 服务端处理 chunked 上传**完全 hang** → 30s 客户端 timeout × 3 retry。
+
+iter 2 的 Readable.from 是 over-engineering — SDK v1.50 类型签名 `Buffer | fs.ReadStream`(`types/index.d.ts:226151`)明确接受 Buffer。
+
+### 修正
+
+`file-uploader.ts`:
+1. 删 `bufferToStream` helper
+2. `uploadImage` / `uploadFile` 直接传 `readFileSync()` 返回的 Buffer 给 SDK
+3. 新增 `sanitizeFileNameForUpload(fileName)`:RFC 5987 percent-encoding
+   - 非 ASCII 文件名(中文 / em-dash / 全角)直传会让飞书服务端**静默失败**(返 200 + 空 file_key),OpenClaw 同款修法
+4. `uploadFile` 把 `basename(path)` 用 sanitize 包一下再传
+
+新增 6 个单测:
+- `sanitizeFileNameForUpload` 5 case(ASCII no-op / 中文 / 中英混 / 引号括号 / em-dash)
+- `uploadFile` 集成:中文名 → file_name percent-encoded 透传
+
+### 套件状态
+
+- typecheck 16/16
+- adapter 套件 518/518(原 512 + 6 新)
 
 ## 改动文件
 
 | 文件 | 净行数 | 改动 |
 |---|---|---|
-| `packages/adapter-feishu-lark/src/feishu/file-uploader.ts` | +120 | createReadStream→readFileSync Buffer + retryUpload helper + withTimeout helper + isRecoverableError helper + 详细 FORK 注释 |
-| `packages/adapter-feishu-lark/src/feishu/__tests__/file-uploader.test.ts` | +260 | 27 新单测(helper extract 12+3+6 + 集成 4+2)+ 既有 SDK 抛错测试改用 non-recoverable error |
+| `packages/adapter-feishu-lark/src/feishu/file-uploader.ts` | +115 | createReadStream→readFileSync raw Buffer + sanitizeFileNameForUpload + retryUpload + withTimeout + isRecoverableError(iter 3 已删 bufferToStream)|
+| `packages/adapter-feishu-lark/src/feishu/__tests__/file-uploader.test.ts` | +290 | 33 新单测(helper extract 12+3+6 + 集成 4+3 + sanitizer 5)+ 既有 SDK 抛错测试改用 non-recoverable error |
 | `packages/adapter-feishu-lark/src/feishu/__tests__/message-pipeline.test.ts` | +3 | 既有"上传抛错"测试改用 401 而非 502,避免 retry 拖慢 |
 
 ## 关键设计点
