@@ -313,19 +313,20 @@ export function deriveNewContentsFromChunks(
   originalText: string,
 ): ApplyPatchFileUpdate {
   const originalContent = Bom.split(originalText)
+  const originalHadTrailingNewline = originalContent.text.endsWith("\n")
 
-  let originalLines = originalContent.text.split("\n")
+  const originalLines = originalContent.text.split("\n")
 
   // Drop trailing empty element for consistent line counting
-  if (originalLines.length > 0 && originalLines[originalLines.length - 1] === "") {
+  if (originalHadTrailingNewline || originalContent.text === "") {
     originalLines.pop()
   }
 
   const replacements = computeReplacements(originalLines, filePath, chunks)
-  let newLines = applyReplacements(originalLines, replacements)
+  const newLines = applyReplacements(originalLines, replacements)
 
-  // Ensure trailing newline
-  if (newLines.length === 0 || newLines[newLines.length - 1] !== "") {
+  // Preserve the original file's trailing newline state instead of adding one unconditionally.
+  if (originalHadTrailingNewline && newLines.length > 0 && newLines[newLines.length - 1] !== "") {
     newLines.push("")
   }
 

@@ -76,9 +76,7 @@ export const ApplyPatchTool = Tool.define(
         switch (hunk.type) {
           case "add": {
             const oldContent = ""
-            const newContent =
-              hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
-            const next = Bom.split(newContent)
+            const next = Bom.split(hunk.contents)
             const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, next.text))
 
             let additions = 0

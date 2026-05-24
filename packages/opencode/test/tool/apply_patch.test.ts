@@ -152,7 +152,7 @@ describe("tool.apply_patch freeform", () => {
         expect(updateFile?.patch).toContain("-line2")
         expect(updateFile?.patch).toContain("+changed")
 
-        expect(yield* readText(path.join(test.directory, "nested", "new.txt"))).toBe("created\n")
+        expect(yield* readText(path.join(test.directory, "nested", "new.txt"))).toBe("created")
         expect(yield* readText(modifyPath)).toBe("line1\nchanged\n")
         yield* expectReadFailure(deletePath)
       }),
@@ -244,7 +244,7 @@ describe("tool.apply_patch freeform", () => {
     }),
   )
 
-  it.instance("appends trailing newline on update", () =>
+  it.instance("preserves missing trailing newline on update", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
       const { ctx } = makeCtx()
@@ -257,8 +257,24 @@ describe("tool.apply_patch freeform", () => {
       yield* execute({ patchText }, ctx)
 
       const contents = yield* readText(target)
-      expect(contents.endsWith("\n")).toBe(true)
-      expect(contents).toBe("first line\nsecond line\n")
+      expect(contents.endsWith("\n")).toBe(false)
+      expect(contents).toBe("first line\nsecond line")
+    }),
+  )
+
+  it.instance("keeps trailing newline when original file has one", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "with_newline.txt")
+      yield* writeText(target, "line at end\n")
+
+      const patchText =
+        "*** Begin Patch\n*** Update File: with_newline.txt\n@@\n-line at end\n+updated line\n*** End Patch"
+
+      yield* execute({ patchText }, ctx)
+
+      expect(yield* readText(target)).toBe("updated line\n")
     }),
   )
 
@@ -312,7 +328,19 @@ describe("tool.apply_patch freeform", () => {
       const patchText = "*** Begin Patch\n*** Add File: duplicate.txt\n+new content\n*** End Patch"
 
       yield* execute({ patchText }, ctx)
-      expect(yield* readText(target)).toBe("new content\n")
+      expect(yield* readText(target)).toBe("new content")
+    }),
+  )
+
+  it.instance("adds file with explicit trailing newline", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+
+      const patchText = "*** Begin Patch\n*** Add File: explicit_newline.txt\n+new content\n+\n*** End Patch"
+
+      yield* execute({ patchText }, ctx)
+      expect(yield* readText(path.join(test.directory, "explicit_newline.txt"))).toBe("new content\n")
     }),
   )
 
@@ -457,7 +485,7 @@ describe("tool.apply_patch freeform", () => {
 EOF`
 
       yield* execute({ patchText }, ctx)
-      expect(yield* readText(path.join(test.directory, "heredoc_test.txt"))).toBe("heredoc content\n")
+      expect(yield* readText(path.join(test.directory, "heredoc_test.txt"))).toBe("heredoc content")
     }),
   )
 
@@ -473,7 +501,7 @@ EOF`
 EOF`
 
       yield* execute({ patchText }, ctx)
-      expect(yield* readText(path.join(test.directory, "heredoc_no_cat.txt"))).toBe("no cat prefix\n")
+      expect(yield* readText(path.join(test.directory, "heredoc_no_cat.txt"))).toBe("no cat prefix")
     }),
   )
 

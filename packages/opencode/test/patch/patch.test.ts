@@ -331,11 +331,11 @@ PATCH`
         expect(result.modified).toHaveLength(1)
 
         const content = yield* Effect.promise(() => fs.readFile(emptyFile, "utf-8"))
-        expect(content).toBe("First line\n")
+        expect(content).toBe("First line")
       }),
     )
 
-    it.live("should handle files with no trailing newline", () =>
+    it.live("should preserve files with no trailing newline", () =>
       Effect.gen(function* () {
         const filePath = path.join(tempDir, "no-newline.txt")
         yield* Effect.promise(() => fs.writeFile(filePath, "no newline"))
@@ -351,7 +351,27 @@ PATCH`
         expect(result.modified).toHaveLength(1)
 
         const content = yield* Effect.promise(() => fs.readFile(filePath, "utf-8"))
-        expect(content).toBe("has newline now\n")
+        expect(content).toBe("has newline now")
+      }),
+    )
+
+    it.live("should preserve files with a trailing newline", () =>
+      Effect.gen(function* () {
+        const filePath = path.join(tempDir, "with-newline.txt")
+        yield* Effect.promise(() => fs.writeFile(filePath, "has newline\n"))
+
+        const patchText = `*** Begin Patch
+*** Update File: ${filePath}
+@@
+-has newline
++still has newline
+*** End Patch`
+
+        const result = yield* Patch.applyPatch(patchText)
+        expect(result.modified).toHaveLength(1)
+
+        const content = yield* Effect.promise(() => fs.readFile(filePath, "utf-8"))
+        expect(content).toBe("still has newline\n")
       }),
     )
 
