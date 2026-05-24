@@ -352,6 +352,16 @@ it.instance(
 )
 
 it.instance(
+  "defaultModel returns a typed error when config excludes every provider",
+  Effect.gen(function* () {
+    const error = yield* Provider.use.defaultModel().pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Provider.NoProvidersError)
+    expect(error._tag).toBe("ProviderNoProvidersError")
+  }),
+  { config: { enabled_providers: [] } },
+)
+
+it.instance(
   "provider with baseURL from config",
   Effect.gen(function* () {
     const providers = yield* list

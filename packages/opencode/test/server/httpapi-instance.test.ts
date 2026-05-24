@@ -9,6 +9,7 @@ import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/co
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { PermissionID } from "../../src/permission/schema"
+import { ProjectID } from "../../src/project/schema"
 import { QuestionID } from "../../src/question/schema"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
@@ -201,6 +202,30 @@ describe("instance HttpApi", () => {
         _tag: "QuestionNotFoundError",
         requestID: questionRejectID,
         message: `Question request not found: ${questionRejectID}`,
+      })
+    }),
+  )
+
+  it.live("returns typed not found bodies for missing projects", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const projectID = ProjectID.make("project_missing")
+      const response = yield* Effect.promise(() =>
+        HttpApiApp.webHandler().handler(
+          new Request(`http://localhost/project/${projectID}`, {
+            method: "PATCH",
+            headers: { "x-opencode-directory": dir, "content-type": "application/json" },
+            body: JSON.stringify({ name: "Missing" }),
+          }),
+          handlerContext,
+        ),
+      )
+
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        _tag: "ProjectNotFoundError",
+        projectID,
+        message: `Project not found: ${projectID}`,
       })
     }),
   )

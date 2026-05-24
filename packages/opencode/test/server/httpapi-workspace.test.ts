@@ -5,6 +5,7 @@ import path from "node:path"
 import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
@@ -247,6 +248,26 @@ describe("workspace HttpApi", () => {
           extra: { listed: true },
         },
       ])
+    }),
+  )
+
+  it.live("returns a declared not found error when warping into a missing workspace", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const session = yield* Session.use.create({}).pipe(provideInstance(dir))
+      const workspaceID = WorkspaceID.ascending("wrk_missing_warp")
+
+      const response = yield* request(WorkspacePaths.warp, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: workspaceID, sessionID: session.id }),
+      })
+
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        name: "NotFoundError",
+        data: { message: `Workspace not found: ${workspaceID}` },
+      })
     }),
   )
 
