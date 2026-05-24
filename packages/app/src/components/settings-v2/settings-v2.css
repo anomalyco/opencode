@@ -42,6 +42,16 @@
   padding: 0 40px 40px;
 }
 
+[data-slot="settings-v2-row-description"] a.settings-v2-link {
+  color: var(--v2-text-text-accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+[data-slot="settings-v2-row-description"] a.settings-v2-link:hover {
+  color: var(--v2-text-text-accent-hover);
+}
+
 .settings-v2-section {
   display: flex;
   flex-direction: column;
