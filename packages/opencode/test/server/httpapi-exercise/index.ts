@@ -1,10 +1,10 @@
 /**
- * End-to-end exerciser for the legacy Hono instance routes and the Effect HttpApi routes.
+ * End-to-end exerciser for the Effect HttpApi routes.
  *
- * The goal is not to be a normal unit test file. This is a route-coverage and parity
- * harness we can run while deleting Hono: every public route should eventually have a
- * small scenario that proves the Effect route decodes requests, uses the right instance
- * context, mutates storage when expected, and returns a compatible response shape.
+ * The goal is not to be a normal unit test file. This is a route-coverage harness:
+ * every public route should have a small scenario that proves the route decodes
+ * requests, uses the right instance context, mutates storage when expected, and
+ * returns the expected response shape.
  *
  * The script intentionally isolates `OPENCODE_DB` before importing modules that touch
  * storage. Scenarios may create/delete sessions and reset the database after each run,
@@ -15,8 +15,7 @@
  * - `.seeded(...)` creates typed per-scenario state using Effect helpers on `ctx`.
  * - `.at(...)` builds the request from that typed state.
  * - `.json(...)` / `.jsonEffect(...)` assert response shape and optional side effects.
- * - `.mutating()` tells parity mode to run Effect and Hono in separate isolated contexts
- *   so destructive routes compare equivalent fresh setups instead of sharing one DB.
+ * - `.mutating()` tells the runner to reset isolated state after destructive routes.
  */
 import { Effect } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
@@ -38,6 +37,10 @@ import { runtime } from "./runtime"
 import { type Scenario } from "./types"
 
 void (await import("@opencode-ai/core/util/log")).init({ print: false })
+
+function cursor(input: Record<string, unknown>) {
+  return Buffer.from(JSON.stringify(input)).toString("base64url")
+}
 
 const scenarios: Scenario[] = [
   http.protected
@@ -175,6 +178,15 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .patch("/project/{projectID}", "project.update.missing")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/project/{projectID}", { projectID: "project_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { name: "Missing Project" },
+    }))
+    .json(404, object, "status"),
+  http.protected
     .post("/project/git/init", "project.initGit")
     .mutating()
     .inProject({ git: false })
@@ -221,9 +233,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { reply: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "permission reply should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected.get("/question", "question.list").json(200, array),
   http.protected
     .post("/question/{requestID}/reply", "question.reply.invalid")
@@ -240,18 +250,14 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { answers: [["Yes"]] },
     }))
-    .json(200, (body) => {
-      check(body === true, "question reply should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/question/{requestID}/reject", "question.reject")
     .at((ctx) => ({
       path: route("/question/{requestID}/reject", { requestID: "que_httpapi_reject" }),
       headers: ctx.headers(),
     }))
-    .json(200, (body) => {
-      check(body === true, "question reject should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected
     .get("/file", "file.list")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
@@ -332,58 +338,37 @@ const scenarios: Scenario[] = [
   http.protected
     .post("/mcp/{name}/auth", "mcp.auth.start")
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(
-      400,
-      (body) => {
-        object(body)
-        check(typeof body.error === "string", "unsupported MCP OAuth response should include error")
-      },
-      "status",
-    ),
+    .json(404, object, "status"),
   http.protected
     .delete("/mcp/{name}/auth", "mcp.auth.remove")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      object(body)
-      check(body.success === true, "MCP auth removal should return success")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/auth/authenticate", "mcp.auth.authenticate")
     .at((ctx) => ({
       path: route("/mcp/{name}/auth/authenticate", { name: "httpapi-missing" }),
       headers: ctx.headers(),
     }))
-    .json(
-      400,
-      (body) => {
-        object(body)
-        check(typeof body.error === "string", "unsupported MCP OAuth authenticate response should include error")
-      },
-      "status",
-    ),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/auth/callback", "mcp.auth.callback")
     .at((ctx) => ({
       path: route("/mcp/{name}/auth/callback", { name: "httpapi-missing" }),
       headers: ctx.headers(),
-      body: { code: 1 },
+      body: { code: "code" },
     }))
-    .status(400),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/connect", "mcp.connect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/connect", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "missing MCP connect should remain a no-op success")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/disconnect", "mcp.disconnect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/disconnect", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "missing MCP disconnect should remain a no-op success")
-    }),
+    .json(404, object, "status"),
   http.protected.get("/pty/shells", "pty.shells").json(200, array),
   http.protected.get("/pty", "pty.list").json(200, array),
   http.protected
@@ -428,9 +413,7 @@ const scenarios: Scenario[] = [
     .delete("/pty/{ptyID}", "pty.remove")
     .mutating()
     .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "PTY remove should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .get("/pty/{ptyID}/connect", "pty.connect")
     .at((ctx) => ({ path: route("/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
@@ -521,7 +504,10 @@ const scenarios: Scenario[] = [
         yield* ctx.worktreeRemove(ctx.state.directory)
       }),
     ),
-  http.protected.get("/experimental/session", "experimental.session.list").json(200, array),
+  http.protected
+    .get("/experimental/session", "experimental.session.list")
+    .at((ctx) => ({ path: "/experimental/session?roots=false&archived=false", headers: ctx.headers() }))
+    .json(200, array),
   http.protected.get("/experimental/resource", "experimental.resource.list").json(),
   http.protected
     .post("/sync/history", "sync.history.list")
@@ -587,6 +573,12 @@ const scenarios: Scenario[] = [
         check(auth.test === undefined, "auth remove should delete provider from isolated auth file")
       }),
     ),
+  http.protected.get("/api/model", "v2.model.list").json(200, array),
+  http.protected.get("/api/provider", "v2.provider.list").json(200, array),
+  http.protected
+    .get("/api/provider/{providerID}", "v2.provider.get")
+    .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))
@@ -600,16 +592,17 @@ const scenarios: Scenario[] = [
       "none",
     ),
   http.protected
-    .get("/api/session/{sessionID}/context", "v2.session.context")
+    .get("/api/session", "v2.session.list.filters")
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
-      headers: ctx.headers(),
-    }))
-    .json(200, array, "none"),
-  http.protected
-    .get("/api/session/{sessionID}/message", "v2.session.messages")
-    .at((ctx) => ({
-      path: route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" }),
+      path: `/api/session?${new URLSearchParams({
+        limit: "2",
+        order: "asc",
+        path: ".",
+        roots: "false",
+        start: "0",
+        search: "missing",
+        directory: ctx.directory ?? "",
+      })}`,
       headers: ctx.headers(),
     }))
     .json(
@@ -621,6 +614,86 @@ const scenarios: Scenario[] = [
       },
       "none",
     ),
+  http.protected
+    .get("/api/session", "v2.session.list.cursor")
+    .at((ctx) => ({
+      path: `/api/session?${new URLSearchParams({
+        limit: "2",
+        directory: ctx.directory ?? "",
+        cursor: cursor({
+          id: "ses_httpapi_missing",
+          time: 0,
+          order: "desc",
+          direction: "next",
+          directory: ctx.directory,
+        }),
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
+  http.protected
+    .get("/api/session", "v2.session.list.cursor.invalid")
+    .at((ctx) => ({
+      path: `/api/session?${new URLSearchParams({
+        cursor: cursor({ id: "ses_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+        search: "not-allowed-with-cursor",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .status(400, undefined, "none"),
+  http.protected
+    .get("/api/session/{sessionID}/context", "v2.session.context")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages.params")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+        limit: "2",
+        order: "asc",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages.cursor")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+        limit: "2",
+        directory: ctx.directory ?? "",
+        cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .json(404, object, "status"),
+  http.protected
+    .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
+    .at((ctx) => ({
+      path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
+        cursor: cursor({ id: "msg_httpapi_missing", time: 0, order: "desc", direction: "next" }),
+        order: "asc",
+      })}`,
+      headers: ctx.headers(),
+    }))
+    .status(400, undefined, "none"),
   http.protected
     .post("/api/session/{sessionID}/prompt", "v2.session.prompt.invalid")
     .at((ctx) => ({
@@ -635,14 +708,14 @@ const scenarios: Scenario[] = [
       path: route("/api/session/{sessionID}/compact", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .status(204, undefined, "none"),
+    .status(404, undefined, "status"),
   http.protected
     .post("/api/session/{sessionID}/wait", "v2.session.wait")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/wait", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .status(204, undefined, "none"),
+    .status(404, undefined, "status"),
   http.protected
     .get("/session", "session.list")
     .seeded((ctx) => ctx.session({ title: "List me" }))
@@ -1156,9 +1229,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { response: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "deprecated permission response should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/session/{sessionID}/share", "session.share")
     .mutating()
@@ -1263,7 +1334,6 @@ const main = Effect.gen(function* () {
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
-  const honoRoutes = routeKeys(yield* Effect.promise(() => modules.Server.openapiHono()))
   const selected = selectedScenarios(options, scenarios)
   const missing = effectRoutes.filter((route) => !scenarios.some((scenario) => route === routeKey(scenario)))
   const extra = scenarios.filter((scenario) => !effectRoutes.includes(routeKey(scenario)))
@@ -1274,7 +1344,7 @@ const main = Effect.gen(function* () {
     }
   }
 
-  printHeader(options, effectRoutes, honoRoutes, selected, missing, extra, {
+  printHeader(options, effectRoutes, selected, missing, extra, {
     database: exerciseDatabasePath,
     global: exerciseGlobalRoot,
   })

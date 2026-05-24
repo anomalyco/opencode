@@ -1,16 +1,18 @@
 import { afterEach, expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Queue } from "effect"
 import { Question } from "../../src/question"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { QuestionID } from "../../src/question/schema"
 import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Bus } from "../../src/bus"
 
-const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(Question.layer.pipe(Layer.provideMerge(Bus.layer)), CrossSpawnSpawner.defaultLayer),
+)
 
 const askEffect = Effect.fn("QuestionTest.ask")(function* (input: {
   sessionID: SessionID
@@ -45,15 +47,19 @@ const rejectAll = Effect.gen(function* () {
   yield* Effect.forEach(yield* listEffect, (req) => rejectEffect(req.id), { discard: true })
 })
 
-const waitForPending = (count: number) =>
-  Effect.gen(function* () {
-    for (let i = 0; i < 100; i++) {
-      const pending = yield* listEffect
-      if (pending.length === count) return pending
-      yield* Effect.sleep("10 millis")
-    }
-    return yield* Effect.fail(new Error(`timed out waiting for ${count} pending question request(s)`))
-  })
+const waitForPending = Effect.fn("QuestionTest.waitForPending")(function* (count: number) {
+  const question = yield* Question.Service
+  const bus = yield* Bus.Service
+  const asked = yield* Queue.unbounded<void>()
+  const off = yield* bus.subscribeCallback(Question.Event.Asked, () => Queue.offerUnsafe(asked, undefined))
+  yield* Effect.addFinalizer(() => Effect.sync(off))
+
+  for (;;) {
+    const pending = yield* question.list()
+    if (pending.length === count) return pending
+    yield* Queue.take(asked).pipe(Effect.timeout("2 seconds"))
+  }
+})
 
 it.instance(
   "ask - remains pending until answered",
@@ -178,11 +184,17 @@ it.instance(
 )
 
 it.instance(
-  "reply - does nothing for unknown requestID",
+  "reply - fails for unknown requestID",
   () =>
-    replyEffect({
-      requestID: QuestionID.make("que_unknown"),
-      answers: [["Option 1"]],
+    Effect.gen(function* () {
+      const exit = yield* replyEffect({
+        requestID: QuestionID.make("que_unknown"),
+        answers: [["Option 1"]],
+      }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
+      }
     }),
   { git: true },
 )
@@ -247,9 +259,18 @@ it.instance(
   { git: true },
 )
 
-it.instance("reject - does nothing for unknown requestID", () => rejectEffect(QuestionID.make("que_unknown")), {
-  git: true,
-})
+it.instance(
+  "reject - fails for unknown requestID",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* rejectEffect(QuestionID.make("que_unknown")).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
+      }
+    }),
+  { git: true },
+)
 
 // multiple questions tests
 
@@ -398,9 +419,11 @@ it.live("pending question rejects on instance dispose", () =>
     }).pipe(provideInstance(dir), Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
-    yield* Effect.promise(() =>
-      WithInstance.provide({ directory: dir, fn: () => InstanceRuntime.disposeInstance(Instance.current) }),
-    )
+    const ctx = yield* Effect.gen(function* () {
+      return yield* InstanceRef
+    }).pipe(provideInstance(dir))
+    if (!ctx) return yield* Effect.die(new Error("missing test instance"))
+    yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

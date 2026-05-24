@@ -282,6 +282,7 @@ export const dict = {
   "mcp.status.connected": "verbunden",
   "mcp.status.failed": "fehlgeschlagen",
   "mcp.status.needs_auth": "benötigt Authentifizierung",
+  "mcp.auth.clickToAuthenticate": "Zum Authentifizieren klicken",
   "mcp.status.disabled": "deaktiviert",
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
   "dialog.directory.search.placeholder": "Ordner durchsuchen",

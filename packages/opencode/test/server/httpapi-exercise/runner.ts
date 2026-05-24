@@ -5,20 +5,10 @@ import type { Config } from "../../../src/config/config"
 import { ModelID, ProviderID } from "../../../src/provider/schema"
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
-import { stable } from "./assertions"
 import { call, callAuthProbe } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
-import type {
-  ActiveScenario,
-  CallResult,
-  Options,
-  ProjectOptions,
-  Result,
-  Scenario,
-  ScenarioContext,
-  SeededContext,
-} from "./types"
+import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
@@ -38,72 +28,31 @@ export function runScenario(options: Options) {
 function runActive(options: Options, scenario: ActiveScenario) {
   if (options.mode === "auth") return runAuth(scenario)
 
-  if (options.mode === "parity" && scenario.mutates && scenario.compare !== "none") {
-    return Effect.gen(function* () {
-      const effect = yield* runBackend(options, "effect", scenario)
-      const legacy = yield* runBackend(options, "legacy", scenario)
-      yield* trace(options, scenario, "compare start")
-      yield* compare(scenario, effect, legacy)
-      yield* trace(options, scenario, "compare done")
-    })
-  }
-
   return withContext(options, scenario, "shared", (ctx) =>
     Effect.gen(function* () {
-      yield* trace(options, scenario, "effect request start")
-      const effect = yield* call("effect", scenario, ctx)
-      yield* trace(options, scenario, `effect response ${effect.status}`)
-      yield* trace(options, scenario, "effect expect start")
-      yield* scenario.expect(ctx, ctx.state, effect)
-      yield* trace(options, scenario, "effect expect done")
-      if (options.mode === "parity" && scenario.compare !== "none") {
-        yield* trace(options, scenario, "legacy request start")
-        const legacy = yield* call("legacy", scenario, ctx)
-        yield* trace(options, scenario, `legacy response ${legacy.status}`)
-        yield* trace(options, scenario, "legacy expect start")
-        yield* scenario.expect(ctx, ctx.state, legacy)
-        yield* trace(options, scenario, "legacy expect done")
-        yield* trace(options, scenario, "compare start")
-        yield* compare(scenario, effect, legacy)
-        yield* trace(options, scenario, "compare done")
-      }
+      yield* trace(options, scenario, "request start")
+      const result = yield* call(scenario, ctx)
+      yield* trace(options, scenario, `response ${result.status}`)
+      yield* trace(options, scenario, "expect start")
+      yield* scenario.expect(ctx, ctx.state, result)
+      yield* trace(options, scenario, "expect done")
     }),
   )
 }
 
 function runAuth(scenario: ActiveScenario) {
   return Effect.gen(function* () {
-    const effect = yield* callAuthProbe("effect", scenario, "missing")
-    const legacy = yield* callAuthProbe("legacy", scenario, "missing")
+    const result = yield* callAuthProbe(scenario, "missing")
     if (scenario.auth === "protected") {
-      if (effect.status !== 401) throw new Error(`effect auth expected 401, got ${effect.status}`)
-      if (legacy.status !== 401) throw new Error(`legacy auth expected 401, got ${legacy.status}`)
-      const effectAuthed = yield* callAuthProbe("effect", scenario, "valid")
-      const legacyAuthed = yield* callAuthProbe("legacy", scenario, "valid")
-      if (effectAuthed.status === 401) throw new Error("effect auth rejected valid credentials")
-      if (legacyAuthed.status === 401) throw new Error("legacy auth rejected valid credentials")
+      if (result.status !== 401) throw new Error(`auth expected 401, got ${result.status}`)
+      const authed = yield* callAuthProbe(scenario, "valid")
+      if (authed.status === 401) throw new Error("auth rejected valid credentials")
       return
     }
 
-    if (effect.status === 401) throw new Error("effect auth expected public access, got 401")
-    if (legacy.status === 401) throw new Error("legacy auth expected public access, got 401")
-    if (effect.timedOut) throw new Error("effect auth expected public access, probe timed out")
-    if (legacy.timedOut) throw new Error("legacy auth expected public access, probe timed out")
+    if (result.status === 401) throw new Error("auth expected public access, got 401")
+    if (result.timedOut) throw new Error("auth expected public access, probe timed out")
   })
-}
-
-function runBackend(options: Options, backend: "effect" | "legacy", scenario: ActiveScenario) {
-  return withContext(options, scenario, backend, (ctx) =>
-    Effect.gen(function* () {
-      yield* trace(options, scenario, `${backend} request start`)
-      const result = yield* call(backend, scenario, ctx)
-      yield* trace(options, scenario, `${backend} response ${result.status}`)
-      yield* trace(options, scenario, `${backend} expect start`)
-      yield* scenario.expect(ctx, ctx.state, result)
-      yield* trace(options, scenario, `${backend} expect done`)
-      return result
-    }),
-  )
 }
 
 function withContext<A, E>(
@@ -219,9 +168,10 @@ function withContext<A, E>(
               )
               return { info, part }
             }),
-          messages: (sessionID) => run(modules.Session.Service.use((svc) => svc.messages({ sessionID }))),
+          messages: (sessionID) =>
+            run(modules.Session.Service.use((svc) => svc.messages({ sessionID }).pipe(Effect.orDie))),
           todos: (sessionID, todos) => run(modules.Todo.Service.use((svc) => svc.update({ sessionID, todos }))),
-          worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input))),
+          worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input).pipe(Effect.orDie))),
           worktreeRemove: (directory) =>
             run(modules.Worktree.Service.use((svc) => svc.remove({ directory })).pipe(Effect.ignore)),
           llmText: (value) => Effect.suspend(() => llm().text(value)),
@@ -300,19 +250,8 @@ function fakeLlmConfig(url: string): Partial<Config.Info> {
   }
 }
 
-function compare(scenario: ActiveScenario, effect: CallResult, legacy: CallResult) {
-  return Effect.sync(() => {
-    if (effect.status !== legacy.status)
-      throw new Error(`legacy returned ${legacy.status}, effect returned ${effect.status}`)
-    if (scenario.compare === "status") return
-    if (stable(effect.body) !== stable(legacy.body))
-      throw new Error(`JSON parity mismatch\nlegacy: ${stable(legacy.body)}\neffect: ${stable(effect.body)}`)
-  })
-}
-
 const resetState = Effect.promise(async () => {
   const modules = await runtime()
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
   await modules.disposeAllInstances()

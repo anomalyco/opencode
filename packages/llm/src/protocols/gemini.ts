@@ -5,9 +5,9 @@ import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Protocol } from "../route/protocol"
 import {
+  LLMEvent,
   Usage,
   type FinishReason,
-  type LLMEvent,
   type LLMRequest,
   type MediaPart,
   type TextPart,
@@ -16,6 +16,7 @@ import {
 } from "../schema"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
+import { Lifecycle } from "./utils/lifecycle"
 
 const ADAPTER = "gemini"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -134,9 +135,8 @@ interface ParserState {
   readonly hasToolCalls: boolean
   readonly nextToolCallId: number
   readonly usage?: Usage
+  readonly lifecycle: Lifecycle.State
 }
-
-const invalid = ProviderShared.invalidRequest
 
 const mediaData = ProviderShared.mediaBytes
 
@@ -281,15 +281,28 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // =============================================================================
 // Stream Parsing
 // =============================================================================
+// Gemini reports `promptTokenCount` (inclusive total) with a
+// `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
+// of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
+// to produce the inclusive `outputTokens` the rest of the contract expects.
 const mapUsage = (usage: GeminiUsage | undefined) => {
   if (!usage) return undefined
+  const cached = usage.cachedContentTokenCount
+  const nonCached = ProviderShared.subtractTokens(usage.promptTokenCount, cached)
+  // `candidatesTokenCount` is visible-only; sum with thoughts to produce the
+  // inclusive `outputTokens` the contract expects. Only compute the total
+  // when the visible component is reported — otherwise we'd fabricate an
+  // inclusive number from a partial breakdown.
+  const outputTokens =
+    usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0) : undefined
   return new Usage({
     inputTokens: usage.promptTokenCount,
-    outputTokens: usage.candidatesTokenCount,
+    outputTokens,
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: cached,
     reasoningTokens: usage.thoughtsTokenCount,
-    cacheReadInputTokens: usage.cachedContentTokenCount,
-    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, usage.candidatesTokenCount, usage.totalTokenCount),
-    native: usage,
+    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
+    providerMetadata: { google: usage },
   })
 }
 
@@ -311,7 +324,14 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
 
 const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
   state.finishReason || state.usage
-    ? [{ type: "request-finish", reason: mapFinishReason(state.finishReason, state.hasToolCalls), usage: state.usage }]
+    ? (() => {
+        const events: LLMEvent[] = []
+        Lifecycle.finish(state.lifecycle, events, {
+          reason: mapFinishReason(state.finishReason, state.hasToolCalls),
+          usage: state.usage,
+        })
+        return events
+      })()
     : []
 
 const step = (state: ParserState, event: GeminiEvent) => {
@@ -328,18 +348,22 @@ const step = (state: ParserState, event: GeminiEvent) => {
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
+  let lifecycle = nextState.lifecycle
   let nextToolCallId = nextState.nextToolCallId
 
   for (const part of candidate.content.parts) {
     if ("text" in part && part.text.length > 0) {
-      events.push({ type: part.thought ? "reasoning-delta" : "text-delta", text: part.text })
+      lifecycle = part.thought
+        ? Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", part.text)
+        : Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
       continue
     }
 
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
-      events.push({ type: "tool-call", id, name: part.functionCall.name, input })
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(LLMEvent.toolCall({ id, name: part.functionCall.name, input }))
       hasToolCalls = true
     }
   }
@@ -348,6 +372,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
     {
       ...nextState,
       hasToolCalls,
+      lifecycle,
       nextToolCallId,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
@@ -371,7 +396,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
+    initial: () => ({ hasToolCalls: false, nextToolCallId: 0, lifecycle: Lifecycle.initial() }),
     step,
     onHalt: finish,
   },
@@ -379,19 +404,14 @@ export const protocol = Protocol.make({
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: "google",
   protocol,
   // Gemini's path embeds the model id and pins SSE framing at the URL level.
-  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`),
-  auth: Auth.apiKeyHeader("x-goog-api-key"),
+  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`, {
+    baseURL: DEFAULT_BASE_URL,
+  }),
+  auth: Auth.none,
   framing: Framing.sse,
-})
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = Route.model(route, {
-  provider: "google",
-  baseURL: DEFAULT_BASE_URL,
 })
 
 export * as Gemini from "./gemini"

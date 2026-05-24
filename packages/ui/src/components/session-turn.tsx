@@ -90,6 +90,12 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
+type SummaryDiff = SnapshotFileDiff & { file: string }
+
+function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
+  return typeof value.file === "string"
+}
+
 const hidden = new Set(["todowrite"])
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
@@ -169,7 +175,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyDiffs: SnapshotFileDiff[] = []
+  const emptyDiffs: SummaryDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
@@ -238,7 +244,8 @@ export function SessionTurn(
 
     const seen = new Set<string>()
     return files
-      .reduceRight<SnapshotFileDiff[]>((result, diff) => {
+      .reduceRight<SummaryDiff[]>((result, diff) => {
+        if (!summaryDiff(diff)) return result
         if (seen.has(diff.file)) return result
         seen.add(diff.file)
         result.push(diff)

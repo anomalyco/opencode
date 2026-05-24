@@ -2,13 +2,12 @@ import { Array as Arr, Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
+  LLMEvent,
   Usage,
   type FinishReason,
-  type LLMEvent,
   type LLMRequest,
   type TextPart,
   type ToolCallPart,
@@ -16,6 +15,7 @@ import {
 } from "../schema"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
+import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
@@ -127,6 +127,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
+  reasoning_content: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -147,6 +148,7 @@ interface ParserState {
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
   readonly finishReason?: FinishReason
+  readonly lifecycle: Lifecycle.State
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -290,15 +292,24 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   return "unknown"
 }
 
+// OpenAI Chat reports `prompt_tokens` (inclusive total) with a
+// `cached_tokens` subset, and `completion_tokens` (inclusive total) with
+// a `reasoning_tokens` subset. We pass the inclusive totals through and
+// derive the non-cached breakdown so the `LLM.Usage` contract is
+// satisfied on both sides.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
+  const cached = usage.prompt_tokens_details?.cached_tokens
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens
+  const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, cached)
   return new Usage({
     inputTokens: usage.prompt_tokens,
     outputTokens: usage.completion_tokens,
-    reasoningTokens: usage.completion_tokens_details?.reasoning_tokens,
-    cacheReadInputTokens: usage.prompt_tokens_details?.cached_tokens,
+    nonCachedInputTokens: nonCached,
+    cacheReadInputTokens: cached,
+    reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
-    native: usage,
+    providerMetadata: { openai: usage },
   })
 }
 
@@ -312,7 +323,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
 
-    if (delta?.content) events.push({ type: "text-delta", text: delta.content })
+    let lifecycle = state.lifecycle
+
+    if (delta?.reasoning_content)
+      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
+
+    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(
@@ -324,7 +340,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       )
       if (ToolStream.isError(result)) return yield* result
       tools = result.tools
-      if (result.event) events.push(result.event)
+      if (result.events.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(...result.events)
     }
 
     // Finalize accumulated tool inputs eagerly when finish_reason arrives so
@@ -340,18 +357,20 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         toolCallEvents: finished?.events ?? state.toolCallEvents,
         usage,
         finishReason,
+        lifecycle,
       },
       events,
     ] as const
   })
 
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
+  const events: LLMEvent[] = []
   const hasToolCalls = state.toolCallEvents.length > 0
   const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
-  return [
-    ...state.toolCallEvents,
-    ...(reason ? ([{ type: "request-finish", reason, usage: state.usage }] satisfies ReadonlyArray<LLMEvent>) : []),
-  ]
+  const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...state.toolCallEvents)
+  if (reason) Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
+  return events
 }
 
 // =============================================================================
@@ -371,34 +390,21 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
-    initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [] }),
+    initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [], lifecycle: Lifecycle.initial() }),
     step,
     onHalt: finishEvents,
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
-
-export const httpTransport = HttpTransport.httpJson({
-  endpoint: Endpoint.path(PATH),
-  auth: Auth.bearer(),
-  framing: Framing.sse,
-  encodeBody,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
+  auth: Auth.none,
   transport: httpTransport,
-  defaults: {
-    baseURL: DEFAULT_BASE_URL,
-  },
 })
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
 
 export * as OpenAIChat from "./openai-chat"

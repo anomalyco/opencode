@@ -107,7 +107,8 @@ function createCommandEntries(props: {
   const allowed = createMemo(() => {
     if (props.filesOnly()) return []
     return props.command.options.filter(
-      (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
+      (option) =>
+        !option.disabled && !option.hidden && !option.id.startsWith("suggested.") && option.id !== "file.open",
     )
   })
 
