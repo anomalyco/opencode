@@ -767,10 +767,7 @@ export const RunCommand = effectCmd({
 
         if (!args.interactive) {
           const events = await client.event.subscribe()
-          loop(client, events).catch((e) => {
-            console.error(e)
-            process.exit(1)
-          })
+          const loopDone = loop(client, events)
 
           if (args.command) {
             const result = await client.session.command({
@@ -785,19 +782,26 @@ export const RunCommand = effectCmd({
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
             }
-            return
+          } else {
+            const model = pick(args.model)
+            const result = await client.session.prompt({
+              sessionID,
+              agent,
+              model,
+              variant: args.variant,
+              parts: [...files, { type: "text", text: message }],
+            })
+            if (result.error) {
+              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+              process.exitCode = 1
+            }
           }
 
-          const model = pick(args.model)
-          const result = await client.session.prompt({
-            sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
-          })
-          if (result.error) {
-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+          try {
+            const loopError = await loopDone
+            if (loopError) process.exitCode = 1
+          } catch (e) {
+            console.error(e)
             process.exitCode = 1
           }
           return
