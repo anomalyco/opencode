@@ -480,7 +480,10 @@ export class MessagePipeline {
 
     let reply: string
     try {
-      reply = await this.runOpencode(sessionID, text, this.opts.account.agent)
+      // [feat: feishu-llm-strip-mention-placeholders] 2026-05-24
+      // 传 cleaned(已 strip @_user_N 飞书占位符)而非 raw text,避免 LLM 误把
+      // 占位符当成另一个联系人(实测 bot reply 含"我不是 @_user_1..."类幻觉)。
+      reply = await this.runOpencode(sessionID, cleaned, this.opts.account.agent)
     } catch (err) {
       console.error(`[pipeline ${this.opts.accountId}] opencode error:`, err)
       await this.sendFeishuText(event.chatId, friendlyErrorReply(err as Error))
