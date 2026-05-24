@@ -21,7 +21,7 @@ export const getPath = () => Database.path()
 
 export type Transaction = SQLiteTransaction<"sync", void, Record<string, unknown>, TablesRelationalConfig>
 
-type Client = Database.Info["drizzle"]
+type Client = Database.Interface["drizzle"]
 
 let client: Client | undefined
 let loaded = false

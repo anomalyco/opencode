@@ -167,4 +167,6 @@ export const layer = (config: Config) =>
   Layer.merge(
     nativeLayer(config),
     Layer.merge(sqliteLayer(config), drizzleLayer).pipe(Layer.provide(nativeLayer(config))),
-  ).pipe(Layer.provide(Reactivity.layer))
+  ).pipe(
+    Layer.provide(Reactivity.layer),
+  )

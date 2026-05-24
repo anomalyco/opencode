@@ -12,18 +12,17 @@ import { InstallationChannel } from "../installation/version"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
-export type Info = {
+
+export interface Interface {
   db: DatabaseShape
-  native: unknown
   drizzle: Sqlite.DrizzleClient
 }
 
-export class Service extends Context.Service<Service, Info>()("@opencode/v2/storage/Database") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const native = yield* Sqlite.Native
     const drizzle = yield* Sqlite.Drizzle
     const db = yield* makeDatabase
 
@@ -36,15 +35,13 @@ export const layer = Layer.effect(
     yield* Effect.log("Applying database migrations")
     yield* DatabaseMigration.apply(db)
 
-    return { db, native, drizzle }
+    return { db, drizzle }
   }).pipe(Effect.orDie),
 )
 
 export function layerFromPath(filename: string) {
   return layer.pipe(Layer.provide(sqliteLayer({ filename })))
 }
-
-export const memoryLayer = layerFromPath(":memory:")
 
 export function path() {
   if (Flag.OPENCODE_DB) {
