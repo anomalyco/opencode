@@ -446,73 +446,27 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("treats includeEncryptedReasoning: true as include: [reasoning.encrypted_content]", () =>
+  it.effect("treats an explicit empty include as no include at all", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.request({
-          model,
-          prompt: "hi",
-          providerOptions: { openai: { includeEncryptedReasoning: true } },
-        }),
-      )
-
-      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
-    }),
-  )
-
-  it.effect("prefers explicit include over the includeEncryptedReasoning alias", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.request({
-          model,
-          prompt: "hi",
-          providerOptions: {
-            openai: {
-              includeEncryptedReasoning: true,
-              include: ["reasoning.encrypted_content", "code_interpreter_call.outputs"],
-            },
-          },
-        }),
-      )
-
-      expect(prepared.body.include).toEqual(["reasoning.encrypted_content", "code_interpreter_call.outputs"])
-    }),
-  )
-
-  it.effect("treats an explicit empty include as opting out of the alias", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.request({
-          model,
-          prompt: "hi",
-          // An empty array is an explicit "include nothing" — the alias must
-          // not silently re-enable encrypted reasoning behind the caller's
-          // back.
-          providerOptions: { openai: { include: [], includeEncryptedReasoning: true } },
-        }),
+        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: [] } } }),
       )
 
       expect(prepared.body.include).toBeUndefined()
     }),
   )
 
-  it.effect("does not let the alias resurrect an include filtered to empty", () =>
+  it.effect("treats an all-invalid include as no include at all", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.request({
-          model,
-          prompt: "hi",
-          // The caller passed include — even if every entry filters out as
-          // unknown, the alias should not take over.
-          providerOptions: { openai: { include: ["bogus.thing"], includeEncryptedReasoning: true } },
-        }),
+        LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: ["bogus.thing"] } } }),
       )
 
       expect(prepared.body.include).toBeUndefined()
     }),
   )
 
-  it.effect("omits include when neither include nor the alias is set", () =>
+  it.effect("omits include when no include is set", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),

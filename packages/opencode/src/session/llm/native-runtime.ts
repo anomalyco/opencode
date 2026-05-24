@@ -74,11 +74,10 @@ export function stream(input: StreamInput): StreamResult {
   // ProviderTransform.providerOptions builds AI-SDK-shaped options for the
   // selected SDK key (e.g. "openai") and the native LLM SDK reads the same
   // keys via OpenAIOptions.* (store, reasoningEffort, reasoningSummary,
-  // include, textVerbosity, promptCacheKey). The shapes are intentionally
-  // aligned with the official OpenAI Responses wire fields, so this is a
-  // pass-through, not a translation. Native-only conveniences such as
-  // OpenAIOptionsInput.includeEncryptedReasoning are resolved inside the
-  // native SDK and are never emitted by ProviderTransform.options.
+  // include, textVerbosity, promptCacheKey). Both sides intentionally use
+  // OpenAI's official wire field names, so this is identity, not translation
+  // — if a field ever needs to differ between the two surfaces, the
+  // translation belongs here, not split across both packages.
   const stream = input.llmClient.stream({
     request: LLMNative.request({
       model: input.model,

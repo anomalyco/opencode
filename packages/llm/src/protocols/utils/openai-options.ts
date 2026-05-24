@@ -54,20 +54,16 @@ export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefine
 export const reasoningSummary = (request: LLMRequest): "auto" | undefined =>
   options(request)?.reasoningSummary === "auto" ? "auto" : undefined
 
-// Resolve the OpenAI Responses `include` field. The official wire shape is an
-// array of `ResponseIncludable`; the boolean `includeEncryptedReasoning` is a
-// convenience that requests only `reasoning.encrypted_content`. Any explicit
-// `include` (even an empty array, or one that filters to empty after dropping
-// unknown values) is treated as the caller having opted out of the alias, so
-// the alias only applies when no `include` was provided at all.
+// Resolve the OpenAI Responses `include` field. Filters out unknown
+// includable values defensively so a typo in upstream config drops the
+// invalid entry instead of poisoning the wire body. An empty array (either
+// passed directly or produced by filtering) is treated as "no include" and
+// returns undefined so the request body omits the field entirely.
 export const include = (request: LLMRequest): ReadonlyArray<OpenAIResponseIncludable> | undefined => {
-  const opts = options(request)
-  if (Array.isArray(opts?.include)) {
-    const filtered = opts.include.filter((entry): entry is OpenAIResponseIncludable => INCLUDABLES.has(entry))
-    return filtered.length > 0 ? filtered : undefined
-  }
-  if (opts?.includeEncryptedReasoning === true) return ["reasoning.encrypted_content"]
-  return undefined
+  const value = options(request)?.include
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter((entry): entry is OpenAIResponseIncludable => INCLUDABLES.has(entry))
+  return filtered.length > 0 ? filtered : undefined
 }
 
 export const promptCacheKey = (request: LLMRequest) => {
