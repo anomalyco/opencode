@@ -120,6 +120,26 @@ const CREATE_GROUP_MARKER_PROMPT = [
 ].join("\n")
 
 /**
+ * [feat: feishu-create-group-toggle-gui] 2026-05-24
+ * `enableAutoGroupCreate=false` 时拼入的"禁止建群"指令 — soft constraint。
+ *
+ * 起因:仅"不教 marker"不足以阻止 LLM — agent 仍会尝试翻源码 / 调 SDK / 装 MCP 等
+ * 替代路径帮用户达成建群目的(2026-05-24 实测撞 imbot read permission ask 卡)。
+ *
+ * 加这段后:LLM 收到明确禁令 + 引导 user 到 GUI 开关。即便 prompt injection 绕过,
+ * imbot agent 受限的 tool 默认权限 + user 在飞书看到权限卡仍能拒绝,是第二道闸。
+ */
+const CREATE_GROUP_DISABLED_PROMPT = [
+  "## 建群能力未启用",
+  "此账号未启用「AI 自动创建新群」能力。当用户请求建群时(例如'帮我建群' / '拉个群' / 'create group' 等),请:",
+  "1. 明确告知用户「此账号未启用自动建群,如需启用请在 DeskFox 设置 → 飞书桥接 → 选此账号点【编辑】→ 高级能力 → 勾选「允许 AI 自动创建新群」后重试」",
+  "2. **不要**尝试通过其他途径建群 — 不要读源码 / 不要尝试调飞书 SDK / 不要装 MCP / 不要找替代方案",
+  "3. **不要**让用户提供飞书 appId/appSecret/token 等凭证试图自己调用 API",
+  "",
+  "原因:建群是用户**主动授权**的能力(opt-in),关闭意味着用户明确选择「不允许」,你应当尊重此决定。",
+].join("\n")
+
+/**
  * 给飞书 user 的友好错误回复 — 把技术性 opencode error message 翻译成 user 可操作的指引。
  * 只识别 happy-path 阻塞性错误(没配 default model / provider key 无效),其他原样返回。
  *
@@ -221,14 +241,17 @@ export class MessagePipeline {
    * [feat: feishu-bridge-light] 动态拼接 system prompt:
    * - base(总是)
    * - ATTACH marker(总是 — 路径白名单 + size 限制安全)
-   * - CREATE_GROUP marker(仅 account.enableAutoGroupCreate=true 时)
-   *
-   * 默认关 CREATE_GROUP 时连教学都不发给 LLM,避免输出 marker 但功能未启用造成"哑回复"。
+   * - CREATE_GROUP marker(`account.enableAutoGroupCreate=true` 时)
+   * - CREATE_GROUP DISABLED(`enableAutoGroupCreate=false` 时,soft constraint)
+   *   [feat: feishu-create-group-toggle-gui] 2026-05-24 加 — 仅"不教 marker"
+   *   不足以阻止 LLM 找替代路径建群,加明确禁令 + GUI 引导。
    */
   private getSystemPrompt(): string {
     const parts = [FEISHU_SESSION_SYSTEM_PROMPT_BASE, ATTACH_MARKER_PROMPT]
     if (this.opts.account.enableAutoGroupCreate) {
       parts.push(CREATE_GROUP_MARKER_PROMPT)
+    } else {
+      parts.push(CREATE_GROUP_DISABLED_PROMPT)
     }
     return parts.join("\n\n")
   }

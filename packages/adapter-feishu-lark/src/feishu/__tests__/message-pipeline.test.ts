@@ -912,7 +912,7 @@ describe("getSystemPrompt (feat: feishu-bridge-light Phase 3)", () => {
     return pipeline
   }
 
-  test("enableAutoGroupCreate=false:含 ATTACH 不含 CREATE_GROUP", () => {
+  test("enableAutoGroupCreate=false:含 ATTACH + 禁止建群指令,不含 CREATE_GROUP marker 协议", () => {
     const p = buildPipeline(false)
     // 用 bracket 访问 private method(等同 testHandle 模式)
     const prompt = (p as any).getSystemPrompt()
@@ -920,14 +920,19 @@ describe("getSystemPrompt (feat: feishu-bridge-light Phase 3)", () => {
     expect(prompt).toContain("[ATTACH:")
     expect(prompt).not.toContain("自动建群协议")
     expect(prompt).not.toContain("[CREATE_GROUP:")
+    // [feat: feishu-create-group-toggle-gui] 2026-05-24:soft constraint 段
+    expect(prompt).toContain("建群能力未启用")
+    expect(prompt).toContain("DeskFox 设置")
   })
 
-  test("enableAutoGroupCreate=true:含 ATTACH 和 CREATE_GROUP", () => {
+  test("enableAutoGroupCreate=true:含 ATTACH 和 CREATE_GROUP marker 协议,不含禁令段", () => {
     const p = buildPipeline(true)
     const prompt = (p as any).getSystemPrompt()
     expect(prompt).toContain("文件回传协议")
     expect(prompt).toContain("自动建群协议")
     expect(prompt).toContain("[CREATE_GROUP:")
+    // 启用时不拼禁令段
+    expect(prompt).not.toContain("建群能力未启用")
   })
 
   test("base prompt 总是含禁用反问工具的指引", () => {
@@ -935,5 +940,22 @@ describe("getSystemPrompt (feat: feishu-bridge-light Phase 3)", () => {
     const prompt = (p as any).getSystemPrompt()
     expect(prompt).toContain("禁止")
     expect(prompt).toContain("反问")
+  })
+
+  // [feat: feishu-create-group-toggle-gui] 2026-05-24
+  test("disabled 时禁令段明确禁止替代路径 + 引导 GUI 开启", () => {
+    const p = buildPipeline(false)
+    const prompt = (p as any).getSystemPrompt()
+    // 关键禁止指令(`**不要**尝试...` 含 markdown bold,验单串)
+    expect(prompt).toContain("不要")
+    expect(prompt).toContain("尝试通过其他途径建群")
+    // 关键替代路径明确点名
+    expect(prompt).toContain("不要读源码")
+    expect(prompt).toContain("不要尝试调飞书 SDK")
+    // GUI 引导路径
+    expect(prompt).toContain("飞书桥接")
+    expect(prompt).toContain("高级能力")
+    // 凭证防护(防 LLM 让 user 提供 appSecret)
+    expect(prompt).toContain("appSecret")
   })
 })
