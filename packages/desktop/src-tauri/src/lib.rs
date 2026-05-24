@@ -590,6 +590,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             feishu_adapter::feishu_delete_account,
             // FORK: per-account model 选择 [feat: feishu-bridge] 2026-05-09
             feishu_adapter::feishu_update_account_model,
+            // FORK: per-account partial settings [feat: feishu-create-group-toggle-gui] 2026-05-24
+            feishu_adapter::feishu_update_account_settings,
             feishu_adapter::feishu_list_providers
         ])
         .events(tauri_specta::collect_events![
