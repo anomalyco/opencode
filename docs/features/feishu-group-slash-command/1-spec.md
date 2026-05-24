@@ -125,6 +125,7 @@ LLM(任何 provider)收到 user "建群"类请求 → 老的 marker 路径删除
 - **/group 不走 LLM**:0 LLM 漂移风险,任何 provider 都一样
 - **白名单替换 regex**:误拦率显著下降(预估 < 1%,vs 当前宽容 regex 的明显误拦)
 - **查询后缀排除**:防"建群怎么操作" 等查询语句被拦
+- **已知漏拦**(strict substring 设计 trade):"建一个X群" / "创建一个X群"(X 是任意词)— 中间字插入断开 contiguous 匹配,user 应改用 `/group <群名>` 显式触发或换说法("建群叫 X" 命中 Tier 1 "建群")。这部分漏拦走 LLM,system prompt 引导段会让 LLM 回"用 /group";对跳过 system prompt 的 provider 是已接受的漏拦风险
 
 ## 决策轨迹
 
