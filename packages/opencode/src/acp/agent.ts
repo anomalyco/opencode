@@ -131,24 +131,26 @@ export class Agent implements ACPAgent {
     this.sdk = config.sdk
     this.sessionManager = new ACPSessionManager(this.sdk)
 
-    // Bind agent lifecycle to ACP connection. When the connection closes,
-    // abort event subscription and clean up pending state so the agent
-    // doesn't continue running against a dead client.
-    connection.signal.addEventListener(
-      "abort",
-      () => {
-        log.info("ACP connection closed, cleaning up agent")
-        this.eventAbort.abort(connection.signal.reason ?? new Error("ACP connection closed"))
-        this.permissionQueues.clear()
-        // Abort all tracked OpenCode sessions to prevent orphaned prompts.
-        void this.sessionManager.abortAll().catch((error) => {
-          log.error("failed to abort sessions on disconnect", { error })
-        })
-      },
-      { once: true },
-    )
+    // Defer with queueMicrotask because AgentSideConnection's constructor
+    // calls the toAgent factory (this constructor) *before* its inner
+    // Connection is initialised, so connection.signal is unavailable
+    // synchronously.
+    queueMicrotask(() => {
+      connection.signal.addEventListener(
+        "abort",
+        () => {
+          log.info("ACP connection closed, cleaning up agent")
+          this.eventAbort.abort(connection.signal.reason ?? new Error("ACP connection closed"))
+          this.permissionQueues.clear()
+          void this.sessionManager.abortAll().catch((error) => {
+            log.error("failed to abort sessions on disconnect", { error })
+          })
+        },
+        { once: true },
+      )
 
-    this.startEventSubscription()
+      this.startEventSubscription()
+    })
   }
 
   private startEventSubscription() {
@@ -296,7 +298,7 @@ private async sendSessionUpdate(
                 toolCall: {
                   toolCallId: permission.tool?.callID ?? permission.id,
                   status: "pending",
-                  title: permission.permission,
+                  title: toolTitle(permission.permission, permission.metadata),
                   rawInput: permission.metadata,
                   kind: toToolKind(permission.permission),
                   locations: toLocations(permission.permission, permission.metadata),
@@ -429,7 +431,7 @@ private async sendSessionUpdate(
                           toolCallId: part.callID,
                           status: "in_progress",
                           kind: toToolKind(part.tool),
-                          title: part.tool,
+                          title: toolTitle(part.tool, part.state.input),
                           locations: toLocations(part.tool, part.state.input),
                           rawInput: part.state.input,
                         },
@@ -457,7 +459,7 @@ private async sendSessionUpdate(
                     toolCallId: part.callID,
                     status: "in_progress",
                     kind: toToolKind(part.tool),
-                    title: part.tool,
+                    title: toolTitle(part.tool, part.state.input),
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
                     ...(content.length > 0 && { content }),
@@ -510,7 +512,7 @@ private async sendSessionUpdate(
                     status: "completed",
                     kind,
                     content,
-                    title: part.state.title,
+                    title: toolTitle(part.tool, part.state.input, part.state.title),
                     rawInput: part.state.input,
                     rawOutput: completedToolRawOutput(part),
                   },
@@ -531,7 +533,7 @@ private async sendSessionUpdate(
                     toolCallId: part.callID,
                     status: "failed",
                     kind: toToolKind(part.tool),
-                    title: part.tool,
+                    title: toolTitle(part.tool, part.state.input),
                     rawInput: part.state.input,
                     content: [
                       {
@@ -941,7 +943,7 @@ private async sendSessionUpdate(
                   toolCallId: part.callID,
                   status: "in_progress",
                   kind: toToolKind(part.tool),
-                  title: part.tool,
+                  title: toolTitle(part.tool, part.state.input),
                   locations: toLocations(part.tool, part.state.input),
                   rawInput: part.state.input,
                   ...(runningContent.length > 0 && { content: runningContent }),
@@ -992,7 +994,7 @@ private async sendSessionUpdate(
                   status: "completed",
                   kind,
                   content,
-                  title: part.state.title,
+                  title: toolTitle(part.tool, part.state.input, part.state.title),
                   rawInput: part.state.input,
                   rawOutput: completedToolRawOutput(part),
                 },
@@ -1011,7 +1013,7 @@ private async sendSessionUpdate(
                   toolCallId: part.callID,
                   status: "failed",
                   kind: toToolKind(part.tool),
-                  title: part.tool,
+                  title: toolTitle(part.tool, part.state.input),
                   rawInput: part.state.input,
                   content: [
                     {
@@ -1165,17 +1167,18 @@ private async sendSessionUpdate(
   private async toolStart(sessionId: string, part: ToolPart) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
+    const input = part.state.input ?? {}
     await this.connection
       .sessionUpdate({
         sessionId,
         update: {
           sessionUpdate: "tool_call",
           toolCallId: part.callID,
-          title: part.tool,
+          title: toolTitle(part.tool, input),
           kind: toToolKind(part.tool),
           status: "pending",
-          locations: [],
-          rawInput: {},
+          locations: toLocations(part.tool, input),
+          rawInput: input,
         },
       })
       .catch((error) => {
@@ -1808,6 +1811,19 @@ function toToolKind(toolName: string): ToolKind {
     default:
       return "other"
   }
+}
+
+function taskToolTitle(input: Record<string, any>): string {
+  const type = typeof input["subagent_type"] === "string" ? input["subagent_type"] : ""
+  const desc = typeof input["description"] === "string" ? input["description"] : ""
+  const kind = type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unknown"
+  if (desc) return `${kind} — ${desc}`
+  return `${kind} Task`
+}
+
+function toolTitle(toolName: string, input: Record<string, any>, stateTitle?: string): string {
+  if (toolName === "task") return taskToolTitle(input)
+  return stateTitle ?? toolName
 }
 
 function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
