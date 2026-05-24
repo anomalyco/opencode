@@ -327,6 +327,11 @@ export async function uploadImage(
  *
  * iter 4:走 Bun-native fetch 绕 SDK file.create
  *
+ * **不做 percent-encoding**:Bun-native FormData 自动按 RFC 8187 处理 UTF-8 filename
+ * (multipart `Content-Disposition` header),飞书 server 正确 decode 回中文。OpenClaw 的
+ * sanitizeFileNameForUpload 是给 Node form-data 库走 SDK 路径用的兜底,iter 4 已经完全
+ * 绕开 SDK,不需要也不能做(否则飞书显示成 %E6%8A%A5%E5%91%8A.md raw 字符串)。
+ *
  * @param retryOptions 可选 — 测试用快退避
  */
 export async function uploadFile(
@@ -343,17 +348,16 @@ export async function uploadFile(
   }
   const buffer = readFileSync(path)
   const fileName = basename(path)
-  const safeName = sanitizeFileNameForUpload(fileName)
   return retryUpload(
     async () => {
       const { token, domain } = await getClientAuthContext(client)
       return uploadMultipartViaFetch({
         endpoint: `${domain}/open-apis/im/v1/files`,
         token,
-        fields: { file_type: fileType, file_name: safeName },
+        fields: { file_type: fileType, file_name: fileName },
         fileFieldName: "file",
         fileBuffer: buffer,
-        fileName: safeName,
+        fileName,
         keyField: "file_key",
       })
     },

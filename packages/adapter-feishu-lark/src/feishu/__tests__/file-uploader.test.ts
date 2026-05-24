@@ -240,12 +240,14 @@ describe("uploadFile", () => {
     expect(fileCalls[0]!.fields.file_type).toBe("stream")
   })
 
-  test("中文名 → file_name 走 percent-encode(避飞书服务端静默失败)", async () => {
-    // [feat: feishu-attach-upload-robustness iter 3] 2026-05-24
+  test("中文名 → file_name 字段保留原 UTF-8(Bun-native FormData 自动 RFC 8187)", async () => {
+    // [feat: feishu-attach-upload-robustness iter 4] 2026-05-24
+    // iter 3 错误地 percent-encode 让飞书显示 raw "%E4%B8%AD..." 而不是 decode 回中文。
+    // iter 4 改用 Bun-native FormData → 自动处理 UTF-8 multipart filename,飞书 server 正确 decode。
     const p = makeFile("中文报告.pdf", 1024)
     const { client, fileCalls } = makeMock({ fileKey: "file_zh" })
     await uploadFile(client, p, "pdf")
-    expect(fileCalls[0]!.fields.file_name).toBe("%E4%B8%AD%E6%96%87%E6%8A%A5%E5%91%8A.pdf")
+    expect(fileCalls[0]!.fields.file_name).toBe("中文报告.pdf")
   })
 
   test("超 30MB → 抛 size 错", async () => {
