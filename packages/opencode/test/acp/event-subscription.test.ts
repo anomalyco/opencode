@@ -222,6 +222,21 @@ function createFakeAgent() {
     eventSubscribe: 0,
     sessionCreate: 0,
   }
+  const sessionMessages = new Map<string, any>()
+  const defaultAssistant = {
+    id: "msg_prompt",
+    sessionID: "ses_1",
+    role: "assistant",
+    providerID: "opencode",
+    modelID: "big-pickle",
+    cost: 0,
+    tokens: {
+      input: 1,
+      output: 1,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  }
 
   const sdk = {
     global: {
@@ -251,7 +266,13 @@ function createFakeAgent() {
       messages: async () => {
         return { data: [] }
       },
+      prompt: async () => {
+        return { data: { info: defaultAssistant } }
+      },
       message: async (params?: any) => {
+        const message = sessionMessages.get(params?.messageID)
+        if (message) return { data: message }
+
         // Return a message with parts that can be looked up by partID
         return {
           data: {
@@ -326,7 +347,7 @@ function createFakeAgent() {
     ;(agent as any).eventAbort.abort()
   }
 
-  return { agent, controller, calls, updates, chunks, sessionUpdates, stop, sdk, connection }
+  return { agent, controller, calls, updates, chunks, sessionUpdates, stop, sdk, connection, sessionMessages }
 }
 
 describe("acp.agent event subscription", () => {
@@ -420,6 +441,151 @@ describe("acp.agent event subscription", () => {
             .filter((u) => u.sessionId === sessionId)
             .some((u) => u.update.sessionUpdate === "user_message_chunk"),
         ).toBe(false)
+
+        stop()
+      },
+    })
+  })
+
+  test("replays canonical assistant text before prompt returns end_turn", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, chunks, sessionMessages, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const text = "There is only one user directory in /home: `agent`."
+
+        sessionMessages.set("msg_prompt", {
+          info: {
+            id: "msg_prompt",
+            sessionID: sessionId,
+            role: "assistant",
+          },
+          parts: [
+            {
+              id: "part_prompt",
+              type: "text",
+              text,
+            },
+          ],
+        })
+
+        const result = await agent.prompt({
+          sessionId,
+          prompt: [{ type: "text", text: "list files" }],
+        } as any)
+
+        expect(result.stopReason).toBe("end_turn")
+        expect(chunks.get(sessionId)).toBe(text)
+
+        stop()
+      },
+    })
+  })
+
+  test("reconciles only the unstreamed assistant text suffix", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, chunks, sessionMessages, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const text = "hello world"
+
+        sessionMessages.set("msg_prompt", {
+          info: {
+            id: "msg_prompt",
+            sessionID: sessionId,
+            role: "assistant",
+          },
+          parts: [
+            {
+              id: "part_prompt",
+              type: "text",
+              text,
+            },
+          ],
+        })
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_prompt",
+              partID: "part_prompt",
+              field: "text",
+              delta: "hello ",
+            },
+          },
+        } as any)
+
+        await pollUntil(() => chunks.get(sessionId) === "hello ", "initial delta never arrived")
+
+        const result = await agent.prompt({
+          sessionId,
+          prompt: [{ type: "text", text: "finish" }],
+        } as any)
+
+        expect(result.stopReason).toBe("end_turn")
+        expect(chunks.get(sessionId)).toBe(text)
+
+        stop()
+      },
+    })
+  })
+
+  test("does not duplicate text when a live delta arrives after reconciliation", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, chunks, sessionMessages, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const text = "late reply"
+
+        sessionMessages.set("msg_prompt", {
+          info: {
+            id: "msg_prompt",
+            sessionID: sessionId,
+            role: "assistant",
+          },
+          parts: [
+            {
+              id: "part_prompt",
+              type: "text",
+              text,
+            },
+          ],
+        })
+
+        await agent.prompt({
+          sessionId,
+          prompt: [{ type: "text", text: "finish" }],
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_prompt",
+              partID: "part_prompt",
+              field: "text",
+              delta: text,
+            },
+          },
+        } as any)
+
+        await new Promise((resolve) => setTimeout(resolve, 25))
+
+        expect(chunks.get(sessionId)).toBe(text)
 
         stop()
       },
