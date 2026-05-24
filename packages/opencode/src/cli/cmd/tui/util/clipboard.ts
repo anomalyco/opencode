@@ -175,7 +175,25 @@ const getCopyMethod = lazy(async () => {
 export async function copy(text: string): Promise<void> {
   writeOsc52(text)
   const method = await getCopyMethod()
-  await method(text)
+  try {
+    await method(text)
+  } catch (error) {
+    if (platform() === "linux") {
+      throw new Error(
+        "Clipboard command failed. Ensure a clipboard backend is installed: xclip, xsel, or wl-clipboard (wl-copy).",
+        { cause: error },
+      )
+    }
+    throw error
+  }
+}
+
+const LINUX_CLIPBOARD_GUIDANCE = "Ensure a clipboard backend is installed: xclip, xsel, or wl-clipboard (wl-copy)."
+
+export function failureMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error)
+  if (msg) return msg
+  return `Clipboard failed. ${LINUX_CLIPBOARD_GUIDANCE}`
 }
 
 export * as Clipboard from "./clipboard"

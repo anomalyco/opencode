@@ -30,6 +30,7 @@ export function ErrorComponent(props: {
     }
   })
   const [copied, setCopied] = createSignal(false)
+  const [copyError, setCopyError] = createSignal("")
 
   const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
@@ -56,9 +57,14 @@ export function ErrorComponent(props: {
   issueURL.searchParams.set("opencode-version", InstallationVersion)
 
   const copyIssueURL = () => {
-    void Clipboard.copy(issueURL.toString()).then(() => {
-      setCopied(true)
-    })
+    Clipboard.copy(issueURL.toString())
+      .then(() => {
+        setCopied(true)
+        setCopyError("")
+      })
+      .catch((e) => {
+        setCopyError(Clipboard.failureMessage(e))
+      })
   }
 
   return (
@@ -73,6 +79,7 @@ export function ErrorComponent(props: {
           </text>
         </box>
         {copied() && <text fg={colors.muted}>Successfully copied</text>}
+        {copyError() && <text fg={colors.muted}>{copyError()}</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
         <text fg={colors.text}>A fatal error occurred!</text>
