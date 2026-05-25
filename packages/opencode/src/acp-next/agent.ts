@@ -5,6 +5,7 @@ import {
   type AuthenticateRequest,
   type CancelNotification,
   type InitializeRequest,
+  type LoadSessionRequest,
   type NewSessionRequest,
   type PromptRequest,
 } from "@agentclientprotocol/sdk"
@@ -15,8 +16,8 @@ import * as ACPNextService from "./service"
 
 export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {
-    create: (_connection: AgentSideConnection) => {
-      return new Agent(ACPNextService.make())
+    create: (connection: AgentSideConnection) => {
+      return new Agent(ACPNextService.make({ sdk: _sdk, connection }))
     },
   }
 }
@@ -34,6 +35,10 @@ export class Agent implements ACPAgent {
 
   newSession(params: NewSessionRequest) {
     return run(this.service.newSession(params))
+  }
+
+  loadSession(params: LoadSessionRequest) {
+    return run(this.service.loadSession(params))
   }
 
   prompt(params: PromptRequest) {

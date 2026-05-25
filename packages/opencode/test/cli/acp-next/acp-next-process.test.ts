@@ -1,8 +1,15 @@
 import { describe, expect } from "bun:test"
-import type { AuthenticateResponse, InitializeResponse } from "@agentclientprotocol/sdk"
+import type {
+  AuthenticateResponse,
+  InitializeResponse,
+  LoadSessionResponse,
+  NewSessionResponse,
+  SessionNotification,
+} from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
-import { createAcpClient, expectOk } from "../acp/acp-test-client"
+import { testProviderConfig } from "../../lib/test-provider"
+import { createAcpClient, expectOk, selectConfigOption } from "../acp/acp-test-client"
 
 describe("opencode acp-next (subprocess)", () => {
   cliIt.live(
@@ -48,14 +55,41 @@ describe("opencode acp-next (subprocess)", () => {
   )
 
   cliIt.live(
-    "SDK-required session stubs fail with safe unsupported errors",
-    ({ home, opencode }) =>
+    "creates and loads sessions behind OPENCODE_ACP_NEXT",
+    ({ home, llm, opencode }) =>
       Effect.gen(function* () {
-        const acp = createAcpClient(yield* opencode.acp({ env: { OPENCODE_ACP_NEXT: "1" } }))
+        const acp = createAcpClient(
+          yield* opencode.acp({
+            env: {
+              OPENCODE_ACP_NEXT: "1",
+              OPENCODE_CONFIG_CONTENT: JSON.stringify(testProviderConfig(llm.url)),
+            },
+          }),
+        )
         yield* acp.request<InitializeResponse>("initialize", { protocolVersion: 1 })
 
-        const newSession = yield* acp.request("session/new", { cwd: home, mcpServers: [] })
-        expect(errorCode(newSession.error)).toBe(-32601)
+        const session = expectOk(
+          yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] }),
+        )
+        expect(typeof session.sessionId).toBe("string")
+        expect(selectConfigOption(session.configOptions, "model")?.category).toBe("model")
+
+        const update = yield* acp.waitForNotification<SessionNotification>(
+          "session/update",
+          (params) =>
+            params.sessionId === session.sessionId &&
+            params.update.sessionUpdate === "available_commands_update",
+        )
+        expect(update.params?.sessionId).toBe(session.sessionId)
+
+        const loaded = expectOk(
+          yield* acp.request<LoadSessionResponse>("session/load", {
+            cwd: home,
+            sessionId: session.sessionId,
+            mcpServers: [],
+          }),
+        )
+        expect(selectConfigOption(loaded.configOptions, "model")?.category).toBe("model")
 
         const prompt = yield* acp.request("session/prompt", {
           sessionId: "ses_missing",
