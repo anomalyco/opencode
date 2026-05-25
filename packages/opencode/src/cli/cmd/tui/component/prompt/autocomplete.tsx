@@ -575,19 +575,27 @@ export function Autocomplete(props: {
     })
   }
 
-  const skillList = createMemo(() =>
-    (props.skills() ?? [])
+  const skillList = createMemo(() => {
+    const results = (props.skills() ?? [])
       .toSorted((a, b) => a.name.localeCompare(b.name))
       .map(
         (skill): AutocompleteOption => ({
-          display: skill.name + "\t",
+          display: skill.name,
+          value: skill.name,
           description: skill.description,
           onSelect: () => {
             insertSkill(skill.name)
           },
         }),
-      ),
-  )
+      )
+
+    const max = Math.max(0, ...results.map((item) => Bun.stringWidth(item.display)))
+    if (max === 0) return results
+    return results.map((item) => ({
+      ...item,
+      display: item.display.padEnd(max + 2),
+    }))
+  })
 
   const referenceAliases = createMemo(() =>
     references().map(
