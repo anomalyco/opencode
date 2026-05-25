@@ -130,9 +130,13 @@ export function TrellisTasksPanel(props: {
     const name = getFilename(path)
     const prdAbsPath = path.endsWith("/") ? path + "prd.md" : path + "/prd.md"
     let content: string | undefined
-    try {
-      content = (await platform.readConfigFile?.(prdAbsPath)) ?? undefined
-    } catch {
+    if (platform.readConfigFile) {
+      try {
+        content = (await platform.readConfigFile(prdAbsPath)) ?? undefined
+      } catch {
+      }
+    }
+    if (typeof content !== "string") {
       try {
         const root = dir().replace(/\/+$/, "")
         const canonRoot = root.replace(/\\/g, "/")
