@@ -21,7 +21,8 @@ export default defineConfig({
     enabled: false,
   },
   server: {
-    host: "0.0.0.0",
+    // FORK: R6 loopback-only — 默认 0.0.0.0 暴露 dev server 到 LAN 是安全风险 2026-05-25
+    host: "127.0.0.1",
   },
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
