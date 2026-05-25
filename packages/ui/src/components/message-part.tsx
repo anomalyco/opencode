@@ -60,6 +60,26 @@ import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
 import { hookName, isCustomHookTool, normalizeTool } from "./tool-meta"
 
+type ProviderSummary = {
+  id?: string
+  name?: string
+  models?: Record<string, { name?: string } | undefined>
+}
+
+function providerByID(all: unknown, providerID: string): ProviderSummary | undefined {
+  if (!all) return undefined
+  if (all instanceof Map) return all.get(providerID) as ProviderSummary | undefined
+  if (Array.isArray(all)) {
+    return all.find((item): item is ProviderSummary => {
+      if (!item || typeof item !== "object") return false
+      return (item as ProviderSummary).id === providerID
+    })
+  }
+  const get = (all as { get?: unknown }).get
+  if (typeof get === "function") return get.call(all, providerID) as ProviderSummary | undefined
+  return undefined
+}
+
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
   let valueRef: HTMLSpanElement | undefined
@@ -179,51 +199,61 @@ export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
-const TEXT_RENDER_THROTTLE_MS = 100
+const LIVE_TEXT_MIN_CHARS = 2
+const LIVE_TEXT_MAX_CHARS = 48
 
-function createThrottledValue(getValue: () => string) {
+function nextLiveText(current: string, target: string) {
+  if (!target.startsWith(current)) return target
+  if (current.length >= target.length) return target
+
+  const remaining = target.length - current.length
+  const size = Math.max(
+    LIVE_TEXT_MIN_CHARS,
+    Math.min(LIVE_TEXT_MAX_CHARS, Math.ceil(remaining / 5), remaining > 160 ? 32 : 12),
+  )
+  let end = Math.min(target.length, current.length + size)
+
+  // Avoid leaving a single punctuation/whitespace character stranded for the
+  // next paint; it reads as smoother without waiting for fixed-size chunks.
+  while (end < target.length && end - current.length < LIVE_TEXT_MAX_CHARS) {
+    const char = target[end]
+    if (!char || !/[\s.,;:!?)}\]'"`]/.test(char)) break
+    end += 1
+  }
+
+  return target.slice(0, end)
+}
+
+function createLiveValue(getValue: () => string) {
   const [value, setValue] = createSignal(getValue())
-  let timeout: ReturnType<typeof setTimeout> | undefined
   let rafId: number | undefined
-  let last = 0
-  let pending: string | undefined
+  let target = getValue()
 
-  const flush = () => {
-    if (pending === undefined) return
-    const next = pending
-    pending = undefined
-    last = Date.now()
-    // Gate on rAF so we only commit values when the browser is ready to paint
+  const step = () => {
+    rafId = undefined
+    const current = value()
+    const next = nextLiveText(current, target)
+    if (next !== current) setValue(next)
+    if (next !== target) schedule()
+  }
+
+  const schedule = () => {
+    if (rafId !== undefined) return
     rafId = requestAnimationFrame(() => {
-      rafId = undefined
-      setValue(next)
+      step()
     })
   }
 
   createEffect(() => {
-    const next = getValue()
-    const now = Date.now()
-
-    pending = next
-
-    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
-    if (remaining <= 0) {
-      if (timeout) {
-        clearTimeout(timeout)
-        timeout = undefined
-      }
-      flush()
+    target = getValue()
+    if (target.length < value().length || !target.startsWith(value())) {
+      setValue(target)
       return
     }
-    if (timeout) clearTimeout(timeout)
-    timeout = setTimeout(() => {
-      timeout = undefined
-      flush()
-    }, remaining)
+    schedule()
   })
 
   onCleanup(() => {
-    if (timeout) clearTimeout(timeout)
     if (rafId !== undefined) cancelAnimationFrame(rafId)
   })
 
@@ -232,11 +262,11 @@ function createThrottledValue(getValue: () => string) {
 
 function createLiveText(getValue: () => string, active: () => boolean) {
   const [value, setValue] = createSignal(getValue())
-  const throttled = createThrottledValue(getValue)
+  const live = createLiveValue(getValue)
 
   createEffect(() => {
     if (active()) {
-      setValue(throttled())
+      setValue(live())
       return
     }
     setValue(getValue())
@@ -558,7 +588,7 @@ type PartRef = {
   partID: string
 }
 
-type PartGroup =
+export type PartGroup =
   | {
       key: string
       type: "part"
@@ -594,7 +624,7 @@ function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[]
   return a.every((item, i) => sameGroup(item, b[i]!))
 }
 
-function groupParts(parts: { messageID: string; part: PartType }[]) {
+export function groupParts(parts: { messageID: string; part: PartType }[]) {
   const result: PartGroup[] = []
   let start = -1
 
@@ -642,7 +672,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
 }
 
-function renderable(part: PartType, showReasoningSummaries = true, showCustomHookParts = true) {
+export function renderable(part: PartType, showReasoningSummaries = true, showCustomHookParts = true) {
   if (part.type === "tool") {
     const tool = toolName(part)
     if (HIDDEN_TOOLS.has(tool)) return false
@@ -1141,7 +1171,7 @@ export function UserMessageDisplay(props: {
     const providerID = props.message.model?.providerID
     const modelID = props.message.model?.modelID
     if (!providerID || !modelID) return ""
-    const match = data.store.provider?.all?.get(providerID)
+    const match = providerByID(data.store.provider?.all, providerID)
     return match?.models?.[modelID]?.name ?? modelID
   })
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
@@ -1149,7 +1179,7 @@ export function UserMessageDisplay(props: {
   const provider = createMemo(() => {
     const providerID = props.message.model?.providerID
     if (!providerID) return ""
-    const match = data.store.provider?.all?.get(providerID)
+    const match = providerByID(data.store.provider?.all, providerID)
     return match?.name ?? providerID
   })
 
@@ -1606,14 +1636,14 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const model = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
-    const match = data.store.provider?.all?.get(message.providerID)
+    const match = providerByID(data.store.provider?.all, message.providerID)
     return match?.models?.[message.modelID]?.name ?? message.modelID
   })
 
   const provider = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
-    const match = data.store.provider?.all?.get(message.providerID)
+    const match = providerByID(data.store.provider?.all, message.providerID)
     return match?.name ?? message.providerID
   })
 
@@ -1683,26 +1713,15 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const len = displayText().length
     const tail = clip(displayText())
     if (len < prev) {
-      console.warn("[text-part] text rollback", {
-        msg: props.message.id,
-        part: part.id,
-        prev,
-        next: len,
-        tail,
-      })
+      console.warn(`[text-part] text rollback msg=${props.message.id} part=${part.id} prev=${prev} next=${len} tail=${tail}`)
     }
 
     const nextLast = isLastTextPart()
     const nextLive = streaming()
     if (nextLast !== last || nextLive !== live) {
-      console.debug("[text-part] stream mode", {
-        msg: props.message.id,
-        part: part.id,
-        len,
-        last: nextLast,
-        streaming: nextLive,
-        tail,
-      })
+      console.debug(
+        `[text-part] stream mode msg=${props.message.id} part=${part.id} len=${len} last=${nextLast} streaming=${nextLive} tail=${tail}`,
+      )
     }
 
     prev = len

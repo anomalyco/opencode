@@ -23,7 +23,8 @@
     "./icons/app": "./src/components/app-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
     "./audio/*": "./src/assets/audio/*",
-    "./v2/*": "./src/v2/*"
+    "./v2/*": "./src/v2/*",
+    "./font-loader": "./src/font-loader.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",

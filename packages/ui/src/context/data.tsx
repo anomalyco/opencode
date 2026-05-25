@@ -3,7 +3,7 @@ import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 export type NormalizedProviderListResponse = {
-  all: Map<string, Provider>
+  all: Map<string, Provider> | Provider[]
   default: {
     [key: string]: string
   }
