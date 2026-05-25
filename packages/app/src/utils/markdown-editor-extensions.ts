@@ -5,9 +5,52 @@ import type { Extension } from "@codemirror/state"
 import { EditorState, Prec } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
 import type { Command } from "@codemirror/view"
-import { foldGutter, foldKeymap } from "@codemirror/language"
+import { HighlightStyle, foldGutter, foldKeymap, syntaxHighlighting } from "@codemirror/language"
+import { tags as t } from "@lezer/highlight"
 import { search, searchKeymap } from "@codemirror/search"
 import { invoke } from "@tauri-apps/api/core"
+
+// ============================================================
+// 编辑态语义高亮(md-editing-iter-3,2026-05-25)
+// 白领基线:GitHub Markdown CSS heading 比例(2/1.5/1.25/1/0.9/0.85)
+//          + iA Writer 源模式标记符弱化(opacity 0.7)
+// 跟 packages/ui/src/components/markdown.css 预览侧视觉统一
+// ============================================================
+
+export const markdownHighlightStyle = HighlightStyle.define([
+  // heading 比例对齐 GitHub MD CSS / Notion
+  { tag: t.heading1, fontSize: "2em",     fontWeight: "700", color: "var(--text-strong)" },
+  { tag: t.heading2, fontSize: "1.5em",   fontWeight: "700", color: "var(--text-strong)" },
+  { tag: t.heading3, fontSize: "1.25em",  fontWeight: "600", color: "var(--text-strong)" },
+  { tag: t.heading4, fontSize: "1em",     fontWeight: "600", color: "var(--text-strong)" },
+  { tag: t.heading5, fontSize: "0.9em",   fontWeight: "600", color: "var(--text-strong)" },
+  { tag: t.heading6, fontSize: "0.85em",  fontWeight: "600", color: "var(--text-weak)" },
+  // 行内样式
+  { tag: t.strong, fontWeight: "700" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  {
+    tag: t.monospace,
+    fontFamily: "var(--mono, Menlo, Consolas, monospace)",
+    background: "color-mix(in oklab, var(--text-base) 10%, transparent)",
+    borderRadius: "3px",
+    padding: "0 4px",
+  },
+  { tag: t.quote, color: "var(--text-weak)", fontStyle: "italic" },
+  // 链接 / 列表 marker 染色(Notion / 飞书文档同款,结构跳出来)
+  { tag: t.url, color: "var(--primary)", textDecoration: "underline" },
+  { tag: t.link, color: "var(--primary)" },
+  { tag: t.list, color: "var(--primary)" },
+  // 语法标记符温和弱化(# ** * ` 等)— iA Writer 同款 opacity 0.7
+  { tag: t.processingInstruction, color: "var(--text-weak)", opacity: "0.7" },
+  { tag: t.contentSeparator, color: "var(--text-weak)", opacity: "0.6" },
+])
+
+/**
+ * markdown-only syntax highlight extension。
+ * Prec.high 确保跟 code-mirror-view.tsx 全局 defaultHighlightStyle(fallback:true)
+ * 共存时,markdown tag 走专属样式,代码块内部语言 fallback 到 default。
+ */
+export const markdownSyntaxHighlight = Prec.high(syntaxHighlighting(markdownHighlightStyle))
 
 // ============================================================
 // CodeMirror 内置 UI 短语翻译(@codemirror/search 走 phrase 取词)
@@ -372,6 +415,9 @@ type ImageOpts = {
 export function markdownEditorExtensions(opts: ImageOpts = {}): Extension[] {
   const phrases = opts.locale ? PHRASES[opts.locale] : undefined
   return [
+    // md-editing-iter-3:markdown 专属语义高亮(GitHub MD CSS heading 比例 + iA Writer 标记符弱化)
+    // Prec.high 在 code-mirror-view.tsx 的 defaultHighlightStyle(fallback)之前匹配 md tag
+    markdownSyntaxHighlight,
     // Heading 折叠 + 折叠键盘(默认 Ctrl+Shift+[/])
     foldGutter(),
     keymap.of(foldKeymap),

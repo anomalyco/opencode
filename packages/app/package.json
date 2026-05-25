@@ -51,6 +51,7 @@
     "@codemirror/state": "6.6.0",
     "@codemirror/view": "6.41.1",
     "@jinzhongjia/markdown-docx": "1.0.4",
+    "@lezer/highlight": "1.2.3",
     "@kobalte/core": "catalog:",
     "@opencode-ai/branding": "workspace:*",
     "@opencode-ai/core": "workspace:*",
