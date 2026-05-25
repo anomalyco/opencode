@@ -55,13 +55,20 @@ T1-T6 6 个用例覆盖行为表 + 异常路径 + 真实 fs:
 `bun test packages/adapter-feishu-lark/` → **517 pass / 0 fail / 1013 expect / 20 files / 3.58s**
 基线 511(`imbot-workspace-rename` 收尾)+ 新 6 = 517 ✓
 
-### C5-C8 验证(user 实测)
+### C5-C8 验证
 
-待 user 装新 .app 验证:
-- **C5 首装路径**:全新机器装 prod/dev → 启动后 `~/.opencode/.imbot-workspace-rename-cleanup-applied` 应存在,内容含 `feat: "imbot-workspace-rename"` + ISO timestamp;chatStore 不被创建直到第一条飞书消息进来
-- **C6 升级路径**:已有 `~/.opencode/feishu-chat-sessions.json` 的 user 装新版 → 启动 sidecar log 出 `[feishu-plugin] cleared stale chat sessions after workspace rename ...`;`feishu-chat-sessions.json` 被删;marker 创建
-- **C7 idempotency**:同一 user 第二次启动 → log 不再出 cleanup 消息(marker 已在,helper 返回 `noop-already-applied` 静默 noop)
-- **C8 飞书桥接 happy path**:user 私聊 `把 notes.md 发给我` → bot 用**新路径** `~/.opencode/imbot-workspace/notes.md` emit ATTACH → 文件发送成功;user 接着问"workspace 地址是什么" → bot 回 `~/.opencode/imbot-workspace`(新路径)
+**C8 user 真飞书 IM 实测 ✓ 已过**(2026-05-25,user 私聊"把 notes.md 发给我",bot 用新路径 `~/.opencode/imbot-workspace/notes.md` emit ATTACH 成功,问"workspace 地址"答新路径)。
+
+**C6 user 真实环境间接验证 ✓ 已过**:user 装新 .app 启动后 `~/.opencode/.imbot-workspace-rename-cleanup-applied` 文件存在,内容 `{"appliedAt":"2026-05-25T09:32:50.081Z","feat":"imbot-workspace-rename"}`,JSON valid,且 chatSessionStore 在 marker 后 1 分钟被重新创建(新 session,proves cleanup 触发过)。
+
+**C5 + C7 集成 probe ✓ 已过**:`packages/adapter-feishu-lark/scripts/probe-cleanup-integration.ts` 在 tmp 真实 fs 跑三路径(不动 user 真实 ~/.opencode),17/17 通过:
+- C5 首装(空目录)→ `noop-no-sessions` + marker 写入 + chatStore 未被创建
+- C7 幂等(marker 已存在 + 故意造 stale chatStore)→ `noop-already-applied` + chatStore **未被误删** + marker mtime **未变**(没 rewrite,证明真 idempotent)
+- bonus C6(无 marker + 有 chatStore)→ `applied` + chatStore 被清 + marker 创建
+
+Probe 是 `scripts/probe-feishu-oauth.ts` 同款集成验证工具,留作未来 regression check。
+
+跑法:`bun run packages/adapter-feishu-lark/scripts/probe-cleanup-integration.ts`
 
 ### C9-C10
 - C9 Rust cargo check:无引用 plugin.ts 内容,跳过(本 feat 0 Rust 改动)
