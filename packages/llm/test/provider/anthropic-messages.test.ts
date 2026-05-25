@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { HttpClientRequest } from "effect/unstable/http"
 import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
+import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios"
 import { it } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
-const model = AnthropicMessages.model({
-  id: "claude-sonnet-4-5",
-  baseURL: "https://api.anthropic.test/v1/",
-  headers: { "x-api-key": "test" },
-})
+const model = AnthropicMessages.route
+  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+  .model({ id: "claude-sonnet-4-5" })
 
 const request = LLM.request({
   id: "req_1",
@@ -23,6 +23,19 @@ const request = LLM.request({
   cache: "none",
   generation: { maxTokens: 20, temperature: 0 },
 })
+
+type AnthropicToolResult = Extract<
+  AnthropicMessages.AnthropicMessagesBody["messages"][number]["content"][number],
+  { readonly type: "tool_result" }
+>
+
+const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): AnthropicToolResult => {
+  const result = body.messages
+    .flatMap((message) => (message.role === "user" ? message.content : []))
+    .find((block): block is AnthropicToolResult => block.type === "tool_result")
+  expect(result).toBeDefined()
+  return result!
+}
 
 describe("Anthropic Messages route", () => {
   it.effect("prepares Anthropic Messages target", () =>
@@ -42,7 +55,7 @@ describe("Anthropic Messages route", () => {
 
   it.effect("prepares tool call and tool result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -68,6 +81,131 @@ describe("Anthropic Messages route", () => {
         stream: true,
         max_tokens: 4096,
       })
+    }),
+  )
+
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `tool_result.content`.
+  it.effect("lowers image tool-result content as structured image blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(expectToolResult(prepared.body).content).toEqual([
+        { type: "text", text: "Image read successfully" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as a structured image block", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/jpeg", data: "/9j/AA==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(expectToolResult(prepared.body).content).toEqual([
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages")
+      expect(error.message).toContain("audio/mpeg")
+    }),
+  )
+
+  it.effect("prepares the composed native continuation request", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        continuationRequest({
+          id: "req_native_continuation_anthropic",
+          model,
+          features: nativeAnthropicMessagesContinuation,
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "You are concise. Continue from the provided history." }],
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "What is shown here?" },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "I inspected the previous turn.", signature: "sig_continuation_1" },
+              { type: "text", text: "It shows a small test image." },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "Check the weather in Paris before continuing." }] },
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "call_weather_1", name: "get_weather", input: { city: "Paris" } }],
+          },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "call_weather_1", content: '{"temperature":22}' }],
+          },
+          { role: "assistant", content: [{ type: "text", text: "Paris is 22 degrees." }] },
+          { role: "user", content: [{ type: "text", text: "Continue from this conversation in one short sentence." }] },
+        ],
+      })
+      expect(prepared.body.tools).toEqual([expect.objectContaining({ name: "get_weather" })])
     }),
   )
 
@@ -199,7 +337,29 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Overloaded" }])
+      // Prefix the error type so consumers can distinguish overloads, rate
+      // limits, and quota errors without parsing the message string.
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error: Overloaded" }])
+    }),
+  )
+
+  it.effect("falls back to error type when no message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when error payload is absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "Anthropic Messages stream error" }])
     }),
   )
 
@@ -394,17 +554,51 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("continues a conversation with user image content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const response = yield* LLMClient.generate(
         LLM.request({
           id: "req_media",
           model,
-          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [
+            Message.user([
+              { type: "text", text: "What is in this image?" },
+              { type: "media", mediaType: "image/png", data: "AAECAw==" },
+            ]),
+          ],
         }),
-      ).pipe(Effect.flip)
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(yield* Effect.promise(() => web.json())).toMatchObject({
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: "What is in this image?" },
+                      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+                    ],
+                  },
+                ],
+              })
+              return input.respond(
+                sseEvents(
+                  { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+                  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "An image." } },
+                  { type: "content_block_stop", index: 0 },
+                  { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+                  { type: "message_stop" },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
 
-      expect(error.message).toContain("Anthropic Messages user messages only support text content for now")
+      expect(response.text).toBe("An image.")
     }),
   )
 

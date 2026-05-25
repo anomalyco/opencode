@@ -17,13 +17,13 @@
 // builders (`opencode.serve(opts)`, `opencode.acp(opts)`, `opencode.auth(...)`)
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
-import type { TestOptions } from "bun:test"
+import { test, type TestOptions } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcess } from "effect/unstable/process"
 import path from "node:path"
-import fs from "node:fs/promises"
-import os from "node:os"
-import { Process } from "@/util/process"
 import { TestLLMServer } from "./llm-server"
 import { testProviderConfig } from "./test-provider"
 import { it } from "./effect"
@@ -32,6 +32,30 @@ const opencodeRoot = path.resolve(import.meta.dir, "../../")
 const cliEntry = path.join(opencodeRoot, "src/index.ts")
 
 export const testModelID = "test/test-model"
+
+// Wrap a Bun subprocess pipe (or any ReadableStream<Uint8Array>) as a Stream.
+// Centralizes the `evaluate` + `onError` boilerplate and tags errors with the
+// stream name so a stderr/stdout failure is greppable in logs.
+function fromBunStream(name: string, get: () => ReadableStream<Uint8Array>) {
+  return Stream.fromReadableStream({
+    evaluate: get,
+    onError: (cause) => new Error(`${name} stream error: ${String(cause)}`),
+  })
+}
+
+// Long-lived processes (serve, acp) all want the same stderr drain: read every
+// chunk, push to a tail buffer, swallow stream errors (the child closing the
+// pipe is normal). `log: true` surfaces a real protocol error to logs so a
+// regression doesn't silently disappear.
+function forkStderrDrain(stream: ReadableStream<Uint8Array>, into: string[]) {
+  return Effect.forkScoped(
+    fromBunStream("stderr", () => stream).pipe(
+      Stream.decodeText(),
+      Stream.runForEach((chunk) => Effect.sync(() => into.push(chunk))),
+      Effect.ignore({ log: true }),
+    ),
+  )
+}
 
 function isolatedEnv(home: string, configJson: string): Record<string, string> {
   return {
@@ -158,33 +182,59 @@ export function withCliFixture<A, E>(
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
+    const fs = yield* AppFileSystem.Service
+    const appProc = yield* AppProcess.Service
 
-    const home = path.join(os.tmpdir(), "oc-cli-" + Math.random().toString(36).slice(2))
-    yield* Effect.promise(() => fs.mkdir(home, { recursive: true }))
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => fs.rm(home, { recursive: true, force: true }).catch(() => undefined)),
-    )
+    // FileSystem.makeTempDirectoryScoped handles both creation and scope-tied
+    // cleanup — replaces the old mkdir + addFinalizer pair.
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "oc-cli-" })
 
     const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
-    const spawn = (args: string[], opts?: SpawnOpts): Effect.Effect<RunResult> =>
-      Effect.promise(async () => {
-        const start = Date.now()
-        // Process.run pipes stdout/stderr by default and returns them as Buffers.
-        const result = await Process.run(["bun", "run", "--conditions=browser", cliEntry, ...args], {
-          cwd: home,
-          timeout: opts?.timeoutMs ?? 30_000,
-          env: { ...process.env, ...env, ...opts?.env },
-          nothrow: true,
-        })
-        return {
-          exitCode: result.code,
-          stdout: result.stdout.toString(),
-          stderr: result.stderr.toString(),
-          durationMs: Date.now() - start,
-        }
+    const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts) {
+      const start = Date.now()
+      const timeoutMs = opts?.timeoutMs ?? 30_000
+      // stdin: "ignore" so the child doesn't see a piped stdin and block
+      // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
+      // consumed as the prompt). The old Process.run wrapper defaulted to
+      // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
+      const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
+        cwd: home,
+        env: { ...env, ...opts?.env },
+        extendEnv: true,
+        stdin: "ignore",
       })
+      // Pass timeout to appProc.run rather than wrapping with
+      // Effect.timeoutOrElse externally: AppProcess.run is itself scoped, so
+      // its built-in timeout triggers the acquireRelease kill finalizer
+      // inside cross-spawn-spawner *before* surfacing the AppProcessError —
+      // guaranteeing the child is dead by the time the test continues.
+      // External timeoutOrElse interrupts the run fiber but races the
+      // scope close, which can leak the child past the test boundary.
+      //
+      // Catch AppProcessError (timeout OR spawn failure) and synthesize a
+      // non-zero result so the test sees it via the usual `expectExit`
+      // path rather than as an unhandled Effect failure.
+      const result = yield* appProc.run(command, { timeout: Duration.millis(timeoutMs) }).pipe(
+        Effect.catchTag("AppProcessError", (err) =>
+          Effect.succeed({
+            command: err.command,
+            exitCode: err.exitCode ?? -1,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.from((err.stderr ?? String(err.cause ?? err.message)) + "\n"),
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          } satisfies AppProcess.RunResult),
+        ),
+      )
+      return {
+        exitCode: result.exitCode,
+        stdout: result.stdout.toString(),
+        stderr: result.stderr.toString(),
+        durationMs: Date.now() - start,
+      }
+    })
 
     const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
       const argv: string[] = ["run"]
@@ -225,20 +275,10 @@ export function withCliFixture<A, E>(
           }).pipe(Effect.ignore),
       )
 
-      // Drain stderr in a scope-bound fork. Without this the OS pipe buffer
-      // eventually fills and the child blocks on its next log call. Kept as a
-      // tail buffer so timeout failures can include context.
+      // Tail buffer so timeout failures can include stderr context. The fork
+      // also keeps the OS pipe buffer from filling and wedging the child.
       const stderrChunks: string[] = []
-      yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stderr,
-          onError: () => new Error("stderr stream error"),
-        }).pipe(
-          Stream.decodeText(),
-          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
-          Effect.ignore,
-        ),
-      )
+      yield* forkStderrDrain(proc.stderr, stderrChunks)
 
       // Watch stdout line-by-line for the listening sentinel. Format
       // (see src/cli/cmd/serve.ts):
@@ -246,17 +286,14 @@ export function withCliFixture<A, E>(
       const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
       const readyDeferred = yield* Deferred.make<{ url: string; hostname: string; port: number }>()
       yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stdout,
-          onError: () => new Error("stdout stream error"),
-        }).pipe(
+        fromBunStream("stdout", () => proc.stdout).pipe(
           Stream.decodeText(),
           Stream.splitLines,
           Stream.runForEach((line) => {
             const m = line.match(readyRe)
             return m ? Deferred.succeed(readyDeferred, { url: m[1], hostname: m[2], port: Number(m[3]) }) : Effect.void
           }),
-          Effect.ignore,
+          Effect.ignore({ log: true }),
         ),
       )
 
@@ -323,26 +360,14 @@ export function withCliFixture<A, E>(
       )
 
       const stderrChunks: string[] = []
-      yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stderr,
-          onError: () => new Error("stderr stream error"),
-        }).pipe(
-          Stream.decodeText(),
-          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
-          Effect.ignore,
-        ),
-      )
+      yield* forkStderrDrain(proc.stderr, stderrChunks)
 
       // Each ndjson line becomes one queue entry. JSON.parse failures are
       // surfaced as the raw string so a malformed protocol message doesn't
       // silently wedge the test in `receive`.
       const responses = yield* Queue.unbounded<unknown>()
       yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stdout,
-          onError: () => new Error("stdout stream error"),
-        }).pipe(
+        fromBunStream("stdout", () => proc.stdout).pipe(
           Stream.decodeText(),
           Stream.splitLines,
           Stream.runForEach((line) => {
@@ -355,23 +380,23 @@ export function withCliFixture<A, E>(
             }
             return Queue.offer(responses, parsed)
           }),
-          Effect.ignore,
+          Effect.ignore({ log: true }),
         ),
       )
 
       return {
+        // `proc.stdin.write` returns `number | Promise<number>`. The promise
+        // form is the backpressure signal — if we don't await it, rapid
+        // successive sends can interleave under pipe-buffer-full conditions
+        // and corrupt the ndjson framing.
         send: (msg: object) =>
-          Effect.sync(() => {
-            proc.stdin.write(JSON.stringify(msg) + "\n")
+          Effect.promise(async () => {
+            const ret = proc.stdin.write(JSON.stringify(msg) + "\n")
+            if (typeof ret !== "number") await ret
           }),
         receive: Queue.take(responses),
-        close: () => {
-          try {
-            proc.stdin.end()
-          } catch {
-            // already closed
-          }
-        },
+        // proc.stdin.end() is idempotent in Bun; no try/catch needed.
+        close: () => proc.stdin.end(),
         exited: proc.exited as Promise<number>,
       } satisfies AcpHandle
     })
@@ -381,7 +406,11 @@ export function withCliFixture<A, E>(
     return yield* fn({ llm, home, opencode })
     // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
     // and hit endpoints on `opencode.serve()` without rolling their own fetch.
-  }).pipe(Effect.provide(Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer)))
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer, AppFileSystem.defaultLayer, AppProcess.defaultLayer),
+    ),
+  )
 }
 
 function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
@@ -410,9 +439,9 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
 // `it.live(name, () => withCliFixture(fixture))` — one fewer nesting level at
 // every call site. Use this for any test that needs the opencode CLI fixture.
 //
-// Only `.live` is exposed because subprocess tests must run against the real
-// clock — a TestClock-paused environment can't drive a child process. If you
-// need `.only` or `.skip`, fall back to `it.live` + `withCliFixture` directly.
+// Subprocess tests must run against the real clock — a TestClock-paused
+// environment can't drive a child process. If you need `.only` or `.skip`, fall
+// back to `it.live` + `withCliFixture` directly.
 // Body's R is `Scope.Scope | never` so tests can yield* scope-requiring
 // resources (e.g. `opencode.serve`) without an extra `Effect.scoped` wrapper —
 // `withCliFixture`'s outer scope is the natural lifetime.
@@ -422,4 +451,9 @@ export const cliIt = {
     body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
     opts?: number | TestOptions,
   ) => it.live(name, () => withCliFixture(body), opts),
+  concurrent: <A, E>(
+    name: string,
+    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
+    opts?: number | TestOptions,
+  ) => test.concurrent(name, () => Effect.runPromise(Effect.scoped(withCliFixture(body))), opts),
 }

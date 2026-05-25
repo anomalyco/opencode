@@ -1,14 +1,18 @@
 import { Effect } from "effect"
 import { PluginV2 } from "../../plugin"
-import { ProviderV2 } from "../../provider"
 
 export const CerebrasPlugin = PluginV2.define({
   id: PluginV2.ID.make("cerebras"),
   effect: Effect.gen(function* () {
     return {
-      "provider.update": Effect.fn(function* (evt) {
-        if (evt.provider.id !== ProviderV2.ID.make("cerebras")) return
-        evt.provider.options.headers["X-Cerebras-3rd-Party-Integration"] = "opencode"
+      "catalog.transform": Effect.fn(function* (ctx) {
+        for (const item of ctx.data) {
+          if (item.provider.endpoint.type !== "aisdk") continue
+          if (item.provider.endpoint.package !== "@ai-sdk/cerebras") continue
+          ctx.provider.update(item.provider.id, (provider) => {
+            provider.options.headers["X-Cerebras-3rd-Party-Integration"] = "opencode"
+          })
+        }
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/cerebras") return
