@@ -885,7 +885,7 @@ export default function Page() {
     selection: SelectedLineRange
     comment: string
     preview?: string
-    origin?: "review" | "file"
+    origin?: "review" | "file" | "quote"
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? selectionPreview(input.file, selection)

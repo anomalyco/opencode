@@ -11,7 +11,7 @@ export type PromptHistoryComment = {
   selection: SelectedLineRange
   comment: string
   time: number
-  origin?: "review" | "file"
+  origin?: "review" | "file" | "quote"
   preview?: string
 }
 

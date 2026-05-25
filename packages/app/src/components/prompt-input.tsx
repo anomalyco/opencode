@@ -182,7 +182,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return diffs.some((diff) => diff.file === path)
   }
 
-  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
+  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" | "quote" }) => {
     if (!item.commentID) return
 
     const focus = { file: item.path, id: item.commentID }

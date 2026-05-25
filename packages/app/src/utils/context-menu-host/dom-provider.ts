@@ -53,7 +53,9 @@ export class DomSelectionProvider implements SelectionProvider {
       const visual = this.collectVisualSpansInBbox(target, range)
       if (visual) {
         const partial = this.spansMultiplePdfPages(range)
-        return { text: visual.text, rects: visual.rects, range, partial }
+        const sourcePath = this.readPdfViewerFilePath(target)
+        const sourceMeta = sourcePath ? { kind: "pdf-office", path: sourcePath } : undefined
+        return { text: visual.text, rects: visual.rects, range, partial, sourceMeta }
       }
       // 视觉算法 fallback(罕见 — 拿不到 bbox 或无 spans)→ 走 native
     }
@@ -85,18 +87,63 @@ export class DomSelectionProvider implements SelectionProvider {
     const pdfViewer = target.closest('[data-slot="pdf-viewer"]')
     if (!pdfViewer) return null
 
-    // native selection 的视觉边界(union of all client rects)
+    // FORK: 优先用 Selection.anchor/focus 视觉坐标定边界(user 真实 mousedown/mouseup 点),
+    // 而非 range.getClientRects() bbox。
+    // [feat: office-选中加聊天] 2026-05-25 user QA #N+2 反馈
+    //
+    // 背景:PDF.js textLayer span 的 DOM 顺序 ≠ 视觉顺序(复杂 PDF 中标题/段落乱序很常见)。
+    // range.getClientRects() 沿 DOM 顺序遍历返回 rects,会把"DOM 在中间但视觉上跨页"的 spans
+    // 全算进 bbox,导致 user 仅拖几行却选中"几乎整页"(实测 user 从"单一"拖到"Claude"4 行,
+    // bbox 扩到包含 title + 4 个 section)。
+    // 解法:用 sel.anchorNode/focusNode 算出真实拖拽起止 2 点 → 用这 2 点的视觉坐标围 bbox。
+    // anchor/focus 是 user 实际 mousedown/mouseup 的 caret 位置,不会跨视觉边界。
+    const sel = typeof window !== "undefined" ? window.getSelection() : null
+    let anchorRect: DOMRect | null = null
+    let focusRect: DOMRect | null = null
+    if (sel && sel.anchorNode && sel.focusNode) {
+      try {
+        const ar = document.createRange()
+        ar.setStart(sel.anchorNode, sel.anchorOffset)
+        ar.setEnd(sel.anchorNode, sel.anchorOffset)
+        anchorRect = ar.getBoundingClientRect()
+        const fr = document.createRange()
+        fr.setStart(sel.focusNode, sel.focusOffset)
+        fr.setEnd(sel.focusNode, sel.focusOffset)
+        focusRect = fr.getBoundingClientRect()
+      } catch {
+        // 罕见:detached node / cross-document — 落回 nativeRects bbox
+      }
+    }
+
     const nativeRects = Array.from(range.getClientRects()).filter(
       (r) => r.width > 0 && r.height > 0,
     )
-    if (nativeRects.length === 0) return null
-    let bboxTop = Infinity
-    let bboxBottom = -Infinity
-    for (const r of nativeRects) {
-      if (r.top < bboxTop) bboxTop = r.top
-      if (r.bottom > bboxBottom) bboxBottom = r.bottom
+
+    let bboxTop: number
+    let bboxBottom: number
+    if (
+      anchorRect &&
+      focusRect &&
+      Number.isFinite(anchorRect.top) &&
+      Number.isFinite(focusRect.top) &&
+      anchorRect.height > 0 &&
+      focusRect.height > 0
+    ) {
+      const ay = anchorRect.top + anchorRect.height / 2
+      const fy = focusRect.top + focusRect.height / 2
+      // 加 2px 容差吃掉 caret 微抖
+      bboxTop = Math.min(ay, fy) - 2
+      bboxBottom = Math.max(ay, fy) + 2
+    } else {
+      if (nativeRects.length === 0) return null
+      bboxTop = Infinity
+      bboxBottom = -Infinity
+      for (const r of nativeRects) {
+        if (r.top < bboxTop) bboxTop = r.top
+        if (r.bottom > bboxBottom) bboxBottom = r.bottom
+      }
+      if (!Number.isFinite(bboxTop) || !Number.isFinite(bboxBottom)) return null
     }
-    if (!Number.isFinite(bboxTop) || !Number.isFinite(bboxBottom)) return null
 
     // 找 pdf-viewer 子树内所有 textLayer spans,过滤中心 y 在 bbox 内
     // 注:**不过滤 whitespace-only spans** — pdf.js textLayer 用 " " span 表词间空格
@@ -134,14 +181,46 @@ export class DomSelectionProvider implements SelectionProvider {
       }
     }
 
-    // 拿 native 选区的真实 x 边界,裁顶/底行(防止包含 user 没选到的 x 范围)
-    const sortedNative = [...nativeRects].sort((a, b) => a.top - b.top || a.left - b.left)
-    const firstNative = sortedNative[0]
-    const lastNative = sortedNative[sortedNative.length - 1]
-    const selStartX = firstNative.left
-    const selEndX = lastNative.right
-    const selStartCy = firstNative.top + firstNative.height / 2
-    const selEndCy = lastNative.top + lastNative.height / 2
+    // 拿 user 拖拽真实 x 边界 — 同样优先 anchor/focus,fallback 到 nativeRects
+    let selStartX: number
+    let selEndX: number
+    let selStartCy: number
+    let selEndCy: number
+    if (
+      anchorRect &&
+      focusRect &&
+      Number.isFinite(anchorRect.top) &&
+      Number.isFinite(focusRect.top) &&
+      anchorRect.height > 0 &&
+      focusRect.height > 0
+    ) {
+      const ax = anchorRect.left
+      const ay = anchorRect.top + anchorRect.height / 2
+      const fx = focusRect.left
+      const fy = focusRect.top + focusRect.height / 2
+      // 把 anchor/focus 按视觉位置归到 start/end(top→bottom,同行 left→right)
+      const aFirst =
+        Math.abs(ay - fy) <= 5 ? ax <= fx : ay < fy
+      if (aFirst) {
+        selStartX = ax
+        selStartCy = ay
+        selEndX = fx
+        selEndCy = fy
+      } else {
+        selStartX = fx
+        selStartCy = fy
+        selEndX = ax
+        selEndCy = ay
+      }
+    } else {
+      const sortedNative = [...nativeRects].sort((a, b) => a.top - b.top || a.left - b.left)
+      const firstNative = sortedNative[0]
+      const lastNative = sortedNative[sortedNative.length - 1]
+      selStartX = firstNative.left
+      selEndX = lastNative.right
+      selStartCy = firstNative.top + firstNative.height / 2
+      selEndCy = lastNative.top + lastNative.height / 2
+    }
 
     // **关键修法**:每行合并成一个 rect 从 minLeft → maxRight 消除字间/词间所有 gaps
     // (user 2026-05-25 反馈每个字独立 rect 间有 1-2px 字间距和 word spacing 显白,
@@ -221,6 +300,17 @@ export class DomSelectionProvider implements SelectionProvider {
       // 早退:确认 >1 就够了
     })
     return count > 1
+  }
+
+  /**
+   * 读 pdf-viewer wrapper 上的 `data-file-path`(file-tabs.tsx 设置)。
+   * 用于把 PDF/office 选区送回 chat 时附 source path → 卡片显示文件名 + LLM 看到出处。
+   * 找不到返回空字符串(罕见 — wrapper 缺 path 属性,fallback 走纯 text 路径)。
+   */
+  private readPdfViewerFilePath(target: Element): string {
+    const pdfViewer = target.closest<HTMLElement>('[data-slot="pdf-viewer"]')
+    if (!pdfViewer) return ""
+    return pdfViewer.dataset.filePath ?? ""
   }
 
   clear(): void {

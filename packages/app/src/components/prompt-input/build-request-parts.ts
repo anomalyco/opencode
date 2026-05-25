@@ -15,7 +15,7 @@ type ContextFile = {
   selection?: FileSelection
   comment?: string
   commentID?: string
-  commentOrigin?: "review" | "file"
+  commentOrigin?: "review" | "file" | "quote"
   preview?: string
 }
 
@@ -135,6 +135,38 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     const path = absolute(input.sessionDirectory, item.path)
     const url = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
+    const isQuote = item.commentOrigin === "quote"
+
+    // FORK: quote origin(PDF/office 选区卡片)只送 user 选中的文字 + 来源路径,
+    //       绝不附整个二进制文件。原因详 docs/features/office-选中加聊天/3-changelog.md
+    //       § QA 跟进 #4。
+    //       — origin=quote 必须有 comment(submitToChat 兜底"(see selected text)"),
+    //         否则下面 formatCommentNote 收不到 preview 段。
+    // [feat: office-选中加聊天] 2026-05-25
+    if (isQuote) {
+      if (!comment) return []
+      return [
+        {
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: formatCommentNote({
+            path: item.path,
+            selection: item.selection,
+            comment,
+            preview: item.preview,
+          }),
+          synthetic: true,
+          metadata: createCommentMetadata({
+            path: item.path,
+            selection: item.selection,
+            comment,
+            preview: item.preview,
+            origin: item.commentOrigin,
+          }),
+        } satisfies PromptRequestPart,
+      ]
+    }
+
     if (!comment && used.has(url)) return []
     used.add(url)
 

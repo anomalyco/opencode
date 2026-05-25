@@ -5,7 +5,7 @@ export type PromptComment = {
   selection?: FileSelection
   comment: string
   preview?: string
-  origin?: "review" | "file"
+  origin?: "review" | "file" | "quote"
 }
 
 function selection(selection: unknown) {
@@ -49,7 +49,7 @@ export function readCommentMetadata(value: unknown) {
     selection: selection((meta as { selection?: unknown }).selection),
     comment,
     preview: typeof preview === "string" ? preview : undefined,
-    origin: origin === "review" || origin === "file" ? origin : undefined,
+    origin: origin === "review" || origin === "file" || origin === "quote" ? origin : undefined,
   } satisfies PromptComment
 }
 

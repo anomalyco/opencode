@@ -50,6 +50,10 @@ type MenuState = {
   partial: boolean
   /** 接管本次右键的 Provider — 关菜单时调 clear() */
   provider: SelectionProvider | null
+  /** PDF/office 来源文件路径(SelectionResult.sourceMeta.path)。
+   *  非空 → submitToChat 用卡片(FileContextItem)而非 textarea blockquote;
+   *  空 → chat 选区(无 source 文件),走老路径 markdown 引用块。 */
+  sourcePath: string
 }
 
 type HighlightRect = { left: number; top: number; width: number; height: number }
@@ -62,6 +66,7 @@ const INITIAL_MENU: MenuState = {
   mode: "menu",
   partial: false,
   provider: null,
+  sourcePath: "",
 }
 
 export function ContextMenuHost(props: {
@@ -151,6 +156,53 @@ export function ContextMenuHost(props: {
     setHighlightRects(null)
   }
 
+  // FORK: 右键 pointerdown snapshot — 防止 PDF 行间空白右键导致 selection collapse 后菜单不弹
+  // [feat: office-选中加聊天] 2026-05-25 user QA 反馈
+  //
+  // 背景:WebView2(Chromium)默认行为是右键到非选区元素时把 caret 移到 click 位置 →
+  // selection 被 collapse 成 0 长度。PDF textLayer 是绝对定位 spans,行间空白不属任何 span,
+  // user 视觉上看 overlay 覆盖到这里(因为我们的视觉 bbox 算法 union 整行 rect),
+  // 但 DOM 上不属选区,右键自动 collapse → 我的 getSelection 返回空 text → 菜单不可用。
+  //
+  // 修法:右键 pointerdown(在 mousedown 默认 collapse 之前)snapshot 一次选区,
+  // contextmenu 时若 live selection 空且右键 client 坐标在 snapshot bbox 内,回退用 snapshot。
+  let rightClickSnapshot:
+    | { sel: SelectionResult; provider: SelectionProvider; bbox: DOMRect }
+    | null = null
+  let rightClickSnapshotTime = 0
+
+  const onRightClickPointerDown = (event: PointerEvent) => {
+    if (event.button !== 2) return
+    const target = event.target as Element | null
+    if (!target) return
+    for (const provider of props.providers) {
+      if (!provider.matches(target)) continue
+      const sel = provider.getSelection(target)
+      if (!sel || !sel.text.trim() || sel.rects.length === 0) {
+        rightClickSnapshot = null
+        return
+      }
+      let left = Infinity
+      let right = -Infinity
+      let top = Infinity
+      let bottom = -Infinity
+      for (const r of sel.rects) {
+        if (r.left < left) left = r.left
+        if (r.right > right) right = r.right
+        if (r.top < top) top = r.top
+        if (r.bottom > bottom) bottom = r.bottom
+      }
+      rightClickSnapshot = {
+        sel,
+        provider,
+        bbox: new DOMRect(left, top, right - left, bottom - top),
+      }
+      rightClickSnapshotTime = Date.now()
+      return
+    }
+    rightClickSnapshot = null
+  }
+
   const handleContextMenu = (event: MouseEvent) => {
     const target = event.target as Element | null
     if (!target) return
@@ -164,6 +216,38 @@ export function ContextMenuHost(props: {
       matched = { provider, sel }
       break
     }
+
+    // Fallback:live 空 + snapshot 新鲜 + 右键点击落在 snapshot bbox 内 → 用 snapshot
+    // (右键在行间空白触发 collapse,但 user 视觉是在选区内,意图就是给现有选区开菜单)
+    if (
+      matched &&
+      !matched.sel.text.trim() &&
+      rightClickSnapshot &&
+      Date.now() - rightClickSnapshotTime < 500
+    ) {
+      const bbox = rightClickSnapshot.bbox
+      const inBbox =
+        event.clientX >= bbox.left - 4 &&
+        event.clientX <= bbox.right + 4 &&
+        event.clientY >= bbox.top - 4 &&
+        event.clientY <= bbox.bottom + 4
+      if (inBbox && rightClickSnapshot.sel.text.trim()) {
+        matched = { provider: rightClickSnapshot.provider, sel: rightClickSnapshot.sel }
+        // 恢复 native selection(让 Ctrl+C 与视觉一致;TextLayerBuilder 的高亮也会重画)
+        if (rightClickSnapshot.sel.range) {
+          try {
+            const ns = window.getSelection()
+            if (ns) {
+              ns.removeAllRanges()
+              ns.addRange(rightClickSnapshot.sel.range)
+            }
+          } catch {
+            // detached range / cross-document — 忽略,只用 snapshot 数据开菜单
+          }
+        }
+      }
+    }
+
     if (!matched) return // 不接管,继续走原生菜单(WebView2 / browser default)
 
     event.preventDefault()
@@ -179,13 +263,16 @@ export function ContextMenuHost(props: {
       mode: "menu",
       partial: matched.sel.partial === true,
       provider: matched.provider,
+      sourcePath: matched.sel.sourceMeta?.path ?? "",
     })
   }
 
   onMount(() => {
     if (typeof document === "undefined") return
+    document.addEventListener("pointerdown", onRightClickPointerDown, true)
     document.addEventListener("contextmenu", handleContextMenu, true)
     onCleanup(() => {
+      document.removeEventListener("pointerdown", onRightClickPointerDown, true)
       document.removeEventListener("contextmenu", handleContextMenu, true)
     })
   })
@@ -227,6 +314,43 @@ export function ContextMenuHost(props: {
     const m = menu()
     const c = comment()
     close()
+    if (!m.text.trim() && !c.trim()) return
+
+    // FORK: PDF/office 选区走"卡片"路径(复用 FileContextItem),chat 选区仍走 markdown 引用块
+    // [feat: office-选中加聊天] 2026-05-25 user QA 反馈 textarea 长 blockquote 形势不好
+    //
+    // 复用现有 file 上下文卡片:path=PDF 文件路径,preview=选中文字,comment=user 后续问题。
+    // 命中 build-request-parts 的 comment 分支 → formatCommentNote 自动拼出
+    // "The user made the following comment regarding this file of {path}: {comment}
+    //  Selected text: \"\"\"\n{preview}\n\"\"\"" 这种 LLM 友好的格式 + 同时附文件。
+    //
+    // 关键:commentID 用 preview 的 checksum 强制每次不同选区生成不同 key,
+    // 否则 contextItemKey 算法在没 selection 行号的情况下会把同 PDF 多次选区认为同一项 dedup 掉。
+    if (m.sourcePath) {
+      // 空 comment 时给个默认占位,formatCommentNote 才会把 preview 段拼进去(没 comment 它返回空)
+      const effectiveComment = c.trim() || "(see selected text)"
+      let hash = 0
+      for (let i = 0; i < m.text.length; i++) {
+        hash = ((hash << 5) - hash + m.text.charCodeAt(i)) | 0
+      }
+      const commentID = `quote-${Math.abs(hash).toString(36)}-${Date.now().toString(36)}`
+      prompt.context.add({
+        type: "file",
+        path: m.sourcePath,
+        comment: effectiveComment,
+        preview: m.text,
+        commentID,
+        commentOrigin: "quote",
+      })
+      requestAnimationFrame(focusChatInput)
+      showToast({
+        variant: "success",
+        title: c.trim() ? "已加入聊天(含问题)" : "已加入聊天",
+      })
+      return
+    }
+
+    // chat 选区无 sourcePath → 老路径:markdown 引用块塞 textarea
     const composed = composeQuotedMarkdown(m.text, c)
     if (!composed) return
     const current = prompt.current()
@@ -258,9 +382,15 @@ export function ContextMenuHost(props: {
                   top: `${rect.top}px`,
                   width: `${rect.width}px`,
                   height: `${rect.height}px`,
-                  // FORK: 单色统一 — 跟 chat 区 native 选区蓝同色调,user 反馈双色困惑
-                  // [feat: office-选中加聊天] 2026-05-25
-                  "background-color": "rgba(60, 120, 220, 0.4)",
+                  // FORK: solid 蓝 + mix-blend-mode: multiply
+                  // [feat: office-选中加聊天] 2026-05-25 user 反馈"正掌握"3 字底色比左右浅
+                  // 根因:rgba alpha 跟下层 canvas pixels(黑文字 vs 白空白)乘出来颜色不均
+                  // 修法:solid color + multiply 混合 — 黑×蓝=黑(文字保留),白×蓝=蓝(均匀蓝底)
+                  // 视觉:跟 chat native 选区接近,字间均匀无浓淡变化
+                  // 普通 alpha 0.55 — multiply 模式下原 PDF 里强调色文字(soffice 转出来非纯黑)
+                  // 会被 multiply 揭露成不同 blue 色调,user 视觉感觉"忽深忽浅"。
+                  // 改回 normal blend,稍高 alpha 把下层颜色变化压住
+                  "background-color": "rgba(60, 120, 220, 0.55)",
                 }}
               />
             )}

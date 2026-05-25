@@ -658,7 +658,7 @@ export function FileTabContent(props: {
     selection: SelectedLineRange
     comment: string
     preview?: string
-    origin?: "review" | "file"
+    origin?: "review" | "file" | "quote"
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? buildPreview(input.file, selection)
@@ -1587,7 +1587,7 @@ export function FileTabContent(props: {
       // 跟 message-part.css:709-710 chat 区开 user-select:text 同套路。
       // [feat: office-选中加聊天] 2026-05-24 hot-fix(user 实测 textLayer 选不中复现)
       return (
-        <div data-slot="pdf-viewer" class="flex flex-col h-full select-text">
+        <div data-slot="pdf-viewer" data-file-path={path() ?? ""} class="flex flex-col h-full select-text">
           <div class="flex items-center justify-end gap-2 px-3 py-1 border-b border-border-base bg-surface-raised-stronger-non-alpha text-xs">
             <button
               type="button"
