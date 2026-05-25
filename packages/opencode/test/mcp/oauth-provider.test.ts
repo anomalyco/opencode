@@ -59,3 +59,127 @@ describe("McpOAuthProvider.clientMetadata", () => {
     expect(provider.clientMetadata.token_endpoint_auth_method).toBe("none")
   })
 })
+
+describe("McpOAuthProvider.redirectToAuthorization", () => {
+  test("appends scope from config when URL lacks it", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-scope",
+      "https://mcp.example.com/mcp",
+      { clientId: "pre-registered-id", scope: "openid offline_access" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const urlWithoutScope = new URL(
+      "https://auth.example.com/authorize?client_id=test&state=abc&code_challenge=xyz&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A19876%2Fmcp%2Foauth%2Fcallback",
+    )
+    await provider.redirectToAuthorization(urlWithoutScope)
+
+    expect(captured?.searchParams.get("scope")).toBe("openid offline_access")
+  })
+
+  test("does NOT append scope when URL already has it (SDK upgraded)", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-scope-dup",
+      "https://mcp.example.com/mcp",
+      { clientId: "pre-registered-id", scope: "openid profile" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const urlWithScope = new URL("https://auth.example.com/authorize?client_id=test&scope=openid%20email&state=abc")
+    await provider.redirectToAuthorization(urlWithScope)
+
+    // URL should keep the SDK's scope, not overwrite with config scope
+    expect(captured?.searchParams.get("scope")).toBe("openid email")
+  })
+
+  test("does NOT append scope when config has none", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-no-scope",
+      "https://mcp.example.com/mcp",
+      { clientId: "pre-registered-id" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const url = new URL("https://auth.example.com/authorize?client_id=test&state=abc")
+    await provider.redirectToAuthorization(url)
+
+    expect(captured?.searchParams.has("scope")).toBe(false)
+  })
+
+  test("does NOT append scope when scope config is empty string", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-empty-scope",
+      "https://mcp.example.com/mcp",
+      { clientId: "pre-registered-id", scope: "" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const url = new URL("https://auth.example.com/authorize?client_id=test&state=abc")
+    await provider.redirectToAuthorization(url)
+
+    expect(captured?.searchParams.has("scope")).toBe(false)
+  })
+
+  test("URL-encodes multi-space scope correctly", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-multi-scope",
+      "https://mcp.example.com/mcp",
+      { clientId: "pre-registered-id", scope: "openid email profile offline_access" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const url = new URL("https://auth.example.com/authorize?client_id=test&state=abc")
+    await provider.redirectToAuthorization(url)
+
+    expect(captured?.searchParams.get("scope")).toBe("openid email profile offline_access")
+  })
+
+  test("appends scope to URL that has no query params", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-no-params",
+      "https://mcp.example.com/mcp",
+      { scope: "openid" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const url = new URL("https://auth.example.com/authorize")
+    await provider.redirectToAuthorization(url)
+
+    expect(captured?.searchParams.get("scope")).toBe("openid")
+  })
+
+  test("preserves all existing params when appending scope", async () => {
+    let captured: URL | undefined
+    const provider = new McpOAuthProvider(
+      "test-preserve",
+      "https://mcp.example.com/mcp",
+      { scope: "openid" },
+      { onRedirect: async (url) => { captured = url } },
+      stubAuth,
+    )
+
+    const url = new URL(
+      "https://auth.example.com/authorize?response_type=code&client_id=myclient&state=xyz&code_challenge=abc123&code_challenge_method=S256&redirect_uri=http%3A%2F%2Flocalhost%3A19876%2Fcallback",
+    )
+    await provider.redirectToAuthorization(url)
+
+    expect(captured?.searchParams.get("response_type")).toBe("code")
+    expect(captured?.searchParams.get("client_id")).toBe("myclient")
+    expect(captured?.searchParams.get("state")).toBe("xyz")
+    expect(captured?.searchParams.get("code_challenge")).toBe("abc123")
+    expect(captured?.searchParams.get("code_challenge_method")).toBe("S256")
+    expect(captured?.searchParams.get("scope")).toBe("openid")
+  })
+})

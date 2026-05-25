@@ -135,6 +135,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
+    if (this.config.scope && !authorizationUrl.searchParams.has("scope")) {
+      authorizationUrl.searchParams.set("scope", this.config.scope)
+    }
     log.info("redirecting to authorization", { mcpName: this.mcpName, url: authorizationUrl.toString() })
     await this.callbacks.onRedirect(authorizationUrl)
   }
