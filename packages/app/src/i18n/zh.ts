@@ -1064,12 +1064,13 @@ export const dict = {
   "settings.feishu.edit.advancedSectionTitle": "高级能力",
   // FORK: [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate flag
   // 老 key requireMention.* / enableAutoGroupCreate.* 已删,新 key groupCommand.info 描述 /group 用法
+  // 标点全角(中文 UI 文案规约,2026-05-25 user 拍板)— 半角符号(如代码段 `...`/路径 /group/特殊字符 ←→等)保留
   "settings.feishu.edit.groupCommand.info":
-    "建群方式:私聊发 `/group <群名>`(例:`/group 项目讨论`),AI 弹确认卡片,点确认才真建。",
+    "建群方式：私聊发 `/group <群名>`（例：`/group 项目讨论`），AI 弹确认卡片，点确认才真建。",
   // FORK: [feat: feishu-group-mention-policy] 2026-05-24 → [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 反转 + 改 key
   "settings.feishu.edit.allowReadAll.label": "允许 AI 免@ 读取群里所有信息",
   "settings.feishu.edit.allowReadAll.hint":
-    "默认关闭:bot 群里只回 @ 自己的消息。\n开启后:① bot 响应群里所有消息(适合 1 群 1 项目独占用法);② 群任一成员可发 `/new` 在当前群开新对话(清 session,**影响所有人**)。\n⚠️ 开启前需在飞书后台改:open.feishu.cn → 选 bot → 事件配置 `im.message.receive_v1` 订阅范围改「全部群消息」+ 权限管理申请 `im:message` + 重新发布。否则飞书不推非 @ 消息,本开关无效。",
+    "默认关闭：bot 群里只回 @ 自己的消息。\n开启后：① bot 响应群里所有消息（适合 1 群 1 项目独占用法）；② 群任一成员可发 `/new` 在当前群开新对话（清 session，**影响所有人**）。\n⚠️ 开启前需在飞书后台改：open.feishu.cn → 选 bot → 事件配置 `im.message.receive_v1` 订阅范围改「全部群消息」+ 权限管理申请 `im:message` + 重新发布。否则飞书不推非 @ 消息，本开关无效。",
   "settings.feishu.edit.saving": "保存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

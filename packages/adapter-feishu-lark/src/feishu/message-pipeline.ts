@@ -313,7 +313,7 @@ export class MessagePipeline {
       if (event.chatType !== "p2p" && this.opts.account.requireMention) {
         await this.sendFeishuText(
           event.chatId,
-          "⚠️ 群里使用 /new 需先开启「允许 AI 免@ 读取群里所有信息」(DeskFox 设置 → 飞书桥接 → 选此账号 → 编辑 → 高级能力)",
+          "⚠️ 群里使用 /new 需先开启「允许 AI 免@ 读取群里所有信息」（DeskFox 设置 → 飞书桥接 → 选此账号 → 编辑 → 高级能力）",
         )
         return
       }
@@ -324,7 +324,7 @@ export class MessagePipeline {
       const replyText =
         event.chatType === "p2p"
           ? "✅ 已开启新对话"
-          : "✅ 已开启新对话(群 session 已清,影响所有成员)"
+          : "✅ 已开启新对话（群 session 已清，影响所有成员）"
       await this.sendFeishuText(event.chatId, replyText)
       console.log(
         `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"}, chatType=${event.chatType})`,
@@ -345,21 +345,21 @@ export class MessagePipeline {
       if (event.chatType !== "p2p") {
         await this.sendFeishuText(
           event.chatId,
-          "⚠️ /group 仅支持私聊(群里建子群 UX 不清晰,请在私聊里执行)",
+          "⚠️ /group 仅支持私聊（群里建子群 UX 不清晰，请在私聊里执行）",
         )
         return
       }
       if (groupCmd.error === "no_name") {
         await this.sendFeishuText(
           event.chatId,
-          "⚠️ 用法:`/group <群名>`,例:`/group 项目讨论`",
+          "⚠️ 用法：`/group <群名>`，例：`/group 项目讨论`",
         )
         return
       }
       if (groupCmd.error === "too_long") {
         await this.sendFeishuText(
           event.chatId,
-          `⚠️ 群名超长(最多 ${GROUP_NAME_MAX_LEN} 字符,飞书限制),请缩短后重试`,
+          `⚠️ 群名超长（最多 ${GROUP_NAME_MAX_LEN} 字符，飞书限制），请缩短后重试`,
         )
         return
       }
@@ -406,15 +406,15 @@ export class MessagePipeline {
       await this.sendFeishuText(
         event.chatId,
         [
-          "你想创建群?请使用斜杠命令:",
+          "你想创建群？请使用斜杠命令：",
           "",
           "  `/group <群名>`",
           "",
-          "例:",
+          "例：",
           "  • `/group 项目讨论`",
           "  • `/group 产品需求-2026Q2`",
           "",
-          "(创建后我会拉你进群,后续讨论在那里继续)",
+          "（创建后我会拉你进群，后续讨论在那里继续）",
         ].join("\n"),
       )
       return
