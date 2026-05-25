@@ -191,6 +191,7 @@ describe("plugin.codex", () => {
         },
         serverUrl: new URL("https://example.com"),
         $: {} as never,
+        log: { debug() {}, info() {}, warn() {}, error() {} },
       },
       {
         issuer: server.url.origin,

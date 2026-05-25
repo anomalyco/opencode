@@ -11,6 +11,7 @@ const pluginInput = {
   },
   serverUrl: new URL("https://example.com"),
   $: {} as never,
+  log: { debug() {}, info() {}, warn() {}, error() {} },
 }
 
 function makeHookInput(overrides: { providerID?: string; apiId?: string; reasoning?: boolean }) {

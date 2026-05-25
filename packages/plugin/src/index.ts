@@ -53,6 +53,17 @@ export type WorkspaceAdapter = {
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
 
+/**
+ * Structured logger for plugins to write to OpenCode's log system.
+ * Messages are persisted to OpenCode's log files with proper namespace tagging.
+ */
+export type PluginLogger = {
+  debug(message?: any, extra?: Record<string, any>): void
+  info(message?: any, extra?: Record<string, any>): void
+  warn(message?: any, extra?: Record<string, any>): void
+  error(message?: any, extra?: Record<string, any>): void
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -63,6 +74,11 @@ export type PluginInput = {
   }
   serverUrl: URL
   $: BunShell
+  /**
+   * Structured logger for writing to OpenCode's log system.
+   * Use this instead of console.log to ensure logs are captured in log files.
+   */
+  log: PluginLogger
 }
 
 export type PluginOptions = Record<string, unknown>
