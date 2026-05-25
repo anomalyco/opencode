@@ -457,6 +457,35 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: seeded.assistant.id,
+      sessionID: chat.id,
+      type: "tool",
+      callID: "interrupted-call",
+      tool: "edit",
+      state: {
+        status: "error",
+        input: {},
+        error: "Tool execution aborted",
+        metadata: { interrupted: true },
+        time: { start: 1, end: 2 },
+      },
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.id).toBe(seeded.assistant.id)
+    expect(yield* llm.hits).toHaveLength(0)
+  }),
+)
+
 it.instance("loop calls LLM and returns assistant message", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

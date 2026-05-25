@@ -8,10 +8,11 @@ import {
   getSessionPrefetchPromise,
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
-import { useServerSync } from "./server-sync"
+import { createServerSyncContext, useServerSync } from "./server-sync"
 import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
+import { useServerSDK } from "./server-sdk"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -164,8 +165,9 @@ function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: Opti
   })
 }
 
-export const createDirSyncContext = (client: OpencodeClient, directory: string) => {
-  const serverSync = useServerSync()
+export const createDirSyncContext = (directory: string, serverSync: ReturnType<typeof createServerSyncContext>) => {
+  const serverSDK = useServerSDK()
+  const client = serverSDK.createClient({ directory, throwOnError: true })
 
   type Child = ReturnType<(typeof serverSync)["child"]>
   type Setter = Child[1]
