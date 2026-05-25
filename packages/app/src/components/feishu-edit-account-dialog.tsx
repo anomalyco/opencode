@@ -34,6 +34,9 @@ export const FeishuEditAccountDialog: Component<{
     props.currentEnableAutoGroupCreate ?? false,
   )
   // [feat: feishu-group-mention-policy] 2026-05-24 默认 true(保守 — 大群只 @ 才响应)
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+  // GUI 显示语义反转("允许免@ 读取所有信息"),后端 requireMention 字段不变。
+  // state 仍存后端字段语义(true=需要@),UI 上 checkbox.checked = !requireMention。
   const [requireMention, setRequireMention] = createSignal(
     props.currentRequireMention ?? true,
   )
@@ -270,20 +273,21 @@ export const FeishuEditAccountDialog: Component<{
                 </p>
               </div>
 
-              {/* 群里需要 @ 才响应 [feat: feishu-group-mention-policy] 2026-05-24 */}
+              {/* 允许 AI 免@ 读取群里所有信息 [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 */}
+              {/* GUI 语义反转 — checkbox.checked = !requireMention,save 时 set 回 requireMention */}
               <div class="flex flex-col gap-1 self-stretch">
                 <label class="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={requireMention()}
-                    onChange={(e) => setRequireMention(e.currentTarget.checked)}
+                    checked={!requireMention()}
+                    onChange={(e) => setRequireMention(!e.currentTarget.checked)}
                   />
                   <span class="text-14-medium">
-                    {language.t("settings.feishu.edit.requireMention.label")}
+                    {language.t("settings.feishu.edit.allowReadAll.label")}
                   </span>
                 </label>
                 <p class="text-13-regular text-text-weak pl-6">
-                  {language.t("settings.feishu.edit.requireMention.hint")}
+                  {language.t("settings.feishu.edit.allowReadAll.hint")}
                 </p>
               </div>
 

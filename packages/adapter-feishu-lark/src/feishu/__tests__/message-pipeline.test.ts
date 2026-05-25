@@ -341,6 +341,8 @@ function makeAccount(overrides: Partial<FeishuAccount> = {}): FeishuAccount {
     appSecret: { type: "plaintext", value: "test_secret" },
     domain: "feishu",
     agent: "build",
+    // 跟 config-schema.ts 的 zod default 对齐
+    requireMention: true,
     ...overrides,
   } as FeishuAccount
 }
@@ -415,7 +417,9 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
     expect(fakes.sentTexts[0]!.text).toBe("✅ 已开启新对话")
   })
 
-  test("群聊 /new → 拒绝,session 不清", async () => {
+  test("群聊 /new + requireMention=true(默认)→ 拒绝,session 不清,引导开高级能力", async () => {
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+    // 默认 requireMention=true(GUI checkbox "允许免@" 不勾)→ 群里 /new 拒绝
     store.set("acc1", "oc_chat_x", "ses_old")
     await pipeline.testHandle(
       makeEvent({
@@ -425,9 +429,61 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
     )
     // session 应保留
     expect(store.get("acc1", "oc_chat_x")).toBe("ses_old")
-    // 提示文字
+    // 引导文字含「允许 AI 免@ 读取群里所有信息」
     expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("/new 仅支持私聊")
+    expect(fakes.sentTexts[0]!.text).toContain("允许 AI 免@ 读取群里所有信息")
+    expect(fakes.sentTexts[0]!.text).toContain("高级能力")
+  })
+
+  test("群聊 /new + requireMention=false(免@ 模式)→ 清 session + 提示影响所有成员", async () => {
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+    // user 主动开 requireMention=false(channel-as-workspace 模式)→ 群里 /new 允许
+    const localFakes = makeNewCmdFakes()
+    const localPipeline = new MessagePipeline({
+      account: makeAccount({ requireMention: false } as any),
+      accountId: "acc1",
+      opencodeClient: localFakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: localFakes.larkClient,
+    })
+    store.set("acc1", "oc_chat_x", "ses_old")
+    await localPipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "/new" }),
+      }),
+    )
+    // session 应清空
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    // 回复含"影响所有成员"提示
+    expect(localFakes.sentTexts).toHaveLength(1)
+    expect(localFakes.sentTexts[0]!.text).toContain("已开启新对话")
+    expect(localFakes.sentTexts[0]!.text).toContain("影响所有成员")
+    // /new 早退,不应触发 ack
+    expect(localFakes.ackedMessages).toHaveLength(0)
+  })
+
+  test("群聊 + requireMention=false + @bot /new → strip mention 后命中,清 session", async () => {
+    const localFakes = makeNewCmdFakes()
+    const localPipeline = new MessagePipeline({
+      account: makeAccount({ requireMention: false } as any),
+      accountId: "acc1",
+      opencodeClient: localFakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: localFakes.larkClient,
+    })
+    store.set("acc1", "oc_chat_x", "ses_old")
+    await localPipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "@_user_1 /new" }),
+        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot" }],
+      }),
+    )
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    expect(localFakes.sentTexts[0]!.text).toContain("影响所有成员")
   })
 
   test("私聊 /new 无原 session(冷启)→ 也发确认,不抛", async () => {
