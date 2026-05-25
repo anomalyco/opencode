@@ -28,6 +28,9 @@ export const markdownHighlightStyle = HighlightStyle.define([
   // 行内样式
   { tag: t.strong, fontWeight: "700" },
   { tag: t.emphasis, fontStyle: "italic" },
+  // 删除线(GFM):lezer-markdown GFM 扩展用 t.strikethrough(在 deleted 之外)
+  // 仅设视觉,不染色
+  { tag: t.strikethrough, textDecoration: "line-through" },
   // monospace tag 没单独 spec — 因为 lezer-markdown 把 fenced code block 内容也标 monospace,
   // 加 chip 背景会让代码块每个 token 都套 chip(视觉灾难)。CodeMirror 整个编辑器已是
   // monospace 字体,源模式下 inline code 靠可见的反引号 ` ` 自识别(iA Writer / GitHub source
@@ -45,10 +48,20 @@ export const markdownHighlightStyle = HighlightStyle.define([
 
 /**
  * markdown-only syntax highlight extension。
- * Prec.high 确保跟 code-mirror-view.tsx 全局 defaultHighlightStyle(fallback:true)
- * 共存时,markdown tag 走专属样式,代码块内部语言 fallback 到 default。
+ *
+ * **不**用 Prec.high 包装(色彩矫正 ④,2026-05-25):
+ *   `code-mirror-view.tsx` 的 default 用 `fallback:true`,该选项语义是
+ *   "仅当没有其他 highlighter 时才用" — 一旦 Prec.high 让 markdown style 成为
+ *   primary highlighter,default 整个 bail out,fenced code block 里 JS/TS/SQL
+ *   等语言的 keyword/string/number 等 tag 拿不到 default 着色 → 代码块单色。
+ *
+ *   去掉 Prec.high 后,我们的 style 跟 default 平级共存,CM 按 tag 逐个 resolve:
+ *   - markdown tag(heading1-6 / strong / emphasis / quote / url / link / 等)
+ *     → 我们 style 匹配,赢
+ *   - 代码块内部语言 tag(keyword / string / number / 等)→ 我们没规则,
+ *     fallback default 着色 → 代码块正常高亮
  */
-export const markdownSyntaxHighlight = Prec.high(syntaxHighlighting(markdownHighlightStyle))
+export const markdownSyntaxHighlight = syntaxHighlighting(markdownHighlightStyle)
 
 // ============================================================
 // CodeMirror 内置 UI 短语翻译(@codemirror/search 走 phrase 取词)
