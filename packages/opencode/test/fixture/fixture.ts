@@ -17,9 +17,8 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const testInstanceRuntime = ManagedRuntime.make(
-  InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap), Layer.provideMerge(Observability.layer)),
-)
+export const testInstanceStoreLayer = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
+const testInstanceRuntime = ManagedRuntime.make(testInstanceStoreLayer.pipe(Layer.provideMerge(Observability.layer)))
 
 const runTestInstanceStore = <A>(fn: (store: InstanceStore.Interface) => Effect.Effect<A>) =>
   testInstanceRuntime.runPromise(InstanceStore.Service.use(fn))
@@ -36,6 +35,10 @@ export async function provideTestInstance<R>(input: {
   } finally {
     await runTestInstanceStore((store) => store.dispose(ctx))
   }
+}
+
+export async function withTestInstance<R>(input: { directory: string; fn: (ctx: InstanceContext) => R }) {
+  return input.fn(await runTestInstanceStore((store) => store.load({ directory: input.directory })))
 }
 
 export async function reloadTestInstance(input: { directory: string }) {
@@ -116,7 +119,10 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
 }
 
 /** Effectful scoped tmpdir. Cleaned up when the scope closes. Make sure these stay in sync */
-export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
+export function tmpdirScoped(options?: {
+  git?: boolean
+  config?: Partial<Config.Info> | (() => Partial<Config.Info>)
+}) {
   return Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
@@ -143,10 +149,11 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     }
 
     if (options?.config) {
+      const resolved = typeof options.config === "function" ? options.config() : options.config
       yield* Effect.promise(() =>
         fs.writeFile(
           path.join(dir, "opencode.json"),
-          JSON.stringify({ $schema: "https://opencode.ai/config.json", ...options.config }),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", ...resolved }),
         ),
       )
     }
@@ -165,9 +172,19 @@ export const provideInstance =
       }),
     )
 
+export const provideInstanceEffect =
+  (directory: string) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | InstanceStore.Service> =>
+    InstanceStore.Service.use((store) => store.provide({ directory }, self))
+
+export const reloadInstance = (input: InstanceStore.LoadInput) =>
+  InstanceStore.Service.use((store) => store.reload(input))
+
+export const disposeAllInstancesEffect = InstanceStore.Service.use((store) => store.disposeAll())
+
 export function provideTmpdirInstance<A, E, R>(
   self: (path: string) => Effect.Effect<A, E, R>,
-  options?: { git?: boolean; config?: Partial<Config.Info> },
+  options?: { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) },
 ) {
   return Effect.gen(function* () {
     const path = yield* tmpdirScoped(options)
@@ -190,18 +207,19 @@ export function provideTmpdirInstance<A, E, R>(
 
 export class TestInstance extends Context.Service<TestInstance, { readonly directory: string }>()("@test/Instance") {}
 
+export const requireInstance = Effect.gen(function* () {
+  const instance = yield* InstanceRef
+  if (!instance) return yield* Effect.die(new Error("missing test instance"))
+  return instance
+})
+
 export const withTmpdirInstance =
-  (options?: { git?: boolean; config?: Partial<Config.Info> }) =>
+  (options?: { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) }) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)
-      return yield* InstanceStore.Service.use((store) =>
-        store.provide({ directory }, self.pipe(Effect.provideService(TestInstance, { directory }))),
-      )
-    }).pipe(
-      Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))),
-      Effect.provide(CrossSpawnSpawner.defaultLayer),
-    )
+      return yield* self.pipe(Effect.provideService(TestInstance, { directory }), provideInstanceEffect(directory))
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
 export function provideTmpdirServer<A, E, R>(
   self: (input: { dir: string; llm: TestLLMServer["Service"] }) => Effect.Effect<A, E, R>,

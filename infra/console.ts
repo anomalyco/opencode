@@ -223,8 +223,6 @@ const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
 
-const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
-
 ////////////////
 // CONSOLE
 ////////////////
@@ -252,6 +250,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     bucket,
     bucketNew,
     database,
+    SECRET.UpstashRedisRestUrl,
+    SECRET.UpstashRedisRestToken,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
     DISCORD_INCIDENT_WEBHOOK_URL,
@@ -274,7 +274,6 @@ new sst.cloudflare.x.SolidStart("Console", {
           new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
         ]
       : []),
-    gatewayKv,
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
@@ -284,7 +283,7 @@ new sst.cloudflare.x.SolidStart("Console", {
   },
   transform: {
     server: {
-      placement: { region: "aws:us-east-1" },
+      placement: { region: "aws:us-east-2" },
       transform: {
         worker: {
           tailConsumers: [{ service: logProcessor.nodes.worker.scriptName }],

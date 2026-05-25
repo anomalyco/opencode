@@ -50,6 +50,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 
+  "dialog.usageExceeded.freeTier.title": "Dostignut besplatan limit",
+  "dialog.usageExceeded.freeTier.description":
+    "Pretplatite se na OpenCode Go za pouzdan pristup najboljim open-source modelima, počevši od $5/mjesec.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Pretplati se",
+  "dialog.usageExceeded.accountRateLimit.title": "Dostignut Go limit",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Dostignut je limit korištenja. Da nastavite koristiti ovaj model sada, omogućite korištenje iz vašeg dostupnog stanja",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvori postavke",
+
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
   "ui.sessionTurn.status.gatheringContext": "Istraživanje",
