@@ -20,6 +20,7 @@
 
 import { Database } from "@/storage/db"
 import { eq, and, isNull } from "drizzle-orm"
+import { base64Decode } from "@opencode-ai/core/util/encode"
 import {
   CollabAuthSessionTable,
   CollabSessionTable,
@@ -174,16 +175,42 @@ function participantOfNativeSession(nativeSessionId: string, githubId: number): 
   })
 }
 
-/** Extract a workspace-addressing parameter from a Request. */
+/** Extract a workspace-addressing parameter from a Request.
+ *
+ *  The iframe URL shape is `/<base64(workspaceDirectory)>/session/<sid>?cs=<csid>`
+ *  — the directory is encoded in the first path segment, not in
+ *  `?directory=` or `x-opencode-directory`.  Without this third lookup,
+ *  cookie-auth's rule (b) misses the iframe entirely → fallthrough → 302
+ *  to OAuth → CSP-blocked because iframes can't navigate to github.com.
+ *
+ *  base64Decode here mirrors packages/app/src/utils/base64.ts which is
+ *  what the SPA uses to construct the URL — URL-safe base64 (`-`/`_` in
+ *  place of `+`/`/`, no padding).
+ */
 function workspaceParamFrom(req: Request): string | null {
   const dirHeader = req.headers.get("x-opencode-directory")
   if (dirHeader) return dirHeader
   const url = new URL(req.url, "http://localhost")
-  return (
-    url.searchParams.get("directory") ||
-    url.searchParams.get("location[directory]") ||
-    null
-  )
+  const queryDir = url.searchParams.get("directory") || url.searchParams.get("location[directory]")
+  if (queryDir) return queryDir
+  return directoryFromBase64Path(url.pathname)
+}
+
+function directoryFromBase64Path(pathname: string): string | null {
+  // First path segment, e.g. /<base64>/session/... → "<base64>".
+  const first = pathname.split("/", 2)[1]
+  if (!first) return null
+  // URL-safe base64 alphabet: [A-Za-z0-9_-].  Anything else (digits-only,
+  // dotted, etc.) is not a directory-encoded path.
+  if (!/^[A-Za-z0-9_-]+$/.test(first)) return null
+  try {
+    const decoded = base64Decode(first)
+    // Decoded value must look like an absolute filesystem path.
+    if (decoded.startsWith("/")) return decoded
+  } catch {
+    // Not base64 — fall through.
+  }
+  return null
 }
 
 /**
@@ -203,7 +230,28 @@ function cookieAllowedWithoutScope(pathname: string): boolean {
   // /preview/<port>/* — see ADR-0001 + the inline note in preview-router.ts:
   // participants already have shell-level trust via the iframe terminal, so
   // strict port↔session binding is deferred to v2.
-  return pathname.startsWith("/preview/")
+  if (pathname.startsWith("/preview/")) return true
+
+  // SPA bootstrap endpoints used by GlobalSyncProvider on every route
+  // (including /collab/*).  None of them are workspace-scoped — they
+  // describe the running opencode binary or the user's global config.
+  // Any authenticated unleashlive org member may read them.  Without this
+  // they fail cookie-auth's scope check, fall through to "deny" in collab
+  // mode, and the SPA's GlobalSyncProvider thrashes with 401s.
+  //
+  // Explicitly listed (not a prefix) so future per-workspace HttpApi groups
+  // mounted under e.g. /provider/<id>/... wouldn't accidentally inherit the
+  // unscoped pass.
+  const UNSCOPED_SPA_BOOTSTRAP = new Set([
+    "/global/event",
+    "/global/config",
+    "/path",
+    "/project",
+    "/provider",
+  ])
+  if (UNSCOPED_SPA_BOOTSTRAP.has(pathname)) return true
+
+  return false
 }
 
 export type CookieAuthDecision = "allow" | "deny" | "fallthrough"

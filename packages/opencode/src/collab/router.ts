@@ -61,6 +61,9 @@ const PROMPT_BODY_MAX_BYTES = 32 * 1024
  * Read TCP ports the container is currently LISTENING on, by parsing
  * /proc/net/tcp + /proc/net/tcp6.  Filters out:
  *   - non-LISTEN states (only state 0A = LISTEN)
+ *   - listeners NOT bound to a wildcard address (0.0.0.0 / ::) — loopback-
+ *     only and per-iface listeners are Bun internals, SSM agent connections,
+ *     etc., not user-facing dev servers
  *   - opencode's own port (4096)
  *   - ports under 1024 (system services)
  *   - well-known DB ports we definitely don't want to expose (5432, 6379, etc.)
@@ -81,7 +84,18 @@ async function readListeningPorts(): Promise<number[]> {
         const local = parts[1]
         const state = parts[3]
         if (state !== "0A") continue // LISTEN only
-        const portHex = local!.split(":").pop()!
+        const [addrHex, portHex] = local!.split(":")
+        if (!addrHex || !portHex) continue
+        // Wildcard-bind only.  /proc/net/tcp uses little-endian hex for
+        // IPv4 addresses; 0.0.0.0 is "00000000".  /proc/net/tcp6 stores
+        // the address as four 32-bit big-endian-pair words concatenated;
+        // both :: (all zeros) and the v4-mapped 0.0.0.0 ("0000000000000000FFFF000000000000")
+        // are wildcards.  Anything else is a per-iface or loopback listener
+        // (likely internal — Bun, SSM, side channels) and not a dev server.
+        const isV4Wildcard = addrHex === "00000000"
+        const isV6Wildcard = addrHex === "00000000000000000000000000000000"
+        const isV4MappedWildcard = addrHex === "0000000000000000FFFF000000000000"
+        if (!isV4Wildcard && !isV6Wildcard && !isV4MappedWildcard) continue
         const port = parseInt(portHex, 16)
         if (!Number.isInteger(port)) continue
         if (port < 1024 || port > 65535) continue

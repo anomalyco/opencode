@@ -30,6 +30,17 @@ if [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
   chmod 0600 "$HOME_DIR/.claude/.credentials.json"
 fi
 
+# Git "dubious ownership" workaround.  EFS access points (terraform/opencode-
+# collab/efs.tf) currently mount with uid=0/gid=0, while the container runs
+# as uid 10001 (ADR-0003).  Git 2.35+ refuses operations on a repo whose
+# .git directory isn't owned by the current uid — clone works because git
+# creates the .git dir itself, but subsequent push/log/diff calls fail with
+# "fatal: detected dubious ownership".  Wildcard '*' tells git to trust any
+# directory; safe enough on this single-tenant container.
+# Proper fix is to align the EFS access point posix_user.uid with the
+# container uid; tracked separately.
+git config --global --add safe.directory '*'
+
 # Hand off to the real server.  $@ propagates whatever args ECS / CMD passed.
 exec bun run --cwd packages/opencode src/index.ts serve \
   --port 4096 --hostname 0.0.0.0 --print-logs "$@"
