@@ -175,6 +175,46 @@ describe("ACP next service sessions", () => {
 
     expect(error.code).toBe(-32000)
   })
+
+  it("does not cache failed directory snapshots", async () => {
+    let providersCalls = 0
+    const sdk = {
+      config: {
+        providers: () => {
+          providersCalls++
+          if (providersCalls === 1) {
+            return Promise.reject({ name: "ProviderAuthError", data: { providerID: "test" } })
+          }
+          return Promise.resolve({ data: { providers: [provider], default: { test: modelID } } })
+        },
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: () => Promise.resolve({ data: { id: "ses_retry" } }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+
+    const first = await Effect.runPromise(
+      service
+        .newSession({ cwd: "/workspace", mcpServers: [] })
+        .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+    )
+    const second = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(first.code).toBe(-32000)
+    expect(second.sessionId).toBe("ses_retry")
+    expect(providersCalls).toBe(2)
+  })
 })
 
 function categories(result: NewSessionResponse | LoadSessionResponse) {

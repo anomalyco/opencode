@@ -94,6 +94,7 @@ export function make(input: { sdk: OpencodeClient; connection?: Pick<AgentSideCo
     if (cached) return yield* request(() => cached, "directory")
 
     const promise = loadDirectorySnapshot(input.sdk, directory).catch((error: unknown) => {
+      directories.delete(directory)
       throw fromUnknownError(error, "directory")
     })
     directories.set(directory, promise)
