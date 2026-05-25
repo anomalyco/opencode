@@ -2,17 +2,14 @@ import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
 import { BackgroundJob } from "@/background/job"
-import { Bus } from "@/bus"
 import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
-import { SessionStatus } from "@/session/status"
 import { Config } from "@/config/config"
-import { TuiEvent } from "@/cli/cmd/tui/event"
-import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
+import { Cause, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -20,7 +17,6 @@ export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
-  loop(input: SessionPrompt.LoopInput): Effect.Effect<MessageV2.WithParts>
 }
 
 const id = "task"
@@ -108,11 +104,9 @@ export const TaskTool = Tool.define(
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const background = yield* BackgroundJob.Service
-    const bus = yield* Bus.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
-    const status = yield* SessionStatus.Service
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
@@ -214,61 +208,29 @@ export const TaskTool = Tool.define(
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
-      const resumeWhenIdle: (input: { userID: MessageID; state: "completed" | "error" }) => Effect.Effect<void> =
-        Effect.fn("TaskTool.resumeWhenIdle")(function* (input: { userID: MessageID; state: "completed" | "error" }) {
-          const latest = yield* sessions
-            .findMessage(ctx.sessionID, (item) => item.info.role === "user")
-            .pipe(Effect.orDie)
-          if (Option.isNone(latest)) return
-          if (latest.value.info.id !== input.userID) return
-          if ((yield* status.get(ctx.sessionID)).type !== "idle") {
-            yield* Effect.sleep("300 millis")
-            return yield* resumeWhenIdle(input)
-          }
-          yield* bus.publish(TuiEvent.ToastShow, {
-            title: input.state === "completed" ? "Background task complete" : "Background task failed",
-            message:
-              input.state === "completed"
-                ? `Background task "${params.description}" finished. Resuming the main thread.`
-                : `Background task "${params.description}" failed. Resuming the main thread.`,
-            variant: input.state === "completed" ? "success" : "error",
-            duration: 5000,
-          })
-          yield* ops
-            .loop({ sessionID: ctx.sessionID })
-            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
-        })
-
-      const continueIfIdle = Effect.fn("TaskTool.continueIfIdle")(function* (input: {
-        userID: MessageID
-        state: "completed" | "error"
-      }) {
-        yield* resumeWhenIdle(input).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
-      })
-
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
         text: string,
       ) {
         const currentParent = yield* sessions.get(ctx.sessionID)
-        const message = yield* ops.prompt({
-          sessionID: ctx.sessionID,
-          noReply: true,
-          agent: currentParent.agent ?? ctx.agent,
-          parts: [
-            {
-              type: "text",
-              synthetic: true,
-              text: backgroundMessage({
-                sessionID: nextSession.id,
-                description: params.description,
-                state,
-                text,
-              }),
-            },
-          ],
-        })
-        yield* continueIfIdle({ userID: message.info.id, state })
+        yield* ops
+          .prompt({
+            sessionID: ctx.sessionID,
+            agent: currentParent.agent ?? ctx.agent,
+            parts: [
+              {
+                type: "text",
+                synthetic: true,
+                text: backgroundMessage({
+                  sessionID: nextSession.id,
+                  description: params.description,
+                  state,
+                  text,
+                }),
+              },
+            ],
+          })
+          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
       })
 
       const existing = yield* background.get(nextSession.id)
