@@ -26,7 +26,7 @@ export interface OpencodeClientOptions {
    * opencode workspace directory — 通过 `x-opencode-directory` header 路由 instance。
    *
    * opencode 是多 instance 设计,每个 instance 跟 directory 绑死;不传此 header → "No context found"。
-   * 飞书桥接默认用 `~/.opencode/feishu-workspace`(独立于 DeskFox 主窗口的 user-selected project)。
+   * 飞书桥接默认用 `~/.opencode/imbot-workspace`(独立于 DeskFox 主窗口的 user-selected project)。
    */
   directory?: string
 }

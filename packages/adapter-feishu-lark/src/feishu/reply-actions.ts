@@ -45,7 +45,7 @@ export function stripMentions(text: string, mentions: ReadonlyArray<MentionRef>)
 export type LarkFileType = "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream"
 
 /** 默认 workspace 根 — 所有 ATTACH 路径必须在此子树内才允许上传 */
-export const FEISHU_WORKSPACE_ROOT = join(homedir(), ".opencode", "feishu-workspace")
+export const IMBOT_WORKSPACE_ROOT = join(homedir(), ".opencode", "imbot-workspace")
 
 /** 走 image.create 的扩展名(返回 image_key,≤10MB) */
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".ico"])
@@ -105,11 +105,11 @@ export type AttachClassification =
  * - resolve 后必须在 workspaceRoot 子树内
  *
  * @param path 来自 LLM reply 的 `[ATTACH:xxx]` 解析串
- * @param workspaceRoot 默认 `~/.opencode/feishu-workspace`,单测可覆盖
+ * @param workspaceRoot 默认 `~/.opencode/imbot-workspace`,单测可覆盖
  */
 export function classifyAttachment(
   path: string,
-  workspaceRoot: string = FEISHU_WORKSPACE_ROOT,
+  workspaceRoot: string = IMBOT_WORKSPACE_ROOT,
 ): AttachClassification {
   if (!isAbsolute(path)) {
     return { kind: "reject", reason: "非绝对路径" }
