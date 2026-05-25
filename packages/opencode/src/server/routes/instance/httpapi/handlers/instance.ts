@@ -4,12 +4,14 @@ import * as InstanceState from "@/effect/instance-state"
 import { Format } from "@/format"
 import { Global } from "@opencode-ai/core/global"
 import { LSP } from "@/lsp/lsp"
+import { InstanceStore } from "@/project/instance-store"
 import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
-import { Effect } from "effect"
+import { errorMessage } from "@/util/error"
+import { Cause, Effect, Exit } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ApiVcsApplyError } from "../groups/instance"
+import { ApiInstanceReloadError, ApiVcsApplyError } from "../groups/instance"
 import { markInstanceForDisposal } from "../lifecycle"
 
 export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance", (handlers) =>
@@ -17,12 +19,27 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     const agent = yield* Agent.Service
     const command = yield* Command.Service
     const format = yield* Format.Service
+    const instanceStore = yield* InstanceStore.Service
     const lsp = yield* LSP.Service
     const skill = yield* Skill.Service
     const vcs = yield* Vcs.Service
 
     const dispose = Effect.fn("InstanceHttpApi.dispose")(function* () {
       yield* markInstanceForDisposal(yield* InstanceState.context)
+      return true
+    })
+
+    const reload = Effect.fn("InstanceHttpApi.reload")(function* () {
+      const ctx = yield* InstanceState.context
+      const exit = yield* Effect.exit(
+        instanceStore.reload({ directory: ctx.directory, worktree: ctx.worktree, project: ctx.project }),
+      )
+      if (Exit.isFailure(exit)) {
+        return yield* new ApiInstanceReloadError({
+          name: "InstanceReloadError",
+          data: { message: errorMessage(Cause.squash(exit.cause)) },
+        })
+      }
       return true
     })
 
@@ -95,6 +112,7 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
 
     return handlers
       .handle("dispose", dispose)
+      .handle("reload", reload)
       .handle("path", getPath)
       .handle("vcs", getVcs)
       .handle("vcsStatus", getVcsStatus)

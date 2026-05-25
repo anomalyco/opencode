@@ -565,6 +565,11 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "插件",
   "status.popover.action.manageServers": "管理服务器",
+  "status.popover.reloadInstance": "刷新当前路径的工具配置",
+  "status.popover.reloadInstance.ariaLabel": "刷新当前路径的 MCP、技能和斜杠命令",
+  "status.popover.reloadInstance.success.title": "工具配置已刷新",
+  "status.popover.reloadInstance.success.description": "当前路径的 MCP、技能和斜杠命令已更新。",
+  "status.popover.reloadInstance.failed.title": "刷新工具配置失败",
 
   "session.share.popover.title": "发布到网页",
   "session.share.popover.description.shared": "此会话已在网页上公开。任何拥有链接的人都可以访问。",

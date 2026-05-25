@@ -553,6 +553,11 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "外掛程式",
   "status.popover.action.manageServers": "管理伺服器",
+  "status.popover.reloadInstance": "重新整理目前路徑的工具設定",
+  "status.popover.reloadInstance.ariaLabel": "重新整理目前路徑的 MCP、技能和斜線命令",
+  "status.popover.reloadInstance.success.title": "工具設定已重新整理",
+  "status.popover.reloadInstance.success.description": "目前路徑的 MCP、技能和斜線命令已更新。",
+  "status.popover.reloadInstance.failed.title": "重新整理工具設定失敗",
 
   "session.share.popover.title": "發佈到網頁",
   "session.share.popover.description.shared": "此工作階段已在網頁上公開。任何擁有連結的人都可以存取。",

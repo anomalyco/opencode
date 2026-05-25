@@ -163,6 +163,41 @@ describe("InstanceStore", () => {
     }),
   )
 
+  it.live("reload disposes the replaced context", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const disposed: Array<string> = []
+      yield* registerDisposerScoped(async (directory) => {
+        disposed.push(directory)
+      })
+      yield* store.load({ directory: dir })
+
+      yield* store.reload({ directory: dir })
+
+      expect(disposed).toEqual([dir])
+    }),
+  )
+
+  it.live("reload failure removes the failed replacement from cache", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      yield* setBootstrap(
+        Effect.sync(() => {
+          throw new Error("reload failed")
+        }),
+      )
+
+      const exit = yield* store.reload({ directory: dir }).pipe(Effect.exit)
+
+      expect(exit._tag).toBe("Failure")
+      yield* setBootstrap(Effect.void)
+      const next = yield* store.load({ directory: dir })
+      expect(next.directory).toBe(dir)
+    }),
+  )
+
   it.live("stale dispose does not delete an in-flight reload", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })

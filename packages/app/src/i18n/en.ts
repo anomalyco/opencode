@@ -681,6 +681,11 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
+  "status.popover.reloadInstance": "Refresh workspace tools for this path",
+  "status.popover.reloadInstance.ariaLabel": "Refresh MCPs, skills, and slash commands for the current path",
+  "status.popover.reloadInstance.success.title": "Workspace tools refreshed",
+  "status.popover.reloadInstance.success.description": "MCPs, skills, and slash commands are up to date for this path.",
+  "status.popover.reloadInstance.failed.title": "Failed to refresh workspace tools",
 
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":

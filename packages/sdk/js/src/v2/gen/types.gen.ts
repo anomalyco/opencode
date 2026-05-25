@@ -2329,6 +2329,13 @@ export type File = {
   status: "added" | "deleted" | "modified"
 }
 
+export type InstanceReloadError = {
+  name: "InstanceReloadError"
+  data: {
+    message: string
+  }
+}
+
 export type Path = {
   home: string
   state: string
@@ -6299,6 +6306,38 @@ export type InstanceDisposeResponses = {
 }
 
 export type InstanceDisposeResponse = InstanceDisposeResponses[keyof InstanceDisposeResponses]
+
+export type InstanceReloadData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/instance/reload"
+}
+
+export type InstanceReloadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * InstanceReloadError
+   */
+  500: InstanceReloadError
+}
+
+export type InstanceReloadError2 = InstanceReloadErrors[keyof InstanceReloadErrors]
+
+export type InstanceReloadResponses = {
+  /**
+   * Instance reloaded
+   */
+  200: boolean
+}
+
+export type InstanceReloadResponse = InstanceReloadResponses[keyof InstanceReloadResponses]
 
 export type PathGetData = {
   body?: never

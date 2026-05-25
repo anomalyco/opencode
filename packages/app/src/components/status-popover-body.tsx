@@ -1,8 +1,10 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -11,6 +13,7 @@ import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection, useServer } from "@/context/server"
+import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
 import { useGlobal } from "@/context/global"
@@ -251,12 +254,16 @@ function ServerStatusList(props: { state: ServerStatusState }) {
 export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sync = useSync()
   const global = useGlobal()
+  const sdk = useSDK()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
   const settings = useSettings()
+  const [reload, setReload] = createStore({
+    reloading: false,
+  })
 
   const fail = (err: unknown) => {
     showToast({
@@ -289,6 +296,31 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const reloadInstance = () => {
+    if (reload.reloading) return
+
+    setReload("reloading", true)
+    sdk.client.instance
+      .reload({ directory: sync.directory })
+      .then(() => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("status.popover.reloadInstance.success.title"),
+          description: language.t("status.popover.reloadInstance.success.description"),
+        })
+      })
+      .catch((err: unknown) => {
+        showToast({
+          variant: "error",
+          title: language.t("status.popover.reloadInstance.failed.title"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => {
+        setReload("reloading", false)
+      })
+  }
 
   return (
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
@@ -300,7 +332,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         defaultValue={settings.general.newLayoutDesigns() ? "mcp" : "servers"}
         variant="alt"
       >
-        <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
+        <Tabs.List data-slot="tablist" class="relative bg-transparent border-b-0 pl-4 pr-14 pt-2 pb-0 gap-4 h-10">
           {!settings.general.newLayoutDesigns() && (
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
               {global.servers.list().length > 0 ? `${global.servers.list().length} ` : ""}
@@ -319,6 +351,19 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             {pluginCount() > 0 ? `${pluginCount()} ` : ""}
             {language.t("status.popover.tab.plugins")}
           </Tabs.Trigger>
+          <Tooltip placement="bottom" value={language.t("status.popover.reloadInstance")}>
+            <Button
+              variant="ghost"
+              class="absolute top-1.5 right-4 size-7 p-0 rounded-md shadow-none shrink-0"
+              onClick={reloadInstance}
+              disabled={reload.reloading}
+              aria-label={language.t("status.popover.reloadInstance.ariaLabel")}
+            >
+              <Show when={reload.reloading} fallback={<Icon size="normal" name="refresh" />}>
+                <Spinner class="size-4" />
+              </Show>
+            </Button>
+          </Tooltip>
         </Tabs.List>
 
         {!settings.general.newLayoutDesigns() && (
