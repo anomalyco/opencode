@@ -509,7 +509,11 @@ export function Prompt(props: PromptProps) {
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
           const value = text
-          const content = await Editor.open({ value, renderer })
+          const content = await Editor.open({
+            value,
+            renderer,
+            cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+          })
           if (!content) return
 
           input.setText(content)

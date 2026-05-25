@@ -965,7 +965,11 @@ export function Session() {
 
           if (options.openWithoutSaving) {
             // Just open in editor without saving
-            await Editor.open({ value: transcript, renderer })
+            await Editor.open({
+              value: transcript,
+              renderer,
+              cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+            })
           } else {
             const exportDir = process.cwd()
             const filename = options.filename.trim()
@@ -974,7 +978,11 @@ export function Session() {
             await Filesystem.write(filepath, transcript)
 
             // Open with EDITOR if available
-            const result = await Editor.open({ value: transcript, renderer })
+            const result = await Editor.open({
+              value: transcript,
+              renderer,
+              cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+            })
             if (result !== undefined) {
               await Filesystem.write(filepath, result)
             }
