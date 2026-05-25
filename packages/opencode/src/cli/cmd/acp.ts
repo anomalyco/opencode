@@ -3,10 +3,12 @@ import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
+import { ACPNext } from "@/acp-next/agent"
 import { Server } from "@/server/server"
 import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -22,6 +24,7 @@ export const AcpCommand = effectCmd({
   },
   handler: Effect.fn("Cli.acp")(function* (args) {
     process.env.OPENCODE_CLIENT = "acp"
+    const flags = yield* RuntimeFlags.Service
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
 
@@ -54,7 +57,7 @@ export const AcpCommand = effectCmd({
     })
 
     const stream = ndJsonStream(input, output)
-    const agent = ACP.init({ sdk })
+    const agent = flags.acpNext ? ACPNext.init({ sdk }) : ACP.init({ sdk })
 
     new AgentSideConnection((conn) => {
       return agent.create(conn, { sdk })
