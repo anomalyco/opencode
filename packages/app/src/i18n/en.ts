@@ -1079,13 +1079,15 @@ export const dict = {
   // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
   "settings.feishu.edit.modelSectionTitle": "Model",
   "settings.feishu.edit.advancedSectionTitle": "Advanced",
-  "settings.feishu.edit.enableAutoGroupCreate.label": "Allow AI to auto-create groups",
-  "settings.feishu.edit.enableAutoGroupCreate.hint":
-    "When on, saying \"create a group\" in DM makes AI send a confirmation card — group is only created after you tap confirm. Off by default to prevent prompt-injection-induced group creation.",
-  // FORK: [feat: feishu-group-mention-policy] 2026-05-24
-  "settings.feishu.edit.requireMention.label": "Require @ mention to respond in groups",
-  "settings.feishu.edit.requireMention.hint":
-    "On by default: bot only replies to @ messages in groups.\n⚠️ Before turning off: open.larksuite.com → your bot → Events: change `im.message.receive_v1` scope to \"All group messages\" + request `im:message` permission + re-publish. Otherwise Lark won't push non-@ messages and this toggle has no effect.",
+  // FORK: [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — deleted enableAutoGroupCreate flag
+  // Old keys removed; new key groupCommand.info describes /group usage
+  "settings.feishu.edit.groupCommand.info":
+    "Group creation: in DM, send `/group <name>` (e.g. `/group project-talk`); AI sends a confirmation card and the group is only created after you tap confirm.",
+  // FORK: [feat: feishu-group-mention-policy] 2026-05-24 → [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 inverted + renamed key
+  "settings.feishu.edit.allowReadAll.label":
+    "Allow AI to read all group messages without @ mention",
+  "settings.feishu.edit.allowReadAll.hint":
+    "Off by default: bot only replies to @ messages in groups.\nWhen on: ① bot responds to all group messages (suits 1-group-1-project workspace model); ② any group member can send `/new` to start a new conversation in the current group (clears session, **affects everyone**).\n⚠️ Before turning on: open.larksuite.com → your bot → Events: change `im.message.receive_v1` scope to \"All group messages\" + request `im:message` permission + re-publish. Otherwise Lark won't push non-@ messages and this toggle has no effect.",
   "settings.feishu.edit.saving": "Saving...",
   "settings.feishu.edit.providerLabel": "Provider",
   "settings.feishu.edit.modelLabel": "Model",

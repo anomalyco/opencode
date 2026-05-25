@@ -18,8 +18,7 @@ import {
 export const FeishuEditAccountDialog: Component<{
   accountId: string
   currentModel: ModelRef | null | undefined
-  /** [feat: feishu-create-group-toggle-gui] 2026-05-24 */
-  currentEnableAutoGroupCreate?: boolean
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 currentEnableAutoGroupCreate prop
   /** [feat: feishu-group-mention-policy] 2026-05-24 */
   currentRequireMention?: boolean
   onSaved?: () => void
@@ -29,11 +28,10 @@ export const FeishuEditAccountDialog: Component<{
   const [useDefault, setUseDefault] = createSignal(!props.currentModel)
   const [providerID, setProviderID] = createSignal(props.currentModel?.provider_id ?? "")
   const [modelID, setModelID] = createSignal(props.currentModel?.model_id ?? "")
-  // [feat: feishu-create-group-toggle-gui] 2026-05-24
-  const [enableGroupCreate, setEnableGroupCreate] = createSignal(
-    props.currentEnableAutoGroupCreate ?? false,
-  )
   // [feat: feishu-group-mention-policy] 2026-05-24 默认 true(保守 — 大群只 @ 才响应)
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+  // GUI 显示语义反转("允许免@ 读取所有信息"),后端 requireMention 字段不变。
+  // state 仍存后端字段语义(true=需要@),UI 上 checkbox.checked = !requireMention。
   const [requireMention, setRequireMention] = createSignal(
     props.currentRequireMention ?? true,
   )
@@ -100,13 +98,13 @@ export const FeishuEditAccountDialog: Component<{
     setSaveError(null)
     try {
       // [feat: feishu-create-group-toggle-gui] 2026-05-24
-      // 一次 partial update 提交 model + flag(只发生变化的字段)
+      // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate
+      // 一次 partial update 提交 model + requireMention(只发生变化的字段)
       const modelPayload: ModelRef | null = useDefault()
         ? null
         : { provider_id: providerID(), model_id: modelID() }
       await feishuUpdateAccountSettings(props.accountId, {
         model: modelPayload,
-        enableAutoGroupCreate: enableGroupCreate(),
         // [feat: feishu-group-mention-policy] 2026-05-24
         requireMention: requireMention(),
       })
@@ -254,36 +252,29 @@ export const FeishuEditAccountDialog: Component<{
                 <div class="flex-1 h-px bg-border-weak" />
               </div>
 
+              {/* /group 命令用法说明 [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 */}
+              {/* 替换了旧的"允许 AI 自动创建新群" checkbox — flag 已删,建群统一走 user 显式 /group */}
               <div class="flex flex-col gap-1 self-stretch">
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={enableGroupCreate()}
-                    onChange={(e) => setEnableGroupCreate(e.currentTarget.checked)}
-                  />
-                  <span class="text-14-medium">
-                    {language.t("settings.feishu.edit.enableAutoGroupCreate.label")}
-                  </span>
-                </label>
-                <p class="text-13-regular text-text-weak pl-6">
-                  {language.t("settings.feishu.edit.enableAutoGroupCreate.hint")}
+                <p class="text-13-regular text-text-weak">
+                  {language.t("settings.feishu.edit.groupCommand.info")}
                 </p>
               </div>
 
-              {/* 群里需要 @ 才响应 [feat: feishu-group-mention-policy] 2026-05-24 */}
+              {/* 允许 AI 免@ 读取群里所有信息 [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 */}
+              {/* GUI 语义反转 — checkbox.checked = !requireMention,save 时 set 回 requireMention */}
               <div class="flex flex-col gap-1 self-stretch">
                 <label class="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={requireMention()}
-                    onChange={(e) => setRequireMention(e.currentTarget.checked)}
+                    checked={!requireMention()}
+                    onChange={(e) => setRequireMention(!e.currentTarget.checked)}
                   />
                   <span class="text-14-medium">
-                    {language.t("settings.feishu.edit.requireMention.label")}
+                    {language.t("settings.feishu.edit.allowReadAll.label")}
                   </span>
                 </label>
                 <p class="text-13-regular text-text-weak pl-6">
-                  {language.t("settings.feishu.edit.requireMention.hint")}
+                  {language.t("settings.feishu.edit.allowReadAll.hint")}
                 </p>
               </div>
 

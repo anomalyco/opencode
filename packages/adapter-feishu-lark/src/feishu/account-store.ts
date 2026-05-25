@@ -144,8 +144,8 @@ export function saveAccount(input: SaveAccountInput): SavedAccount {
     threadSession: existing?.threadSession ?? true,
     tables: existing?.tables ?? "bullets",
     blockStreamingCoalesce: existing?.blockStreamingCoalesce ?? 50,
-    // [feat: feishu-bridge-light] 自动建群 opt-in,默认关
-    enableAutoGroupCreate: existing?.enableAutoGroupCreate ?? false,
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate flag
+    // 建群统一走 user 显式 /group 命令,不再有预 opt-in 开关
   }
 
   config.accounts[accountId] = account
@@ -195,7 +195,7 @@ export function updateAccountModel(
 }
 
 /**
- * Partial 更新账号 settings — 当前支持 model + enableAutoGroupCreate 两个字段。
+ * Partial 更新账号 settings — 当前支持 model + requireMention 两个字段。
  *
  * **严格白名单**:只接受 patch 列出的字段;其他 schema 字段(appId/appSecret/openId/
  * tokenStore/agent/threadSession/tables/blockStreamingCoalesce 等)0 影响。
@@ -203,16 +203,16 @@ export function updateAccountModel(
  * server endpoint 自动复用。
  *
  * @param patch model: 设/清(null = 清除走 default,undefined = 不动);
- *              enableAutoGroupCreate: true/false 都更新,undefined = 不动
+ *              requireMention: true/false 都更新,undefined = 不动
  * @returns 是否更新成功(account 不存在返 false)
  *
  * [feat: feishu-create-group-toggle-gui] 2026-05-24
+ * [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate 字段
  */
 export function updateAccountSettings(
   accountId: string,
   patch: {
     model?: { providerID: string; modelID: string } | null
-    enableAutoGroupCreate?: boolean
     /** [feat: feishu-group-mention-policy] 2026-05-24 */
     requireMention?: boolean
   },
@@ -228,9 +228,6 @@ export function updateAccountSettings(
     } else {
       delete account.model
     }
-  }
-  if (patch.enableAutoGroupCreate !== undefined) {
-    account.enableAutoGroupCreate = patch.enableAutoGroupCreate
   }
   if (patch.requireMention !== undefined) {
     account.requireMention = patch.requireMention

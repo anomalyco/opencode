@@ -57,13 +57,8 @@ describe("FeishuAccountSchema", () => {
     expect(a.threadSession).toBe(true)
     expect(a.tables).toBe("bullets")
     expect(a.blockStreamingCoalesce).toBe(50)
-    // [feat: feishu-bridge-light] 自动建群默认关
-    expect(a.enableAutoGroupCreate).toBe(false)
-  })
-
-  test("[feat: feishu-bridge-light] enableAutoGroupCreate 显式 true 接受", () => {
-    const a = FeishuAccountSchema.parse({ ...validAccount, enableAutoGroupCreate: true })
-    expect(a.enableAutoGroupCreate).toBe(true)
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate
+    // 老配置含此字段 zod 默认 strip,新配置 schema 不再含此字段
   })
 
   test("appId 不可空", () => {

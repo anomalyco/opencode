@@ -128,12 +128,9 @@ export const FeishuAccountSchema = z.object({
   tables: TableStrategySchema.default("bullets"),
   /** 短 token 流式聚合阈值(ms)(spec G3),默认 50 */
   blockStreamingCoalesce: z.number().int().min(0).max(1000).default(50),
-  /**
-   * [feat: feishu-bridge-light] AI 自动建群 opt-in。
-   * true 时 system prompt 教 LLM 用 `[CREATE_GROUP:群名]` marker,触发会发飞书 permission-card
-   * 让 user 二次确认才真创建。默认 false 安全(prompt injection 防护)。
-   */
-  enableAutoGroupCreate: z.boolean().default(false),
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate 死开关
+  // 老配置文件含此字段也 OK,zod 默认 strip unknown(无 migration 风险)。
+  // 建群现在统一走 user 显式 /group <群名> 命令(feishu-group-slash-command),不再有 opt-in flag。
 })
 
 export type FeishuAccount = z.infer<typeof FeishuAccountSchema>

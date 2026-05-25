@@ -303,21 +303,31 @@ export class MessagePipeline {
     }
     if (!text) return
 
-    // [feat: feishu-bridge-light] /new slash command — 私聊清当前 session 切话题
-    // 群聊禁用(chatId 共享会影响全员);先 strip mention 再判,允许 "@bot /new" 形态
+    // [feat: feishu-bridge-light] /new slash command — 清当前 chat session 切话题
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+    // 启用条件:p2p 永远允许;group 只在 requireMention=false(免@ 模式)时允许 —
+    // user 主动选 channel-as-workspace 模式,清群 session 是 channel-level 共识操作。
+    // 先 strip mention 再判,允许 "@bot /new" 形态。
     const cleaned = stripMentions(text, event.mentions)
     if (cleaned === "/new") {
-      if (event.chatType !== "p2p") {
-        await this.sendFeishuText(event.chatId, "⚠️ /new 仅支持私聊(群里清会影响全员)")
+      if (event.chatType !== "p2p" && this.opts.account.requireMention) {
+        await this.sendFeishuText(
+          event.chatId,
+          "⚠️ 群里使用 /new 需先开启「允许 AI 免@ 读取群里所有信息」（DeskFox 设置 → 飞书桥接 → 选此账号 → 编辑 → 高级能力）",
+        )
         return
       }
       const sessionID = this.chatToSession.get(event.chatId)
       this.opts.chatSessionStore.delete(this.opts.accountId, event.chatId)
       this.chatToSession.delete(event.chatId)
       if (sessionID) this.sessionToChat.delete(sessionID)
-      await this.sendFeishuText(event.chatId, "✅ 已开启新对话")
+      const replyText =
+        event.chatType === "p2p"
+          ? "✅ 已开启新对话"
+          : "✅ 已开启新对话（群 session 已清，影响所有成员）"
+      await this.sendFeishuText(event.chatId, replyText)
       console.log(
-        `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"})`,
+        `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"}, chatType=${event.chatType})`,
       )
       return
     }
@@ -335,21 +345,21 @@ export class MessagePipeline {
       if (event.chatType !== "p2p") {
         await this.sendFeishuText(
           event.chatId,
-          "⚠️ /group 仅支持私聊(群里建子群 UX 不清晰,请在私聊里执行)",
+          "⚠️ /group 仅支持私聊（群里建子群 UX 不清晰，请在私聊里执行）",
         )
         return
       }
       if (groupCmd.error === "no_name") {
         await this.sendFeishuText(
           event.chatId,
-          "⚠️ 用法:`/group <群名>`,例:`/group 项目讨论`",
+          "⚠️ 用法：`/group <群名>`，例：`/group 项目讨论`",
         )
         return
       }
       if (groupCmd.error === "too_long") {
         await this.sendFeishuText(
           event.chatId,
-          `⚠️ 群名超长(最多 ${GROUP_NAME_MAX_LEN} 字符,飞书限制),请缩短后重试`,
+          `⚠️ 群名超长（最多 ${GROUP_NAME_MAX_LEN} 字符，飞书限制），请缩短后重试`,
         )
         return
       }
@@ -396,15 +406,15 @@ export class MessagePipeline {
       await this.sendFeishuText(
         event.chatId,
         [
-          "你想创建群?请使用斜杠命令:",
+          "你想创建群？请使用斜杠命令：",
           "",
           "  `/group <群名>`",
           "",
-          "例:",
+          "例：",
           "  • `/group 项目讨论`",
           "  • `/group 产品需求-2026Q2`",
           "",
-          "(创建后我会拉你进群,后续讨论在那里继续)",
+          "（创建后我会拉你进群，后续讨论在那里继续）",
         ].join("\n"),
       )
       return
