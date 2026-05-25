@@ -258,7 +258,9 @@ export function ContextMenuHost(props: {
                   top: `${rect.top}px`,
                   width: `${rect.width}px`,
                   height: `${rect.height}px`,
-                  "background-color": "rgba(209, 52, 56, 0.5)",
+                  // FORK: 单色统一 — 跟 chat 区 native 选区蓝同色调,user 反馈双色困惑
+                  // [feat: office-选中加聊天] 2026-05-25
+                  "background-color": "rgba(60, 120, 220, 0.4)",
                 }}
               />
             )}

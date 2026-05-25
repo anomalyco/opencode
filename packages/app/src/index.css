@@ -334,3 +334,17 @@
     }
   }
 }
+
+/* FORK: PDF/office 预览区藏掉浏览器 native 选区蓝色 — 单色统一,只用我的 overlay
+   [feat: office-选中加聊天] 2026-05-25 user 反馈双色叠加分不清以哪个为主
+   理由:textLayer span 上的 ::selection 跟我的红色 overlay 叠加成紫红,user 困惑。
+   藏掉 native ::selection 后,只有 overlay 一层视觉,清晰单一。
+   chat 区不动 — chat 走 message-part 自家 ::selection 风格,保持原样。 */
+[data-slot="pdf-viewer"] *::selection {
+  background: transparent;
+  color: inherit;
+}
+[data-slot="pdf-viewer"] *::-moz-selection {
+  background: transparent;
+  color: inherit;
+}
