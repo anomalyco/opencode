@@ -94,20 +94,14 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
     const webRequest = yield* HttpServerRequest.toWeb(req)
     const webResponse = yield* Effect.promise(() => handleCollabRequest(webRequest))
 
-    const resHeaders = new Headers(webResponse.headers)
-
-    // SSE: stream without buffering
-    if (webResponse.headers.get("content-type")?.startsWith("text/event-stream") && webResponse.body) {
-      const rs = webResponse.body
-      const effectStream = Stream.fromAsyncIterable(
-        rs as AsyncIterable<Uint8Array>,
-        () => new Error("SSE stream error"),
-      )
-      return HttpServerResponse.stream(effectStream, { status: webResponse.status, headers: resHeaders })
-    }
-
-    const buf = yield* Effect.promise(() => webResponse.arrayBuffer())
-    return HttpServerResponse.raw(new Uint8Array(buf), { status: webResponse.status, headers: resHeaders })
+    // HttpServerResponse.fromWeb properly extracts multi-valued Set-Cookie
+    // headers via getSetCookie() and stores them in the Effect response's
+    // dedicated `cookies` collection.  Going through HttpServerResponse.raw
+    // with a Headers object loses them, because Effect's internal Headers
+    // type is `Record<string, string>` (single value per key) — multiple
+    // Set-Cookies collapse to one (the OAuth callback never set a cookie
+    // before this fix, which manifested as an infinite re-auth loop).
+    return HttpServerResponse.fromWeb(webResponse)
   })
 
 const serveHealthz = () =>
