@@ -87,7 +87,11 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   if (input.sync === undefined || existing?.sync === undefined || input.sync.version >= existing.sync.version) {
     registry.set(input.type, definition)
   }
-  if (input.sync) syncRegistry.set(versionedType(input.type, input.sync.version), definition as Definition & { readonly sync: NonNullable<Definition["sync"]> })
+  if (input.sync)
+    syncRegistry.set(
+      versionedType(input.type, input.sync.version),
+      definition as Definition & { readonly sync: NonNullable<Definition["sync"]> },
+    )
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
 }
@@ -110,7 +114,10 @@ export interface Interface {
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
-  readonly replay: (event: SerializedEvent, options?: { readonly publish?: boolean; readonly ownerID?: string }) => Effect.Effect<void>
+  readonly replay: (
+    event: SerializedEvent,
+    options?: { readonly publish?: boolean; readonly ownerID?: string },
+  ) => Effect.Effect<void>
   readonly replayAll: (
     events: SerializedEvent[],
     options?: { readonly publish?: boolean; readonly ownerID?: string },
@@ -145,7 +152,10 @@ export const layer = Layer.effect(
       }),
     )
 
-    function commitSyncEvent(event: Payload, input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string }) {
+    function commitSyncEvent(
+      event: Payload,
+      input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string },
+    ) {
       return Effect.gen(function* () {
         const definition = registry.get(event.type)
         const sync = definition?.sync
@@ -272,13 +282,23 @@ export const layer = Layer.effect(
         const source = events[0]?.aggregateID
         if (!source) return undefined
         if (events.some((event) => event.aggregateID !== source)) {
-          yield* Effect.die(new InvalidSyncEventError({ type: events[0]?.type ?? "unknown", message: "Replay events must belong to the same aggregate" }))
+          yield* Effect.die(
+            new InvalidSyncEventError({
+              type: events[0]?.type ?? "unknown",
+              message: "Replay events must belong to the same aggregate",
+            }),
+          )
         }
         const start = events[0]?.seq ?? 0
         for (const [index, event] of events.entries()) {
           const seq = start + index
           if (event.seq !== seq) {
-            yield* Effect.die(new InvalidSyncEventError({ type: event.type, message: `Replay sequence mismatch at index ${index}: expected ${seq}, got ${event.seq}` }))
+            yield* Effect.die(
+              new InvalidSyncEventError({
+                type: event.type,
+                message: `Replay sequence mismatch at index ${index}: expected ${seq}, got ${event.seq}`,
+              }),
+            )
           }
         }
         for (const event of events) {
