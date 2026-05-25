@@ -29,7 +29,7 @@ const BACKGROUND_DESCRIPTION = [
   "",
   [
     "Background mode: background=true launches the subagent asynchronously.",
-    "Use task_status(task_id=..., wait=false) to poll, or wait=true to block until done.",
+    "The parent agent is notified automatically when the background task finishes.",
   ].join(" "),
 ].join("\n")
 
@@ -70,11 +70,11 @@ function output(sessionID: SessionID, text: string) {
 
 function backgroundOutput(sessionID: SessionID) {
   return [
-    `task_id: ${sessionID} (for polling this task with task_status)`,
+    `task_id: ${sessionID}`,
     "state: running",
     "",
     "<task_result>",
-    "Background task started. Continue your current work and call task_status when you need the result.",
+    "Background task started. The parent agent will be notified automatically when it finishes.",
     "</task_result>",
   ].join("\n")
 }
@@ -270,9 +270,7 @@ export const TaskTool = Tool.define(
 
       const existing = yield* background.get(nextSession.id)
       if (existing?.status === "running") {
-        return yield* Effect.fail(
-          new Error(`Task ${nextSession.id} is already running. Use task_status to check progress.`),
-        )
+        return yield* Effect.fail(new Error(`Task ${nextSession.id} is already running.`))
       }
 
       if (runInBackground) {
