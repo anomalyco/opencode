@@ -250,7 +250,42 @@ export async function createConfigFile(path: string, content: string) {
 export async function listTrellisTasks(directory: string): Promise<TrellisTaskList> {
   const root = resolve(directory)
   registerAllowedRoot(root)
-  const trellisRoot = join(root, ".trellis")
+  const tasks: TrellisTask[] = []
+  let skipped = 0
+  const worktrees = await listGitWorktrees(root)
+  const roots = worktrees.length > 0 ? worktrees : [root]
+  let current: string | undefined
+  for (const worktreeRoot of roots) {
+    const result = await listTrellisTasksInWorktree(worktreeRoot)
+    if (worktreeRoot === root) current = result.current
+    skipped += result.skipped
+    tasks.push(...result.tasks)
+  }
+  return { root, current, skipped, tasks }
+}
+
+async function listGitWorktrees(root: string) {
+  const result = await execFileAsync("git", ["-C", root, "worktree", "list", "--porcelain"], {
+    timeout: 3000,
+    windowsHide: true,
+  }).catch(() => undefined)
+  if (!result?.stdout) return []
+  const roots: string[] = []
+  for (const line of result.stdout.split(/\r?\n/)) {
+    if (!line.startsWith("worktree ")) continue
+    const worktreeRoot = resolve(line.slice("worktree ".length).trim())
+    if (worktreeRoot) roots.push(worktreeRoot)
+  }
+  return Array.from(new Set(roots))
+}
+
+async function listTrellisTasksInWorktree(worktreeRoot: string): Promise<{
+  current?: string
+  skipped: number
+  tasks: TrellisTask[]
+}> {
+  registerAllowedRoot(worktreeRoot)
+  const trellisRoot = join(worktreeRoot, ".trellis")
   registerAllowedRoot(trellisRoot)
   const tasksRoot = join(trellisRoot, "tasks")
   const current = await readFile(join(trellisRoot, ".current-task"), "utf8")
@@ -272,7 +307,7 @@ export async function listTrellisTasks(directory: string): Promise<TrellisTaskLi
       const id = data.id ?? entry.name
       const name = data.name ?? id
       tasks.push({
-        id,
+        id: `${worktreeRoot}:${id}`,
         name,
         title: typeof data.title === "string" ? data.title : name,
         status: typeof data.status === "string" ? data.status : "unknown",
@@ -284,13 +319,15 @@ export async function listTrellisTasks(directory: string): Promise<TrellisTaskLi
         createdAt: stringOrUndefined(data.createdAt),
         completedAt: stringOrUndefined(data.completedAt),
         path,
+        worktreeRoot,
+        worktreeName: basename(worktreeRoot),
         current: Boolean(current && (current === path || current === entry.name || current.endsWith(`/${entry.name}`))),
       })
     } catch {
       skipped++
     }
   }
-  return { root, current, skipped, tasks }
+  return { current, skipped, tasks }
 }
 
 export function getOpenclawConfig(): OpenclawConfig {

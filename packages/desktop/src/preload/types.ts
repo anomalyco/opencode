@@ -63,6 +63,8 @@ export type TrellisTask = {
   createdAt?: string
   completedAt?: string
   path: string
+  worktreeRoot: string
+  worktreeName: string
   current: boolean
 }
 
