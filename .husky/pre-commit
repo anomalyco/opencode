@@ -61,13 +61,23 @@ if [ -n "$dups" ]; then
 fi
 
 # ------------------------------------------------------------
-# 4.5 网络监听安全(2026-05-10 立,feishu-server-loopback-bind 教训沉淀)
+# 4.5 网络监听安全(2026-05-10 立,2026-05-25 扩 vite/astro host 覆盖)
 # ------------------------------------------------------------
-# 防止 Bun.serve / *.listen 默认绑 0.0.0.0 暴露端口到 LAN/公网。
-# 触发:staged 新增行包含 Bun.serve( 或 .listen( 第一参数是端口号/变量,
-#       且**对应文件**没有 hostname: "127.0.0.1"|"localhost" 安全标记。
+# 防止 dev server / Bun.serve / *.listen 默认绑 0.0.0.0 暴露端口到 LAN/公网。
+# 覆盖三类:
+#   (a) Bun.serve( — fork 自家 server / plugin
+#   (b) *.listen(port, ...) — node http / express 类
+#   (c) host: "0.0.0.0" — vite / astro / rollup 类 dev server 配置
+# 触发:staged 新增行命中上述任一,且**对应文件**没有 loopback 安全标记
+#       (hostname / .listen(...,"127.0.0.1") / host: "127.0.0.1"|"localhost")。
 # 豁免:commit message 标 [network-bind-public: <理由>] (走 --no-verify 或后续放宽)。
 # 例外路径:测试文件 (__tests__/, .test., .spec.) 不查(测试有时绑 ephemeral port localhost)。
+#
+# 起源 (c): 2026-05-25 user 装 prod 2026.5.25.1 + R6 audit 时发现
+# packages/{app,enterprise}/vite.config.ts + packages/web/astro.config.mjs
+# 三处 dev server 长期默认 0.0.0.0 暴露 :3000 / :4321 类端口到 LAN,
+# pre-push 自动起 e2e-mock dev server 时撞 R6 违规。把 vite/astro 配置
+# 也纳入 §4.5 扫描,防再回归。
 
 unsafe_bind_files=""
 STAGED_TS=$(git diff --cached --name-only --diff-filter=AM | grep -E '\.(ts|tsx|js|mjs)$' | grep -vE '__tests__|\.test\.|\.spec\.' || true)
@@ -76,21 +86,24 @@ for f in $STAGED_TS; do
   [ -f "$f" ] || continue
   # 取本次 commit 新增行(过 +++ header)
   added=$(git diff --cached -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+' || true)
-  # 是否新增了 bind 站点?
-  if echo "$added" | grep -qE 'Bun\.serve\(|\.listen\(\s*[0-9a-zA-Z_$]'; then
-    # 该文件全文是否含 loopback 安全标记?
-    if ! grep -qE 'hostname\s*:\s*["'"'"']?(127\.0\.0\.1|localhost)["'"'"']?|\.listen\([^)]+,\s*["'"'"'](127\.0\.0\.1|localhost)["'"'"']' "$f"; then
+  # 是否新增了 bind 站点?(三类:Bun.serve / *.listen(port,...) / host: "0.0.0.0")
+  if echo "$added" | grep -qE 'Bun\.serve\(|\.listen\(\s*[0-9a-zA-Z_$]|host\s*:\s*["'"'"']0\.0\.0\.0["'"'"']'; then
+    # 该文件全文是否含 loopback 安全标记?(三种形式都接受)
+    if ! grep -qE 'hostname\s*:\s*["'"'"']?(127\.0\.0\.1|localhost)["'"'"']?|\.listen\([^)]+,\s*["'"'"'](127\.0\.0\.1|localhost)["'"'"']|host\s*:\s*["'"'"'](127\.0\.0\.1|localhost)["'"'"']' "$f"; then
       unsafe_bind_files="$unsafe_bind_files\n  $f"
     fi
   fi
 done
 
 if [ -n "$unsafe_bind_files" ]; then
-  echo "❌ pre-commit (4.5 网络绑定安全): 检测到新增 Bun.serve / *.listen 未显式指定 loopback:"
+  echo "❌ pre-commit (4.5 网络绑定安全): 检测到新增 server bind 未显式指定 loopback:"
   printf "%b\n" "$unsafe_bind_files"
   echo ""
   echo "默认绑 0.0.0.0 = 暴露端口到所有网卡(LAN/公网)= Win Firewall 弹窗 + 安全风险"
-  echo "请加: hostname: \"127.0.0.1\" 或 .listen(port, \"127.0.0.1\")"
+  echo "请加 (任一):"
+  echo "  hostname: \"127.0.0.1\"                  (Bun.serve)"
+  echo "  .listen(port, \"127.0.0.1\")              (node http)"
+  echo "  host: \"127.0.0.1\"                       (vite/astro/rollup server 配置)"
   echo "若确实需要公网监听: git commit --no-verify -m '... [network-bind-public: <理由>]'"
   exit 1
 fi
