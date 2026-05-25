@@ -388,6 +388,28 @@ pub fn spawn_command(
             state_dir.to_string_lossy().to_string(),
         ),
     ];
+
+    // Pass through token compression proxy URL to the sidecar process.
+    // When ADAL_APP_URL is set, the sidecar routes LLM requests through
+    // the specified proxy for transparent compression or middleware.
+    // Only localhost/loopback URLs are accepted to prevent unintended
+    // traffic routing to external endpoints.
+    if let Some(app_url) = std::env::var_os("ADAL_APP_URL") {
+        if let Some(url_str) = app_url.to_str() {
+            if url_str.starts_with("http://localhost")
+                || url_str.starts_with("http://127.0.0.1")
+                || url_str.starts_with("http://[::1]")
+            {
+                envs.push(("ADAL_APP_URL".to_string(), url_str.to_string()));
+            } else {
+                tracing::warn!(
+                    url = %url_str,
+                    "Ignoring ADAL_APP_URL: only localhost URLs are permitted"
+                );
+            }
+        }
+    }
+
     envs.extend(
         extra_env
             .iter()
