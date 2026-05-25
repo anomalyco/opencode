@@ -7,8 +7,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 # feishu-group-new-cmd-and-mention-rename — 3-changelog
 
 > **状态**:✅ 代码 + 测试落地(2026-05-25,等用户实测)
-> **commit 链**:3 commits(spec/plan + 主实施 + changelog)
-> **规模**:Medium- 净 +71 行(97 + / 26 -)+ 三文档 / 6 文件触动 / 0 上游侵入
+> **commit 链**:4 commits(spec/plan + 主实施 + flag cleanup + changelog)
+> **规模**:Medium 净 -2 行(162 + / 164 -;主实施 +71 + cleanup -73)+ 三文档 / 16 文件触动 / 0 上游侵入
 
 ## commit 链
 
@@ -16,7 +16,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 |---|---|
 | `80a04487c` | docs: 1-spec + 2-plan + INDEX entry |
 | `092fd106b` | feat: /new 群里启用 + GUI checkbox 反转 + i18n 改名(3 文件 i18n + 1 GUI + 1 pipeline + 1 test) |
-| (本次填) | docs: 3-changelog + INDEX done + 改动日志 entry |
+| `1092eca52` | docs: 3-changelog + INDEX done + 改动日志 entry |
+| `a1bef9d05` | feat(扩展):删 enableAutoGroupCreate 死开关 — 全栈 cleanup(backend 3 + Tauri 1 + GUI 3 + i18n 3 + 测试 2 = 12 文件)+ 加 /group 用法 info paragraph 替换 checkbox |
 
 ## 改动文件
 
@@ -28,6 +29,28 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `packages/app/src/i18n/zht.ts` | +3 / -3 | 繁体中文同步 |
 | `packages/app/src/i18n/en.ts` | +4 / -3 | 英文同步 |
 | `packages/adapter-feishu-lark/src/feishu/__tests__/message-pipeline.test.ts` | +63 / -5 | 旧"群聊 /new 拒绝"测试改写为"requireMention=true 拒绝引导";新加"requireMention=false 允许 + 影响所有人"和"@bot strip mention"两个 case;`makeAccount` 默认加 `requireMention: true` 跟 zod schema 对齐 |
+
+## 实施中扩展:删 `enableAutoGroupCreate` 死开关(commit `a1bef9d05`)
+
+实施中 user 注意到 GUI 第一项 checkbox "允许 AI 自动创建新群" 的 hint 文案是 `feishu-group-slash-command` 之前的版本("私聊说「帮我建群」AI 会发飞书确认卡片..."),已经不准。深查发现 `enableAutoGroupCreate` flag 在 pipeline 0 引用 — `feishu-group-slash-command` 删 LLM marker 路径时把所有 flag 引用点都删了,留下个**视觉死开关**。
+
+User 拍板:**整个 checkbox + flag 全栈删掉**,只留一句 info paragraph 说明 `/group` 用法。
+
+**全栈 cleanup 12 文件**:
+- 后端 3:`config-schema.ts` 删字段 / `account-store.ts` 删 constructor + patch / `server.ts` 删 endpoint
+- Tauri 1:`feishu_adapter.rs` 删 AccountSummary / Wire types / ListItem 4 处字段
+- GUI 3:`feishu-edit-account-dialog.tsx` 删 checkbox + 加 info paragraph / `settings-feishu.tsx` 删 prop 传递 / `utils/feishu-config.ts` 删字段
+- i18n 3:`zh.ts` / `zht.ts` / `en.ts` 删 enableAutoGroupCreate.{label,hint} + 加 groupCommand.info
+- 测试 2:`account-store.test.ts` 删 2 case + 改 2 case 为 requireMention / `config-schema.test.ts` 删 2 case
+
+**老配置兼容**:zod 默认 strip unknown fields,老用户 config 文件含 `enableAutoGroupCreate: true/false` 字段在新版加载时**自动消失**,无 migration 风险。
+
+**Info paragraph 文案**(替代旧 checkbox):
+- zh: "建群方式:私聊发 `/group <群名>`(例:`/group 项目讨论`),AI 弹确认卡片,点确认才真建。"
+- zht: "建群方式:私訊發送 `/group <群名>`(例:`/group 專案討論`),AI 彈確認卡片,點確認才真建。"
+- en: "Group creation: in DM, send `/group <name>` (e.g. `/group project-talk`); AI sends a confirmation card and the group is only created after you tap confirm."
+
+**闭环 backlog**:`feishu-group-slash-command` 3-changelog 留的 "`enableAutoGroupCreate` flag 是否彻底删 / 改语义" — 本次彻底删,backlog 关闭。
 
 ## 关键设计点
 
