@@ -88,6 +88,15 @@ packages/app/src/utils/markdown-editor-extensions.ts (452 行)
 
 ## 方案
 
+### 设计基线:GitHub Markdown CSS heading 比例 + iA Writer 源模式语法处理
+
+**理由(白领用户视角,非程序员)**:
+- **GitHub MD CSS 是事实标准** — Notion / GitLab / 公众号 / 知乎 / 简书 排版用同款比例(h1 2em / h2 1.5em / h3 1.25em),白领用户**被这个比例训练了 10 年**(公众号文章 / 简书 / 知乎)
+- **iA Writer 是写作者的标杆** — Mac 付费榜常驻第一,源模式做得最克制
+- **跟我们 preview 侧统一** — DeskFox 的 markdown preview(`packages/ui/src/components/markdown.css`)就是 GitHub 风,user 切预览模式不跳变
+
+**不 copy 程序员风格**(VS Code / Obsidian Source Mode 的 1.6/1.35/1.18 紧凑比例 + opacity 0.5 激进弱化):那是给习惯密集源码的程序员的紧凑版,白领看会"还是密密麻麻"。
+
 ### 核心改动:markdownHighlightStyle 注入
 
 在 `markdown-editor-extensions.ts` 新增 export:
@@ -98,23 +107,26 @@ import { tags as t } from "@lezer/highlight"
 import { Prec } from "@codemirror/state"
 
 export const markdownHighlightStyle = HighlightStyle.define([
-  { tag: t.heading1, fontSize: "1.6em", fontWeight: "700", color: "var(--text-strong)" },
-  { tag: t.heading2, fontSize: "1.35em", fontWeight: "700", color: "var(--text-strong)" },
-  { tag: t.heading3, fontSize: "1.18em", fontWeight: "600", color: "var(--text-strong)" },
-  { tag: t.heading4, fontSize: "1.08em", fontWeight: "600", color: "var(--text-strong)" },
-  { tag: t.heading5, fontSize: "1.0em",  fontWeight: "600", color: "var(--text-strong)" },
-  { tag: t.heading6, fontSize: "1.0em",  fontWeight: "600", color: "var(--text-weak)" },
+  // === heading 比例对齐 GitHub MD CSS / Notion ===
+  { tag: t.heading1, fontSize: "2.0em",  fontWeight: "700", color: "var(--text-strong)" },
+  { tag: t.heading2, fontSize: "1.5em",  fontWeight: "700", color: "var(--text-strong)" },
+  { tag: t.heading3, fontSize: "1.25em", fontWeight: "600", color: "var(--text-strong)" },
+  { tag: t.heading4, fontSize: "1.0em",  fontWeight: "600", color: "var(--text-strong)" },
+  { tag: t.heading5, fontSize: "0.9em",  fontWeight: "600", color: "var(--text-strong)" },
+  { tag: t.heading6, fontSize: "0.85em", fontWeight: "600", color: "var(--text-weak)" },
+  // === 行内样式 ===
   { tag: t.strong,   fontWeight: "700" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.monospace, fontFamily: "var(--mono, Menlo, Consolas, monospace)",
-    background: "color-mix(in oklab, var(--text-base) 12%, transparent)",
+    background: "color-mix(in oklab, var(--text-base) 10%, transparent)",
     borderRadius: "3px", padding: "0 4px" },
   { tag: t.quote,    color: "var(--text-weak)", fontStyle: "italic" },
+  // === 链接 / 列表(白领高频结构跳出来)===
   { tag: t.url,      color: "var(--primary)", textDecoration: "underline" },
   { tag: t.link,     color: "var(--primary)" },
-  { tag: t.list,     color: "var(--primary)" },  // list marker(-、*、1.)染色
-  // 语法标记符弱化:# ** * ` 等,降低视觉噪音
-  { tag: t.processingInstruction, color: "var(--text-weak)", opacity: "0.55" },
+  { tag: t.list,     color: "var(--primary)" },  // list marker(-、*、1.)
+  // === 语法标记符温和弱化(白领还在学语法时别让他找不到 ** 或 #)===
+  { tag: t.processingInstruction, color: "var(--text-weak)", opacity: "0.7" },
   { tag: t.contentSeparator, color: "var(--text-weak)", opacity: "0.6" },
 ])
 
@@ -122,6 +134,18 @@ export const markdownSyntaxHighlight = Prec.high(syntaxHighlighting(markdownHigh
 ```
 
 加到 `getMarkdownExtensions()` 返回数组的**最前面**(优先级最高,Prec.high 进一步确保 tag 解析时它先匹配)。
+
+### CSS 补强:blockquote 左竖线(Word / Notion 标志性元素,可选)
+
+```css
+/* FORK: md-editing-iter-3 — blockquote 左竖线,跟 Notion / 飞书文档一致(可选) */
+[data-context="md-editor"] .cm-line:has(> .cm-quote, > .tok-quote) {
+  border-left: 3px solid var(--border-weak-base);
+  padding-left: 0.6em;
+}
+```
+
+CM6 token class 实际命名得实测(可能不是 `.tok-quote`);**首期先不做**,等 highlight 上线后看 user 反馈再补。
 
 ### 与 defaultHighlightStyle 共存机制
 
@@ -211,43 +235,54 @@ V1-V3 是验证级别测试,如果 Phase 1 e2e 基础设施好,补上;否则人�
 
 ## 需 user 拍板的决策点(实施前 confirm)
 
-### D1:行业基线对齐 vs 保守
+> **基线已由白领用户画像锁定**:GitHub MD CSS heading 比例 + iA Writer 源模式语法处理。下方 D1-D4 是"是否要在白领基线上再做微调"的开关,默认 **A/A/A/A** 即标准白领方案。
 
-| 选项 | heading1 字号 | 描述 |
+### D1:heading 比例档(白领基线 2.0/1.5/1.25/.../GitHub MD CSS)
+
+| 选项 | h1 / h2 / h3 / h4 / h5 / h6 | 描述 |
 |---|---|---|
-| A | **1.6em** | 行业典型(Markdown Preview Enhanced / VS Code preview)|
-| B | 1.4em | 保守,行高跳变小,但层次感弱一档 |
-| C | 1.3em | 更保守,适合长文档为主的 user |
+| A | **2.0 / 1.5 / 1.25 / 1.0 / 0.9 / 0.85em** | **白领标准**(GitHub MD CSS / Notion / 公众号 排版同款)|
+| B | 1.8 / 1.4 / 1.2 / 1.0 / 0.9 / 0.85em | 略保守(防 h1 在小屏占太大)|
+| C | 1.6 / 1.35 / 1.18 / 1.08 / 1.0 / 1.0em | **程序员风**(VS Code / Obsidian Source Mode 紧凑)— 不推荐 |
 
-**推荐**:A(1.6em)。理由:user 反馈"丑陋无层次"说明嫌当前太平,跳一档够。如果实测过头再降。
+**推荐**:A。GitHub/Notion 比例 user 已被训练 10 年,符合"copy 行业最大用户量方案"目标。
 
-### D2:语法标记符弱化程度(`# ** * ` ` 等)
+### D2:语法标记符(`# ** * ` ` 等)弱化档(白领基线 0.7)
 
 | 选项 | opacity | 描述 |
 |---|---|---|
-| A | **0.55** | 行业典型,标记符明显发灰但能看见 |
-| B | 0.7 | 保守,弱化少 |
-| C | 不弱化 | 跟字色一致 |
+| A | **0.7** | **白领标准**(iA Writer 同款)— 能看见但发灰,既学得到语法又不分散注意力 |
+| B | 0.55 | 程序员风(VS Code / Obsidian)— 不推荐,白领还在学 markdown 语法时太隐 |
+| C | 不弱化 | 标记符跟正文一样深 — 视觉太脏 |
 
-**推荐**:A(0.55)。
+**推荐**:A。
 
-### D3:list marker(`-`、`*`、`1.`)染色
+### D3:list marker(`-` `*` `1.`)染色
 
 | 选项 | 描述 |
 |---|---|
-| A | **染色** primary(蓝色)— 让列表结构跳出来 |
-| B | 跟字色一致 — 极简 |
+| A | **染 primary 蓝色** — Notion / 飞书文档同款,列表结构跳出来 |
+| B | 跟字色一致 — 极简但白领扫读慢 |
 
-**推荐**:A。理由:列表是 MD 高频结构,marker 跳出来扫读快。
+**推荐**:A。
 
 ### D4:CSS 段落间距增强(空行加高)
 
 | 选项 | 描述 |
 |---|---|
-| A | **不做**,首期只换 highlight 试效果 |
-| B | 做,空行 line height 加到 1.6em |
+| A | **首期不做**,只换 highlight 试效果 |
+| B | 做,空行 line-height 加到 1.6em |
 
-**推荐**:A。理由:iter-2 教训"调研再细实际用才能暴露真实摩擦",iter-3 先只动 highlight 一项,空行间距感受看 user 反馈再做 iter-3.1。
+**推荐**:A。iter-2 教训"调研再细实际用才能暴露真实摩擦",iter-3 先只动 highlight 一项,空行间距感受看 user 反馈再做 iter-3.1。
+
+### D5(新增):blockquote 左竖线(Word / Notion 标志性)
+
+| 选项 | 描述 |
+|---|---|
+| A | **首期不做**,只换 highlight,看 user 实际用 blockquote 频次 |
+| B | 做,加 3px 左竖线 + 缩进 |
+
+**推荐**:A。CSS 改动单独走,跟 highlight 解耦,可作 iter-3.1 跟进。
 
 ## 与既有 feat 关系
 
