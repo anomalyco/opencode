@@ -838,6 +838,13 @@ export const layer = Layer.effect(
                 },
               }),
             ),
+            Effect.catchCause((cause) => {
+              const squashed = Cause.squash(cause)
+              if (squashed instanceof DOMException && squashed.name === "AbortError") {
+                return halt(new DOMException("Aborted", "AbortError"))
+              }
+              return Effect.failCause(cause)
+            }),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
           )
