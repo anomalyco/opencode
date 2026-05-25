@@ -199,6 +199,7 @@ type CommentItem = {
   commentID?: string
   commentOrigin?: "review" | "file" | "quote"
   preview?: string
+  kind?: "chat" | "file"
 }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
@@ -256,6 +257,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         commentID: item.commentID,
         commentOrigin: item.commentOrigin,
         preview: item.preview,
+        kind: item.kind,
       })
     }
   }

@@ -17,6 +17,7 @@ type ContextFile = {
   commentID?: string
   commentOrigin?: "review" | "file" | "quote"
   preview?: string
+  kind?: "chat" | "file"
 }
 
 type BuildRequestPartsInput = {
@@ -154,6 +155,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
             selection: item.selection,
             comment,
             preview: item.preview,
+            kind: item.kind,
           }),
           synthetic: true,
           metadata: createCommentMetadata({
@@ -162,6 +164,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
             comment,
             preview: item.preview,
             origin: item.commentOrigin,
+            kind: item.kind,
           }),
         } satisfies PromptRequestPart,
       ]
