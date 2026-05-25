@@ -213,6 +213,21 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  it.effect("specific experimental flags override OPENCODE_EXPERIMENTAL", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+            OPENCODE_EXPERIMENTAL: "true",
+            OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "false",
+          }),
+        ),
+      )
+
+      expect(flags.experimentalIconDiscovery).toBe(false)
+    }),
+  )
+
   it.effect("experimentalOxfmt defaults to false", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
