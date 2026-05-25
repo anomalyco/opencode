@@ -11,25 +11,12 @@ import {
   type PromptResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect } from "effect"
+import * as ACPNextError from "./error"
 
 export const AuthMethodID = "opencode-login"
 
-export class UnknownAuthMethodError extends Schema.TaggedErrorClass<UnknownAuthMethodError>()(
-  "ACPNextUnknownAuthMethodError",
-  {
-    methodId: Schema.String,
-  },
-) {}
-
-export class UnsupportedOperationError extends Schema.TaggedErrorClass<UnsupportedOperationError>()(
-  "ACPNextUnsupportedOperationError",
-  {
-    method: Schema.String,
-  },
-) {}
-
-export type Error = UnknownAuthMethodError | UnsupportedOperationError
+export type Error = ACPNextError.Error
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -81,7 +68,7 @@ export function make(): Interface {
 
   const authenticate = Effect.fn("ACPNext.authenticate")(function* (params: AuthenticateRequest) {
     if (params.methodId !== AuthMethodID) {
-      return yield* new UnknownAuthMethodError({ methodId: params.methodId })
+      return yield* new ACPNextError.UnknownAuthMethodError({ methodId: params.methodId })
     }
     return {}
   })
@@ -90,13 +77,13 @@ export function make(): Interface {
     initialize,
     authenticate,
     newSession: Effect.fn("ACPNext.newSession")(function* (_input: NewSessionRequest) {
-      return yield* new UnsupportedOperationError({ method: "session/new" })
+      return yield* new ACPNextError.UnsupportedOperationError({ method: "session/new" })
     }),
     prompt: Effect.fn("ACPNext.prompt")(function* (_input: PromptRequest) {
-      return yield* new UnsupportedOperationError({ method: "session/prompt" })
+      return yield* new ACPNextError.UnsupportedOperationError({ method: "session/prompt" })
     }),
     cancel: Effect.fn("ACPNext.cancel")(function* (_input: CancelNotification) {
-      return yield* new UnsupportedOperationError({ method: "session/cancel" })
+      return yield* new ACPNextError.UnsupportedOperationError({ method: "session/cancel" })
     }),
   }
 }
