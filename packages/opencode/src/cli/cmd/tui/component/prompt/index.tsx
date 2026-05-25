@@ -29,7 +29,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign, expandPastedTextPlaceholders } from "./part"
-import { expand, has } from "./skill"
+import { expand, has, references } from "./skill"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -1322,7 +1322,36 @@ export function Prompt(props: PromptProps) {
       return
     }
 
+    const pasteStartOffset = input.visualCursor.offset
     input.insertText(normalizedText)
+
+    const validSkillNames = new Set((skills() ?? []).map((s) => s.name))
+    const skillRefs = references(normalizedText).filter((r) => validSkillNames.has(r.name))
+    for (const ref of skillRefs) {
+      const extmarkStart = pasteStartOffset + ref.start
+      const extmarkEnd = pasteStartOffset + ref.end
+      const extmarkId = input.extmarks.create({
+        start: extmarkStart,
+        end: extmarkEnd,
+        virtual: true,
+        styleId: skillStyleId,
+        typeId: promptPartTypeId,
+      })
+      setStore(
+        produce((draft) => {
+          const partIndex = draft.prompt.parts.length
+          draft.prompt.parts.push({
+            type: "text",
+            text: ref.value,
+            source: {
+              text: { start: extmarkStart, end: extmarkEnd, value: ref.value },
+              kind: "skill",
+            },
+          })
+          draft.extmarkToPartIndex.set(extmarkId, partIndex)
+        }),
+      )
+    }
 
     setTimeout(() => {
       if (!input || input.isDestroyed) return
