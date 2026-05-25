@@ -118,6 +118,17 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 import { TrellisTasksPanel } from "./layout/trellis-tasks-panel"
 
+const QUICK_ASSISTANT_DIR = "quick-assistant"
+
+function joinPath(root: string, child: string) {
+  const slash = /^[A-Za-z]:\\|\\\\/.test(root) || root.includes("\\") ? "\\" : "/"
+  return root.replace(/[\\/]+$/, "") + slash + child
+}
+
+function normalizeDirectory(value: string) {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+}
+
 export default function Layout(props: ParentProps) {
   type CurrentProject = LocalProject & {
     root: string
@@ -498,6 +509,10 @@ export default function Layout(props: ParentProps) {
             : language.t("notification.question.title")
         const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
         const directory = e.name
+        const quickAssistantDirectory = globalSync.data.path.config
+          ? normalizeDirectory(joinPath(globalSync.data.path.config, QUICK_ASSISTANT_DIR))
+          : ""
+        if (quickAssistantDirectory && normalizeDirectory(directory) === quickAssistantDirectory) return
         const props = e.details.properties
         if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
 

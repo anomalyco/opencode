@@ -52,6 +52,70 @@ const initial = {
   context: false,
 } satisfies Saved
 
+function quickAssistantConfig() {
+  return {
+    $schema: "https://opencode.ai/config.json",
+    instructions: [],
+    plugin: [],
+    skills: {
+      paths: [],
+      urls: [],
+    },
+    agent: {
+      build: {
+        permission: {
+          question: "deny",
+        },
+      },
+      plan: {
+        permission: {
+          question: "deny",
+        },
+      },
+    },
+  }
+}
+
+function patchQuickAssistantConfig(existing: string | null) {
+  if (existing === null) return JSON.stringify(quickAssistantConfig(), null, 2)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(existing)
+  } catch {
+    return undefined
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined
+  const root = parsed as Record<string, unknown>
+  const agent = root.agent && typeof root.agent === "object" && !Array.isArray(root.agent) ? root.agent : {}
+  const next = {
+    ...root,
+    agent: {
+      ...agent,
+      build: patchAgentQuestionDeny((agent as Record<string, unknown>).build),
+      plan: patchAgentQuestionDeny((agent as Record<string, unknown>).plan),
+    },
+  }
+  const text = JSON.stringify(next, null, 2)
+  return text === existing ? undefined : text
+}
+
+function patchAgentQuestionDeny(input: unknown) {
+  const agent = input && typeof input === "object" && !Array.isArray(input) ? input : {}
+  const permission =
+    (agent as Record<string, unknown>).permission &&
+    typeof (agent as Record<string, unknown>).permission === "object" &&
+    !Array.isArray((agent as Record<string, unknown>).permission)
+      ? (agent as Record<string, unknown>).permission
+      : {}
+  return {
+    ...(agent as Record<string, unknown>),
+    permission: {
+      ...(permission as Record<string, unknown>),
+      question: "deny",
+    },
+  }
+}
+
 function validModel(store: State, model: { providerID: string; modelID: string } | undefined) {
   if (!model) return true
   const provider = store.provider.all.find((item) => item.id === model.providerID)
@@ -272,23 +336,9 @@ export function QuickAssistant() {
     if (!platform.readConfigFile || !platform.writeConfigFile) return
     const file = join(next, "opencode.json")
     platform.readConfigFile(file).then((existing) => {
-      if (existing !== null) return
-      return platform.writeConfigFile!(
-        file,
-        JSON.stringify(
-          {
-            $schema: "https://opencode.ai/config.json",
-            instructions: [],
-            plugin: [],
-            skills: {
-              paths: [],
-              urls: [],
-            },
-          },
-          null,
-          2,
-        ),
-      )
+      const patched = patchQuickAssistantConfig(existing)
+      if (!patched) return
+      return platform.writeConfigFile!(file, patched)
     })
   })
 
@@ -553,6 +603,9 @@ export function QuickAssistant() {
         agent: pick.agent,
         model: pick.model,
         messageID,
+        tools: {
+          question: false,
+        },
         parts: [
           {
             id: part.id,
