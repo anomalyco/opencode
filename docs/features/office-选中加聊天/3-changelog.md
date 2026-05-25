@@ -10,13 +10,13 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 | 维度 | 值 |
 |---|---|
-| 状态 | v1 done(View 清单 e2e 留 backlog,等 Phase ③ infra ready) |
-| 起止 | 2026-05-24(单日完成 Steps 1-7,Step 8 user QA 待办)|
-| commit 数 | 8 笔 |
-| 净增行 | +1302 / -257 |
-| 改上游文件 | 0 个(wrapper 替代避开 R4 黑名单)|
-| R4 override | 0 笔 |
-| 测试 | 19 单测 pass(Logic 清单 ≥ 80%)|
+| 状态 | v1 done — 含 QA 跟进 #1-#4(View 清单 e2e 留 backlog,等 Phase ③ infra ready)|
+| 起止 | 2026-05-24 ~ 2026-05-25(2 天:首日交付 Steps 1-7,次日 QA 4 轮跟进打磨)|
+| commit 数 | 主交付 8 笔 + Follow-up R4 override 2 笔 + QA 跟进 #1-#4 共 ~16 笔 |
+| 净增行 | +1700 / -270(估算,含 QA 跟进集 + 诊断脚本)|
+| 改上游文件 | 0 个产品代码(全 fork-only 新文件或 wrapper);R4 override 在 packages/ui/pdf.tsx |
+| R4 override | 2 笔(TextLayerBuilder + `--total-scale-factor`,当季 2/2 配额满)|
+| 测试 | 72 单测 pass(Logic 清单 ≥ 80%)|
 
 ## 用户视角变化
 
@@ -41,6 +41,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## commit 链
 
+主交付(2026-05-24):
+
 | # | hash | type | 一句话 |
 |---|---|---|---|
 | 1 | `6e3eb2b3c` | docs | office-viewer-plan 加 AI agent 编辑路径段 + 引向需求池调研 |
@@ -51,6 +53,30 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | 6 | `9f0a73352` | refactor | chat-selection-menu 薄壳化 — UI 下沉到 ContextMenuHost |
 | 7 | `7749509d2` | feat | 跨页选区菜单 hint + 按钮 disabled + 三语 i18n |
 | 8 | `45f0e8a58` | feat | PDF/office 顶栏"用本机软件打开"按钮常驻 |
+| 9 | `6c797d27b` | docs | 3-changelog 填充 + INDEX/改动日志收录 |
+
+第 1 轮 QA 跟进(2026-05-25 上半天):
+
+| # | hash | type | 一句话 |
+|---|---|---|---|
+| 10 | `52734f9d9` | fix | PDF/office textLayer 加 select-text 启用选中 |
+| 11 | `899c0254b` | fix | pdf.tsx 加 endOfContent + .selecting hack(后续证实未生效,见 #12)|
+| 12 | `d5d27cb0b` | fix | pdf.tsx 换 TextLayerBuilder 正解 [override-blacklist] |
+| 13 | `a4aac3265` | test | CDP 自测脚本初版 |
+| 14 | `72b204d36` | fix | DomSelectionProvider 视觉 bbox 算法修视觉漏字 |
+| 15 | `5238f8d93` | fix | Host 提到 Session 顶层 + 拖拽中实时 overlay |
+| 16 | `33f4283d9` | fix | 视觉算法不再过滤 whitespace spans |
+| 17 | `58dd2be3d` | fix | rects 按行合并消除字间天窗 |
+| 18 | `648b79991` | fix | PDF/office 选区单色蓝(藏 native + overlay 改 chat 同色调)|
+
+第 2 轮 QA 跟进 #1-#4(2026-05-25 下半天,本笔):
+
+| # | hash | type | 一句话 |
+|---|---|---|---|
+| 19 | `ca09359e2` | fix | QA #1 — `--total-scale-factor` 修行末漏字 [override-blacklist] [bug-repro] |
+| 20-22 | `3564f54c6` | fix | QA #2-#4 合并(host.tsx + dom-provider.ts 同文件两轮修改,合一 commit;含 quote 卡片接线 11 文件)[bug-repro] |
+| 23 | `ea03331e9` | test | CDP 诊断 + 自测脚本集(16 个 mjs,QA 跟进诊断辅助)[large-diff]|
+| 24 | `<本笔>` | docs | 3-changelog QA #1-#4 段 + 经验沉淀 T1-T7 + 总览统计 / INDEX / 改动日志同步 |
 
 ## 关键设计决策回顾
 
@@ -186,11 +212,114 @@ backlog 项:
 
 (commit hash 落地后回填)
 
-### 教训沉淀
+---
 
-- R4 override 改前先**读高层 source**(TextLayerBuilder 源码),不要凭直觉拼下层 API
-- 类似"找上层 wrapper class"先 grep `class.*Builder` / `class.*Wrapper` 在所有子 entry(不只 build/pdf.mjs,也包含 web/、legacy/)
-- 复杂浏览器交互(选区、拖拽、focus)的"动态行为"通常需要 selectionchange / pointer 事件协同,不只是 CSS class 切换
+## Follow-up 第 2 轮 — 2026-05-25 QA 跟进 #1-#4
+
+第 1 轮 R4 override(TextLayerBuilder)修完 user 重测后又暴露 4 个问题,按发现顺序处理:
+
+### QA #1 — `--total-scale-factor` 修行末漏字(R4 override 第 2 笔,packages/ui/pdf.tsx)
+
+- `<待填>` fix: pdf-page-wrapper 创建时设 `--total-scale-factor` CSS var = viewport scale
+- **现象**:user 截图 "都可审计、可" / "署、私有化定制," / "不确定风险。" 三处**行末几字**没有蓝色 overlay 底色,但行中部分覆盖完整
+- **根因 4 层链**:
+  1. PDF.js 5.6.205 textLayer 通过 CSS var 体系算字号:`--text-scale-factor = --total-scale-factor × --min-font-size` → `font-size = --text-scale-factor × --font-height`(span 上 inline 设的)
+  2. 官方 `PDFPageView.setScale()` 内部会 `setProperty('--total-scale-factor', scale)`,我们手搓 `renderPage()` 漏了这步
+  3. var 未设 → CSS calc 失效 → font-size 走 browser fallback 13px(应为 16.5px)
+  4. span 宽度 = 文字按 13px 排出来的宽度,**比 canvas 实际渲染窄 ~20%** → 文字溢出 span 右边界,但 visual bbox 算法以 `span.getBoundingClientRect().right` 为界 → 行末漏盖
+- **诊断方法关键**:加 `outline:1px solid red` 给 textLayer span 然后截图肉眼对比 canvas 文字边界 → 一眼看出 textLayer 比 canvas 窄一截。**纯 DOM 数据看不出**(数据角度 span.right 跟 overlay.right 是吻合的,只是 textLayer 整体跟 canvas 不对齐)
+- **修法**:`wrap.style.setProperty("--total-scale-factor", String(scale))` 1 行
+- **验证**:CDP 实测 spanRight 从 1481→1617(覆盖 "私有化定制,"),overlay 完整覆盖 3 行末
+- **配额**:R4 第 2 笔(当季 2/2 满 — TextLayerBuilder + scale-factor)
+
+### QA #2 — pointerdown snapshot 修行间空白右键 collapse(host.tsx)
+
+- `<待填>` fix: host.tsx 加 pointerdown right-button snapshot + contextmenu fallback
+- **现象**:user 选中多行,右键落在**行与行之间的空白处** → 选区瞬间消失 + 菜单不弹
+- **根因**:WebView2(Chromium)默认行为:右键到非选区元素时把 caret 移到 click 位置 → selection collapse 成 0 长度。PDF textLayer 是绝对定位 spans,**行间空白不属任何 span**;user 视觉上看到 overlay 覆盖此处(我们 visual bbox union 整行 rect 算的),但 DOM 上不属选区 → 右键 collapse → contextmenu 触发时 live getSelection 已空 → menu 不接管
+- **修法**:
+  - 加 `onRightClickPointerDown`(button=2 时):**在 mousedown collapse 之前**snapshot 选区(text/rects/range/bbox + timestamp)
+  - `handleContextMenu` fallback:live 空 + snapshot < 500ms + 右键坐标落 snapshot bbox 内 → 用 snapshot,并 `addRange(snapshot.range)` 恢复 native selection
+  - bbox 容差 ±4px 处理边缘 click
+- **净改动**:~50 行,全在 host.tsx FORK 块内
+- **验证**:CDP 实测 — 行间 13.7px 空白右键,菜单 open + 按钮 enabled + selection 保留 329 chars
+
+### QA #3 — anchor/focus 修拖几行选中整页(dom-provider.ts)
+
+- `<待填>` fix: 视觉 bbox 改用 `sel.anchor/focus` caret 坐标,不用 `range.getClientRects()` bbox
+- **现象**:user 从段 2 line 1 "单一" 拖到段 2 line 4 "Claude"(4 行),overlay 扩到**整页**(title + 4 sections 全染蓝)
+- **根因**:PDF.js textLayer span 的 **DOM 顺序 ≠ 视觉顺序**(复杂 PDF 标题/段落在 PDF text stream 里乱序很常见)。`range.getClientRects()` 沿 DOM 顺序遍历返回 rects,把"DOM 在 anchor 与 focus 之间但视觉跨页"的 spans 全算进 bbox → bboxTop = title.top / bboxBottom = section4.bottom → 算法收所有 y 在 bbox 内 spans → 整页 overlay
+- **修法**:
+  - 用 `sel.anchorNode/anchorOffset` + `sel.focusNode/focusOffset` 算 caret rect(`createRange + setStart/End 同点 + getBoundingClientRect`)
+  - 用 anchor/focus 两点的 cy 作 bboxTop/bboxBottom(±2px 容差吃 caret 抖动)
+  - selStartX/selEndX 同样用 anchor/focus,按 cy 大小(同行按 x)排出真实 start/end
+  - fallback:anchor/focus 拿不到时落回 nativeRects bbox(罕见 — detached node)
+- **净改动**:~50 行,dom-provider.ts FORK 块内
+- **关键洞察**:`anchor/focus` 表达 user 真实意图(mousedown/mouseup 实际坐标),`range.getClientRects` 表达 DOM 解析结果。**user 意图维度更适合做视觉选区**,DOM 维度只在格式良序时才等价
+
+### QA #4 — `commentOrigin: "quote"` 改卡片形式 + 跳过 filePart(B 方案)
+
+- `<待填>` feat: PDF/office 选区不再塞 textarea 当 markdown blockquote,改为**卡片**(复用 `PromptContextItems`)+ LLM 端**只送选中文字 + 路径,绝不附二进制文件**
+- **现象**:user QA "复制文案,形势不好" — textarea 长 `> ...` blockquote 难看
+- **设计演进 3 步**:
+  1. **A1(初版,有缺陷)**— 复用 `FileContextItem` 走 `commentOrigin: "file"`,卡片 OK 但 `build-request-parts` 给 PDF 强制 `text/plain` mime,LLM read 工具读整个 docx/pdf 二进制 = utf-8 乱码塞 context
+  2. **C/D 备选驳回**— 多模态原生 PDF(只解 PDF,Office 不行,大文件爆 context);后台文本抽取(v1 infra 过大,v2 backlog)
+  3. **B 终版**— 加 `commentOrigin: "quote"` 子型,`build-request-parts` quote 分支 **跳过 filePart**,只 emit text part(`formatCommentNote` 已含选中文字 preview),格式无关 + token 干净
+- **修法 11 文件 ~80 行**:
+  - **核心 2 处**:
+    - `build-request-parts.ts` `isQuote` 分支 — `commentOrigin === "quote"` 时只回 text part,不附 file URL
+    - `host.tsx` `submitToChat` — PDF/office 选区(`m.sourcePath` 非空)→ `prompt.context.add({..., commentOrigin: "quote"})`,空 comment 兜底 `(see selected text)`(否则 formatCommentNote 漏 preview)
+  - **接线 2 处**:`file-tabs.tsx` pdf-viewer wrapper 加 `data-file-path={path()}` + `dom-provider.ts` `readPdfViewerFilePath` 透传到 `sourceMeta:{kind,path}`
+  - **类型扩展 7 处**(commentOrigin 加 "quote"):`comment-note.ts` / `prompt.tsx` / `prompt-input.tsx` / `submit.ts` / `history.ts` / `pages/session.tsx` / `pages/session/file-tabs.tsx`
+  - commentID = `quote-${textHash}-${ts}`(避免同 PDF 多次选区被 contextItemKey dedup)
+- **设计决策记录**(为何 B 而非 A1/C/D):user 选区意图 = 引用一段,**不是让 LLM 读全文**;quote 路径格式无关(PDF/DOCX/PPTX/XLSX 同套代码)+ token 干净 + context window 友好 + 未来加"展开周围段落"是平滑加法
+- **真实 LLM payload 验证**(SQLite `opencode.db` part 表):
+  - user message `msg_e5dcf5d3c001cislgCk0cdtzsq` 只含 2 个 text part(1 空 + 1 formatCommentNote),**0 个 file part** ✓
+  - LLM reasoning: "The user wants a one-sentence explanation of the selected text" — 正确理解意图
+  - input tokens 14358(主要 Claude Code system prompt 开销,**无 docx 二进制乱码**;若 A1 路径会膨胀到几十 K)
+
+### 经验沉淀(本次 2 天 4 轮 QA 提炼出的可复用教训)
+
+**T1 — R4 override 改前必须读官方"完整 side effect 链"**
+
+教训源:QA #1 scale-factor 漏设。第 1 笔 R4 用 TextLayerBuilder 时只读了 `builder.render()` 入口,没扫官方 `PDFPageView.setScale()` 的全套 side effect(CSS var / dataset / scrollIntoView 等)。下次改 pdf.tsx 应先 `grep -r "setProperty\|dataset\." node_modules/pdfjs-dist/web/` 把 setScale/setupSize 等钩子全 side effect 列出来 checklist 化。
+
+**T2 — DOM 顺序 ≠ 视觉顺序是 PDF.js textLayer 的根本特性,凡是"沿 range 走"的浏览器 API 都不可信**
+
+教训源:QA #3 整页选中。具体范围:
+- `range.getClientRects()` 沿 DOM 顺序遍历 → 跨视觉跳跃
+- 浏览器 native 蓝色高亮也沿 DOM 顺序 → 视觉中间漏字
+- `selection.toString()` 沿 DOM 顺序拼接 → 顺序可能乱
+
+**反向选 user 真实意图维度**:`sel.anchorNode/focusNode + offset` 反映 user 实际点击坐标,跟视觉强对应。改 PDF 选区相关功能默认用 anchor/focus,只有需要"linear DOM 顺序文字"时才用 range.
+
+**T3 — 浏览器选区相关行为必须考虑"事件链中默认行为何时发生"**
+
+教训源:QA #2 右键 collapse。WebView2/Chromium 默认在 mousedown 中处理 caret placement → selection collapse。我们的 contextmenu listener 在 mousedown 之后才触发 → 拿不到 collapse 前的状态。
+
+**通用模式**:涉及选区/拖拽/focus 的功能,在 `pointerdown` capture 阶段 snapshot,在 `contextmenu` / `click` / `dragstart` 中用 snapshot 兜底。
+
+**T4 — 架构选型时区分"复用一段代码"和"复用一条数据通路"**
+
+教训源:QA #4 A1→B 演进。A1 看着是"max reuse" 复用 FileContextItem,但其实那条数据通路(file URL → read tool → text/plain 全文)是为**代码评审**设计的,语义不匹配 PDF quote 场景。"复用 UI" 和 "复用语义通路" 是两件事:UI 可复用,语义通路必须每次重新审视。
+
+**判别原则**:看那条通路上的下游处理(read tool / mime 强制 / formatter)是否在你的输入数据形态下还做对的事。
+
+**T5 — 大模型应用要分清"user 引用一段问问题" vs "user 让模型读全文" 的根本不同**
+
+教训源:QA #4 B 方案 token 干净。前者只需要那段文字 + 用户问题;后者才需要附整个文件。**默认走前者**(token 便宜、context 不爆、格式无关),后者作为可 escalate 的扩展。这是 LLM 应用 UX 设计的基础区分,跟"全文 RAG vs 段落引用"是同一个二分。
+
+**T6 — CDP 自测脚本是真桌面 QA 的好补充但不是替代**
+
+本次 4 个 QA 全靠 user 真桌面截图反馈才发现:
+- CDP `Input.dispatchMouseEvent` 合成事件**不一定触发**所有 native default(如右键 collapse)
+- CDP 提供 DOM 数据真相,但不提供视觉/感知真相(scale-factor 错位看 DOM 数据看不出,看截图才能看出)
+
+**结论**:CDP 自测能验"算法逻辑/数据流",真桌面 QA 必须验"视觉/感知/native 行为"。两者互补不替代。
+
+**T7 — 调研撞墙 3 次没新信息立刻换层面(memory 已存)**
+
+本次实战:QA #1 scale-factor 调研时,先连截 3 张 x-marker 截图都没定位根因,卡在"dump 数 vs 视觉数不一致"上。第 4 步切换到 source-level — 直接看 pdf.tsx 怎么调 TextLayerBuilder → 翻 pdfjs-dist CSS → 找 CSS var → 立刻定位。**降一层(从数据维度切到源码维度)才有突破**。
 
 ---
 
