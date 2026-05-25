@@ -1,6 +1,6 @@
 # ADR-0001: Refuse to start without `OPENCODE_SERVER_PASSWORD`; authenticate `/preview/*`
 
-- Status: Accepted (Phase 3: per-collab-session internal token for executor self-fetches)
+- Status: Accepted (Phase 4: boot-time LLM-auth presence check)
 - Date: 2026-05-21
 - Implemented: 2026-05-22 (password enforcement in commit `ed22169b0`;
   preview proxy auth + cookie-or-basic auth gate in commit
@@ -11,6 +11,34 @@
 - Phase 3 amended: 2026-05-25 — collab executor's self-fetches to the
   native HttpApi authenticate with a per-collab-session internal token
   instead of the shared server password.
+- Phase 4 amended: 2026-05-25 — `serve.ts` fail-fast aborts boot in
+  collab production when neither a real `ANTHROPIC_API_KEY` nor a
+  `~/.claude/.credentials.json` file is present.  The literal sentinel
+  `"dummy"` is treated as missing.
+
+## Phase 4 — boot-time LLM-auth presence check (utils deployment)
+
+A subtle failure mode emerged after Phase 3: with `ANTHROPIC_API_KEY=dummy`
+(the docker-compose placeholder) carried into ECS and the `claude_credentials`
+secret holding **expired** OAuth tokens, opencode booted cleanly, accepted
+sessions, created native sessions, then failed on the *first* LLM call with
+an opaque `invalid x-api-key` from `api.anthropic.com`.  The plugin's
+"credentials expired" log appeared minutes before the failure, but nothing
+linked the two for the operator.
+
+The fix moves detection to boot:
+
+- `packages/opencode/src/cli/cmd/serve.ts` checks, in
+  `isCollabMode && NODE_ENV === "production"`:
+  - `hasRealApiKey = ANTHROPIC_API_KEY !== "" && ANTHROPIC_API_KEY !== "dummy"`
+  - `hasClaudeCreds = await Bun.file($HOME/.claude/.credentials.json).exists()`
+- If neither is true, log a clear FATAL message naming both remediation
+  paths and `process.exit(1)`.  ECS treats the exit as a task failure and
+  re-attempts — operators see the FATAL line in CloudWatch instead of
+  cryptic 401s under load.
+- Presence-only check.  Token *freshness* still surfaces as a runtime
+  plugin error (`Claude credentials are expired and could not be refreshed`)
+  — a boot-time refresh probe is deferred to a future phase.
 
 ## Phase 3 — per-collab-session internal token (utils deployment)
 

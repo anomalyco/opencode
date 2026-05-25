@@ -384,7 +384,9 @@ Common gotchas you'll see in the logs if anything's misconfigured:
 | `[collab.auth] GitHub returned an OAuth error: redirect_uri_mismatch` | OAuth App callback ≠ `OPENCODE_BASE_URL` | Fix the URL in the GitHub OAuth App |
 | `[collab.auth] code exchange failed` | `GITHUB_OAUTH_CLIENT_*` env mismatch | Re-check the secret values |
 | `[collab.auth] org membership denied` | User isn't a public unleashlive member, or PAT lacks `read:org` | Public the membership, or rotate the PAT |
-| `[collab] failed to create native session` | Anthropic key invalid | Check `ANTHROPIC_API_KEY` secret |
+| `[collab] failed to create native session` | Anthropic key invalid | Check `ANTHROPIC_API_KEY` secret (real `sk-ant-...`, not `dummy`) or refresh `CLAUDE_CREDENTIALS_JSON` |
+| `opencode-claude-auth: Claude credentials are expired` | Claude OAuth refresh token rejected | Re-dump on a Mac (`security find-generic-password -s "Claude Code-credentials" -w`) and `put-secret-value` to `collab/claude_credentials`, then `aws ecs update-service --force-new-deployment` |
+| `FATAL: no LLM auth configured in collab production` | Neither `ANTHROPIC_API_KEY` (real) nor `~/.claude/.credentials.json` present at boot | Set one of them.  The literal string `"dummy"` is treated as missing (ADR-0001 Phase 4) |
 
 ---
 
@@ -407,15 +409,37 @@ Common gotchas you'll see in the logs if anything's misconfigured:
 
 ### How Claude credentials are supplied
 
-Three paths, ranked by suitability for a server deployment:
+Two paths, ranked by suitability for a server deployment:
 
 | | Path | When to pick |
 |---|---|---|
-| ✅ **Recommended** | `ANTHROPIC_API_KEY` env var (via Secrets Manager) | Production.  Stable, no rotation hassle, billed centrally to the unleashlive Anthropic account.  Bypasses the `opencode-claude-auth` plugin entirely — opencode sees a non-empty API key and uses it directly. |
-| ⚠️ Possible | Bake Claude Code creds into a Secret, write to `/root/.claude/.credentials.json` from an entrypoint shim on container start | If you specifically want to use someone's Claude Pro/Max subscription.  Tokens are short-lived so you'll be re-uploading every few weeks. |
-| ❌ Don't | Bind-mount from the host like local dev | Impossible on Fargate (no host filesystem). |
+| ✅ **Recommended (utils / dev)** | Claude Code creds via `CLAUDE_CREDENTIALS_JSON` Secrets Manager entry; `scripts/entrypoint.sh` writes the JSON to `~/.claude/.credentials.json` on container start; the pre-installed `opencode-claude-auth` plugin reads it at runtime.  No `ANTHROPIC_API_KEY` env in the task definition.  Billed to whoever's Claude Pro/Max subscription the creds belong to.  Tokens last a few weeks; rotate by re-dumping. |
+| ⚠️ For metered $ access | `ANTHROPIC_API_KEY` env var (via Secrets Manager) holding a real `sk-ant-...` key.  Set `manage_anthropic_api_key_secret = true` in the terraform module to opt in.  Bypasses the plugin — opencode sees a non-empty key and uses it directly. |
+| ❌ Don't | Set `ANTHROPIC_API_KEY=dummy` in production.  ADR-0001 Phase 4 treats `"dummy"` as missing and fail-fast aborts the boot.  The string only exists as a docker-compose placeholder for local dev where the bind-mounted plugin takes over. |
 
-The local `docker-compose.yml` setting `ANTHROPIC_API_KEY=dummy` exists *only* to let the opencode provider loader accept a non-empty value so the bind-mounted Claude Code plugin can take over.  In ECS we replace that dummy with the real API key and the plugin is a no-op.
+**Rotating Claude credentials** (utils path) — every few weeks:
+
+```bash
+# On a Mac with active Claude Code login:
+CREDS=$(security find-generic-password -s "Claude Code-credentials" -w)
+aws secretsmanager put-secret-value \
+  --secret-id collab/claude_credentials \
+  --secret-string "$CREDS" \
+  --profile unleash-utils --region ap-southeast-2
+
+# Force ECS to restart the task so it re-reads the secret:
+aws ecs update-service \
+  --cluster opencode-collab --service opencode-collab \
+  --force-new-deployment \
+  --profile unleash-utils --region ap-southeast-2
+
+# Watch the rollout finish:
+aws ecs wait services-stable \
+  --cluster opencode-collab --services opencode-collab \
+  --profile unleash-utils --region ap-southeast-2
+```
+
+If you see `opencode-claude-auth: Claude credentials are expired and could not be refreshed` in the logs, that's the signal — the refresh token has aged out and a fresh dump is required.
 
 ---
 

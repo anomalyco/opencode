@@ -78,17 +78,18 @@ OPENCODE_BASE_URL=https://YOUR-NGROK-ID.ngrok-free.dev
 SESSION_SECRET=...
 
 # LLM credentials — one of:
-ANTHROPIC_API_KEY=sk-ant-...   # Option A: API key
-# Option B: Claude Code subscription — see "Credentials" section below
+# Option A (default): Claude Code subscription — see "Credentials" section below
+# Option B: API key (metered $)
+# ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### LLM credentials: two options
 
-#### Option A — Anthropic API key (recommended for production)
-Set `ANTHROPIC_API_KEY` in `.env`. All LLM costs are billed to that key.
+#### Option A — Claude Code subscription (recommended)
+Leave `ANTHROPIC_API_KEY` unset (or absent from `.env`). The server uses the `opencode-claude-auth` plugin (already configured in the Docker image).
+In production (ECS) the literal placeholder `ANTHROPIC_API_KEY=dummy` is **rejected** — ADR-0001 Phase 4 treats `"dummy"` as missing and refuses to boot.
 
-#### Option B — Claude Code subscription
-Leave `ANTHROPIC_API_KEY` empty. The server uses the `opencode-claude-auth` plugin (already configured in the Docker image). On macOS, extract your credentials once:
+On macOS, extract your credentials once:
 
 ```bash
 # Run on the Mac that runs Docker:
@@ -98,6 +99,9 @@ security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.cred
 The `docker-compose.yml` bind-mounts `~/.claude/.credentials.json` into the container (read-only). If the token expires, run the command again — no container restart needed.
 
 > **Important:** This shares *your* Claude subscription with the server — all LLM usage is billed to your account. Teammates do not need and cannot use their own Claude subscriptions through this path. If you want per-user billing, use the API key option with an org-level key.
+
+#### Option B — Anthropic API key (metered $)
+Set `ANTHROPIC_API_KEY=sk-ant-...` in `.env`. All LLM costs are billed to that key. The presence of a non-empty, non-`"dummy"` value bypasses the `opencode-claude-auth` plugin entirely.
 
 ---
 
