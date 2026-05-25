@@ -42,7 +42,7 @@ const CheckSmall = () => (
 
 export type SelectV2Props<T> = Omit<
   ComponentProps<typeof Kobalte<T, { category: string; options: T[] }>>,
-  "value" | "onChange" | "children" | "options" | "itemComponent" | "sectionComponent" | "defaultValue" | "multiple"
+  "value" | "onSelect" | "children" | "options" | "itemComponent" | "sectionComponent" | "defaultValue" | "multiple"
 > & {
   placeholder?: string
   options: T[]
@@ -58,6 +58,7 @@ export type SelectV2Props<T> = Omit<
   invalid?: boolean
   numeric?: boolean
   children?: (item: T) => JSX.Element
+  valueClass?: string
 }
 
 export function SelectV2<T>(props: SelectV2Props<T>) {
@@ -78,6 +79,7 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
     "invalid",
     "numeric",
     "disabled",
+    "valueClass",
   ])
 
   const state: { key?: string; cleanup?: void | (() => void) } = {}
@@ -172,7 +174,7 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
         }}
       >
         <div data-slot="select-v2-value">
-          <Kobalte.Value<T> data-slot="select-v2-value-text">
+          <Kobalte.Value<T> data-slot="select-v2-value-text" class={local.valueClass}>
             {(st) => {
               const selected = st.selectedOption()
               if (local.label && selected != null) return local.label(selected)

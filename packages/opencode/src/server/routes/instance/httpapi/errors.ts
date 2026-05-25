@@ -122,6 +122,59 @@ export class SessionBusyError extends Schema.TaggedErrorClass<SessionBusyError>(
   { httpApiStatus: 409 },
 ) {}
 
+export class QuestionNotFoundError extends Schema.TaggedErrorClass<QuestionNotFoundError>()(
+  "QuestionNotFoundError",
+  {
+    requestID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PermissionNotFoundError extends Schema.TaggedErrorClass<PermissionNotFoundError>()(
+  "PermissionNotFoundError",
+  {
+    requestID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class McpServerNotFoundError extends Schema.TaggedErrorClass<McpServerNotFoundError>()(
+  "McpServerNotFoundError",
+  {
+    name: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>()(
+  "PtyNotFoundError",
+  {
+    ptyID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class PtyForbiddenError extends Schema.TaggedErrorClass<PtyForbiddenError>()(
+  "PtyForbiddenError",
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 403 },
+) {}
+
+export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoundError>()(
+  "ProjectNotFoundError",
+  {
+    projectID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class ApiNotFoundError extends Schema.ErrorClass<ApiNotFoundError>("NotFoundError")(
   {
     name: Schema.Literal("NotFoundError"),

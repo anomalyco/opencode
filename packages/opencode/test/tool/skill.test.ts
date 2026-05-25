@@ -1,5 +1,5 @@
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -87,6 +87,46 @@ Use this skill.
         expect(result.output).toContain(`<skill_content name="tool-skill">`)
         expect(result.output).toContain(`Base directory for this skill: ${pathToFileURL(skill).href}`)
         expect(result.output).toContain(`<file>${file}</file>`)
+      }),
+    ),
+  )
+
+  it.live("execute preserves not found message", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const home = process.env.OPENCODE_TEST_HOME
+        process.env.OPENCODE_TEST_HOME = dir
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            process.env.OPENCODE_TEST_HOME = home
+          }),
+        )
+
+        const registry = yield* ToolRegistry.Service
+        const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+        const tool = (yield* registry.tools({
+          providerID: "opencode" as any,
+          modelID: "gpt-5" as any,
+          agent,
+        })).find((tool) => tool.id === SkillTool.id)
+        if (!tool) throw new Error("Skill tool not found")
+
+        const exit = yield* tool
+          .execute(
+            { name: "missing-skill" },
+            {
+              ...baseCtx,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(Error)
+          if (error instanceof Error) expect(error.message).toContain('Skill "missing-skill" not found.')
+        }
       }),
     ),
   )

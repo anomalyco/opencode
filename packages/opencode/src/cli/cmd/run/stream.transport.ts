@@ -62,6 +62,8 @@ type Trace = {
   write(type: string, data?: unknown): void
 }
 
+const StreamClosed = undefined as never
+
 type StreamInput = {
   sdk: OpencodeClient
   directory?: string
@@ -418,12 +420,12 @@ function createLayer(input: StreamInput) {
             ),
             (events) =>
               Effect.sync(() => {
-                void events.stream.return(undefined).catch(() => {})
+                void events.stream.return(StreamClosed).catch(() => {})
               }),
           ),
         )
         closeStream = () => {
-          void events.stream.return(undefined).catch(() => {})
+          void events.stream.return(StreamClosed).catch(() => {})
         }
         input.trace?.write("recv.subscribe", {
           sessionID: input.sessionID,
