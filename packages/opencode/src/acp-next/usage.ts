@@ -85,9 +85,9 @@ export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
   return MessageLoader.of({
     messages: (input) =>
       Effect.promise(() =>
-        sdk.session.messages({ sessionID: input.sessionID, directory: input.directory }, { throwOnError: true }).then(
-          (response) => response.data ?? [],
-        ),
+        sdk.session
+          .messages({ sessionID: input.sessionID, directory: input.directory }, { throwOnError: true })
+          .then((response) => response.data ?? []),
       ),
   })
 }
@@ -102,8 +102,7 @@ export function buildUsage(message: AssistantTokenCost): Usage {
   return {
     inputTokens: message.tokens.input,
     outputTokens: message.tokens.output,
-    totalTokens:
-      message.tokens.input + message.tokens.output + thoughtTokens + cachedReadTokens + cachedWriteTokens,
+    totalTokens: message.tokens.input + message.tokens.output + thoughtTokens + cachedReadTokens + cachedWriteTokens,
     ...(thoughtTokens > 0 ? { thoughtTokens } : {}),
     ...(cachedReadTokens > 0 ? { cachedReadTokens } : {}),
     ...(cachedWriteTokens > 0 ? { cachedWriteTokens } : {}),
@@ -186,7 +185,7 @@ export const layer = Layer.effect(
       readonly providerID: ProviderID
       readonly modelID: ModelID
     }) {
-      return yield* (yield* cachedLimit(input))
+      return yield* yield* cachedLimit(input)
     })
 
     const sendUpdate = Effect.fn("ACPNextUsage.sendUpdate")(function* (input: {
