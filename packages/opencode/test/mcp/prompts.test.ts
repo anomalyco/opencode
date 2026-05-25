@@ -30,7 +30,8 @@ mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }))
 
 const { MCP } = await import("../../src/mcp/index")
-const { Instance } = await import("../../src/project/instance")
+const { AppRuntime } = await import("../../src/effect/app-runtime")
+const { InstanceStore } = await import("../../src/project/instance-store")
 const { tmpdir } = await import("../fixture/fixture")
 
 beforeEach(() => {
@@ -49,12 +50,17 @@ test("skips clients that do not support prompts/list", async () => {
     },
   })
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      expect(await MCP.prompts()).toEqual({})
-      expect(await MCP.prompts()).toEqual({})
-      expect(calls).toBe(1)
-    },
-  })
+  const readPrompts = () =>
+    AppRuntime.runPromise(
+      InstanceStore.Service.use((store) =>
+        store.provide(
+          { directory: tmp.path },
+          MCP.Service.use((mcp) => mcp.prompts()),
+        ),
+      ),
+    )
+
+  expect(await readPrompts()).toEqual({})
+  expect(await readPrompts()).toEqual({})
+  expect(calls).toBe(2)
 })

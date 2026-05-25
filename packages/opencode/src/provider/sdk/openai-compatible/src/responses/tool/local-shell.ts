@@ -1,4 +1,7 @@
-import { createProviderDefinedToolFactoryWithOutputSchema } from "@ai-sdk/provider-utils"
+import {
+  createProviderToolFactoryWithOutputSchema as createProviderDefinedToolFactoryWithOutputSchema,
+  zodSchema,
+} from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 export const localShellInputSchema = z.object({
@@ -59,7 +62,6 @@ export const localShell = createProviderDefinedToolFactoryWithOutputSchema<
   {}
 >({
   id: "openai.local_shell",
-  name: "local_shell",
-  inputSchema: localShellInputSchema,
-  outputSchema: localShellOutputSchema,
+  inputSchema: (zodSchema as any)(localShellInputSchema),
+  outputSchema: (zodSchema as any)(localShellOutputSchema),
 })

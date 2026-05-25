@@ -22,7 +22,7 @@ function legacySessionID() {
   return crypto.randomUUID() as SessionID
 }
 
-function seed(opts: { id: SessionID; dir: string; project: ProjectID; created?: number; updated?: number }) {
+function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
   const now = Date.now()
   Database.use((db) =>
     db
@@ -34,8 +34,8 @@ function seed(opts: { id: SessionID; dir: string; project: ProjectID; created?: 
         directory: opts.dir,
         title: "test",
         version: "0.0.0-test",
-        time_created: opts.created ?? now,
-        time_updated: opts.updated ?? now,
+        time_created: now,
+        time_updated: now,
       })
       .run(),
   )
@@ -87,36 +87,13 @@ describe("migrateFromGlobal", () => {
     }),
   )
 
-  test("preserves session updated time while migrating project ID", async () => {
-    await using tmp = await tmpdir()
-    await $`git init`.cwd(tmp.path).quiet()
-    await $`git config user.name "Test"`.cwd(tmp.path).quiet()
-    await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
-    const { project: pre } = await Project.fromDirectory(tmp.path)
-    expect(pre.id).toBe(ProjectID.global)
-
-    const id = uid()
-    const created = new Date("2026-01-30T00:00:00.000Z").getTime()
-    const updated = new Date("2026-01-30T00:30:00.000Z").getTime()
-    seed({ id, dir: tmp.path, project: ProjectID.global, created, updated })
-
-    await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
-
-    const { project: real } = await Project.fromDirectory(tmp.path)
-    expect(real.id).not.toBe(ProjectID.global)
-
-    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
-    expect(row).toBeDefined()
-    expect(row!.project_id).toBe(real.id)
-    expect(row!.time_created).toBe(created)
-    expect(row!.time_updated).toBe(updated)
-  })
-
-  test("migrates global sessions even when project row already exists", async () => {
-    // 1. Create a repo with a commit — real project ID created immediately
-    await using tmp = await tmpdir({ git: true })
-    const { project } = await Project.fromDirectory(tmp.path)
-    expect(project.id).not.toBe(ProjectID.global)
+  it.live("migrates global sessions even when project row already exists", () =>
+    Effect.gen(function* () {
+      // 1. Create a repo with a commit — real project ID created immediately
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const { project } = yield* projects.fromDirectory(tmp)
+      expect(project.id).not.toBe(ProjectID.global)
 
       // 2. Ensure "global" project row exists (as it would from a prior no-git session)
       yield* Effect.sync(() => ensureGlobal())

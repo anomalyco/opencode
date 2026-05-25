@@ -171,20 +171,18 @@ describe("step-finish token propagation via Bus event", () => {
 })
 
 describe("session archive state", () => {
-  test("can clear archived time with null", async () => {
-    await Instance.provide({
-      directory: projectRoot,
-      fn: async () => {
-        const session = await Session.create({})
+  it.instance("can clear archived time with null", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const info = yield* session.create({})
 
-        await Session.setArchived({ sessionID: session.id, time: Date.now() })
-        expect((await Session.get(session.id)).time.archived).toBeDefined()
+      yield* session.setArchived({ sessionID: info.id, time: Date.now() })
+      expect((yield* session.get(info.id)).time.archived).toBeDefined()
 
-        await Session.setArchived({ sessionID: session.id, time: null as never })
-        expect((await Session.get(session.id)).time.archived).toBeUndefined()
+      yield* session.setArchived({ sessionID: info.id, time: null })
+      expect((yield* session.get(info.id)).time.archived).toBeUndefined()
 
-        await Session.remove(session.id)
-      },
-    })
-  })
+      yield* session.remove(info.id)
+    }),
+  )
 })

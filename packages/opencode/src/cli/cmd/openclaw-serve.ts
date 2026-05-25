@@ -1,10 +1,12 @@
-import { cmd } from "./cmd"
+import { Effect } from "effect"
+import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { OpenClawBridge } from "@/openclaw/bridge"
 
-export const OpenClawServeCommand = cmd({
+export const OpenClawServeCommand = effectCmd({
   command: "openclaw-serve",
   describe: "start an OpenClaw gateway adapter server",
+  instance: false,
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .option("gateway-url", {
@@ -25,8 +27,8 @@ export const OpenClawServeCommand = cmd({
         type: "string",
         describe: "OpenClaw gateway token",
       }),
-  handler: async (args) => {
-    const net = await resolveNetworkOptions(args)
+  handler: Effect.fn("Cli.openclawServe")(function* (args) {
+    const net = yield* resolveNetworkOptions(args)
     const url = args.gatewayUrl || `ws://${args.gatewayHost}:${args.gatewayPort}`
     const token = args.gatewayToken || process.env.OPENCLAW_GATEWAY_TOKEN
     const server = OpenClawBridge.listen({
@@ -39,7 +41,6 @@ export const OpenClawServeCommand = cmd({
       },
     })
     console.log(`openclaw adapter listening on http://${server.hostname}:${server.port}`)
-    await new Promise(() => {})
-    await server.stop()
-  },
+    yield* Effect.never.pipe(Effect.ensuring(Effect.promise(() => server.stop())))
+  }),
 })

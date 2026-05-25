@@ -4,7 +4,7 @@ import {
   type LanguageModelV2ToolCallPart,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
-import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
+import { convertToBase64, parseProviderOptions, zodSchema } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types"
 import { localShellInputSchema, localShellOutputSchema } from "./tool/local-shell"
@@ -253,11 +253,11 @@ export async function convertToOpenAIResponsesInput({
             }
 
             case "reasoning": {
-              const providerOptions = await parseProviderOptions({
+              const providerOptions = (await parseProviderOptions({
                 provider: "openai",
                 providerOptions: part.providerOptions,
-                schema: openaiResponsesReasoningProviderOptionsSchema,
-              })
+                schema: (zodSchema as any)(openaiResponsesReasoningProviderOptionsSchema),
+              })) as OpenAIResponsesReasoningProviderOptions | undefined
 
               const reasoningId = providerOptions?.itemId
 

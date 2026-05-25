@@ -1,13 +1,13 @@
 import path from "path"
-import os from "os"
-import { Global } from "../global"
-import { Filesystem } from "../util/filesystem"
-import { Config } from "../config/config"
-import { Instance } from "../project/instance"
-import { Flag } from "@/flag/flag"
-import { QuickAssistant } from "@/quick-assistant"
-import { Log } from "../util/log"
-import { Glob } from "../util/glob"
+import { Effect, Layer, Context } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { withTransientReadRetry } from "@/util/effect-http-client"
+import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -106,11 +106,10 @@ export const layer: Layer.Layer<
       s.claims.delete(messageID)
     })
 
-  export async function systemPaths() {
-    if (QuickAssistant.active(Instance.directory)) return new Set<string>()
-
-    const config = await Config.get()
-    const paths = new Set<string>()
+    const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
+      const config = yield* cfg.get()
+      const ctx = yield* InstanceState.context
+      const paths = new Set<string>()
 
       for (const file of globalFiles) {
         if (yield* fs.existsSafe(file)) {
@@ -119,104 +118,33 @@ export const layer: Layer.Layer<
         }
       }
 
-    for (const file of globalFiles()) {
-      if (await Filesystem.exists(file)) {
-        paths.add(path.resolve(file))
-        break
-      }
-    }
-
-    if (config.instructions) {
-      for (let instruction of config.instructions) {
-        if (instruction.startsWith("https://") || instruction.startsWith("http://")) continue
-        if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
-        }
-        const matches = path.isAbsolute(instruction)
-          ? await Glob.scan(path.basename(instruction), {
-              cwd: path.dirname(instruction),
-              absolute: true,
-              include: "file",
-            }).catch(() => [])
-          : await resolveRelative(instruction)
-        matches.forEach((p) => {
-          paths.add(path.resolve(p))
-        })
-      }
-    }
-
-    return paths
-  }
-
-  export async function system() {
-    if (QuickAssistant.active(Instance.directory)) return []
-
-    const config = await Config.get()
-    const paths = await systemPaths()
-
-    const files = Array.from(paths).map(async (p) => {
-      const content = await Filesystem.readText(p).catch(() => "")
-      return content ? "Instructions from: " + p + "\n" + content : ""
-    })
-
-    const urls: string[] = []
-    if (config.instructions) {
-      for (const instruction of config.instructions) {
-        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
-          urls.push(instruction)
-        }
-      }
-    }
-    const fetches = urls.map((url) =>
-      fetch(url, { signal: AbortSignal.timeout(5000) })
-        .then((res) => (res.ok ? res.text() : ""))
-        .catch(() => "")
-        .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
-    )
-
-    return Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
-  }
-
-  export function loaded(messages: MessageV2.WithParts[]) {
-    const paths = new Set<string>()
-    for (const msg of messages) {
-      for (const part of msg.parts) {
-        if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
-          if (part.state.time.compacted) continue
-          const loaded = part.state.metadata?.loaded
-          if (!loaded || !Array.isArray(loaded)) continue
-          for (const p of loaded) {
-            if (typeof p === "string") paths.add(p)
+      // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
+      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+        for (const file of instructionFiles) {
+          const matches = yield* fs
+            .findUp(file, ctx.directory, ctx.worktree)
+            .pipe(Effect.catch(() => Effect.succeed([])))
+          if (matches.length > 0) {
+            matches.forEach((item) => paths.add(path.resolve(item)))
+            break
           }
         }
       }
 
-  export async function find(dir: string) {
-    for (const file of FILES) {
-      const filepath = path.resolve(path.join(dir, file))
-      if (await Filesystem.exists(filepath)) return filepath
-    }
-  }
-
-  export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
-    if (QuickAssistant.active(Instance.directory)) return []
-
-    const system = await systemPaths()
-    const already = loaded(messages)
-    const results: { filepath: string; content: string }[] = []
-
-    const target = path.resolve(filepath)
-    let current = path.dirname(target)
-    const root = path.resolve(Instance.directory)
-
-    while (current.startsWith(root) && current !== root) {
-      const found = await find(current)
-
-      if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
-        claim(messageID, found)
-        const content = await Filesystem.readText(found).catch(() => undefined)
-        if (content) {
-          results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
+      if (config.instructions) {
+        for (const raw of config.instructions) {
+          if (raw.startsWith("https://") || raw.startsWith("http://")) continue
+          const instruction = raw.startsWith("~/") ? path.join(global.home, raw.slice(2)) : raw
+          const matches = yield* (
+            path.isAbsolute(instruction)
+              ? fs.glob(path.basename(instruction), {
+                  cwd: path.dirname(instruction),
+                  absolute: true,
+                  include: "file",
+                })
+              : relative(instruction)
+          ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          matches.forEach((item) => paths.add(path.resolve(item)))
         }
       }
 

@@ -1,7 +1,7 @@
 import { Plugin } from "../plugin"
 import { Format } from "../format"
-import { LSP } from "../lsp"
-import { FileWatcher } from "../file/watcher"
+import { LSP } from "@/lsp/lsp"
+import { File } from "../file"
 import { Snapshot } from "../snapshot"
 import * as Project from "./project"
 import * as Vcs from "./vcs"
@@ -14,44 +14,8 @@ import { Config } from "@/config/config"
 import { Service } from "./bootstrap-service"
 import { Reference } from "@/reference/reference"
 
-export async function InstanceBootstrap() {
-  const log = Log.create({ service: "instance.bootstrap" })
-  const all = Date.now()
-  const run = async (name: string, fn: () => Promise<unknown> | unknown) => {
-    const at = Date.now()
-    await fn()
-    log.info("instance.bootstrap", {
-      directory: Instance.directory,
-      projectID: Instance.project.id,
-      step: name,
-      duration: Date.now() - at,
-    })
-  }
-
-  log.info("instance.bootstrap", {
-    directory: Instance.directory,
-    projectID: Instance.project.id,
-    step: "start",
-  })
-  await run("plugin", () => Plugin.init())
-  ShareNext.init()
-  log.info("instance.bootstrap", {
-    directory: Instance.directory,
-    projectID: Instance.project.id,
-    step: "share",
-    duration: 0,
-  })
-  await run("format", () => Format.init())
-  await run("lsp", () => LSP.init())
-  await run("watcher", () => FileWatcher.init())
-  await run("vcs", () => Vcs.init())
-  await run("snapshot", () => Snapshot.init())
-  log.info("instance.bootstrap", {
-    directory: Instance.directory,
-    projectID: Instance.project.id,
-    step: "total",
-    duration: Date.now() - all,
-  })
+export { Service } from "./bootstrap-service"
+export type { Interface } from "./bootstrap-service"
 
 export const layer = Layer.effect(
   Service,

@@ -13,9 +13,12 @@ import { UI } from "./cli/ui"
 import { Installation } from "./installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { Filesystem } from "@/util/filesystem"
+import { errorMessage } from "@/util/error"
+import { isRecord } from "@/util/record"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -34,10 +37,23 @@ import { DbCommand } from "./cli/cmd/db"
 import { OpenClawServeCommand } from "./cli/cmd/openclaw-serve"
 import { ExtraAgentServeCommand } from "./cli/cmd/extra-agent-serve"
 import path from "path"
-import { Global } from "./global"
+import { Global } from "@opencode-ai/core/global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { Heap } from "./cli/heap"
+import { drizzle } from "drizzle-orm/bun-sqlite"
+
+function isResolveMessage(value: unknown): value is {
+  name: string
+  message: string
+  code?: string
+  specifier?: string
+  referrer?: string
+  position?: unknown
+  importKind?: string
+} {
+  return isRecord(value) && value.name === "ResolveMessage" && typeof value.message === "string"
+}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -52,6 +68,7 @@ process.on("uncaughtException", (e) => {
 })
 
 const args = hideBin(process.argv)
+const processMetadata = ensureProcessMetadata("main")
 
 function show(out: string) {
   const text = out.trimStart()
@@ -63,7 +80,7 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
-const cli = yargs(args)
+let cli = yargs(args)
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -184,10 +201,6 @@ const cli = yargs(args)
   .command(OpenClawServeCommand)
   .command(ExtraAgentServeCommand)
 
-if (Installation.isLocal()) {
-  cli = cli.command(WorkspaceServeCommand)
-}
-
 cli = cli
   .fail((msg, err) => {
     if (
@@ -234,7 +247,7 @@ try {
     }
   }
 
-  if (e instanceof ResolveMessage) {
+  if (isResolveMessage(e)) {
     Object.assign(data, {
       name: e.name,
       message: e.message,

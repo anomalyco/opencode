@@ -375,7 +375,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const exit = useExit()
     const args = useArgs()
 
-    async function bootstrap() {
+    async function bootstrap(input: { fatal?: boolean } = {}) {
+      const fatal = input.fatal ?? true
+      const workspace = project.workspace.current()
+      const projectPromise = project.sync()
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })

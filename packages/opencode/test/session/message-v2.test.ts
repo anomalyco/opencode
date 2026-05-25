@@ -378,7 +378,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -405,29 +405,20 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "bash",
             output: {
-              type: "text",
-              value: "ok",
+              type: "content",
+              value: [
+                { type: "text", text: "ok" },
+                { type: "media", mediaType: "image/png", data: "Zm9v" },
+              ],
             },
             providerOptions: { openai: { tool: "meta" } },
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Attached image(s) from tool result:" },
-          {
-            type: "file",
-            mediaType: "image/png",
-            data: "data:image/png;base64,Zm9v",
-            filename: undefined,
           },
         ],
       },
     ])
   })
 
-  test("falls back to a user image message when tool results include media but model input has no image support", () => {
+  test("falls back to a user image message when tool results include media but model input has no image support", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
     const noImageModel = {
@@ -482,7 +473,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, noImageModel)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, noImageModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run question" }],
@@ -507,17 +498,16 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "question",
             output: {
-              type: "text",
-              value: 'User has answered your questions: "What do you see?"="[image: proof.png]".',
+              type: "content",
+              value: [
+                {
+                  type: "text",
+                  text: 'User has answered your questions: "What do you see?"="[image: proof.png]".',
+                },
+                { type: "media", mediaType: "image/png", data: "Zm9v" },
+              ],
             },
           },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Attached image(s) from tool result:" },
-          { type: "file", mediaType: "image/png", data: "data:image/png;base64,Zm9v", filename: undefined },
         ],
       },
     ])
@@ -1369,7 +1359,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("drops crash-recovery assistant messages that only contain empty content", () => {
+  test("drops crash-recovery assistant messages that only contain empty content", async () => {
     const assistantID = "m-assistant"
 
     const input: MessageV2.WithParts[] = [
@@ -1402,7 +1392,32 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: {
+              openai: {
+                itemId: "item-1",
+                reasoningEncryptedContent: "secret",
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "",
+            providerOptions: {
+              openai: {
+                itemId: "item-2",
+              },
+            },
+          },
+        ],
+      },
+    ])
   })
 })
 

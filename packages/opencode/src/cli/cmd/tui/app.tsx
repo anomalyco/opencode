@@ -257,25 +257,10 @@ export function tui(input: {
                 </KVProvider>
               </ExitProvider>
             </ArgsProvider>
-          </ErrorBoundary>
-        )
-      },
-      {
-        targetFps: 60,
-        gatherStats: false,
-        exitOnCtrlC: false,
-        useKittyKeyboard: {},
-        autoFocus: false,
-        consoleOptions: {
-          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
-          onCopySelection: (text) => {
-            Clipboard.copy(text).catch((error) => {
-              console.error(`Failed to copy console selection to clipboard: ${error}`)
-            })
-          },
-        },
-      },
-    )
+          </OpencodeKeymapProvider>
+        </ErrorBoundary>
+      )
+    }, renderer)
   })
 }
 
@@ -903,14 +888,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const version = evt.properties.version
 
     const skipped = kv.get("skipped_version")
-    if (skipped) {
-      const next = semver.coerce(version)
-      const prev = semver.coerce(skipped)
-      if (next && prev && !semver.gt(next, prev)) return
-      if (!next || !prev) {
-        if (version === skipped) return
-      }
-    }
+    if (skipped && !semver.gt(version, skipped)) return
 
     const choice = await DialogConfirm.show(
       dialog,

@@ -23,11 +23,10 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
-import { CodeSearchTool } from "./codesearch"
-import { Flag } from "@/flag/flag"
-import { Instance } from "@/project/instance"
-import { QuickAssistant } from "@/quick-assistant"
-import { Log } from "@/util/log"
+import { RepoCloneTool } from "./repo_clone"
+import { RepoOverviewTool } from "./repo_overview"
+import { RepositoryCache } from "@/reference/repository-cache"
+import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -143,66 +142,34 @@ export const layer: Layer.Layer<
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
 
-      async function all(custom: Tool.Info[]): Promise<Tool.Info[]> {
-        const cfg = await Config.get()
-        const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-
-        if (QuickAssistant.active(Instance.directory)) {
-          return [InvalidTool, ReadTool, GlobTool, GrepTool, WebFetchTool, WebSearchTool, CodeSearchTool]
-        }
-
-        return [
-          InvalidTool,
-          ...(question ? [QuestionTool] : []),
-          BashTool,
-          ReadTool,
-          GlobTool,
-          GrepTool,
-          EditTool,
-          WriteTool,
-          TaskTool,
-          WebFetchTool,
-          TodoWriteTool,
-          WebSearchTool,
-          CodeSearchTool,
-          SkillTool,
-          ApplyPatchTool,
-          ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-          ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
-          ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
-          ...custom,
-        ]
-      }
-
-      const register = Effect.fn("ToolRegistry.register")(function* (tool: Tool.Info) {
-        const state = yield* InstanceState.get(cache)
-        const idx = state.custom.findIndex((t) => t.id === tool.id)
-        if (idx >= 0) {
-          state.custom.splice(idx, 1, tool)
-          return
-        }
-        state.custom.push(tool)
-      })
-
-      const ids = Effect.fn("ToolRegistry.ids")(function* () {
-        const state = yield* InstanceState.get(cache)
-        const tools = yield* Effect.promise(() => all(state.custom))
-        return tools.map((t) => t.id)
-      })
-
-      const tools = Effect.fn("ToolRegistry.tools")(function* (
-        model: { providerID: ProviderID; modelID: ModelID },
-        agent?: Agent.Info,
-      ) {
-        const state = yield* InstanceState.get(cache)
-        const allTools = yield* Effect.promise(() => all(state.custom))
-        return yield* Effect.promise(() =>
-          Promise.all(
-            allTools
-              .filter((tool) => {
-                // Enable websearch/codesearch for zen users OR via enable flag
-                if (tool.id === "codesearch" || tool.id === "websearch") {
-                  return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+        function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
+          // Plugin tools still expose Zod args publicly; keep that compatibility
+          // boxed at the registry boundary and give the LLM the original JSON Schema.
+          // Normalize missing args to `{}` once — pre-1.14.49 the code was
+          // `z.object(def.args)` and Zod silently tolerated undefined (#27451, #27630).
+          const args = def.args ?? {}
+          const entries = Object.entries(args)
+          const allZod = entries.every((entry) => isZodType(entry[1]))
+          const zodParams = allZod ? z.object(args) : undefined
+          const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
+          const parameters = zodParams
+            ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
+            : Schema.Unknown
+          return {
+            id,
+            parameters,
+            jsonSchema,
+            description: def.description,
+            execute: (args, toolCtx) =>
+              Effect.gen(function* () {
+                // Bridge the host's Effect-based `ask` into a Promise-returning
+                // function for the plugin to make sure context persists
+                const bridge = yield* EffectBridge.make()
+                const pluginCtx: PluginToolContext = {
+                  ...toolCtx,
+                  ask: (req) => bridge.promise(toolCtx.ask(req)),
+                  directory: ctx.directory,
+                  worktree: ctx.worktree,
                 }
                 const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output

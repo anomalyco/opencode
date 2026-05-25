@@ -1,4 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect } from "bun:test"
+import path from "path"
+import { Effect } from "effect"
+import { Global } from "@opencode-ai/core/global"
+import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { it } from "../lib/effect"
 
 let Database: typeof import("../../src/storage/db").Database
 

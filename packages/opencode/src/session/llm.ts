@@ -19,105 +19,31 @@ import { Bus } from "@/bus"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
-import { Session } from "."
-import { MessageID, PartID, SessionID } from "./schema"
-import { ulid } from "ulid"
+import { EffectBridge } from "@/effect/bridge"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import * as Option from "effect/Option"
+import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { LLMAISDK } from "./llm/ai-sdk"
+import { LLMNativeRuntime } from "./llm/native-runtime"
+import { LLMRequestPrep } from "./llm/request"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
-  async function hookPart(input: {
-    sessionID: SessionID
-    messageID: MessageID
-    plugin: string
-    hook: string
-    stage: "before" | "after" | "error"
-    error?: string
-  }) {
-    const now = Date.now()
-    await Session.updatePart({
-      id: PartID.ascending(),
-      messageID: input.messageID,
-      sessionID: input.sessionID,
-      type: "tool",
-      callID: ulid(),
-      tool: "hook",
-      state: {
-        status: "completed",
-        input: {
-          hook: input.plugin,
-          hook_type: `${input.stage} ${input.hook}`,
-          event: input.hook,
-        },
-        output: input.error ?? "",
-        title: input.plugin,
-        metadata: {
-          hook: input.plugin,
-          hook_type: `${input.stage} ${input.hook}`,
-          event: input.hook,
-          output: input.error ?? "",
-        },
-        time: {
-          start: now,
-          end: now,
-        },
-      },
-      metadata: {
-        hook: input.plugin,
-        hook_type: `${input.stage} ${input.hook}`,
-        event: input.hook,
-        error: input.error,
-      },
-    })
-  }
-
-  function hookOpts(sessionID: SessionID, messageID: MessageID) {
-    return {
-      onInvoke: async (event: {
-        plugin: string
-        custom: boolean
-        hook: string
-        stage: "before" | "after" | "error"
-        error?: string
-      }) => {
-        if (!event.custom) return
-        try {
-          await hookPart({
-            sessionID,
-            messageID,
-            plugin: event.plugin,
-            hook: event.hook,
-            stage: event.stage,
-            error: event.error,
-          })
-        } catch (err) {
-          log.debug("skip hook timeline part", {
-            sessionID,
-            messageID,
-            plugin: event.plugin,
-            hook: event.hook,
-            stage: event.stage,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        }
-      },
-    }
-  }
-
-  export type StreamInput = {
-    user: MessageV2.User
-    sessionID: SessionID
-    model: Provider.Model
-    agent: Agent.Info
-    system: string[]
-    abort: AbortSignal
-    messages: ModelMessage[]
-    small?: boolean
-    tools: Record<string, Tool>
-    hooks?: boolean
-    retries?: number
-    toolChoice?: "auto" | "required" | "none"
-  }
+export type StreamInput = {
+  user: MessageV2.User
+  sessionID: string
+  parentSessionID?: string
+  model: Provider.Model
+  agent: Agent.Info
+  permission?: Permission.Ruleset
+  system: string[]
+  messages: ModelMessage[]
+  small?: boolean
+  tools: Record<string, Tool>
+  retries?: number
+  toolChoice?: "auto" | "required" | "none"
+}
 
 export type StreamRequest = StreamInput & {
   abort: AbortSignal
@@ -129,19 +55,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
-    const header = system[0]
-    await Plugin.trigger(
-      "experimental.chat.system.transform",
-      { sessionID: input.sessionID, model: input.model },
-      { system },
-      input.hooks === false ? undefined : hookOpts(input.sessionID, input.user.id),
-    )
-    // rejoin to maintain 2-part structure for caching if header unchanged
-    if (system.length > 2 && system[0] === header) {
-      const rest = system.slice(1)
-      system.length = 0
-      system.push(header, rest.join("\n"))
-    }
+export const use = serviceUse(Service)
 
 const live: Layer.Layer<
   Service,
@@ -164,63 +78,18 @@ const live: Layer.Layer<
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
 
-    const params = await Plugin.trigger(
-      "chat.params",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-          : undefined,
-        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-        topK: ProviderTransform.topK(input.model),
-        options,
-      },
-      input.hooks === false ? undefined : hookOpts(input.sessionID, input.user.id),
-    )
-
-    const { headers } = await Plugin.trigger(
-      "chat.headers",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        headers: {},
-      },
-      input.hooks === false ? undefined : hookOpts(input.sessionID, input.user.id),
-    )
-
-    const maxOutputTokens =
-      isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
-
-    const tools = await resolveTools(input)
-
-    // LiteLLM and some Anthropic proxies require the tools parameter to be present
-    // when message history contains tool calls, even if no tools are being used.
-    // Add a dummy tool that is never called to satisfy this validation.
-    // This is enabled for:
-    // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-    // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
-    const isLiteLLMProxy =
-      provider.options?.["litellmProxy"] === true ||
-      input.model.providerID.toLowerCase().includes("litellm") ||
-      input.model.api.id.toLowerCase().includes("litellm")
-
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
-      tools["_noop"] = tool({
-        description:
-          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
-        inputSchema: jsonSchema({ type: "object", properties: {} }),
-        execute: async () => ({ output: "", title: "", metadata: {} }),
+    const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const l = log
+        .clone()
+        .tag("providerID", input.model.providerID)
+        .tag("modelID", input.model.id)
+        .tag("session.id", input.sessionID)
+        .tag("small", (input.small ?? false).toString())
+        .tag("agent", input.agent.name)
+        .tag("mode", input.agent.mode)
+      l.info("stream", {
+        modelID: input.model.id,
+        providerID: input.model.providerID,
       })
 
       const [language, cfg, item, info] = yield* Effect.all(

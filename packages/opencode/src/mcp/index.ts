@@ -139,110 +139,6 @@ function listTools(key: string, client: MCPClient, timeout: number) {
         try: () =>
           client.request({ method: "tools/list" }, TolerantListToolsResultSchema, {
             timeout,
-          },
-        )
-      },
-    })
-  }
-
-  // Store transports for OAuth servers to allow finishing auth
-  type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
-  const pendingOAuthTransports = new Map<string, TransportWithAuth>()
-
-  // Prompt cache types
-  type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
-
-  type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
-  type McpEntry = NonNullable<Config.Info["mcp"]>[string]
-  function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
-    return typeof entry === "object" && entry !== null && "type" in entry
-  }
-
-  function missing(method: string, err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return /method not found/i.test(msg) && msg.includes(method)
-  }
-
-  async function descendants(pid: number): Promise<number[]> {
-    if (process.platform === "win32") return []
-    const pids: number[] = []
-    const queue = [pid]
-    while (queue.length > 0) {
-      const current = queue.shift()!
-      const proc = Bun.spawn(["pgrep", "-P", String(current)], { stdout: "pipe", stderr: "pipe" })
-      const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]).catch(
-        () => [-1, ""] as const,
-      )
-      if (code !== 0) continue
-      for (const tok of out.trim().split(/\s+/)) {
-        const cpid = parseInt(tok, 10)
-        if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
-          pids.push(cpid)
-          queue.push(cpid)
-        }
-      }
-    }
-    return pids
-  }
-
-  const state = Instance.state(
-    async () => {
-      const cfg = await Config.get()
-      const config = cfg.mcp ?? {}
-      const clients: Record<string, MCPClient> = {}
-      const status: Record<string, Status> = {}
-
-      await Promise.all(
-        Object.entries(config).map(async ([key, mcp]) => {
-          if (!isMcpConfigured(mcp)) {
-            log.error("Ignoring MCP config entry without type", { key })
-            return
-          }
-
-          // If disabled by config, mark as disabled without trying to connect
-          if (mcp.enabled === false) {
-            status[key] = { status: "disabled" }
-            return
-          }
-
-          const result = await create(key, mcp).catch(() => undefined)
-          if (!result) return
-
-          status[key] = result.status
-
-          if (result.mcpClient) {
-            clients[key] = result.mcpClient
-          }
-        }),
-      )
-      return {
-        status,
-        clients,
-        promptless: new Set<string>(),
-      }
-    },
-    async (state) => {
-      // The MCP SDK only signals the direct child process on close.
-      // Servers like chrome-devtools-mcp spawn grandchild processes
-      // (e.g. Chrome) that the SDK never reaches, leaving them orphaned.
-      // Kill the full descendant tree first so the server exits promptly
-      // and no processes are left behind.
-      for (const client of Object.values(state.clients)) {
-        const pid = (client.transport as any)?.pid
-        if (typeof pid !== "number") continue
-        for (const dpid of await descendants(pid)) {
-          try {
-            process.kill(dpid, "SIGTERM")
-          } catch {}
-        }
-      }
-
-      await Promise.all(
-        Object.values(state.clients).map((client) =>
-          client.close().catch((error) => {
-            log.error("Failed to close MCP client", {
-              error,
-            })
           }),
         catch: (err) => (err instanceof Error ? err : new Error(String(err))),
       }).pipe(
@@ -258,19 +154,9 @@ function listTools(key: string, client: MCPClient, timeout: number) {
   )
 }
 
-  // Helper function to fetch prompts for a specific client
-  async function fetchPromptsForClient(clientName: string, client: Client, promptless: Set<string>) {
-    if (promptless.has(clientName)) return
-
-    const prompts = await client.listPrompts().catch((e) => {
-      if (missing("prompts/list", e)) {
-        promptless.add(clientName)
-        log.debug("client does not support prompts", { clientName })
-        return undefined
-      }
-      log.error("failed to get prompts", { clientName, error: e.message })
-      return undefined
-    })
+// Convert MCP tool definition to AI SDK Tool type
+function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
+  const inputSchema = mcpTool.inputSchema
 
   // Spread first, then override type to ensure it's always "object"
   const schema: JSONSchema7 = {
@@ -698,71 +584,11 @@ export const layer = Layer.effect(
       }),
     )
 
-    for (const { clientName, client, toolsResult } of toolsResults) {
-      if (!toolsResult) continue
-      const mcpConfig = config[clientName]
-      const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
-      const timeout = entry?.timeout ?? defaultTimeout
-      for (const mcpTool of toolsResult.tools) {
-        const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-        const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
-      }
-    }
-    return result
-  }
-
-  export async function prompts() {
-    const s = await state()
-    const clientsSnapshot = await clients()
-
-    const prompts = Object.fromEntries<PromptInfo & { client: string }>(
-      (
-        await Promise.all(
-          Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
-            if (s.status[clientName]?.status !== "connected") {
-              return []
-            }
-
-            return Object.entries((await fetchPromptsForClient(clientName, client, s.promptless)) ?? {})
-          }),
-        )
-      ).flat(),
-    )
-
-    return prompts
-  }
-
-  export async function resources() {
-    const s = await state()
-    const clientsSnapshot = await clients()
-
-    const result = Object.fromEntries<ResourceInfo & { client: string }>(
-      (
-        await Promise.all(
-          Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
-            if (s.status[clientName]?.status !== "connected") {
-              return []
-            }
-
-            return Object.entries((await fetchResourcesForClient(clientName, client)) ?? {})
-          }),
-        )
-      ).flat(),
-    )
-
-    return result
-  }
-
-  export async function getPrompt(clientName: string, name: string, args?: Record<string, string>) {
-    const clientsSnapshot = await clients()
-    const client = clientsSnapshot[clientName]
-
-    if (!client) {
-      log.warn("client not found for prompt", {
-        clientName,
-      })
-      return undefined
+    function closeClient(s: State, name: string) {
+      const client = s.clients[name]
+      delete s.defs[name]
+      if (!client) return Effect.void
+      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
     }
 
     const storeClient = Effect.fnUntraced(function* (

@@ -452,18 +452,8 @@ it.instance(
         },
       },
     },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const names = (await Agent.list()).map((a) => a.name)
-      expect(names[0]).toBe("plan")
-      expect(names).toContain("assistant")
-      const rest = names.slice(1)
-      expect(rest).toEqual(rest.toSorted((a, b) => a.localeCompare(b)))
-    },
-  })
-})
+  },
+)
 
 it.instance("Agent.get returns undefined for non-existent agent", () =>
   Effect.gen(function* () {
@@ -738,12 +728,5 @@ it.instance(
         plan: { disable: true },
       },
     },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      // build and plan are disabled, no visible primary-capable agents remain
-      await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
-    },
-  })
-})
+  },
+)

@@ -1,4 +1,5 @@
-import { test, expect, spyOn } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
+import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -11,7 +12,7 @@ import { provideInstance, provideTmpdirInstance, tmpdir } from "../fixture/fixtu
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
-import { Log } from "../../src/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 
 const node = CrossSpawnSpawner.defaultLayer
 
@@ -568,39 +569,44 @@ description: A skill in the .opencode/skills directory.
   )
 })
 
-test("does not warn when the same skill file is discovered twice", async () => {
-  await using tmp = await tmpdir({
-    git: true,
-    config: {
-      skills: {
-        paths: ["./.claude"],
-      },
-    },
-    init: async (dir) => {
-      const skillDir = path.join(dir, ".claude", "skills", "echo")
-      await Bun.write(
-        path.join(skillDir, "SKILL.md"),
-        `---
+it.live("does not warn when the same skill file is discovered twice", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireRelease(
+      Effect.promise(() =>
+        tmpdir({
+          git: true,
+          config: {
+            skills: {
+              paths: ["./.claude"],
+            },
+          },
+          init: async (dir) => {
+            const skillDir = path.join(dir, ".claude", "skills", "echo")
+            await Bun.write(
+              path.join(skillDir, "SKILL.md"),
+              `---
 name: echo
 description: Duplicate path test skill.
 ---
 
 # Echo
 `,
-      )
-    },
-  })
+            )
+          },
+        }),
+      ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    )
 
-  const warn = spyOn(Log.create({ service: "skill" }), "warn")
+    const warn = spyOn(Log.create({ service: "skill" }), "warn")
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const skills = await Skill.all()
+    yield* Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const skills = yield* skill.all()
       expect(skills.length).toBe(1)
       expect(skills[0].name).toBe("echo")
-    },
-  })
+    }).pipe(provideInstance(tmp.path))
 
-  expect(warn).not.toHaveBeenCalled()
-})
+    expect(warn).not.toHaveBeenCalled()
+  }),
+)

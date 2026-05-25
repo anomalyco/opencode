@@ -2269,7 +2269,7 @@ function Question(props: ToolProps<typeof QuestionTool>) {
     return part.filename ? `[image: ${part.filename}]` : "[image]"
   }
 
-  function format(answer?: Array<string | { type: "image"; filename?: string }>) {
+  function format(answer?: ReadonlyArray<string | { type: "image"; filename?: string }>) {
     if (!answer?.length) return "(no answer)"
     return answer.map(formatPart).join(", ")
   }

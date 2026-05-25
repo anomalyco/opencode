@@ -92,71 +92,50 @@ describe("tool.question", () => {
     }),
   )
 
-  test("returns image answers as tool result attachments", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What do you see?",
-        header: "Image",
-        options: [{ label: "Attached", description: "Use the image" }],
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([
-      [
-        "Attached",
+  it.instance("returns selected answers in tool output", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
         {
-          type: "image",
-          mime: "image/png",
-          url: "data:image/png;base64,AAAA",
-          filename: "proof.png",
+          question: "What do you see?",
+          header: "Image",
+          options: [{ label: "Attached", description: "Use the image" }],
         },
-      ],
-    ])
+      ]
 
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.output).toContain(`"What do you see?"="Attached, [image: proof.png]"`)
-    expect(result.attachments).toEqual([
-      {
-        type: "file",
-        mime: "image/png",
-        url: "data:image/png;base64,AAAA",
-        filename: "proof.png",
-      },
-    ])
-  })
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [["Attached"]] })
 
-  test("normalizes nested image answers before creating tool result attachments", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What do you see?",
-        header: "Image",
-        options: [{ label: "Attached", description: "Use the image" }],
-      },
-    ]
+      const result = yield* Fiber.join(fiber)
+      expect(result.output).toContain(`"What do you see?"="Attached"`)
+    }),
+  )
 
-    askSpy.mockResolvedValueOnce([
-      [
+  it.instance("preserves nested data URL strings as plain answers", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
         {
-          type: "image",
-          mime: "image/png",
-          url: "data:image/png;base64,data:image/png;base64,AAAA",
-          filename: "proof.png",
+          question: "What do you see?",
+          header: "Image",
+          options: [{ label: "Attached", description: "Use the image" }],
         },
-      ],
-    ])
+      ]
+      const answer = "data:image/png;base64,data:image/png;base64,AAAA"
 
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.attachments).toEqual([
-      {
-        type: "file",
-        mime: "image/png",
-        url: "data:image/png;base64,AAAA",
-        filename: "proof.png",
-      },
-    ])
-  })
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [[answer]] })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.output).toContain(answer)
+    }),
+  )
 
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {

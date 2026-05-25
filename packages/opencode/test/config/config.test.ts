@@ -260,24 +260,18 @@ test("project plugin config does not leak into other projects", async () => {
   const a = path.join(tmp.path, "a")
   const b = path.join(tmp.path, "b")
 
-  const first = await Instance.provide({
+  const first = await withTestInstance({
     directory: a,
-    fn: async () => {
-      const cfg = await Config.get()
-      return cfg.plugin ?? []
-    },
+    fn: (ctx) => load(ctx).then((cfg) => cfg.plugin ?? []),
   })
 
-  const second = await Instance.provide({
+  const second = await withTestInstance({
     directory: b,
-    fn: async () => {
-      const cfg = await Config.get()
-      return cfg.plugin ?? []
-    },
+    fn: (ctx) => load(ctx).then((cfg) => cfg.plugin ?? []),
   })
 
   expect(first.length).toBe(1)
-  expect(Config.getPluginName(first[0])).toBe("scoped")
+  expect(String(first[0])).toContain("scoped")
   expect(second).toEqual([])
 })
 

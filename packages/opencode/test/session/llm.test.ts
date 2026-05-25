@@ -150,20 +150,6 @@ describe("session.llm.hasToolCalls", () => {
     expect(LLM.hasToolCalls(messages)).toBe(false)
   })
 
-  test("accepts user messages with content parts", () => {
-    const messages: ModelMessage[] = [
-      {
-        role: "user",
-        content: [{ type: "text", text: "Hello world" }],
-      },
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "Hi there" }],
-      },
-    ]
-    expect(LLM.hasToolCalls(messages)).toBe(false)
-  })
-
   test("returns true when tool-call is mixed with text content", () => {
     const messages = [
       {
@@ -754,8 +740,7 @@ describe("session.llm.stream", () => {
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
-          messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+          messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
 
@@ -1016,175 +1001,22 @@ describe("session.llm.stream", () => {
     { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
   )
 
-  test("normalizes malformed OpenAI responses error chunks", async () => {
-    const server = state.server
-    if (!server) {
-      throw new Error("Server not initialized")
-    }
-
-    const source = await loadFixture("openai", "gpt-5.2")
-    const model = source.model
-
-    const request = waitRequest(
-      "/responses",
-      createEventResponse(
-        [
-          {
-            error: {
-              message: "Too many requests",
-              type: "too_many_requests",
-            },
-          },
-        ],
-        true,
-      ),
-    )
-
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            enabled_providers: ["openai"],
-            provider: {
-              openai: {
-                name: "OpenAI",
-                env: ["OPENAI_API_KEY"],
-                npm: "@ai-sdk/openai",
-                api: "https://api.openai.com/v1",
-                models: {
-                  [model.id]: model,
-                },
-                options: {
-                  apiKey: "test-openai-key",
-                  baseURL: `${server.url.origin}/v1`,
-                },
-              },
-            },
-          }),
-        )
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
-        const sessionID = SessionID.make("ses_test_openai_error")
-        const agent = {
-          name: "test",
-          mode: "primary",
-          options: {},
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-          temperature: 0.2,
-        } satisfies Agent.Info
-
-        const user = {
-          id: MessageID.make("msg_test_openai_error"),
-          sessionID,
-          role: "user",
-          time: { created: Date.now() },
-          agent: agent.name,
-          model: { providerID: ProviderID.openai, modelID: resolved.id },
-          variant: "high",
-        } satisfies MessageV2.User
-
-        const stream = await LLM.stream({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          abort: new AbortController().signal,
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        })
-
-        const parts: Array<any> = []
-        for await (const part of stream.fullStream) {
-          parts.push(part)
-        }
-
-        const error = parts.find((part) => part.type === "error")
-        expect(error).toBeDefined()
-        expect(error.error).toMatchObject({
-          type: "error",
-          sequence_number: 0,
-          error: {
-            type: "too_many_requests",
-            code: "too_many_requests",
-            message: "Too many requests",
-          },
-        })
-
-        await request
-      },
-    })
-  })
-
-  test("sends messages API payload for Anthropic models", async () => {
-    const server = state.server
-    if (!server) {
-      throw new Error("Server not initialized")
-    }
-
-    const providerID = "anthropic"
-    const modelID = "claude-3-5-sonnet-20241022"
-    const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
-    const model = fixture.model
-
-    const chunks = [
-      {
-        type: "message_start",
-        message: {
-          id: "msg-1",
-          model: model.id,
-          usage: {
-            input_tokens: 3,
-            cache_creation_input_tokens: null,
-            cache_read_input_tokens: null,
-          },
-        },
-      },
-      {
-        type: "content_block_start",
-        index: 0,
-        content_block: { type: "text", text: "" },
-      },
-      {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text: "Hello" },
-      },
-      { type: "content_block_stop", index: 0 },
-      {
-        type: "message_delta",
-        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
-        usage: {
-          input_tokens: 3,
-          output_tokens: 2,
-          cache_creation_input_tokens: null,
-          cache_read_input_tokens: null,
-        },
-      },
-      { type: "message_stop" },
-    ]
-    const request = waitRequest("/messages", createEventResponse(chunks))
-
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            enabled_providers: [providerID],
-            provider: {
-              [providerID]: {
-                options: {
-                  apiKey: "test-anthropic-key",
-                  baseURL: `${server.url.origin}/v1`,
+  it.instance(
+    "keeps supported OpenAI models on AI SDK path when native flag is off",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture("openai", "gpt-5.2").model
+        const request = waitRequest(
+          "/responses",
+          createEventResponse(
+            [
+              {
+                type: "response.created",
+                response: {
+                  id: "resp-flag-off",
+                  created_at: Math.floor(Date.now() / 1000),
+                  model: model.id,
+                  service_tier: null,
                 },
               },
               {

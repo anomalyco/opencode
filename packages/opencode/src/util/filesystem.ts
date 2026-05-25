@@ -1,22 +1,22 @@
 import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { realpathSync } from "fs"
-import { dirname, isAbsolute, join, relative, resolve as pathResolve } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { fileURLToPath } from "url"
 
-export namespace Filesystem {
-  function ignorable(e: unknown) {
-    if (!e || typeof e !== "object" || !("code" in e)) return false
-    const code = (e as { code?: string }).code
-    return code === "ENOENT" || code === "EACCES" || code === "EPERM"
-  }
+// Fast sync version for metadata checks
+export async function exists(p: string): Promise<boolean> {
+  return existsSync(p)
+}
 
-  // Fast sync version for metadata checks
-  export async function exists(p: string): Promise<boolean> {
-    return existsSync(p)
+export async function isDir(p: string): Promise<boolean> {
+  try {
+    return statSync(p).isDirectory()
+  } catch {
+    return false
   }
 }
 
@@ -74,141 +74,7 @@ export async function write(p: string, content: string | Buffer | Uint8Array, mo
       }
       return
     }
-  }
-
-  export async function writeJson(p: string, data: unknown, mode?: number): Promise<void> {
-    return write(p, JSON.stringify(data, null, 2), mode)
-  }
-
-  export async function writeStream(
-    p: string,
-    stream: ReadableStream<Uint8Array> | Readable,
-    mode?: number,
-  ): Promise<void> {
-    const dir = dirname(p)
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true })
-    }
-
-    const nodeStream = stream instanceof ReadableStream ? Readable.fromWeb(stream as any) : stream
-    const writeStream = createWriteStream(p)
-    await pipeline(nodeStream, writeStream)
-
-    if (mode) {
-      await chmod(p, mode)
-    }
-  }
-
-  export function mimeType(p: string): string {
-    return lookup(p) || "application/octet-stream"
-  }
-
-  /**
-   * On Windows, normalize a path to its canonical casing using the filesystem.
-   * This is needed because Windows paths are case-insensitive but LSP servers
-   * may return paths with different casing than what we send them.
-   */
-  export function normalizePath(p: string): string {
-    if (process.platform !== "win32") return p
-    try {
-      return realpathSync.native(p)
-    } catch {
-      return p
-    }
-  }
-
-  // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
-  // Also resolves symlinks so that callers using the result as a cache key
-  // always get the same canonical path for a given physical directory.
-  export function resolve(p: string): string {
-    const resolved = pathResolve(windowsPath(p))
-    try {
-      return normalizePath(realpathSync(resolved))
-    } catch (e) {
-      if (isEnoent(e) || ignorable(e)) return normalizePath(resolved)
-      throw e
-    }
-  }
-
-  export function windowsPath(p: string): string {
-    if (process.platform !== "win32") return p
-    return (
-      p
-        .replace(/^\/([a-zA-Z]):(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // Git Bash for Windows paths are typically /<drive>/...
-        .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // Cygwin git paths are typically /cygdrive/<drive>/...
-        .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // WSL paths are typically /mnt/<drive>/...
-        .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-    )
-  }
-  export function overlaps(a: string, b: string) {
-    const relA = relative(a, b)
-    const relB = relative(b, a)
-    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
-  }
-
-  export function contains(parent: string, child: string) {
-    const rel = relative(parent, child)
-    if (!rel) return true
-    // On Windows, path.relative() across different roots/drives returns an absolute path.
-    // Treat that as outside the parent so callers like QuickAssistant.active() don't
-    // misclassify unrelated project directories as nested under the config directory.
-    if (isAbsolute(rel)) return false
-    return !rel.startsWith("..")
-  }
-
-  export async function findUp(target: string, start: string, stop?: string) {
-    let current = start
-    const result = []
-    while (true) {
-      const search = join(current, target)
-      if (await exists(search)) result.push(search)
-      if (stop === current) break
-      const parent = dirname(current)
-      if (parent === current) break
-      current = parent
-    }
-    return result
-  }
-
-  export async function* up(options: { targets: string[]; start: string; stop?: string }) {
-    const { targets, start, stop } = options
-    let current = start
-    while (true) {
-      for (const target of targets) {
-        const search = join(current, target)
-        if (await exists(search)) yield search
-      }
-      if (stop === current) break
-      const parent = dirname(current)
-      if (parent === current) break
-      current = parent
-    }
-  }
-
-  export async function globUp(pattern: string, start: string, stop?: string) {
-    let current = start
-    const result = []
-    while (true) {
-      try {
-        const matches = await Glob.scan(pattern, {
-          cwd: current,
-          absolute: true,
-          include: "file",
-          dot: true,
-        })
-        result.push(...matches)
-      } catch {
-        // Skip invalid glob patterns
-      }
-      if (stop === current) break
-      const parent = dirname(current)
-      if (parent === current) break
-      current = parent
-    }
-    return result
+    throw e
   }
 }
 

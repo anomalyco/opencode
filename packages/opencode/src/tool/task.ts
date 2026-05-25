@@ -7,12 +7,14 @@ import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
-import { SessionPrompt } from "../session/prompt"
-import { iife } from "@/util/iife"
-import { defer } from "@/util/defer"
-import { Config } from "../config/config"
-import { Permission } from "@/permission"
-import { Truncate } from "./truncate"
+import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
+import type { SessionPrompt } from "../session/prompt"
+import { SessionStatus } from "@/session/status"
+import { Config } from "@/config/config"
+import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
+import { EffectBridge } from "@/effect/bridge"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -42,8 +44,19 @@ const BaseParameters = Schema.Struct({
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 })
 
-export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("task", async (ctx) => {
-  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+export const Parameters = Schema.Struct({
+  description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
+  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
+  subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  task_id: Schema.optional(Schema.String).annotate({
+    description:
+      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+  }),
+  command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  background: Schema.optional(Schema.Boolean).annotate({
+    description: "When true, launch the subagent in the background and return immediately",
+  }),
+})
 
 function output(sessionID: SessionID, text: string) {
   return [
@@ -80,22 +93,36 @@ function backgroundMessage(input: {
   return [title, `task_id: ${input.sessionID}`, `state: ${input.state}`, "", `<${tag}>`, input.text, `</${tag}>`].join(
     "\n",
   )
-  return {
-    description,
-    parameters,
-    async execute(params: z.infer<typeof parameters>, ctx) {
-      if (ctx.agent && params.subagent_type === ctx.agent) {
-        return {
-          title: params.description,
-          metadata: {
-            refused: "self",
-            subagent_type: params.subagent_type,
-          } as Record<string, any>,
-          output: `Refused to launch subagent "${params.subagent_type}" from itself. Continue in the current session instead.`,
-        }
-      }
+}
 
-      const config = await Config.get()
+function errorText(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+export const TaskTool = Tool.define(
+  id,
+  Effect.gen(function* () {
+    const agent = yield* Agent.Service
+    const background = yield* BackgroundJob.Service
+    const bus = yield* Bus.Service
+    const config = yield* Config.Service
+    const sessions = yield* Session.Service
+    const scope = yield* Scope.Scope
+    const status = yield* SessionStatus.Service
+    const flags = yield* RuntimeFlags.Service
+
+    const run = Effect.fn("TaskTool.execute")(function* (
+      params: Schema.Schema.Type<typeof Parameters>,
+      ctx: Tool.Context,
+    ) {
+      const cfg = yield* config.get()
+      const runInBackground = params.background === true
+      if (runInBackground && !flags.experimentalBackgroundSubagents) {
+        return yield* Effect.fail(
+          new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
+        )
+      }
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
@@ -209,37 +236,43 @@ function backgroundMessage(input: {
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
         })
 
-      const fullOutput = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
+      const continueIfIdle = Effect.fn("TaskTool.continueIfIdle")(function* (input: {
+        userID: MessageID
+        state: "completed" | "error"
+      }) {
+        yield* resumeWhenIdle(input).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+      })
 
-      // Apply task-specific truncation with higher limits (4000 lines / 100KB vs default 2000/50KB).
-      // Setting metadata.truncated skips the automatic Truncate.output() in tool.ts,
-      // preventing double-truncation.
-      const out = await Truncate.output(fullOutput, { maxLines: 4000, maxBytes: 100 * 1024 })
-      const output = out.truncated
-        ? [
-            `📁 Full task output: ${out.outputPath}`,
-            `Use the Read tool with offset/limit to access the full content.`,
-            "",
-            `--- Preview (${fullOutput.split("\n").length} total lines, ${Buffer.byteLength(fullOutput, "utf-8")} bytes) ---`,
-            out.content,
-          ].join("\n")
-        : out.content
+      const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
+        state: "completed" | "error",
+        text: string,
+      ) {
+        const currentParent = yield* sessions.get(ctx.sessionID)
+        const message = yield* ops.prompt({
+          sessionID: ctx.sessionID,
+          noReply: true,
+          agent: currentParent.agent ?? ctx.agent,
+          parts: [
+            {
+              type: "text",
+              synthetic: true,
+              text: backgroundMessage({
+                sessionID: nextSession.id,
+                description: params.description,
+                state,
+                text,
+              }),
+            },
+          ],
+        })
+        yield* continueIfIdle({ userID: message.info.id, state })
+      })
 
-      return {
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-          truncated: out.truncated,
-          outputPath: out.truncated ? out.outputPath : undefined,
-        },
-        output,
+      const existing = yield* background.get(nextSession.id)
+      if (existing?.status === "running") {
+        return yield* Effect.fail(
+          new Error(`Task ${nextSession.id} is already running. Use task_status to check progress.`),
+        )
       }
 
       if (runInBackground) {

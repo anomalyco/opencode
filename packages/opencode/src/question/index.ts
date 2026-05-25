@@ -38,30 +38,11 @@ const base = {
   }),
 }
 
-  export const Image = z
-    .object({
-      type: z.literal("image"),
-      mime: z.string(),
-      url: z.string(),
-      filename: z.string().optional(),
-    })
-    .meta({
-      ref: "QuestionImageAnswer",
-    })
-  export type Image = z.infer<typeof Image>
-
-  export const Part = z.union([z.string(), Image]).meta({
-    ref: "QuestionAnswerPart",
-  })
-  export type Part = z.infer<typeof Part>
-
-  export const Answer = z.array(Part).meta({
-    ref: "QuestionAnswer",
-  })
-  export type Answer = z.infer<typeof Answer>
-
 export const Prompt = Schema.Struct(base).annotate({ identifier: "QuestionPrompt" })
 export type Prompt = Schema.Schema.Type<typeof Prompt>
+
+export const Info = Prompt
+export type Info = Prompt
 
 export const Tool = Schema.Struct({
   messageID: MessageID,

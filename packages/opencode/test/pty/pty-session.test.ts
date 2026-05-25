@@ -7,14 +7,7 @@ import type { PtyID } from "../../src/pty/schema"
 import { Cause, Effect, Exit, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
 
-const wait = async (fn: () => boolean, ms = 5000) => {
-  const end = Date.now() + ms
-  while (Date.now() < end) {
-    if (fn()) return
-    await sleep(25)
-  }
-  throw new Error("timeout waiting for pty events")
-}
+type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
 
 const it = testEffect(
   Pty.layer.pipe(
@@ -73,34 +66,19 @@ const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) 
 }
 
 describe("pty", () => {
-  test("publishes created, exited, deleted in order for env true + remove", async () => {
-    if (process.platform === "win32") return
-
-    await using dir = await tmpdir({ git: true })
-
-    await Instance.provide({
-      directory: dir.path,
-      fn: async () => {
-        const log: Array<{ type: "created" | "exited" | "deleted"; id: string }> = []
-        const off = [
-          Bus.subscribe(Pty.Event.Created, (evt) => log.push({ type: "created", id: evt.properties.info.id })),
-          Bus.subscribe(Pty.Event.Exited, (evt) => log.push({ type: "exited", id: evt.properties.id })),
-          Bus.subscribe(Pty.Event.Deleted, (evt) => log.push({ type: "deleted", id: evt.properties.id })),
-        ]
-
-        let id = ""
-        try {
-          const info = await Pty.create({ command: "/usr/bin/env", args: ["true"], title: "true" })
-          id = info.id
-
-          await wait(() => pick(log, id).includes("exited"))
-
-          await Pty.remove(id)
-          await wait(() => pick(log, id).length >= 3)
-          expect(pick(log, id)).toEqual(["created", "exited", "deleted"])
-        } finally {
-          off.forEach((x) => x())
-          if (id) await Pty.remove(id)
+  it.instance(
+    "returns typed not found errors for missing sessions",
+    () =>
+      Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        const id = "pty_missing" as PtyID
+        let closed = false
+        const socket = {
+          readyState: 1,
+          send: () => {},
+          close: () => {
+            closed = true
+          },
         }
 
         const get = yield* pty.get(id).pipe(Effect.exit)

@@ -1,10 +1,14 @@
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { createMemo, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import { useDirectory } from "../../context/directory"
+import { useKV } from "../../context/kv.tsx"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
@@ -13,7 +17,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const project = useProject()
   const sync = useSync()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
+  const workspace = () => {
+    const workspaceID = session()?.workspaceID
+    if (!workspaceID) return
+    return project.workspace.get(workspaceID)
+  }
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
@@ -195,7 +206,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>
               <b>Code</b>
             </span>{" "}
-            <span>{Installation.VERSION}</span>
+            <span>{InstallationVersion}</span>
           </text>
         </box>
       </box>

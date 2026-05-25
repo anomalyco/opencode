@@ -15,7 +15,6 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import * as ProviderError from "@/provider/error"
-import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
@@ -404,31 +403,10 @@ export const TextPartInput = Schema.Struct({
       start: NonNegativeInt,
       end: Schema.optional(NonNegativeInt),
     }),
-    summary: z
-      .object({
-        title: z.string().optional(),
-        body: z.string().optional(),
-        diffs: Snapshot.FileDiff.array(),
-      })
-      .optional(),
-    agent: z.string(),
-    model: z.object({
-      providerID: z.string(),
-      modelID: z.string(),
-    }),
-    system: z.string().optional(),
-    tools: z.record(z.string(), z.boolean()).optional(),
-    variant: z.string().optional(),
-    command: z
-      .object({
-        name: z.string(),
-        source: z.enum(["command", "mcp", "skill"]).optional(),
-      })
-      .optional(),
-  }).meta({
-    ref: "UserMessage",
-  })
-  export type User = z.infer<typeof User>
+  ),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+}).annotate({ identifier: "TextPartInput" })
+export type TextPartInput = Types.DeepMutable<Schema.Schema.Type<typeof TextPartInput>>
 
 export const FilePartInput = Schema.Struct({
   id: Schema.optional(PartID),
@@ -589,20 +567,14 @@ type Cursor = typeof Cursor.Type
 
 const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
-  const info = (row: typeof MessageTable.$inferSelect) =>
-    (() => {
-      const value = {
-        ...row.data,
-        id: row.id,
-        sessionID: row.session_id,
-      } as MessageV2.Info
-
-      if (value.role === "user" && value.summary && !Array.isArray(value.summary.diffs)) {
-        value.summary.diffs = []
-      }
-
-      return value
-    })()
+export const cursor = {
+  encode(input: Cursor) {
+    return Buffer.from(JSON.stringify(input)).toString("base64url")
+  },
+  decode(input: string) {
+    return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
+  },
+}
 
 const info = (row: typeof MessageTable.$inferSelect) =>
   ({
@@ -648,93 +620,57 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
   }))
 }
 
-  export function toModelMessages(
-    input: WithParts[],
-    model: Provider.Model,
-    options?: { stripMedia?: boolean },
-  ): ModelMessage[] {
-    const result: UIMessage[] = []
-    const toolNames = new Set<string>()
-    // Track media from tool results that need to be injected as user messages
-    // for providers that don't support media in tool results.
-    //
-    // OpenAI-compatible APIs only support string content in tool results, so we need
-    // to extract media and inject as user messages. Other SDKs (anthropic, google,
-    // bedrock) handle type: "content" with media parts natively.
-    //
-    // Only apply this workaround if the model actually supports image input -
-    // otherwise there's no point extracting images.
-    const supportsMediaInToolResults = (() => {
-      if (!model.capabilities.input.image) return false
-      if (model.api.npm === "@ai-sdk/anthropic") return true
-      // Removed @ai-sdk/openai from this list because it doesn't properly handle
-      // nested data URLs in tool result attachments. When supportsMediaInToolResults=false,
-      // the media() function cleans up nested data URLs before injection.
-      // if (model.api.npm === "@ai-sdk/openai") return true
-      if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
-      if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
-      if (model.api.npm === "@ai-sdk/google") {
-        const id = model.api.id.toLowerCase()
-        return id.includes("gemini-3") && !id.includes("gemini-2")
-      }
-      return false
-    })()
+function providerMeta(metadata: Record<string, any> | undefined) {
+  if (!metadata) return undefined
+  const { providerExecuted: _, ...rest } = metadata
+  return Object.keys(rest).length > 0 ? rest : undefined
+}
 
-    const media = (url: string): string => {
-      // If not a data URL, return as-is
-      if (!url.startsWith("data:")) return url
+function stripDataUrlPrefix(data: string): string {
+  const commaIndex = data.indexOf(",")
+  if (commaIndex === -1) return data
+  const value = data.slice(commaIndex + 1)
+  return value.startsWith("data:") ? stripDataUrlPrefix(value) : value
+}
 
-      const comma = url.indexOf(",")
-      if (comma === -1) return url
+function normalizeDataUrl(data: string, mediaType: string): string {
+  if (!data.startsWith("data:")) return data
+  return `data:${mediaType};base64,${stripDataUrlPrefix(data)}`
+}
 
-      const prefix = url.slice(0, comma + 1) // e.g., "data:image/png;base64,"
-      const body = url.slice(comma + 1)
-
-      // If body is nested data URL, recursively extract and rebuild
-      if (body.startsWith("data:")) {
-        const extracted = media(body)
-        // If extracted is a data URL, strip its prefix and use our prefix
-        if (extracted.startsWith("data:")) {
-          const extractedComma = extracted.indexOf(",")
-          if (extractedComma !== -1) {
-            return prefix + extracted.slice(extractedComma + 1)
-          }
-        }
-        return prefix + extracted
-      }
-
-      // Body is pure base64, return complete data URL
-      return prefix + body
+export const toModelMessagesEffect = Effect.fnUntraced(function* (
+  input: WithParts[],
+  model: Provider.Model,
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+) {
+  const result: UIMessage[] = []
+  const toolNames = new Set<string>()
+  // Track media from tool results that need to be injected as user messages
+  // for providers that don't support that media type in tool results.
+  //
+  // OpenAI-compatible APIs only support string content in tool results, so we need
+  // to extract media and inject as user messages. Some SDKs only support a subset
+  // of media in tool results; e.g. Bedrock supports images but not PDFs there.
+  //
+  // Only apply this workaround if the model actually supports that media input -
+  // otherwise unsupportedParts() will turn it into a user-visible error.
+  const supportsMediaInToolResult = (attachment: { mime: string }) => {
+    if (model.api.npm === "@ai-sdk/anthropic") return true
+    if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
+    if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
+    if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
+    if (model.api.npm === "@ai-sdk/google") {
+      const id = model.api.id.toLowerCase()
+      return id.includes("gemini-3") && !id.includes("gemini-2")
     }
+    return false
+  }
 
-    const toModelOutput = (output: unknown) => {
-      if (typeof output === "string") {
-        return { type: "text", value: output }
-      }
-
-      if (typeof output === "object") {
-        const outputObject = output as {
-          text: string
-          attachments?: Array<{ mime: string; url: string }>
-        }
-        const attachments = (outputObject.attachments ?? []).filter((attachment) => {
-          return attachment.url.startsWith("data:") && attachment.url.includes(",")
-        })
-
-        return {
-          type: "content",
-          value: [
-            { type: "text", text: outputObject.text },
-            ...attachments.map((attachment) => ({
-              type: "media",
-              mediaType: attachment.mime,
-              data: media(attachment.url),
-            })),
-          ],
-        }
-      }
-
-      return { type: "json", value: output as never }
+  const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
+    const output = options.output
+    if (typeof output === "string") {
+      return { type: "text", value: output }
     }
 
     if (typeof output === "object") {
@@ -753,10 +689,7 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
           ...attachments.map((attachment) => ({
             type: "media",
             mediaType: attachment.mime,
-            data: iife(() => {
-              const commaIndex = attachment.url.indexOf(",")
-              return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-            }),
+            data: stripDataUrlPrefix(attachment.url),
           })),
         ],
       }
@@ -814,9 +747,9 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
       if (userMessage.parts.length > 0) result.push(userMessage)
     }
 
-      if (msg.info.role === "assistant") {
-        const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
-        const pendingMedia: Array<{ mime: string; url: string }> = []
+    if (msg.info.role === "assistant") {
+      const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+      const media: Array<{ mime: string; url: string; filename?: string }> = []
 
       if (
         msg.info.error &&
@@ -856,47 +789,48 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
             ...(differentModel ? {} : { providerMetadata: part.metadata }),
           })
         }
-        const assistantMessage: UIMessage = {
-          id: msg.info.id,
-          role: "assistant",
-          parts: [],
-        }
-        for (const part of msg.parts) {
-          if (part.type === "text")
-            if (part.text !== "")
-              assistantMessage.parts.push({
-                type: "text",
-                text: part.text,
-                ...(differentModel ? {} : { providerMetadata: part.metadata }),
-              })
-          if (part.type === "step-start")
+        if (part.type === "step-start")
+          assistantMessage.parts.push({
+            type: "step-start",
+          })
+        if (part.type === "tool") {
+          toolNames.add(part.tool)
+          if (part.state.status === "completed") {
+            const outputText = part.state.time.compacted
+              ? "[Old tool result content cleared]"
+              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+
+            // For providers that don't support media in tool results, extract media files
+            // (images, PDFs) to be sent as a separate user message
+            const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+            const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
+            if (extractedMedia.length > 0) {
+              media.push(...extractedMedia)
+            }
+            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
+
+            const output =
+              finalAttachments.length > 0
+                ? {
+                    text: outputText,
+                    attachments: finalAttachments,
+                  }
+                : outputText
+
             assistantMessage.parts.push({
-              type: "step-start",
+              type: ("tool-" + part.tool) as `tool-${string}`,
+              state: "output-available",
+              toolCallId: part.callID,
+              input: part.state.input,
+              output,
+              ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
-          if (part.type === "tool") {
-            if (part.tool === "hook") continue
-            toolNames.add(part.tool)
-            if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
-
-              // For providers that don't support media in tool results, extract media files
-              // (images, PDFs) to be sent as a separate user message
-              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-              const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
-              if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                pendingMedia.push(...mediaAttachments)
-              }
-              const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
-
-              const output =
-                finalAttachments.length > 0
-                  ? {
-                      text: outputText,
-                      attachments: finalAttachments,
-                    }
-                  : outputText
-
+          }
+          if (part.state.status === "error") {
+            const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined
+            if (typeof output === "string") {
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
@@ -918,35 +852,27 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
               })
             }
           }
-          if (part.type === "reasoning") {
-            if (part.text !== "")
-              assistantMessage.parts.push({
-                type: "reasoning",
-                text: part.text,
-                ...(differentModel ? {} : { providerMetadata: part.metadata }),
-              })
-          }
-        }
-        if (assistantMessage.parts.length > 0) {
-          result.push(assistantMessage)
-          // Inject pending media as a user message for providers that don't support
-          // media (images, PDFs) in tool results
-          if (pendingMedia.length > 0) {
-            result.push({
-              id: MessageID.ascending(),
-              role: "user",
-              parts: [
-                {
-                  type: "text" as const,
-                  text: "Attached image(s) from tool result:",
-                },
-                ...pendingMedia.map((attachment) => ({
-                  type: "file" as const,
-                  url: media(attachment.url),
-                  mediaType: attachment.mime,
-                })),
-              ],
+          // Handle pending/running tool calls to prevent dangling tool_use blocks
+          // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+          if (part.state.status === "pending" || part.state.status === "running")
+            assistantMessage.parts.push({
+              type: ("tool-" + part.tool) as `tool-${string}`,
+              state: "output-error",
+              toolCallId: part.callID,
+              input: part.state.input,
+              errorText: "[Tool execution was interrupted]",
+              ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
+        }
+        if (part.type === "reasoning") {
+          if (differentModel) {
+            if (part.text.trim().length > 0)
+              assistantMessage.parts.push({
+                type: "text",
+                text: part.text,
+              })
+            continue
           }
           assistantMessage.parts.push({
             type: "reasoning",
@@ -970,7 +896,7 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
               },
               ...media.map((attachment) => ({
                 type: "file" as const,
-                url: attachment.url,
+                url: normalizeDataUrl(attachment.url, attachment.mime),
                 mediaType: attachment.mime,
                 filename: attachment.filename,
               })),

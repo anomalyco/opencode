@@ -6,12 +6,14 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import fuzzysort from "fuzzysort"
-import { Installation } from "@/installation"
-import { Global } from "@/global"
-import { Log } from "@/util/log"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/core/global"
+import { Log } from "@opencode-ai/core/util/log"
 import { Identifier } from "@/id/id"
 import { Ripgrep } from "@/file/ripgrep"
+import { AppRuntime } from "@/effect/app-runtime"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { Effect, Stream } from "effect"
 import shimSource from "./python/bridge_shim.py" with { type: "text" }
 
 // Cursor encode/decode for pagination (mirrors packages/opencode/src/session/message-v2.ts)
@@ -41,7 +43,7 @@ const directory = "/genericagent"
 const projectID = "genericagent"
 const providerID = "genericagent"
 const modelID = "python"
-const version = Installation.VERSION
+const version = InstallationVersion
 
 const fileUnsupported =
   "GenericAgent does not expose a project filesystem yet. Use a normal project to browse files, or keep chatting in GenericAgent without the file tree."
@@ -737,7 +739,13 @@ async function searchWorkspaceFiles(input: { cwd: string; query: string; dirs: b
   const includeDirs = input.type === "directory" || (input.type !== "file" && input.dirs)
 
   try {
-    for await (const file of Ripgrep.files({ cwd: input.cwd })) {
+    const matches = await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const rg = yield* Ripgrep.Service
+        return yield* rg.files({ cwd: input.cwd }).pipe(Stream.runCollect, Effect.map((chunk) => Array.from(chunk)))
+      }),
+    )
+    for (const file of matches) {
       if (includeFiles) files.push(file)
       if (!includeDirs) continue
 

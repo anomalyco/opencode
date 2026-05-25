@@ -115,20 +115,10 @@ export async function read(): Promise<Content | undefined> {
     }
   }
 
-    console.log("clipboard: no native support")
-    return async (text: string) => {
-      await clipboardy.write(text).catch(() => {})
-    }
-  })
-
-  export async function copy(text: string): Promise<void> {
-    const renderer = rendererRef.current
-    if (renderer) {
-      // @ts-expect-error - copyToClipboardOSC52 is not in CliRenderer types but exists
-      const copied = renderer.copyToClipboardOSC52(text)
-      if (copied) return
-    }
-    await getCopyMethod()(text)
+  const clipboardy = await getClipboardy()
+  const text = await clipboardy.read().catch(() => {})
+  if (text) {
+    return { data: text, mime: "text/plain" }
   }
 }
 

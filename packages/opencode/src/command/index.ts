@@ -1,11 +1,10 @@
 import { BusEvent } from "@/bus/bus-event"
-import z from "zod"
-import { Config } from "../config/config"
-import { Instance } from "../project/instance"
-import { Identifier } from "../id/id"
-import PROMPT_INITIALIZE from "./template/initialize.txt"
-import PROMPT_REVIEW from "./template/review.txt"
-import PROMPT_SKILLS from "./template/skills.txt"
+import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
+import type { InstanceContext } from "@/project/instance-context"
+import { SessionID, MessageID } from "@/session/schema"
+import { Effect, Layer, Context, Schema } from "effect"
+import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
@@ -63,11 +62,12 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
-  export const Default = {
-    INIT: "init",
-    REVIEW: "review",
-    SKILLS: "skills",
-  } as const
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const config = yield* Config.Service
+    const mcp = yield* MCP.Service
+    const skill = yield* Skill.Service
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
@@ -92,39 +92,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
-      },
-      [Default.SKILLS]: {
-        name: Default.SKILLS,
-        description: "list all available skills",
-        source: "command",
-        get template() {
-          return (async () => {
-            const skills = await Skill.all()
-            if (skills.length === 0) {
-              return `${PROMPT_SKILLS}\n\n**No skills are currently loaded.**`
-            }
-            const skillList = skills
-              .map((s) => `- **/${s.name}**: ${s.description}\n  Location: \`${s.location}\``)
-              .join("\n")
-            return `${PROMPT_SKILLS}\n\n**Currently loaded skills (${skills.length}):**\n\n${skillList}`
-          })()
-        },
-        hints: [],
-      },
-    }
-
-    for (const [name, command] of Object.entries(cfg.command ?? {})) {
-      result[name] = {
-        name,
-        agent: command.agent,
-        model: command.model,
-        description: command.description,
-        source: "command",
-        get template() {
-          return command.template
-        },
-        subtask: command.subtask,
-        hints: hints(command.template),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

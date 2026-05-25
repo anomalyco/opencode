@@ -1,4 +1,4 @@
-import { expect, describe } from "bun:test"
+import { expect, describe, test } from "bun:test"
 import { Cause, Effect, Exit } from "effect"
 import path from "path"
 import fs from "fs/promises"

@@ -10,96 +10,105 @@ import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
-import { ProviderTransform } from "@/provider/transform"
-import { ulid } from "ulid"
+import { NotFoundError } from "@/storage/storage"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { Effect, Layer, Context, Schema } from "effect"
+import * as DateTime from "effect/DateTime"
+import { InstanceState } from "@/effect/instance-state"
+import { isOverflow as overflow, usable } from "./overflow"
+import { serviceUse } from "@/effect/service-use"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session-event"
 
 const log = Log.create({ service: "session.compaction" })
 
-  async function hookPart(input: {
-    sessionID: string
-    messageID: string
-    plugin: string
-    hook: string
-    stage: "before" | "after" | "error"
-    error?: string
-  }) {
-    const now = Date.now()
-    await Session.updatePart({
-      id: Identifier.ascending("part"),
-      messageID: input.messageID,
-      sessionID: input.sessionID,
-      type: "tool",
-      callID: ulid(),
-      tool: "hook",
-      state: {
-        status: "completed",
-        input: {
-          hook: input.plugin,
-          hook_type: `${input.stage} ${input.hook}`,
-          event: input.hook,
-        },
-        output: input.error ?? "",
-        title: input.plugin,
-        metadata: {
-          hook: input.plugin,
-          hook_type: `${input.stage} ${input.hook}`,
-          event: input.hook,
-          output: input.error ?? "",
-        },
-        time: {
-          start: now,
-          end: now,
-        },
-      },
-      metadata: {
-        hook: input.plugin,
-        hook_type: `${input.stage} ${input.hook}`,
-        event: input.hook,
-        error: input.error,
-      },
-    })
-  }
+export const Event = {
+  Compacted: BusEvent.define(
+    "session.compacted",
+    Schema.Struct({
+      sessionID: SessionID,
+    }),
+  ),
+}
 
-  function hookOpts(sessionID: string, messageID: string) {
-    return {
-      onInvoke: async (event: {
-        plugin: string
-        custom: boolean
-        hook: string
-        stage: "before" | "after" | "error"
-        error?: string
-      }) => {
-        if (!event.custom) return
-        try {
-          await hookPart({
-            sessionID,
-            messageID,
-            plugin: event.plugin,
-            hook: event.hook,
-            stage: event.stage,
-            error: event.error,
-          })
-        } catch (err) {
-          log.debug("skip hook timeline part", {
-            sessionID,
-            messageID,
-            plugin: event.plugin,
-            hook: event.hook,
-            stage: event.stage,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        }
-      },
-    }
-  }
+export const PRUNE_MINIMUM = 20_000
+export const PRUNE_PROTECT = 40_000
+const TOOL_OUTPUT_MAX_CHARS = 2_000
+const PRUNE_PROTECTED_TOOLS = ["skill"]
+const DEFAULT_TAIL_TURNS = 2
+const MIN_PRESERVE_RECENT_TOKENS = 2_000
+const MAX_PRESERVE_RECENT_TOKENS = 8_000
+const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
+<template>
+## Goal
+- [single-sentence task summary]
 
-  export const Event = {
-    Compacted: BusEvent.define(
-      "session.compacted",
-      z.object({
-        sessionID: z.string(),
-      }),
-    ),
+## Constraints & Preferences
+- [user constraints, preferences, specs, or "(none)"]
+
+## Progress
+### Done
+- [completed work or "(none)"]
+
+### In Progress
+- [current work or "(none)"]
+
+### Blocked
+- [blockers or "(none)"]
+
+## Key Decisions
+- [decision and why, or "(none)"]
+
+## Next Steps
+- [ordered next actions or "(none)"]
+
+## Critical Context
+- [important technical facts, errors, open questions, or "(none)"]
+
+## Relevant Files
+- [file or directory path: why it matters, or "(none)"]
+</template>
+
+Rules:
+- Keep every section, even when empty.
+- Use terse bullets, not prose paragraphs.
+- Preserve exact file paths, commands, error strings, and identifiers when known.
+- Do not mention the summary process or that context was compacted.`
+type Turn = {
+  start: number
+  end: number
+  id: MessageID
+}
+
+type Tail = {
+  start: number
+  id: MessageID
+}
+
+type CompletedCompaction = {
+  userIndex: number
+  assistantIndex: number
+  summary: string | undefined
+}
+
+function summaryText(message: MessageV2.WithParts) {
+  const text = message.parts
+    .filter((part): part is MessageV2.TextPart => part.type === "text")
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim()
+  return text || undefined
+}
+
+function completedCompactions(messages: MessageV2.WithParts[]) {
+  const users = new Map<MessageID, number>()
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    if (msg.info.role !== "user") continue
+    if (!msg.parts.some((part) => part.type === "compaction")) continue
+    users.set(msg.info.id, i)
   }
 
   return messages.flatMap((msg, assistantIndex): CompletedCompaction[] => {
@@ -331,16 +340,6 @@ export const layer = Layer.effect(
         log.info("pruned", { count: toPrune.length })
       }
     })
-    // Allow plugins to inject context or replace compaction prompt
-    const compacting = await Plugin.trigger(
-      "experimental.session.compacting",
-      { sessionID: input.sessionID },
-      { context: [], prompt: undefined },
-      hookOpts(input.sessionID, msg.id),
-    )
-    const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
-Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
-The summary that you construct will be used so that another agent can read it and continue the work.
 
     const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
       parentID: MessageID
@@ -356,82 +355,22 @@ The summary that you construct will be used so that another agent can read it an
       const userMessage = parent.info
       const compactionPart = parent.parts.find((part): part is MessageV2.CompactionPart => part.type === "compaction")
 
-[What goal(s) is the user trying to accomplish?]
-
-## Instructions
-
-- [What important instructions did the user give you that are relevant]
-- [If there is a plan or spec, include information about it so next agent can continue using it]
-
-## Discoveries
-
-[What notable things were learned during this conversation that would be useful for the next agent to know when continuing the work]
-
-## Accomplished
-
-[What work has been completed, what work is still in progress, and what work is left?]
-
-## Relevant files / directories
-
-[Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
----`
-
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-    const result = await processor.process({
-      user: userMessage,
-      agent,
-      abort: input.abort,
-      sessionID: input.sessionID,
-      tools: {},
-      system: [],
-      messages: [
-        ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
-        {
-          role: "user",
-          content: promptText,
-        },
-      ],
-      model,
-    })
-
-    if (result === "compact") {
-      processor.message.error = new MessageV2.ContextOverflowError({
-        message: replay
-          ? "Conversation history too large to compact - exceeds model context limit"
-          : "Session too large to compact - context exceeds model limit even after stripping media",
-      }).toObject()
-      processor.message.finish = "error"
-      await Session.updateMessage(processor.message)
-      return "stop"
-    }
-
-    if (result === "continue" && input.auto) {
-      if (replay) {
-        const original = replay.info as MessageV2.User
-        const replayMsg = await Session.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: input.sessionID,
-          time: { created: Date.now() },
-          agent: original.agent,
-          model: original.model,
-          format: original.format,
-          tools: original.tools,
-          system: original.system,
-          variant: original.variant,
-        })
-        for (const part of replay.parts) {
-          if (part.type === "compaction") continue
-          const replayPart =
-            part.type === "file" && MessageV2.isMedia(part.mime)
-              ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
-              : part
-          await Session.updatePart({
-            ...replayPart,
-            id: PartID.ascending(),
-            messageID: replayMsg.id,
-            sessionID: input.sessionID,
-          })
+      let messages = input.messages
+      let replay:
+        | {
+            info: MessageV2.User
+            parts: MessageV2.Part[]
+          }
+        | undefined
+      if (input.overflow) {
+        const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
+        for (let i = idx - 1; i >= 0; i--) {
+          const msg = input.messages[i]
+          if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
+            replay = { info: msg.info, parts: msg.parts }
+            messages = input.messages.slice(0, i)
+            break
+          }
         }
         const hasContent =
           replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))

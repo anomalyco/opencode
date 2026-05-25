@@ -134,15 +134,17 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  test("derives stable project ID from non-git directory", async () => {
-    await using tmp = await tmpdir()
-    const { project: a } = await Project.fromDirectory(tmp.path)
-    const { project: b } = await Project.fromDirectory(tmp.path)
-    expect(a.id).not.toBe(ProjectID.global)
+it.live("uses global project for non-git directory", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const { project: a } = yield* run((svc) => svc.fromDirectory(tmp))
+    const { project: b } = yield* run((svc) => svc.fromDirectory(tmp))
+    expect(a.id).toBe(ProjectID.global)
     expect(b.id).toBe(a.id)
-    expect(a.worktree).toBe(tmp.path)
+    expect(a.worktree).toBe("/")
     expect(a.vcs).toBeUndefined()
-  })
+  }),
+)
 
   it.live("derives stable project ID from root commit", () =>
     Effect.gen(function* () {

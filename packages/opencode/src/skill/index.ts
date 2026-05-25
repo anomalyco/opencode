@@ -7,12 +7,12 @@ import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
-import { QuickAssistant } from "@/quick-assistant"
-import { Filesystem } from "@/util/filesystem"
-import { Config } from "../config/config"
-import { ConfigMarkdown } from "../config/markdown"
-import { Glob } from "../util/glob"
-import { Log } from "../util/log"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Config } from "@/config/config"
+import { ConfigMarkdown } from "@/config/markdown"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Glob } from "@opencode-ai/core/util/glob"
+import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
 import { isRecord } from "@/util/record"
@@ -202,24 +202,90 @@ const discoverSkills = Effect.fnUntraced(function* (
     }
   }
 
-  const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
-    log.info("skill.scan.glob.start", { root, pattern, scope: opts?.scope })
-    return Glob.scan(pattern, {
-      cwd: root,
-      absolute: true,
-      include: "file",
-      symlink: true,
-      dot: opts?.dot,
-    })
-      .then((matches) => {
-        log.info("skill.scan.glob.matches", { root, pattern, count: matches.length, matches: matches.slice(0, 5) })
-        return Promise.all(matches.map((match) => add(state, match)))
-      })
-      .catch((error) => {
-        if (!opts?.scope) throw error
-        log.error(`failed to scan ${opts.scope} skills`, { dir: root, pattern, error })
-      })
+  const configDirs = yield* config.directories()
+  for (const dir of configDirs) {
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
   }
+
+  const cfg = yield* config.get()
+  for (const item of cfg.skills?.paths ?? []) {
+    const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
+    const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+    if (!(yield* fsys.isDir(dir))) {
+      log.warn("skill path not found", { path: dir })
+      continue
+    }
+
+    yield* scan(state, dir, SKILL_PATTERN)
+  }
+
+  for (const url of cfg.skills?.urls ?? []) {
+    const pulledDirs = yield* discovery.pull(url)
+    for (const dir of pulledDirs) {
+      yield* scan(state, dir, SKILL_PATTERN)
+    }
+  }
+
+  return {
+    matches: Array.from(state.matches),
+    dirs: Array.from(state.dirs),
+  }
+})
+
+const loadSkills = Effect.fnUntraced(function* (state: State, discovered: DiscoveryState, bus: Bus.Interface) {
+  yield* Effect.forEach(discovered.matches, (match) => add(state, match, bus), {
+    concurrency: "unbounded",
+    discard: true,
+  })
+
+  log.info("init", { count: Object.keys(state.skills).length })
+})
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const discovery = yield* Discovery.Service
+    const config = yield* Config.Service
+    const bus = yield* Bus.Service
+    const fsys = yield* AppFileSystem.Service
+    const global = yield* Global.Service
+    const flags = yield* RuntimeFlags.Service
+    const discovered = yield* InstanceState.make(
+      Effect.fn("Skill.discovery")(function* (ctx) {
+        return yield* discoverSkills(
+          config,
+          discovery,
+          fsys,
+          global,
+          flags.disableExternalSkills,
+          flags.disableClaudeCodeSkills,
+          ctx.directory,
+          ctx.worktree,
+        )
+      }),
+    )
+    const state = yield* InstanceState.make(
+      Effect.fn("Skill.state")(function* () {
+        const s: State = { skills: {}, dirs: new Set() }
+        // Register the built-in skill BEFORE disk discovery so a user-disk
+        // skill with the same name can override it.
+        s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
+          name: CUSTOMIZE_OPENCODE_SKILL_NAME,
+          description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+        }
+        yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
+        return s
+      }),
+    )
+
+    const get = Effect.fn("Skill.get")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      return s.skills[name]
+    })
 
     const require = Effect.fn("Skill.require")(function* (name: string) {
       const s = yield* InstanceState.get(state)
@@ -228,40 +294,14 @@ const discoverSkills = Effect.fnUntraced(function* (
       return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
     })
 
-    const load = async () => {
-      if (QuickAssistant.active(directory)) {
-        log.info("skip quick assistant skills", { directory })
-        return
-      }
+    const all = Effect.fn("Skill.all")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Object.values(s.skills)
+    })
 
-      log.info("skill.scan.start", {
-        directory,
-        worktree,
-        message: "Starting skill scan",
-      })
-
-      if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-        for (const dir of EXTERNAL_DIRS) {
-          const root = path.join(Global.Path.home, dir)
-          if (!(await Filesystem.isDir(root))) continue
-          log.info("skill.scan.global", { root, pattern: EXTERNAL_SKILL_PATTERN })
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
-        }
-
-        log.info("skill.scan.project.start", {
-          start: directory,
-          stop: worktree,
-          targets: EXTERNAL_DIRS,
-        })
-        for await (const root of Filesystem.up({
-          targets: EXTERNAL_DIRS,
-          start: directory,
-          stop: worktree,
-        })) {
-          log.info("skill.scan.project.found", { root, pattern: EXTERNAL_SKILL_PATTERN })
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
-        }
-      }
+    const dirs = Effect.fn("Skill.dirs")(function* () {
+      return (yield* InstanceState.get(discovered)).dirs
+    })
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
       const s = yield* InstanceState.get(state)
