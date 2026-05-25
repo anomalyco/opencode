@@ -189,6 +189,18 @@ async function main() {
     return { text, length: text.length }
   })()`)
 
+  // 视觉 overlay 实测(拖拽中应该已经渲染)
+  const overlay = await cdp.eval(`(() => {
+    // 找 data-slot="selection-overlay-rect" 或 z-40 + pointer-events-none + rgba(209,52,56) 背景
+    let rects = Array.from(document.querySelectorAll('[data-slot="selection-overlay-rect"]'))
+    if (rects.length === 0) {
+      rects = Array.from(document.querySelectorAll('div.fixed.pointer-events-none.z-40')).filter(d => {
+        return d.style.backgroundColor && d.style.backgroundColor.includes('209, 52, 56')
+      })
+    }
+    return { count: rects.length }
+  })()`)
+
   // 模拟 DomSelectionProvider.collectVisualSpansInBbox — 验"右键时 Provider 拿到什么"
   // 这一段代码必须跟 packages/app/src/utils/context-menu-host/dom-provider.ts 里的算法 1:1 一致
   const providerVisual = await cdp.eval(`(() => {
@@ -235,6 +247,9 @@ async function main() {
   console.log(`  Length: ${native.length}`)
   console.log(`  Text: ${JSON.stringify(native.text.slice(0, 300))}`)
 
+  console.log("\n=== 视觉 overlay(拖拽中应实时渲染)===")
+  console.log(`  Overlay rects 个数: ${overlay.count}`)
+
   console.log("\n=== Provider 视觉 bbox 算法 ===")
   if (providerVisual) {
     console.log(`  Length: ${providerVisual.length} (rects ${providerVisual.rectsCount})`)
@@ -252,10 +267,20 @@ async function main() {
   if (providerVisual) {
     const visualRange = [Math.max(1, Math.floor(targets.visualExpectedLength * 0.85)), Math.ceil(targets.visualExpectedLength * 1.15)]
     if (providerVisual.length >= visualRange[0] && providerVisual.length <= visualRange[1]) {
-      console.log(`  ✅ Provider 视觉 ${providerVisual.length} ≈ 期望 ${targets.visualExpectedLength}(允许 ${visualRange[0]}-${visualRange[1]})— bug 2 修了,视觉完整性达成`)
+      console.log(`  ✅ Provider 视觉 ${providerVisual.length} ≈ 期望 ${targets.visualExpectedLength}(允许 ${visualRange[0]}-${visualRange[1]})— bug 2 chat 文本完整`)
     } else {
       console.log(`  ❌ Provider 视觉 ${providerVisual.length} vs 期望 ${targets.visualExpectedLength}(允许 ${visualRange[0]}-${visualRange[1]})— 算法仍有偏差`)
     }
+  }
+
+  if (overlay.count === 0) {
+    console.log(`  ❌ 拖拽中无 overlay rects 渲染 — 视觉 overlay 未实时显示,user 拖拽中仍看不到完整选区`)
+  } else if (providerVisual && Math.abs(overlay.count - providerVisual.rectsCount) <= 2) {
+    console.log(`  ✅ Overlay rects ${overlay.count} ≈ Provider 视觉 spans ${providerVisual.rectsCount} — 拖拽中视觉 overlay 完整`)
+  } else if (providerVisual) {
+    console.log(`  ⚠ Overlay rects ${overlay.count} vs Provider 视觉 spans ${providerVisual.rectsCount}(差 ${Math.abs(overlay.count - providerVisual.rectsCount)})— 实时 overlay 与 Provider 算法有偏差`)
+  } else {
+    console.log(`  ✓ Overlay rects ${overlay.count} 已渲染`)
   }
 
   cdp.close()

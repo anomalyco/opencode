@@ -92,6 +92,56 @@ export function ContextMenuHost(props: {
     onCleanup(() => window.removeEventListener("scroll", onScroll, true))
   })
 
+  // FORK: 拖拽中实时视觉 overlay — 仅对 pdf-viewer 区域生效
+  // [feat: office-选中加聊天] 2026-05-25 user 反馈"视觉漏字仍看得见"
+  //
+  // 背景:Provider.getSelection 的视觉 bbox 算法已让 chat 收到完整 text + Host 红色 overlay
+  // 在右键瞬间显示完整视觉,但**拖拽中** user 看到的仍是浏览器 native 蓝色高亮(线性,可能漏字)。
+  // 本 effect 在 selectionchange 时**实时**调 Provider 重算 rects 更新 overlay,
+  // 让 user 在拖拽过程中就看到完整视觉(red overlay 覆盖 native blue 漏掉的部分)。
+  //
+  // 限制:
+  // - chat 区不接管(chat 走 message-part user-select:text,native 蓝色就是完整的,加 red overlay 反而干扰)
+  // - menu open 时不更新(snapshot 模式,保持右键瞬间快照)
+  onMount(() => {
+    if (typeof document === "undefined") return
+    const onSelectionChange = () => {
+      // menu 打开时走 snapshot 模式,不动 overlay
+      if (menu().open) return
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) {
+        setHighlightRects(null)
+        return
+      }
+      const range = sel.getRangeAt(0)
+      const ancestor = range.commonAncestorContainer
+      const targetEl =
+        ancestor.nodeType === Node.ELEMENT_NODE
+          ? (ancestor as Element)
+          : ancestor.parentElement
+      if (!targetEl) {
+        setHighlightRects(null)
+        return
+      }
+      // 只对 pdf-viewer 区域跑视觉算法 — chat 区让 native 自己显示蓝色
+      if (!targetEl.closest('[data-slot="pdf-viewer"]')) {
+        setHighlightRects(null)
+        return
+      }
+      for (const provider of props.providers) {
+        if (!provider.matches(targetEl)) continue
+        const result = provider.getSelection(targetEl)
+        if (result && result.rects.length > 0 && result.text.trim()) {
+          applyHighlight(result)
+          return
+        }
+      }
+      setHighlightRects(null)
+    }
+    document.addEventListener("selectionchange", onSelectionChange)
+    onCleanup(() => document.removeEventListener("selectionchange", onSelectionChange))
+  })
+
   const close = () => {
     const m = menu()
     if (!m.open) return
@@ -201,6 +251,7 @@ export function ContextMenuHost(props: {
           <For each={highlightRects()!}>
             {(rect) => (
               <div
+                data-slot="selection-overlay-rect"
                 class="fixed pointer-events-none z-40"
                 style={{
                   left: `${rect.left}px`,

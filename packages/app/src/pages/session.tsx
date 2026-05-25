@@ -51,6 +51,10 @@ import {
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
+// FORK: ChatSelectionMenu / ContextMenuHost 提到 Session 顶层,不受 messagesReady() Show 门控
+// 否则 user 看 PDF/office 时无 chat 会话 → Host 不 mount → 右键无菜单 + 拖拽无 overlay。
+// [feat: office-选中加聊天] 2026-05-25
+import { ChatSelectionMenu } from "@/pages/session/chat-selection-menu"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
@@ -1795,6 +1799,10 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       {sessionSync() ?? ""}
+      {/* FORK: 选区菜单 Host 提到 Session 顶层(原在 MessageTimeline,被 messagesReady Show 门控)
+          确保 user 看 PDF/office 无 chat 会话时也能用右键菜单 + 拖拽 overlay
+          [feat: office-选中加聊天] 2026-05-25 */}
+      <ChatSelectionMenu />
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>

@@ -34,7 +34,9 @@ import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
 // FORK: 聊天对话区右键选区菜单 [feat: chat-selection-menu] 2026-05-15
-import { ChatSelectionMenu } from "./chat-selection-menu"
+// FORK: ChatSelectionMenu mount 已上移到 session.tsx 顶层(2026-05-25)
+// 避免被 messagesReady Show 门控导致 user 看 PDF/office 无 chat 时 Host 不 mount
+// [feat: office-选中加聊天]
 
 type MessageComment = {
   path: string
@@ -1115,8 +1117,7 @@ export function MessageTimeline(props: {
           </div>
         </ScrollView>
       </div>
-      {/* FORK: 聊天对话区右键选区菜单(全局 contextmenu capture,scope 到 session-turn-list)2026-05-15 */}
-      <ChatSelectionMenu />
+      {/* FORK: ChatSelectionMenu 已上移到 session.tsx 顶层 2026-05-25 [feat: office-选中加聊天] */}
     </Show>
   )
 }
