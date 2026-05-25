@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js"
 import { createMemo } from "solid-js"
 import { useNavigate } from "@solidjs/router"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
@@ -15,7 +15,7 @@ import { WordmarkV2 } from "@opencode-ai/ui/v2/components/wordmark-v2.jsx"
 const MAIN_WORKTREE = "main"
 
 export function NewSessionDesignView(props: { worktree: string; children: JSX.Element }) {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const layout = useLayout()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -24,7 +24,7 @@ export function NewSessionDesignView(props: { worktree: string; children: JSX.El
 
   const projectRoot = createMemo(() => sync.project?.worktree ?? sdk.directory)
   const projects = createMemo(() => {
-    const roots = globalSync.data.project.map((project) => project.worktree)
+    const roots = serverSync.data.project.map((project) => project.worktree)
     if (roots.includes(projectRoot())) return roots
     return [projectRoot(), ...roots]
   })
