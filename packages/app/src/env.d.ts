@@ -19,3 +19,25 @@ export declare module "solid-js" {
     }
   }
 }
+
+// Fork extensions: opencode core in this fork exposes additional VCS metadata
+// (worktrees, branches) and UserMessage variants. Augment the upstream SDK types
+// so business code can continue using these fields without weakening type safety.
+declare module "@opencode-ai/sdk/v2/gen/types.gen" {
+  interface VcsInfo {
+    branches?: Array<string>
+    worktrees?: Array<{
+      path: string
+      branch?: string
+      head?: string
+      bare?: boolean
+      detached?: boolean
+      locked?: string
+      prunable?: string
+    }>
+  }
+
+  interface UserMessage {
+    variant?: string
+  }
+}

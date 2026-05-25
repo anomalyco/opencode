@@ -2,7 +2,6 @@ import { useGlobalSync } from "@/context/global-sync"
 import { mainDomain } from "@/pages/layout/extra-agents"
 import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
-import { Iterable, pipe } from "effect"
 import { createMemo } from "solid-js"
 
 export const popularProviders = [
@@ -22,32 +21,16 @@ function providerAccessors(providers: () => ReturnType<typeof useGlobalSync>["da
     data: providers,
     all: () => providers().all,
     default: () => providers().default,
-    popular: () =>
-      pipe(
-        providers().all,
-        Iterable.map(([, p]) => p),
-        Iterable.filter((p) => popularProviderSet.has(p.id)),
-        (v) => Array.from(v),
-      ),
+    popular: () => providers().all.filter((p) => popularProviderSet.has(p.id)),
     connected: () => {
       const connected = new Set(providers().connected)
-      return pipe(
-        providers().all,
-        Iterable.map(([, p]) => p),
-        Iterable.filter((p) => connected.has(p.id)),
-        (v) => Array.from(v),
-      )
+      return providers().all.filter((p) => connected.has(p.id))
     },
     paid: () => {
       const connected = new Set(providers().connected)
-      return [
-        ...Iterable.filter(
-          providers().all,
-          ([id]) =>
-            connected.has(id) &&
-            (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
-        ),
-      ]
+      return providers().all.filter(
+        (p) => connected.has(p.id) && (p.id !== "opencode" || Object.values(p.models).some((m) => m.cost?.input)),
+      )
     },
   }
 }

@@ -32,7 +32,7 @@ describe("checkServerHealth", () => {
 
     const result = await checkServerHealth(server, fetch)
 
-    expect(result).toEqual({ healthy: false })
+    expect(result).toEqual({ healthy: false, message: "network" })
   })
 
   test("uses timeout fallback when AbortSignal.timeout is unavailable", async () => {
@@ -64,7 +64,7 @@ describe("checkServerHealth", () => {
     })
 
     expect(aborted).toBe(true)
-    expect(result).toEqual({ healthy: false })
+    expect(result).toEqual({ healthy: false, message: "Aborted" })
   })
 
   test("uses provided abort signal", async () => {
@@ -118,6 +118,6 @@ describe("checkServerHealth", () => {
     })
 
     expect(count).toBe(3)
-    expect(result).toEqual({ healthy: false })
+    expect(result).toEqual({ healthy: false, message: "network" })
   })
 })

@@ -43,8 +43,6 @@ export const dict = {
   "command.project.openInFileExplorer": "在文件资源管理器打开",
   "command.project.openInFileManager": "在文件管理器打开",
 
-  "command.project.open": "打开项目",
-  "command.project.switch": "切换项目",
   "command.provider.connect": "连接提供商",
 
   "command.server.switch": "切换服务器",
@@ -83,8 +81,7 @@ export const dict = {
   "command.language.set": "使用语言：{{language}}",
 
   "command.session.new": "新建会话",
-  "command.input.focus": "聚焦输入框",
-  "command.input.focus.description": "聚焦到聊天输入框",
+
   "command.file.open": "打开文件",
 
   "command.tab.close": "关闭标签页",
@@ -120,9 +117,6 @@ export const dict = {
 
   "command.mcp.toggle": "切换 MCPs",
   "command.mcp.toggle.description": "切换 MCPs",
-  "command.skill.list": "查看技能",
-  "command.skill.list.description": "查看已加载的技能",
-
   "command.skill.list": "查看技能",
   "command.skill.list.description": "查看已加载的技能",
 
@@ -296,7 +290,7 @@ export const dict = {
   "common.default": "默认",
   "common.attachment": "附件",
 
-  "prompt.placeholder.shell": "输入 shell 命令... {{example}}",
+  "prompt.placeholder.shell": "输入 shell 命令...",
   "prompt.placeholder.normal": '随便问点什么... "{{example}}"',
   "prompt.placeholder.simple": "随便问点什么...",
   "prompt.placeholder.summarizeComments": "总结评论…",
@@ -349,8 +343,8 @@ export const dict = {
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
   "prompt.editor.title": "编辑提示词",
-  "prompt.toast.pasteUnsupported.title": "不支持的粘贴",
-  "prompt.toast.pasteUnsupported.description": "这里只能粘贴图片或 PDF 文件。",
+  "prompt.toast.pasteUnsupported.title": "不支持的附件",
+  "prompt.toast.pasteUnsupported.description": "此处仅能附加图片、PDF 或文本文件。",
   "prompt.toast.modelAgentRequired.title": "请选择智能体和模型",
   "prompt.toast.modelAgentRequired.description": "发送提示前请先选择智能体和模型。",
   "prompt.toast.worktreeCreateFailed.title": "创建工作树失败",
@@ -364,10 +358,6 @@ export const dict = {
   "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",
   "dialog.mcp.empty": "未配置 MCPs",
 
-  "dialog.skill.title": "技能",
-  "dialog.skill.description": "已加载 {{count}} 个",
-  "dialog.skill.empty": "未加载技能",
-
   "dialog.lsp.empty": "已从文件类型自动检测到 LSPs",
 
   "dialog.plugins.empty": "在 opencode.json 中配置的插件",
@@ -375,7 +365,6 @@ export const dict = {
   "mcp.status.connected": "已连接",
   "mcp.status.failed": "失败",
   "mcp.status.needs_auth": "需要授权",
-  "mcp.auth.clickToAuthenticate": "点击进行授权",
   "mcp.status.disabled": "已禁用",
 
   "dialog.fork.empty": "没有可用于分叉的消息",
@@ -426,11 +415,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "工作区启动脚本",
   "dialog.project.edit.worktree.startup.description": "在创建新的工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
-
-  "project.switch.title": "切换项目",
-  "project.switch.placeholder": "搜索项目...",
-  "project.switch.empty": "没有可用的项目",
-  "project.switch.current": "当前",
 
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",
@@ -584,14 +568,6 @@ export const dict = {
   "home.recentProjects": "最近项目",
   "home.empty.title": "没有最近项目",
   "home.empty.description": "通过打开本地项目开始使用",
-  "home.title": "主页",
-  "home.projects": "项目",
-  "home.project.add": "添加项目",
-  "home.sessions.search.placeholder": "搜索会话",
-  "home.sessions.empty": "未找到会话",
-  "home.sessions.group.today": "今天",
-  "home.sessions.group.yesterday": "昨天",
-  "home.sessions.group.older": "更早",
 
   "session.tab.session": "会话",
   "session.tab.review": "审查",
@@ -810,8 +786,6 @@ export const dict = {
   "settings.general.row.shellToolPartsExpanded.description": "默认在时间线中展开 shell 工具部分",
   "settings.general.row.editToolPartsExpanded.title": "展开编辑工具部分",
   "settings.general.row.editToolPartsExpanded.description": "默认在时间线中展开 edit、write 和 patch 工具部分",
-  "settings.general.row.customHookParts.title": "显示自定义 hooks",
-  "settings.general.row.customHookParts.description": "在时间线中显示自定义 hook 条目",
   "settings.general.row.wayland.title": "使用原生 Wayland",
   "settings.general.row.wayland.description": "在 Wayland 上禁用 X11 回退。需要重启。",
   "settings.general.row.wayland.tooltip": "在混合刷新率显示器的 Linux 系统上，原生 Wayland 可能更稳定。",
@@ -826,6 +800,20 @@ export const dict = {
   "settings.updates.action.checking": "正在检查...",
   "settings.updates.toast.latest.title": "已是最新版本",
   "settings.updates.toast.latest.description": "你正在使用最新版本的 OpenCode。",
+
+  "font.option.ibmPlexMono": "IBM Plex Mono",
+  "font.option.cascadiaCode": "Cascadia Code",
+  "font.option.firaCode": "Fira Code",
+  "font.option.hack": "Hack",
+  "font.option.inconsolata": "Inconsolata",
+  "font.option.intelOneMono": "Intel One Mono",
+  "font.option.iosevka": "Iosevka",
+  "font.option.jetbrainsMono": "JetBrains Mono",
+  "font.option.mesloLgs": "Meslo LGS",
+  "font.option.robotoMono": "Roboto Mono",
+  "font.option.sourceCodePro": "Source Code Pro",
+  "font.option.ubuntuMono": "Ubuntu Mono",
+  "font.option.geistMono": "Geist Mono",
 
   "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
@@ -966,6 +954,8 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "从 URL 获取内容",
   "settings.permissions.tool.websearch.title": "网页搜索",
   "settings.permissions.tool.websearch.description": "搜索网页",
+  "settings.permissions.tool.codesearch.title": "代码搜索",
+  "settings.permissions.tool.codesearch.description": "在网上搜索代码",
   "settings.permissions.tool.external_directory.title": "外部目录",
   "settings.permissions.tool.external_directory.description": "访问项目目录之外的文件",
   "settings.permissions.tool.doom_loop.title": "死循环",
@@ -975,8 +965,6 @@ export const dict = {
   "session.delete.title": "删除会话",
   "session.delete.confirm": '删除会话 "{{name}}"？',
   "session.delete.button": "删除会话",
-  "session.restore": "恢复",
-  "session.restore.failed.title": "恢复会话失败",
 
   "workspace.new": "新建工作区",
   "workspace.type.local": "本地",
@@ -1146,9 +1134,15 @@ export const dict = {
   "config.claws.field.tokenPlaceholder": "粘贴 token",
   "config.claws.action.save": "保存设置",
   "config.claws.action.test": "测试连接",
+  "config.claws.action.detect": "自动探测",
+  "config.claws.action.detecting": "探测中...",
   "config.claws.action.abort": "中止测试",
   "config.claws.error.urlRequired": "Gateway URL 为必填项。",
   "config.claws.test.success": "Gateway 连接成功。",
+  "config.claws.detect.success": "已探测到 OpenClaw gateway 设置。",
+  "config.claws.detect.successSource": "来自 {{source}}。",
+  "config.claws.detect.fallbackRestart": "已使用默认 gateway。重启桌面端后可启用完整探测。",
+  "config.claws.detect.failed": "OpenClaw 自动探测失败",
   "config.claws.status.testing": "正在测试连接...",
   "config.claws.status.success": "连接测试成功。",
   "config.claws.status.failed": "连接测试失败。",

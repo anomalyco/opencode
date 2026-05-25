@@ -339,7 +339,7 @@ export const createDirSyncContext = (client: OpencodeClient, directory: string) 
           setSessionPrefetch({
             directory: input.directory,
             sessionID: input.sessionID,
-            limit: message.length,
+            count: message.length,
             cursor: next.cursor,
             complete: next.complete,
           })
@@ -426,7 +426,7 @@ export const createDirSyncContext = (client: OpencodeClient, directory: string) 
         const seeded = getSessionPrefetch(directory, sessionID)
         if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
           batch(() => {
-            setMeta("limit", key, seeded.limit)
+            setMeta("limit", key, seeded.count)
             setMeta("cursor", key, seeded.cursor)
             setMeta("complete", key, seeded.complete)
             setMeta("loading", key, false)
@@ -440,7 +440,7 @@ export const createDirSyncContext = (client: OpencodeClient, directory: string) 
             const seeded = getSessionPrefetch(directory, sessionID)
             if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
               batch(() => {
-                setMeta("limit", key, seeded.limit)
+                setMeta("limit", key, seeded.count)
                 setMeta("cursor", key, seeded.cursor)
                 setMeta("complete", key, seeded.complete)
                 setMeta("loading", key, false)

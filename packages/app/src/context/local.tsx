@@ -1,16 +1,17 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
+import { modelEnabled, modelProbe } from "@/testing/model-selection"
 import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 
-export type ModelKey = { providerID: string; modelID: string; variant?: string }
+export type ModelKey = { providerID: string; modelID: string }
 
 type State = {
   agent?: string
@@ -44,7 +45,7 @@ const migrate = (value: unknown) => {
 }
 
 const clone = (value: State | undefined) => {
-  if (!value) return
+  if (!value) return undefined
   return {
     ...value,
     model: value.model ? { ...value.model } : undefined,
@@ -90,7 +91,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const validModel = (model: ModelKey) => {
-      const provider = providers.all().get(model.providerID)
+      const provider = providers.all().find((item) => item.id === model.providerID)
       return !!provider?.models[model.modelID] && connected().has(model.providerID)
     }
 
@@ -104,7 +105,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const pickAgent = (name: string | undefined) => {
       const items = list()
-      if (items.length === 0) return
+      if (items.length === 0) return undefined
       return items.find((item) => item.name === name) ?? items[0]
     }
 
@@ -227,14 +228,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         () => agent.current()?.model,
         fallback,
       )
-      if (!item) return
+      if (!item) return undefined
       return models.find(item)
     }
 
     const configured = () => {
       const item = agent.current()
       const model = current()
-      if (!item || !model) return
+      if (!item || !model) return undefined
       return getConfiguredAgentVariant({
         agent: { model: item.model, variant: item.variant },
         model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
@@ -314,16 +315,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         configured,
         selected,
         current() {
-          const resolved = resolveModelVariant({
+          return resolveModelVariant({
             variants: this.list(),
             selected: this.selected(),
             configured: this.configured(),
           })
-          if (resolved) return resolved
-          const model = current()
-          if (!model) return
-          const saved = models.variant.get({ providerID: model.provider.id, modelID: model.id })
-          if (saved && this.list().includes(saved)) return saved
         },
         list() {
           const item = current()
@@ -340,9 +336,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               variant: value ?? null,
             })
             write({ variant: value ?? null })
-            if (model) {
-              models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? undefined)
-            }
           })
         },
         cycle() {
@@ -380,7 +373,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           handoff.set(handoffKey(dir, session), next)
           setStore("draft", undefined)
         },
-        restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
+        restore(msg: { sessionID: string; agent: string; model: ModelKey; variant?: string }) {
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
@@ -390,11 +383,40 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            variant: msg.model?.variant ?? null,
+            variant: msg.variant ?? null,
           })
         },
       },
     }
+
+    if (modelEnabled()) {
+      createEffect(() => {
+        const agent = result.agent.current()
+        const model = result.model.current()
+        modelProbe.set({
+          dir: sdk.directory,
+          sessionID: id(),
+          last: store.last,
+          agent: agent?.name,
+          model: model
+            ? {
+                providerID: model.provider.id,
+                modelID: model.id,
+                name: model.name,
+              }
+            : undefined,
+          variant: result.model.variant.current() ?? null,
+          selected: result.model.variant.selected(),
+          configured: result.model.variant.configured(),
+          pick: scope(),
+          base: undefined,
+          current: store.current,
+        })
+      })
+
+      onCleanup(() => modelProbe.clear())
+    }
+
     return result
   },
 })

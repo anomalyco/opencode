@@ -1,4 +1,4 @@
-import type { FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff as FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
@@ -69,6 +69,9 @@ const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
 const settleMs = 1_500
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
+const smoothBottomSnapDistance = 900
+const smoothBottomMaxStep = 180
+const smoothBottomEase = 0.32
 
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
@@ -1293,14 +1296,20 @@ export default function Page() {
   // Streaming stability depends on locking the outer timeline directly to the
   // physical bottom. This avoids relying on the auto-scroll state machine once
   // content height is already changing every frame.
-  const lockBottom = (el: HTMLDivElement, source: string) => {
+  const lockBottom = (el: HTMLDivElement, source: string, mode: "auto" | "smooth" = "auto") => {
     const next = Math.max(0, el.scrollHeight - el.clientHeight)
     const dist = next - el.scrollTop
     if (Math.abs(dist) <= 1) {
       debug("lock-bottom:skip", el, { source, dist: Math.round(dist) })
       return
     }
-    el.scrollTop = next
+    if (mode === "smooth" && Math.abs(dist) <= smoothBottomSnapDistance) {
+      const step =
+        Math.sign(dist) * Math.min(Math.max(Math.abs(dist) * smoothBottomEase, 1), smoothBottomMaxStep)
+      el.scrollTop += step
+    } else {
+      el.scrollTop = next
+    }
     debug("lock-bottom:write", el, { source, dist: Math.round(dist) })
   }
 
@@ -1339,7 +1348,7 @@ export default function Page() {
     }
 
     const gap = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
-    if (Math.abs(gap) > 1) console.debug("[session] initial bottom settle", { gap })
+    if (Math.abs(gap) > 1) console.debug(`[session] initial bottom settle gap=${gap}`)
     lockBottom(root, "initial-scroll:settle")
     scheduleScrollState(root)
 
@@ -1378,7 +1387,7 @@ export default function Page() {
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
       if ((live() || settling()) && !hasScrollTarget() && !hasScrollGesture()) {
-        lockBottom(root, "content:resize:lock-bottom")
+        lockBottom(root, "content:resize:lock-bottom", live() ? "smooth" : "auto")
         if (root.style.visibility === "hidden") {
           const gap = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
           if (Math.abs(gap) <= 1) {
@@ -1396,7 +1405,7 @@ export default function Page() {
     if (!el.isConnected || el.clientHeight <= 0 || el.scrollHeight <= 0) return
     debug("state:before", el)
     if ((live() || settling()) && !hasScrollGesture() && !hasScrollTarget()) {
-      lockBottom(el, "state:live-lock")
+      lockBottom(el, "state:live-lock", live() ? "smooth" : "auto")
     }
     const top = clamp(el)
     const max = el.scrollHeight - el.clientHeight

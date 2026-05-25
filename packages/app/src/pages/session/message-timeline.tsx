@@ -70,6 +70,9 @@ const toolLimit = 8
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
+const FOLLOW_SNAP_DISTANCE = 900
+const FOLLOW_MAX_STEP = 180
+const FOLLOW_EASE = 0.32
 
 const heightCacheKey = (sessionId: string, msgId: string, stage: string, signature: string) =>
   `opencode.h2.${signature}.${sessionId}.${msgId}.${stage}`
@@ -443,7 +446,7 @@ export function MessageTimeline(props: {
     return map
   })
 
-  const follow = (root: HTMLDivElement, src: string) => {
+  const follow = (root: HTMLDivElement, src: string, mode: "smooth" | "auto" = "smooth") => {
     if (props.hasScrollGesture()) {
       const now = Date.now()
       if (now - skipped > 300) {
@@ -453,7 +456,22 @@ export function MessageTimeline(props: {
       return
     }
 
-    root.scrollTop = root.scrollHeight
+    const top = Math.max(0, root.scrollHeight - root.clientHeight)
+    const dist = top - root.scrollTop
+    if (Math.abs(dist) <= 1) {
+      root.scrollTop = top
+      props.onScheduleScrollState(root)
+      return
+    }
+
+    if (mode === "auto" || Math.abs(dist) > FOLLOW_SNAP_DISTANCE) {
+      root.scrollTop = top
+      props.onScheduleScrollState(root)
+      return
+    }
+
+    const step = Math.sign(dist) * Math.min(Math.max(Math.abs(dist) * FOLLOW_EASE, 1), FOLLOW_MAX_STEP)
+    root.scrollTop += step
     props.onScheduleScrollState(root)
   }
   const estimateTurnHeight = (id: string) => {
@@ -1061,8 +1079,7 @@ export function MessageTimeline(props: {
     }
     if (same && !seek) {
       if ((pinned || jumping) && root) {
-        root.scrollTop = root.scrollHeight
-        props.onScheduleScrollState(root)
+        follow(root, jumping ? "window:jump-steady" : "window:pinned-steady", jumping ? "auto" : "smooth")
       }
       if (jumping) props.onClearJumpIntent()
       return
@@ -1093,13 +1110,12 @@ export function MessageTimeline(props: {
         if (!root) return
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
         const before = snap(root)
-        root.scrollTop = root.scrollHeight
+        follow(root, "window:streaming", "smooth")
         const after = snap(root)
         seq += 1
         console.debug(
           `[timeline] streaming window bottom follow before=${before.gap} after=${after.gap} pinned=${pinned}`,
         )
-        props.onScheduleScrollState(root)
       })
       return
     }
@@ -1117,8 +1133,7 @@ export function MessageTimeline(props: {
         const root = viewport
         if (!root) return
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
-        root.scrollTop = root.scrollHeight
-        props.onScheduleScrollState(root)
+        follow(root, "window:jump", "auto")
       })
       return
     }
@@ -1290,11 +1305,10 @@ export function MessageTimeline(props: {
       return
     }
 
-    root.scrollTop = top
+    follow(root, source, "smooth")
     console.debug(
       `[timeline] bottom pin: source=${source} dist=${Math.round(dist)} top=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)}`,
     )
-    props.onScheduleScrollState(root)
   }
 
   const schedulePin = (source: string) => {
@@ -2488,7 +2502,9 @@ export function MessageTimeline(props: {
             performance.mark("submit:dom-mount")
             performance.measure("submit:to-dom-mount", "submit:start", "submit:dom-mount")
             const m = performance.getEntriesByName("submit:to-dom-mount", "measure").at(-1)
-            console.debug(`[perf:submit] message DOM mounted: ${Math.round(m?.duration ?? 0)}ms after submit`, { messageID: item.messageID })
+            console.debug(
+              `[perf:submit] message DOM mounted after=${Math.round(m?.duration ?? 0)}ms messageID=${item.messageID}`,
+            )
           }
         }}
         id={props.anchor(item.messageID)}

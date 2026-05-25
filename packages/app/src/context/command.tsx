@@ -1,10 +1,7 @@
-import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type Accessor, createEffect, createMemo, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
+import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { dict as en } from "@/i18n/en"
@@ -85,7 +82,6 @@ export interface CommandOption {
   slash?: string
   suggested?: boolean
   disabled?: boolean
-  hidden?: boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
   onHighlight?: () => (() => void) | void
 }
@@ -98,7 +94,6 @@ export type CommandCatalogItem = {
   category?: string
   keybind?: KeybindConfig
   slash?: string
-  hidden?: boolean
 }
 
 export type CommandRegistration = {
@@ -196,8 +191,21 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
       arrowright: "→",
       comma: ",",
       plus: "+",
-      space: "Space",
       slash: "/",
+    }
+    const named: Record<string, KeyLabel> = {
+      backspace: "common.key.backspace",
+      delete: "common.key.delete",
+      end: "common.key.end",
+      enter: "common.key.enter",
+      esc: "common.key.esc",
+      escape: "common.key.esc",
+      home: "common.key.home",
+      insert: "common.key.insert",
+      pagedown: "common.key.pageDown",
+      pageup: "common.key.pageUp",
+      space: "common.key.space",
+      tab: "common.key.tab",
     }
     const key = kb.key.toLowerCase()
     const displayKey =
@@ -385,7 +393,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     onMount(() => {
-      makeEventListener(document, "keydown", handleKeyDown)
+      document.addEventListener("keydown", handleKeyDown)
+    })
+
+    onCleanup(() => {
+      document.removeEventListener("keydown", handleKeyDown)
     })
 
     function register(cb: () => CommandOption[]): void

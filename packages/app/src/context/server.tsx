@@ -153,11 +153,7 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: {
-    defaultServer: ServerConnection.Key
-    disableHealthCheck?: boolean
-    servers?: Array<ServerConnection.Any>
-  }) => {
+  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const checkServerHealth = useCheckServerHealth()
 
     const [store, setStore, _, ready] = persisted(
@@ -171,13 +167,20 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
 
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
+    const storedList = () => (Array.isArray(store.list) ? store.list : [])
+    const storedProjects = () =>
+      store.projects && typeof store.projects === "object" && !Array.isArray(store.projects) ? store.projects : {}
+    const storedLastProject = () =>
+      store.lastProject && typeof store.lastProject === "object" && !Array.isArray(store.lastProject)
+        ? store.lastProject
+        : {}
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       const sidecar = (props.servers ?? []).find((item) => item.type === "sidecar" && item.variant === "base")
       const legacy = store.currentSidecarUrl
       const servers = [
         ...(props.servers ?? []),
-        ...store.list.flatMap((value) => {
+        ...storedList().flatMap((value) => {
           if (isPersistedLoopbackHttpServer(value)) {
             return []
           }
@@ -261,13 +264,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
       if (!url_) return
-      const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
+      const conn = { ...input, http: { ...input.http, url: url_ } }
       return batch(() => {
-        const existing = store.list.findIndex((x) => url(x) === url_)
+        const list = storedList()
+        const existing = list.findIndex((x) => url(x) === url_)
         if (existing !== -1) {
           setStore("list", existing, conn)
         } else {
-          setStore("list", store.list.length, conn)
+          setStore("list", list.length, conn)
         }
         setState("active", ServerConnection.key(conn))
         return conn
@@ -275,7 +279,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(key: ServerConnection.Key) {
-      const list = store.list.filter((x) => url(x) !== key)
+      const list = storedList().filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
         if (state.active === key) {
@@ -363,11 +367,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (isExtraAgentIntegration(conn?.integration)) return conn.integration
       return projectsKey(state.active)
     })
-    const projectsList = createMemo(() => store.projects[origin()] ?? [])
+    const projectsList = createMemo(() => storedProjects()[origin()] ?? [])
     const projectsFor = (input?: ServerConnection.Key) => {
       const key = input ? originFor(input) : origin()
       if (!key) return [] as StoredProject[]
-      return store.projects[key] ?? []
+      return storedProjects()[key] ?? []
     }
     const isLocal = createMemo(() => {
       const c = current()
@@ -534,12 +538,12 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         last() {
           const key = origin()
           if (!key) return
-          return store.lastProject[key]
+          return storedLastProject()[key]
         },
         lastFor(input: ServerConnection.Key) {
           const key = originFor(input)
           if (!key) return
-          return store.lastProject[key]
+          return storedLastProject()[key]
         },
         touch(directory: string) {
           const key = origin()

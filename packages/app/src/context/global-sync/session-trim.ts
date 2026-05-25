@@ -40,7 +40,6 @@ export function trimSessions(
     .filter((s) => !!s?.id)
     .filter((s) => !s.time?.archived)
   const roots = all.filter((s) => !s.parentID)
-  roots.sort(compareSessionRecent)
   const children = all.filter((s) => !!s.parentID)
   const sorted = roots.slice().sort((a, b) => {
     const diff = sessionUpdatedAt(b) - sessionUpdatedAt(a)

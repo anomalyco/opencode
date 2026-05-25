@@ -1,6 +1,7 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
+  SnapshotFileDiff as FileDiff,
   Message,
   Part,
   PermissionRequest,
@@ -8,13 +9,11 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
-  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
-import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -23,7 +22,7 @@ const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
-  setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
+  setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
@@ -35,18 +34,14 @@ export function applyGlobalEvent(input: {
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)
   if (result.found) {
-    input.setGlobalProject(
-      produce((draft) => {
-        draft[result.index] = { ...draft[result.index], ...properties }
-      }),
-    )
+    input.setGlobalProject((draft) => {
+      draft[result.index] = { ...draft[result.index], ...properties }
+    })
     return
   }
-  input.setGlobalProject(
-    produce((draft) => {
-      draft.splice(result.index, 0, properties)
-    }),
-  )
+  input.setGlobalProject((draft) => {
+    draft.splice(result.index, 0, properties)
+  })
 }
 
 function cleanupSessionCaches(
@@ -127,7 +122,6 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
-        if (input.store.session[result.index]!.time.archived === info.time.archived) break
         if (result.found) {
           input.setStore(
             "session",
@@ -169,8 +163,8 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.diff": {
-      const props = event.properties as { sessionID: string; diff: SnapshotFileDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
+      const props = event.properties as { sessionID: string; diff: FileDiff[] }
+      input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
       break
     }
     case "todo.updated": {
@@ -185,7 +179,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "message.updated": {
-      const info = clean((event.properties as { info: Message }).info)
+      const info = (event.properties as { info: Message }).info
       const messages = input.store.message[info.sessionID]
       if (!messages) {
         input.setStore("message", info.sessionID, [info])
@@ -241,12 +235,6 @@ export function applyDirectoryEvent(input: {
             const result = Binary.search(messages, props.messageID, (m) => m.id)
             if (result.found) messages.splice(result.index, 1)
           }
-          const parts = draft.part[props.messageID]
-          if (parts) {
-            for (const part of parts) {
-              delete draft.part_text_accum_delta[part.id]
-            }
-          }
           delete draft.part[props.messageID]
         }),
       )
@@ -255,11 +243,6 @@ export function applyDirectoryEvent(input: {
     case "message.part.updated": {
       const part = (event.properties as { part: Part }).part
       if (SKIP_PARTS.has(part.type)) break
-      input.setStore(
-        produce((draft) => {
-          delete draft.part_text_accum_delta[part.id]
-        }),
-      )
       const parts = input.store.part[part.messageID]
       if (!parts) {
         input.setStore("part", part.messageID, [part])
@@ -296,11 +279,6 @@ export function applyDirectoryEvent(input: {
     }
     case "message.part.removed": {
       const props = event.properties as { messageID: string; partID: string }
-      input.setStore(
-        produce((draft) => {
-          delete draft.part_text_accum_delta[props.partID]
-        }),
-      )
       const parts = input.store.part[props.messageID]
       if (!parts) break
       const result = Binary.search(parts, props.partID, (p) => p.id)

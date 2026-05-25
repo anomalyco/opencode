@@ -8,7 +8,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { FileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff as FileDiff } from "@opencode-ai/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
@@ -64,7 +64,7 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
-  const diffFiles = createMemo(() => props.diffs().map((d) => d.file))
+  const diffFiles = createMemo(() => props.diffs().map((d) => d.file).filter((f): f is string => !!f))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
       if (!a) return b
@@ -76,6 +76,7 @@ export function SessionSidePanel(props: {
 
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of props.diffs()) {
+      if (!diff.file) continue
       const file = normalize(diff.file)
       const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
 

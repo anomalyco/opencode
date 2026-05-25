@@ -5,8 +5,8 @@ import type {
   PermissionRequest,
   Project,
   ProviderAuthResponse,
+  ProviderListResponse,
   QuestionRequest,
-  Session,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -15,7 +15,7 @@ import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
-import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
+import { cmp, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { projectOwner } from "@/pages/layout/helpers"
 
@@ -40,22 +40,14 @@ function waitForPaint() {
     const timer = setTimeout(finish, 50)
     if (typeof requestAnimationFrame !== "function") return
     requestAnimationFrame(() => {
-      setTimeout(() => {
-        clearTimeout(timer)
-        finish()
-      }, 0)
+      clearTimeout(timer)
+      finish()
     })
   })
 }
 
 function errors(list: PromiseSettledResult<unknown>[]) {
   return list.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason)
-}
-
-const providerRev = new Map<string, number>()
-
-export function clearProviderRev(directory: string) {
-  providerRev.delete(directory)
 }
 
 function runAll(list: Array<() => Promise<unknown>>) {
@@ -77,27 +69,6 @@ function showErrors(input: {
     description: message + more,
   })
 }
-
-export const loadGlobalConfigQuery = (sdk: OpencodeClient) =>
-  queryOptions({
-    queryKey: ["config"],
-    queryFn: () => retry(() => sdk.global.config.get().then((x) => x.data!)),
-  })
-
-export const loadProjectsQuery = (sdk: OpencodeClient) =>
-  queryOptions({
-    queryKey: ["project"],
-    queryFn: () =>
-      retry(() =>
-        sdk.project.list().then((x) => {
-          return (x.data ?? [])
-            .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
-            .slice()
-            .sort((a, b) => cmp(a.id, b.id))
-        }),
-      ),
-  })
 
 export async function bootstrapGlobal(input: {
   globalSDK: OpencodeClient
@@ -207,19 +178,19 @@ export async function bootstrapDirectory(input: {
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
-    path: Path
     project: Project[]
-    provider: NormalizedProviderListResponse
+    provider: ProviderListResponse
   }
-  queryClient: QueryClient
 }) {
   const loading = input.store.status !== "complete"
   let projects = input.global.project
   const seededProject = projectID(input.directory, projects)
   if (seededProject) input.setStore("project", seededProject)
-  if (seededPath) input.setStore("path", seededPath)
+  if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
+    input.setStore("provider", input.global.provider)
+  }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
-    input.setStore("config", reconcile(input.global.config, { merge: false }))
+    input.setStore("config", input.global.config)
   }
   if (loading) input.setStore("status", "partial")
 

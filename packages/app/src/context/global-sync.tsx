@@ -1,4 +1,12 @@
-import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
+import type {
+  Config,
+  OpencodeClient,
+  Path,
+  Project,
+  ProviderAuthResponse,
+  ProviderListResponse,
+  Todo,
+} from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import {
@@ -12,21 +20,14 @@ import {
 } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
+import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { GlobalSyncProvider as GlobalSyncContextProvider, useGlobalSync } from "./global-sync-context"
 import { useGlobalSDK } from "./global-sdk"
-import {
-  bootstrapDirectory,
-  bootstrapGlobal,
-  clearProviderRev,
-  loadAgentsQuery,
-  loadGlobalConfigQuery,
-  loadPathQuery,
-  loadProjectsQuery,
-  loadProvidersQuery,
-} from "./global-sync/bootstrap"
+import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
+import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
@@ -59,38 +60,11 @@ export type GlobalStore = {
   session_todo: {
     [sessionID: string]: Todo[]
   }
-  provider: NormalizedProviderListResponse
+  provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
 }
-
-export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
-  queryOptions({
-    queryKey: [directory, "mcp"] as const,
-    queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
-  })
-
-export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
-  queryOptions({
-    queryKey: [directory, "lsp"] as const,
-    queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
-  })
-
-function makeQueryOptionsApi(globalSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
-  return {
-    globalConfig: () => loadGlobalConfigQuery(globalSDK()),
-    projects: () => loadProjectsQuery(globalSDK()),
-    providers: (directory: PathKey | null) =>
-      loadProvidersQuery(directory, directory === null ? globalSDK() : sdkFor(directory)),
-    path: (directory: PathKey | null) => loadPathQuery(directory, directory === null ? globalSDK() : sdkFor(directory)),
-    agents: (directory: PathKey) => loadAgentsQuery(directory, sdkFor(directory)),
-    mcp: (directory: PathKey) => loadMcpQuery(directory, sdkFor(directory)),
-    lsp: (directory: PathKey) => loadLspQuery(directory, sdkFor(directory)),
-    sessions: (directory: PathKey) => ({ queryKey: [directory, "loadSessions"] as const }),
-  }
-}
-export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
@@ -250,25 +224,9 @@ function createGlobalSync() {
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
 
-  const bootstrap = useQuery(() => ({
-    queryKey: ["bootstrap"],
-    queryFn: async () => {
-      await bootstrapGlobal({
-        globalSDK: globalSDK.client,
-        requestFailedTitle: language.t("common.requestFailed"),
-        translate: language.t,
-        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-        setGlobalStore: setBootStore,
-        queryClient,
-      })
-      bootedAt = Date.now()
-      return bootedAt
-    },
-  }))
-
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
+      setProjects(input[1] as Project[] | ((draft: Project[]) => void))
       return input[1]
     }
     if (
@@ -494,12 +452,11 @@ function createGlobalSync() {
           description: formatServerError(err, language.t),
         })
       })
-      .then(() => {})
 
-    sessionLoads.set(key, promise)
-    void promise.finally(() => {
-      sessionLoads.delete(key)
-      children.unpin(key)
+    sessionLoads.set(directory, promise)
+    promise.finally(() => {
+      sessionLoads.delete(directory)
+      children.unpin(directory)
     })
     return promise
   }
@@ -539,22 +496,20 @@ function createGlobalSync() {
         setProject: (projects) => setProjectsFor(domainFromDirectory(directory), projects),
         vcsCache: cache,
         translate: language.t,
-        queryClient,
       })
       setLoaded("dir", directory, true)
     })()
 
-    booting.set(key, promise)
-    void promise.finally(() => {
-      booting.delete(key)
-      children.unpin(key)
+    booting.set(directory, promise)
+    promise.finally(() => {
+      booting.delete(directory)
+      children.unpin(directory)
     })
     return promise
   }
 
   const unsub = globalSDK.listenAll((e) => {
     const directory = e.name
-    const key = directoryKey(directory)
     const event = e.details
     const emittingDomain = e.domain
     const dirDomain = directory === "global" ? emittingDomain : domainFromDirectory(directory)
@@ -593,7 +548,7 @@ function createGlobalSync() {
     if (isolated(directory)) return
     const existing = managerOf(directory).children[directory]
     if (!existing) return
-    children.mark(key)
+    children.mark(directory)
     const [store, setStore] = existing
     try {
       applyDirectoryEvent({
@@ -611,7 +566,7 @@ function createGlobalSync() {
         },
       })
     } catch (err) {
-      const props = event.properties as
+      const props = (event as { properties?: unknown }).properties as
         | {
             messageID?: string
             partID?: string
@@ -770,36 +725,25 @@ function createGlobalSync() {
     todo: {
       set: setSessionTodo,
     },
-    createDirSyncContext: (directory: string) => {
-      onCleanup(() => {
-        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) - 1)
-        if (dirSyncContextRefCounts.get(directory) === 0) {
-          dirSyncContexts.delete(directory)
-          dirSyncContextRefCounts.delete(directory)
-        }
-      })
-
-      const cached = dirSyncContexts.get(directory)
-      if (cached) {
-        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) + 1)
-        return cached
-      }
-      const ctx = createDirSyncContext(globalSDK.createClient({ directory, throwOnError: true }), directory)
-      dirSyncContexts.set(directory, ctx)
-      dirSyncContextRefCounts.set(directory, 1)
-
-      return ctx
-    },
   }
 }
 
 export { createGlobalSync, useGlobalSync }
 
+export function useQueryOptions() {
+  return {
+    mcp: (directory: string) => ({ queryKey: [directory, "mcp"] as const }),
+    lsp: (directory: string) => ({ queryKey: [directory, "lsp"] as const }),
+    agents: (directory: string) => ({ queryKey: [directory, "agents"] as const }),
+    providers: (directory: string | null) => ({ queryKey: [directory, "providers"] as const }),
+    path: (directory: string | null) => ({ queryKey: [directory, "path"] as const }),
+    sessions: (directory: string) => ({ queryKey: [directory, "loadSessions"] as const }),
+    projects: () => ({ queryKey: ["projects"] as const }),
+    globalConfig: () => ({ queryKey: ["globalConfig"] as const }),
+  }
+}
+
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
   return <GlobalSyncContextProvider value={value}>{props.children}</GlobalSyncContextProvider>
-}
-
-export function useQueryOptions() {
-  return useGlobalSync().queryOptions
 }

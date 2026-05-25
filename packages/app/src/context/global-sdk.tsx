@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2/client"
 import { createContext, createEffect, createSignal, getOwner, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createGlobalEmitter, type GlobalEmitter } from "@solid-primitives/event-bus"
 import z from "zod"
@@ -8,12 +8,13 @@ import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
-const isAbortError = (error: unknown) =>
-  error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
+const abortError = z.object({
+  name: z.literal("AbortError"),
+})
 
-type EventMap = { [key: string]: Event }
+type EventMap = { [key: string]: GlobalEvent["payload"] }
 type DomainEmitter = GlobalEmitter<EventMap>
-type DomainEvent = { name: string; details: Event; domain: DomainId }
+type DomainEvent = { name: string; details: GlobalEvent["payload"]; domain: DomainId }
 type DomainListener = (event: DomainEvent) => void
 
 type Value = {
@@ -156,7 +157,7 @@ export function GlobalSDKProvider(props: ParentProps) {
       setState((prev) => ({ ...prev, [domain]: createRuntime(conn, next, domain) }))
       const domainEmitter = ensureEmitter(domain)
 
-      type Queued = { directory: string; payload: Event }
+      type Queued = { directory: string; payload: GlobalEvent["payload"] }
       const FLUSH_FRAME_MS = 16
       const STREAM_YIELD_MS = 8
       const RECONNECT_DELAY_MS = 250
@@ -182,7 +183,7 @@ export function GlobalSDKProvider(props: ParentProps) {
       const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
       const aborted = (error: unknown) => abortError.safeParse(error).success
       const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
-      const key = (directory: string, payload: Event) => {
+      const key = (directory: string, payload: GlobalEvent["payload"]) => {
         if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
         if (payload.type === "lsp.updated") return `lsp.updated:${directory}`
         if (payload.type === "message.part.updated") {

@@ -1,13 +1,36 @@
+import { batch, createMemo } from "solid-js"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/core/util/binary"
+import { retry } from "@opencode-ai/core/util/retry"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import {
+  clearSessionPrefetch,
+  getSessionPrefetch,
+  getSessionPrefetchPromise,
+  setSessionPrefetch,
+} from "./global-sync/session-prefetch"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
 function sortParts(parts: Part[]) {
   return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
 }
+
+function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
+  const pending = map.get(key)
+  if (pending) return pending
+  const promise = task().finally(() => {
+    map.delete(key)
+  })
+  map.set(key, promise)
+  return promise
+}
+
+const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -124,11 +147,15 @@ export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticR
   delete draft.part[input.messageID]
 }
 
-export const useSync = () => {
-  const globalSync = useGlobalSync()
-  const sdk = useSDK()
-
-  return globalSync.createDirSyncContext(sdk.directory)
+function setOptimisticAdd(setStore: (...args: unknown[]) => void, input: OptimisticAddInput) {
+  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
+    if (!messages) return [input.message]
+    const result = Binary.search(messages, input.message.id, (m) => m.id)
+    const next = [...messages]
+    next.splice(result.index, 0, input.message)
+    return next
+  })
+  setStore("part", input.message.id, sortParts(input.parts))
 }
 
 function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: OptimisticRemoveInput) {
@@ -173,6 +200,7 @@ const initialMessagePageSize = 80
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
     const inflightTodo = new Map<string, Promise<void>>()
+    const optimistic = new Map<string, Map<string, OptimisticItem>>()
     const maxDirs = 30
     const seen = new Map<string, Set<string>>()
     const [meta, setMeta] = createStore({
@@ -188,6 +216,33 @@ const initialMessagePageSize = 80
       if (match.found) return store.session[match.index]
       return undefined
     }
+
+    const setOptimistic = (directory: string, sessionID: string, item: OptimisticItem) => {
+      const key = keyFor(directory, sessionID)
+      const list = optimistic.get(key)
+      if (list) {
+        list.set(item.message.id, { message: item.message, parts: sortParts(item.parts) })
+        return
+      }
+      optimistic.set(key, new Map([[item.message.id, { message: item.message, parts: sortParts(item.parts) }]]))
+    }
+
+    const clearOptimistic = (directory: string, sessionID: string, messageID?: string) => {
+      const key = keyFor(directory, sessionID)
+      if (!messageID) {
+        optimistic.delete(key)
+        return
+      }
+
+      const list = optimistic.get(key)
+      if (!list) return
+      list.delete(messageID)
+      if (list.size === 0) optimistic.delete(key)
+    }
+
+    const getOptimistic = (directory: string, sessionID: string) => [
+      ...(optimistic.get(keyFor(directory, sessionID))?.values() ?? []),
+    ]
 
     const seenFor = (directory: string) => {
       const existing = seen.get(directory)
@@ -211,6 +266,9 @@ const initialMessagePageSize = 80
 
     const clearMeta = (directory: string, sessionIDs: string[]) => {
       if (sessionIDs.length === 0) return
+      for (const sessionID of sessionIDs) {
+        clearOptimistic(directory, sessionID)
+      }
       setMeta(
         produce((draft) => {
           for (const sessionID of sessionIDs) {
@@ -299,15 +357,20 @@ const initialMessagePageSize = 80
 
       setMeta("loading", key, true)
       await fetchMessages(input)
-        .then((next) => {
+        .then((page) => {
           if (!tracked(input.directory, input.sessionID)) return
+          const next = mergeOptimisticPage(page, getOptimistic(input.directory, input.sessionID))
+          for (const messageID of next.confirmed) {
+            clearOptimistic(input.directory, input.sessionID, messageID)
+          }
           const [store] = globalSync.child(input.directory, { bootstrap: false })
           const cached = input.mode === "prepend" ? (store.message[input.sessionID] ?? []) : []
           const message = input.mode === "prepend" ? merge(cached, next.session) : next.session
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(message, { key: "id" }))
             for (const p of next.part) {
-              input.setStore("part", p.id, p.part)
+              const filtered = p.part.filter((x) => !SKIP_PARTS.has(x.type))
+              if (filtered.length) input.setStore("part", p.id, filtered)
             }
             if ((meta.show[key] ?? 0) > message.length) setMeta("show", key, message.length)
             setMeta("cursor", key, next.cursor)
@@ -382,11 +445,15 @@ const initialMessagePageSize = 80
         get: getSession,
         optimistic: {
           add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
+            const directory = input.directory ?? sdk.directory
             const [, setStore] = target(input.directory)
+            setOptimistic(directory, input.sessionID, { message: input.message, parts: input.parts })
             setOptimisticAdd(setStore as (...args: unknown[]) => void, input)
           },
           remove(input: { directory?: string; sessionID: string; messageID: string }) {
+            const directory = input.directory ?? sdk.directory
             const [, setStore] = target(input.directory)
+            clearOptimistic(directory, input.sessionID, input.messageID)
             setOptimisticRemove(setStore as (...args: unknown[]) => void, input)
           },
         },
@@ -408,6 +475,7 @@ const initialMessagePageSize = 80
             variant: input.variant,
           }
           const [, setStore] = target()
+          setOptimistic(sdk.directory, input.sessionID, { message, parts: input.parts })
           setOptimisticAdd(setStore as (...args: unknown[]) => void, {
             sessionID: input.sessionID,
             message,
@@ -556,7 +624,7 @@ const initialMessagePageSize = 80
             const [, setStore] = globalSync.child(directory)
             touch(directory, setStore, sessionID)
             const key = keyFor(directory, sessionID)
-            const step = count ?? messagePageSize
+            const step = count ?? historyMessagePageSize
             if (meta.loading[key]) return
             const cached = current()[0].message[sessionID]?.length ?? 0
             const show = view(directory, sessionID)

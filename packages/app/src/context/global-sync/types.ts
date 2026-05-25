@@ -2,20 +2,21 @@ import type {
   Agent,
   Command,
   Config,
+  SnapshotFileDiff as FileDiff,
   LspStatus,
   McpStatus,
   Message,
   Part,
   Path,
   PermissionRequest,
+  Project,
+  ProviderListResponse,
   QuestionRequest,
   Session,
   SessionStatus,
-  SnapshotFileDiff,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -39,8 +40,7 @@ export type State = {
   project: string
   projectMeta: ProjectMeta | undefined
   icon: string | undefined
-  provider_ready: boolean
-  provider: NormalizedProviderListResponse
+  provider: ProviderListResponse
   config: Config
   path: Path
   session: Session[]
@@ -48,9 +48,8 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
-  session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: SnapshotFileDiff[]
+    [sessionID: string]: FileDiff[]
   }
   todo: {
     [sessionID: string]: Todo[]
@@ -61,11 +60,9 @@ export type State = {
   question: {
     [sessionID: string]: QuestionRequest[]
   }
-  mcp_ready: boolean
   mcp: {
     [name: string]: McpStatus
   }
-  lsp_ready: boolean
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
   limit: number
@@ -74,9 +71,6 @@ export type State = {
   }
   part: {
     [messageID: string]: Part[]
-  }
-  part_text_accum_delta: {
-    [partID: string]: string
   }
 }
 

@@ -26,6 +26,7 @@ import { applyEdits, modify } from "jsonc-parser"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { paint } from "@/components/prompt-input/expand"
 import { DialogConnectProvider } from "@/components/dialog-connect-provider"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import {
   OPENAI_COMPATIBLE,
   headerRow as blankHeaderRow,
@@ -89,7 +90,7 @@ type DocItem = {
 
 type SkillItem = {
   name: string
-  description: string
+  description?: string
   location: string
   content: string
   editable: boolean
@@ -228,7 +229,8 @@ function stem(path: string) {
   return path.replace(/\.(?:md|mdx|d\.ts|ts|js|mjs|cjs)$/i, "")
 }
 
-function pkg(spec: string) {
+function pkg(spec: string | [string, Record<string, unknown>]) {
+  if (Array.isArray(spec)) spec = spec[0]
   if (spec.startsWith("file://")) return
   if (spec.includes("\\") || spec.startsWith("/") || /^[A-Za-z]:\//.test(spec)) return
   const last = spec.lastIndexOf("@")
@@ -536,6 +538,7 @@ function clawCfg(input?: OpenclawConfig) {
     token: input?.token ?? "",
     saving: false,
     testing: false,
+    detecting: false,
     err: {
       url: "",
     },
@@ -602,7 +605,7 @@ function SectionButton(props: { current: boolean; title: string; icon: IconProps
   return (
     <button
       type="button"
-      class="group flex w-full items-center justify-between gap-3 border-b border-border-weak-base px-4 py-4 text-left transition-colors"
+      class="group flex w-full items-center justify-between gap-3 px-2.5 py-4 text-left transition-colors"
       classList={{
         "bg-surface-base hover:bg-surface-base-hover": !props.current,
         "border-border-base bg-surface-base-active": props.current,
@@ -1121,22 +1124,41 @@ function ClawFormActions(props: {
   dirty: boolean
   busy: boolean
   canTest: boolean
+  canDetect?: boolean
   saving: boolean
   testing: boolean
+  detecting?: boolean
   onSave: () => void
   onTest: () => void
+  onDetect?: () => void
   onAbort?: () => void
 }) {
   const language = useLanguage()
 
   return (
     <div class="flex flex-wrap items-center justify-end gap-2">
+      <Show when={props.canDetect && props.onDetect}>
+        <Button
+          size="small"
+          variant="ghost"
+          icon="magnifying-glass"
+          onClick={() => props.onDetect?.()}
+          disabled={props.busy || props.saving || props.testing || props.detecting}
+        >
+          <Show when={props.detecting} fallback={language.t("config.claws.action.detect")}>
+            <span class="inline-flex items-center gap-2">
+              <Spinner class="size-3" />
+              {language.t("config.claws.action.detecting")}
+            </span>
+          </Show>
+        </Button>
+      </Show>
       <Button
         size="small"
         variant="ghost"
         icon="reset"
         onClick={props.onTest}
-        disabled={!props.canTest || props.busy || props.saving || props.testing}
+        disabled={!props.canTest || props.busy || props.saving || props.testing || props.detecting}
       >
         {language.t("config.claws.action.test")}
       </Button>
@@ -1148,7 +1170,7 @@ function ClawFormActions(props: {
       <SaveButton
         label={language.t("config.claws.action.save")}
         onClick={props.onSave}
-        disabled={props.busy || props.saving || props.testing || !props.dirty}
+        disabled={props.busy || props.saving || props.testing || props.detecting || !props.dirty}
       />
     </div>
   )
@@ -1160,9 +1182,11 @@ function ClawEditor(props: {
   dirty: boolean
   busy: boolean
   canTest: boolean
+  canDetect: boolean
   onChange: (key: "enabled" | "url" | "token", value: string | boolean) => void
   onSave: () => void
   onTest: () => void
+  onDetect: () => void
   onAbort?: () => void
 }) {
   const language = useLanguage()
@@ -1226,10 +1250,13 @@ function ClawEditor(props: {
               dirty={props.dirty}
               busy={props.busy}
               canTest={props.canTest}
+              canDetect={props.canDetect}
               saving={props.form.saving}
               testing={props.form.testing}
+              detecting={props.form.detecting}
               onSave={props.onSave}
               onTest={props.onTest}
+              onDetect={props.onDetect}
               onAbort={props.onAbort}
             />
 
@@ -1292,6 +1319,7 @@ function GenericAgentEditor(props: {
   busy: boolean
   canTest: boolean
   onChange: (key: "enabled" | "pythonExecutable" | "genericAgentDir", value: string | boolean) => void
+  onChooseDir: () => void
   onSave: () => void
   onTest: () => void
   onAbort?: () => void
@@ -1331,17 +1359,42 @@ function GenericAgentEditor(props: {
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
             <div class="grid gap-4 lg:grid-cols-2">
-              <TextField
-                type="text"
-                label={language.t("config.claws.field.genericAgentDir")}
-                description={language.t("config.claws.field.genericAgentDirDescription")}
-                placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
-                value={props.form.genericAgentDir}
-                validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
-                error={props.form.err.genericAgentDir}
-                disabled={props.busy || props.form.saving || props.form.testing}
-                onChange={(value) => props.onChange("genericAgentDir", value)}
-              />
+              <div class="min-w-0">
+                <div class="mb-1.5 flex min-w-0 items-center justify-between gap-3">
+                  <div class="min-w-0 truncate text-14-medium text-text-base">
+                    {language.t("config.claws.field.genericAgentDir")}
+                  </div>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    icon="folder-add-left"
+                    onClick={props.onChooseDir}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                  >
+                    {language.t("session.new.genericagent.cwd.choose")}
+                  </Button>
+                </div>
+                <TextField
+                  type="text"
+                  hideLabel
+                  label={language.t("config.claws.field.genericAgentDir")}
+                  placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
+                  value={props.form.genericAgentDir}
+                  validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
+                  disabled={props.busy || props.form.saving || props.form.testing}
+                  onChange={(value) => props.onChange("genericAgentDir", value)}
+                />
+                <Show
+                  when={props.form.err.genericAgentDir}
+                  fallback={
+                    <div class="mt-2 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.genericAgentDirDescription")}
+                    </div>
+                  }
+                >
+                  {(error) => <div class="mt-2 text-12-regular text-text-danger-base">{error()}</div>}
+                </Show>
+              </div>
               <TextField
                 type="text"
                 label={language.t("config.claws.field.pythonExecutable")}
@@ -1425,6 +1478,7 @@ function HermesEditor(props: {
   busy: boolean
   canTest: boolean
   onChange: (key: "enabled" | "pythonExecutable" | "hermesDir" | "hermesHome", value: string | boolean) => void
+  onChooseDir: () => void
   onSave: () => void
   onTest: () => void
   onAbort?: () => void
@@ -1464,17 +1518,42 @@ function HermesEditor(props: {
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
             <div class="grid gap-4 lg:grid-cols-2">
-              <TextField
-                type="text"
-                label={language.t("config.claws.field.hermesDir")}
-                description={language.t("config.claws.field.hermesDirDescription")}
-                placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
-                value={props.form.hermesDir}
-                validationState={props.form.err.hermesDir ? "invalid" : undefined}
-                error={props.form.err.hermesDir}
-                disabled={props.busy || props.form.saving || props.form.testing}
-                onChange={(value) => props.onChange("hermesDir", value)}
-              />
+              <div class="min-w-0">
+                <div class="mb-1.5 flex min-w-0 items-center justify-between gap-3">
+                  <div class="min-w-0 truncate text-14-medium text-text-base">
+                    {language.t("config.claws.field.hermesDir")}
+                  </div>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    icon="folder-add-left"
+                    onClick={props.onChooseDir}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                  >
+                    {language.t("session.new.genericagent.cwd.choose")}
+                  </Button>
+                </div>
+                <TextField
+                  type="text"
+                  hideLabel
+                  label={language.t("config.claws.field.hermesDir")}
+                  placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
+                  value={props.form.hermesDir}
+                  validationState={props.form.err.hermesDir ? "invalid" : undefined}
+                  disabled={props.busy || props.form.saving || props.form.testing}
+                  onChange={(value) => props.onChange("hermesDir", value)}
+                />
+                <Show
+                  when={props.form.err.hermesDir}
+                  fallback={
+                    <div class="mt-2 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.hermesDirDescription")}
+                    </div>
+                  }
+                >
+                  {(error) => <div class="mt-2 text-12-regular text-text-danger-base">{error()}</div>}
+                </Show>
+              </div>
               <TextField
                 type="text"
                 label={language.t("config.claws.field.pythonExecutable")}
@@ -2034,8 +2113,8 @@ export default function ConfigPage() {
         origin: source.origin,
         root: source.root,
         warn:
-          !item.name.trim() || !item.description.trim()
-            ? `Incomplete metadata. Add ${[!item.name.trim() && "`name`", !item.description.trim() && "`description`"]
+          !item.name.trim() || !item.description?.trim()
+            ? `Incomplete metadata. Add ${[!item.name.trim() && "`name`", !item.description?.trim() && "`description`"]
                 .filter((part): part is string => !!part)
                 .join(t("config.common.and"))} ${t("config.skills.warn.metadataSuffix")}`
             : undefined,
@@ -2503,7 +2582,8 @@ export default function ConfigPage() {
       })
     }
 
-    for (const spec of on) {
+    for (const entry of on) {
+      const spec = Array.isArray(entry) ? entry[0] : entry
       const key = pluginKey(spec)
       const item = map.get(key)
       if (item) {
@@ -3121,6 +3201,69 @@ export default function ConfigPage() {
       })
   }
 
+  async function detectClaw() {
+    if (!platform.detectOpenclawConfig) return
+    setState("claw", "detecting", true)
+    setState("claw", "test", undefined)
+    await platform
+      .detectOpenclawConfig()
+      .then((item) => {
+        const config = item.config
+        if (!item.ok || !config?.url) {
+          setState("claw", "test", { ok: false, logs: item.logs })
+          showToast({
+            title: t("config.claws.detect.failed"),
+            description: item.logs[item.logs.length - 1] ?? t("common.requestFailed"),
+          })
+          return
+        }
+        batch(() => {
+          setState("claw", "enabled", config.enabled ?? true)
+          setState("claw", "url", config.url ?? "")
+          setState("claw", "token", config.token ?? "")
+          setState("claw", "err", "url", "")
+          setState("claw", "test", { ok: true, logs: item.logs })
+        })
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: t("config.claws.action.detect"),
+          description: item.source
+            ? t("config.claws.detect.successSource", { source: item.source })
+            : t("config.claws.detect.success"),
+        })
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        if (message.includes("No handler registered for 'detect-openclaw-config'")) {
+          const url = "ws://127.0.0.1:18789"
+          batch(() => {
+            setState("claw", "enabled", true)
+            setState("claw", "url", url)
+            setState("claw", "err", "url", "")
+            setState("claw", "test", {
+              ok: true,
+              logs: [
+                "Desktop main process has not registered detect-openclaw-config yet.",
+                `Using default OpenClaw gateway candidate ${url}.`,
+                "Restart the desktop app to enable full auto-detection from environment variables and config files.",
+              ],
+            })
+          })
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: t("config.claws.action.detect"),
+            description: t("config.claws.detect.fallbackRestart"),
+          })
+          return
+        }
+        setState("claw", "test", { ok: false, logs: [message] })
+        showToast({ title: t("config.claws.detect.failed"), description: message })
+      })
+      .finally(() => setState("claw", "detecting", false))
+  }
+
   async function abortClaw() {
     setState("claw", "run", (value) => value + 1)
     setState("claw", "testing", false)
@@ -3224,6 +3367,19 @@ export default function ConfigPage() {
     setState("ga", key, value)
     if (key === "genericAgentDir") setState("ga", "err", "genericAgentDir", "")
     setState("ga", "test", undefined)
+  }
+
+  function chooseGenericAgentDir() {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title={t("config.claws.field.genericAgentDir")}
+        domain={mainDomain}
+        onSelect={(value) => {
+          if (typeof value !== "string") return
+          setGa("genericAgentDir", value)
+        }}
+      />
+    ))
   }
 
   function validateHm(required = state.hm.enabled) {
@@ -3333,6 +3489,19 @@ export default function ConfigPage() {
     setState("hm", key, value)
     if (key === "hermesDir") setState("hm", "err", "hermesDir", "")
     setState("hm", "test", undefined)
+  }
+
+  function chooseHermesDir() {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title={t("config.claws.field.hermesDir")}
+        domain={mainDomain}
+        onSelect={(value) => {
+          if (typeof value !== "string") return
+          setHm("hermesDir", value)
+        }}
+      />
+    ))
   }
 
   function openFolder() {
@@ -3683,9 +3852,10 @@ export default function ConfigPage() {
     const prev = cfg().plugin ?? []
     const nextSpec = item.spec ?? (item.path ? spec(item.path) : item.name)
     const key = pluginKey(nextSpec)
+    const keyOf = (entry: string | [string, Record<string, unknown>]) => pluginKey(Array.isArray(entry) ? entry[0] : entry)
     const next = enabled
-      ? Array.from(new Set([...prev.filter((entry) => pluginKey(entry) !== key), nextSpec]))
-      : prev.filter((entry) => pluginKey(entry) !== key)
+      ? Array.from(new Set([...prev.filter((entry) => keyOf(entry) !== key), nextSpec]))
+      : prev.filter((entry) => keyOf(entry) !== key)
     void update({ plugin: next })
   }
 
@@ -4449,9 +4619,11 @@ export default function ConfigPage() {
                       dirty={clawDirty()}
                       busy={openclaw.loading}
                       canTest={!!platform.testOpenclawConfig}
+                      canDetect={!!platform.detectOpenclawConfig}
                       onChange={setClaw}
                       onSave={() => void saveClaw()}
                       onTest={() => void testClaw()}
+                      onDetect={() => void detectClaw()}
                       onAbort={platform.abortOpenclawTest ? () => void abortClaw() : undefined}
                     />
                   }
@@ -4464,6 +4636,7 @@ export default function ConfigPage() {
                       busy={hermes.loading}
                       canTest={!!platform.testHermesConfig}
                       onChange={setHm}
+                      onChooseDir={chooseHermesDir}
                       onSave={() => void saveHm()}
                       onTest={() => void testHm()}
                       onAbort={platform.abortHermesTest ? () => void abortHm() : undefined}
@@ -4477,6 +4650,7 @@ export default function ConfigPage() {
                       busy={genericagent.loading}
                       canTest={!!platform.testGenericagentConfig}
                       onChange={setGa}
+                      onChooseDir={chooseGenericAgentDir}
                       onSave={() => void saveGa()}
                       onTest={() => void testGa()}
                       onAbort={platform.abortGenericagentTest ? () => void abortGa() : undefined}

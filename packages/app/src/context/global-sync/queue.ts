@@ -11,16 +11,16 @@ export function createRefreshQueue(input: QueueInput) {
   let running = false
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  const key = input.key ?? ((directory: string) => directory)
+  const keyOf = input.key ?? ((directory: string) => directory)
 
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   const take = (count: number) => {
     if (queued.size === 0) return [] as string[]
     const items: string[] = []
-    for (const [id, directory] of queued) {
-      queued.delete(id)
-      items.push(directory)
+    for (const [k, dir] of queued) {
+      queued.delete(k)
+      items.push(dir)
       if (items.length >= count) break
     }
     return items
@@ -38,7 +38,7 @@ export function createRefreshQueue(input: QueueInput) {
 
   const push = (directory: string) => {
     if (!directory) return
-    queued.set(key(directory), directory)
+    queued.set(keyOf(directory), directory)
     if (input.paused()) return
     schedule()
   }
@@ -75,7 +75,6 @@ export function createRefreshQueue(input: QueueInput) {
       }
     } finally {
       running = false
-      // oxlint-disable-next-line no-unsafe-finally -- intentional: early return skips schedule() when paused
       if (input.paused()) return
       if (root || queued.size) schedule()
     }
@@ -85,7 +84,7 @@ export function createRefreshQueue(input: QueueInput) {
     push,
     refresh,
     clear(directory: string) {
-      queued.delete(key(directory))
+      queued.delete(keyOf(directory))
     },
     dispose() {
       if (refreshTimer) {

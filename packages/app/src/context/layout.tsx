@@ -1,7 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { makeEventListener } from "@solid-primitives/event-listener"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
@@ -16,8 +15,7 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_SIDEBAR_WIDTH = 344
-const DEFAULT_FILE_TREE_WIDTH = 200
+const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -45,7 +43,6 @@ type SessionView = {
   reviewOpen?: string[]
   pendingMessage?: string
   pendingMessageAt?: number
-  todoCollapsed?: boolean
 }
 
 type TabHandoff = {
@@ -240,7 +237,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
-          width: DEFAULT_SIDEBAR_WIDTH,
+          width: DEFAULT_PANEL_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
@@ -253,8 +250,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           panelOpened: true,
         },
         fileTree: {
-          opened: false,
-          width: DEFAULT_FILE_TREE_WIDTH,
+          opened: true,
+          width: DEFAULT_PANEL_WIDTH,
           tab: "changes" as "changes" | "all",
         },
         session: {
@@ -352,7 +349,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return
         }
 
-        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
         prune(keep)
       },
     })
@@ -375,10 +372,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         flush()
       }
 
-      makeEventListener(window, "pagehide", flush)
-      makeEventListener(document, "visibilitychange", handleVisibility)
+      window.addEventListener("pagehide", flush)
+      document.addEventListener("visibilitychange", handleVisibility)
 
       onCleanup(() => {
+        window.removeEventListener("pagehide", flush)
+        document.removeEventListener("visibilitychange", handleVisibility)
         scroll.dispose()
       })
     })
@@ -408,14 +407,37 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           .find((x) => x.worktree === project.worktree) ??
         (projectID ? Object.values(globalSync.data.projectByDomain).flat().filter((x): x is NonNullable<typeof x> => Boolean(x)).find((x) => x.id === projectID) : undefined)
 
-      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-      // Without this, different subdirectories of the same git repo would share the same
-      // icon from the database instead of using their individual overrides.
-      const base = { ...metadata, ...project }
-      if (childStore.icon) {
-        return { ...base, icon: { ...base.icon, override: childStore.icon } }
+      const local = childStore.projectMeta
+      const localOverride =
+        local?.name !== undefined ||
+        local?.commands?.start !== undefined ||
+        local?.icon?.override !== undefined ||
+        local?.icon?.color !== undefined
+
+      const base = {
+        ...(metadata ?? {}),
+        ...project,
+        icon: {
+          url: metadata?.icon?.url,
+          override: metadata?.icon?.override ?? childStore.icon,
+          color: metadata?.icon?.color,
+        },
       }
-      return base
+
+      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
+      if (!isGlobal) return base
+
+      return {
+        ...base,
+        id: base.id ?? "global",
+        name: local?.name,
+        commands: local?.commands,
+        icon: {
+          url: base.icon?.url,
+          override: local?.icon?.override,
+          color: local?.icon?.color,
+        },
+      }
     }
 
     const roots = createMemo(() => {
@@ -579,7 +601,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
 
       for (const project of projects) {
-        if (project.icon?.color || project.icon?.override || project.icon?.url) continue
+        if (project.icon?.color) continue
         const worktree = project.worktree
         const color = colors[worktree]
         if (!color || !project.id) continue
@@ -706,32 +728,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
+        width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
         setTab(tab: "changes" | "all") {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
+            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
             return
           }
           setStore("fileTree", "tab", tab)
         },
         open() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", (x) => !x)
@@ -845,18 +867,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
-          },
-          todoCollapsed: {
-            get: () => s().todoCollapsed ?? false,
-            set(collapsed: boolean) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, { scroll: {}, todoCollapsed: collapsed })
-              } else {
-                setStore("sessionView", session, "todoCollapsed", collapsed)
-              }
-            },
           },
           terminal: {
             opened: terminalOpened,

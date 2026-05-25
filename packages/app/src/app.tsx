@@ -1,5 +1,4 @@
 import "@/index.css"
-import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
@@ -11,7 +10,7 @@ import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Effect } from "effect"
+import { type Duration, Effect } from "effect"
 import {
   type Accessor,
   type Component,
@@ -42,6 +41,7 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SessionHistoryProvider } from "@/context/session-history"
@@ -57,13 +57,10 @@ const Session = lazy(() => import("@/pages/session"))
 const Config = lazy(() => import("@/pages/config"))
 const Loading = () => <div class="size-full" />
 
-const SessionRoute = Object.assign(
-  () => (
-    <SessionProviders>
-      <Session />
-    </SessionProviders>
-  ),
-  { preload: Session.preload },
+const SessionRoute = () => (
+  <SessionProviders>
+    <Session />
+  </SessionProviders>
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />
@@ -121,6 +118,10 @@ declare global {
       serverPassword?: string
       deepLinks?: string[]
       initialPath?: string | null
+      wsl?: boolean
+    }
+    api?: {
+      setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
     }
   }
 }
@@ -135,6 +136,11 @@ function MarkedProviderWithNativeParser(props: ParentProps) {
       {props.children}
     </MarkedProvider>
   )
+}
+
+function QueryProvider(props: ParentProps) {
+  const client = new QueryClient()
+  return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
 function AppShellProviders(props: ParentProps) {
@@ -174,10 +180,10 @@ function SessionProviders(props: ParentProps) {
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
-      {/*<Suspense fallback={<Loading />}>*/}
-      {props.appChildren}
-      {props.children}
-      {/*</Suspense>*/}
+      <Suspense fallback={<Loading />}>
+        {props.appChildren}
+        {props.children}
+      </Suspense>
     </AppShellProviders>
   )
 }
@@ -197,9 +203,9 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
               <CrashProbe />
               <QueryProvider>
                 <DialogProvider>
-                  <MarkedProvider>
+                  <MarkedProviderWithNativeParser>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
+                  </MarkedProviderWithNativeParser>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
@@ -242,6 +248,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Acce
             if (checkMode() === "background" || type === "http") return false
           }
         }).pipe(
+          effectMinDuration(checkMode() === "blocking" ? "1.2 seconds" : 0),
           Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.succeed(false) }),
           Effect.ensuring(Effect.sync(() => setCheckMode("background"))),
           Effect.runPromise,
@@ -257,42 +264,33 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Acce
   })
 
   return (
-    <Suspense
+    <Show
+      when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
       fallback={
         <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >
-      {/*<Show
-        when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
-        fallback={
-          <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
-            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-          </div>
-        }
-      >*/}
-      {checkMode() === "blocking" ? startupHealthCheck() : startupHealthCheck.latest}
       <Show
         when={startupHealthCheck()}
         fallback={
           <ConnectionError
             message={() => store.message}
             onRetry={() => {
-              if (checkMode() === "background") void healthCheckActions.refetch()
+              if (checkMode() === "background") healthCheckActions.refetch()
             }}
             onServerSelected={(key) => {
               setCheckMode("blocking")
               server.setActive(key)
-              void healthCheckActions.refetch()
+              healthCheckActions.refetch()
             }}
           />
         }
       >
         {props.children}
       </Show>
-      {/*</Show>*/}
-    </Suspense>
+    </Show>
   )
 }
 

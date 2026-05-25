@@ -259,7 +259,9 @@ export function StatusPopover() {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() => (sync.data.config.plugin ?? []).map((entry) => item(entry, global.data.project)))
+  const plugins = createMemo(() =>
+    (sync.data.config.plugin ?? []).map((entry) => item(Array.isArray(entry) ? entry[0] : entry, global.data.project)),
+  )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
   const skillItems = createMemo(() =>

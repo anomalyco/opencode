@@ -253,6 +253,11 @@ export const extraAgentCapabilities = (id?: string): ExtraAgentCapabilities | un
 export const enabledExtraAgents = (list: Array<{ integration?: string }>) =>
   extraAgents.filter((agent) => list.some((item) => item.integration === agent.id))
 
+export const sidebarExtraAgents = (
+  list: Array<{ integration?: string }>,
+  options?: { includeConfigurable?: boolean },
+) => (options?.includeConfigurable ? extraAgents : enabledExtraAgents(list))
+
 export const extraAgentByDirectory = (directory?: string) => {
   if (!directory) return
   return extraAgents.find((agent) => workspaceKey(agent.directory) === workspaceKey(directory))

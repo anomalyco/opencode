@@ -1,10 +1,10 @@
 import type {
+  SnapshotFileDiff as FileDiff,
   Message,
   Part,
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
-  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 
@@ -12,13 +12,12 @@ export const SESSION_CACHE_LIMIT = 40
 
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
-  session_diff: Record<string, SnapshotFileDiff[] | undefined>
+  session_diff: Record<string, FileDiff[] | undefined>
   todo: Record<string, Todo[] | undefined>
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>
   question: Record<string, QuestionRequest[] | undefined>
-  part_text_accum_delta: Record<string, string | undefined>
 }
 
 export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<string>) {
@@ -28,9 +27,6 @@ export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<stri
   for (const key of Object.keys(store.part)) {
     const parts = store.part[key]
     if (!parts?.some((part) => stale.has(part?.sessionID ?? ""))) continue
-    for (const part of parts) {
-      delete store.part_text_accum_delta[part.id]
-    }
     delete store.part[key]
   }
 

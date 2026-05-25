@@ -19,6 +19,7 @@ export type SidebarExtraAgent = {
   id: string
   label: Accessor<string>
   active?: Accessor<boolean>
+  available?: Accessor<boolean>
   healthy?: Accessor<boolean | undefined>
   icon: IconName
   onOpen: () => void
@@ -166,7 +167,9 @@ export const SidebarContent = (props: {
                       class="flex items-center gap-2 px-3 py-2 rounded-md text-text-base hover:bg-surface-base-hover transition-colors"
                       classList={{
                         "bg-surface-base-active": !!agent.active?.(),
+                        "opacity-50 cursor-not-allowed hover:bg-transparent": agent.available?.() === false,
                       }}
+                      disabled={agent.available?.() === false}
                       onClick={() => {
                         agent.onOpen()
                         setMenuOpen(false)

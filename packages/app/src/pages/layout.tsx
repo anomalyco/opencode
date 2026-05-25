@@ -95,9 +95,11 @@ import {
   extraAgentByDirectory,
   extraAgentConfig,
   extraAgentDir,
+  extraAgentLabelKey,
   extraAgentProject,
   isExtraAgentDirectory,
   mainDomain,
+  sidebarExtraAgents,
 } from "./layout/extra-agents"
 import {
   collectNewSessionDeepLinks,
@@ -190,6 +192,11 @@ export default function Layout(props: ParentProps) {
   // resolvers keep working, but the icon should not look "selected".
   const onConfigRoute = createMemo(() => /\/config(?:\/|$)/.test(location.pathname))
   const tasksPanelActive = createMemo(() => store.sidebarPanel === "tasks")
+  const canConfigureExtraAgents = createMemo(
+    () =>
+      platform.platform === "desktop" &&
+      !!(platform.getOpenclawConfig || platform.getHermesConfig || platform.getGenericagentConfig),
+  )
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -1477,15 +1484,24 @@ export default function Layout(props: ParentProps) {
   }
 
   function openExtraAgent(id: Parameters<typeof extraAgentDir>[0]) {
-    console.debug("[layout] open extra agent", {
-      id,
-      current: server.current?.integration ?? null,
-      directory: routeDir() || null,
-    })
+    console.debug(
+      `[layout] open extra agent id=${id} current=${server.current?.integration ?? "none"} directory=${routeDir() || "none"}`,
+    )
     const conn = server.list.find((item) => item.integration === id)
     if (!conn) {
       const cfg = extraAgentConfig(id)
-      openConfig(cfg?.section, cfg?.pick)
+      showToast({
+        title: `${language.t(extraAgentLabelKey(id) as keyof typeof enDict)} ${language.t("config.claws.badge.disabled")}`,
+        description: language.t("config.claws.field.enabledDescription"),
+        actions: cfg
+          ? [
+              {
+                label: language.t("config.claws.title"),
+                onClick: () => openConfig(cfg.section, cfg.pick),
+              },
+            ]
+          : undefined,
+      })
       return
     }
     if (
@@ -1495,17 +1511,10 @@ export default function Layout(props: ParentProps) {
         pathname: location.pathname,
       })
     ) {
-      console.debug("[layout] extra agent already active", {
-        id,
-        directory: routeDir() || null,
-        pathname: location.pathname,
-      })
+      console.debug(`[layout] extra agent already active id=${id} directory=${routeDir() || "none"} path=${location.pathname}`)
       return
     }
-    console.debug("[layout] navigate to extra agent", {
-      id,
-      directory: extraAgentDir(id),
-    })
+    console.debug(`[layout] navigate to extra agent id=${id} directory=${extraAgentDir(id)}`)
     void navigateToProject(extraAgentDir(id))
   }
 
@@ -2076,7 +2085,7 @@ export default function Layout(props: ParentProps) {
           .update({
             directory: session.directory,
             sessionID: session.id,
-            time: { archived: null },
+            time: { archived: undefined },
           })
           .then((x) => x.data)
         if (!restored) throw new Error(language.t("common.requestFailed"))
@@ -2516,7 +2525,7 @@ export default function Layout(props: ParentProps) {
 
     if (!created?.directory) return
 
-    setWorkspaceName(created.directory, created.branch, project.id, created.branch)
+    setWorkspaceName(created.directory, created.branch ?? "", project.id, created.branch)
 
     const local = project.worktree
     const key = workspaceKey(created.directory)
@@ -2983,14 +2992,18 @@ export default function Layout(props: ParentProps) {
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
       extraAgents={() =>
-        enabledExtraAgents(server.list).map((agent) => ({
-          id: agent.id,
-          label: () => language.t(agent.labelKey),
-          active: () => routeDir() === agent.directory,
-          healthy: () => server.healthyFor(`extra-agent/${agent.id}`),
-          icon: agent.icon,
-          onOpen: () => openExtraAgent(agent.id),
-        }))
+        sidebarExtraAgents(server.list, { includeConfigurable: canConfigureExtraAgents() }).map((agent) => {
+          const enabled = !!server.list.find((item) => item.integration === agent.id)
+          return {
+            id: agent.id,
+            label: () => language.t(agent.labelKey),
+            active: () => routeDir() === agent.directory,
+            available: () => enabled,
+            healthy: enabled ? () => server.healthyFor(`extra-agent/${agent.id}`) : undefined,
+            icon: agent.icon,
+            onOpen: () => openExtraAgent(agent.id),
+          }
+        })
       }
       configLabel={() => "Config"}
       configActive={onConfigRoute}

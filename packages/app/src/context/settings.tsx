@@ -30,16 +30,10 @@ export interface Settings {
     autoSave: boolean
     releaseNotes: boolean
     followup: "queue" | "steer"
-    showFileTree: boolean
-    showNavigation: boolean
-    showSearch: boolean
-    showStatus: boolean
-    showTerminal: boolean
     showReasoningSummaries: boolean
     showCustomHookParts: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
-    showSessionProgressBar: boolean
   }
   updates: {
     startup: boolean
@@ -88,7 +82,6 @@ const defaultSettings: Settings = {
     showCustomHookParts: true,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
-    showSessionProgressBar: true,
   },
   updates: {
     startup: true,
@@ -148,6 +141,13 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
+let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
+
+function loadFont() {
+  font ??= import("@opencode-ai/ui/font-loader")
+  return font
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
@@ -161,14 +161,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     createEffect(() => {
       if (typeof document === "undefined") return
-      const root = document.documentElement
-      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
-    })
-
-    createEffect(() => {
-      if (store.general?.followup !== "queue") return
-      setStore("general", "followup", "steer")
+      const id = store.appearance?.font ?? defaultSettings.appearance.font
+      if (id !== defaultSettings.appearance.font) {
+        void loadFont().then((x) => x.ensureMonoFont(id))
+      }
+      document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(id))
     })
 
     createEffect(() => {
@@ -200,32 +197,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
         },
-        followup: withFallback(
-          () => (store.general?.followup === "queue" ? "steer" : store.general?.followup),
-          defaultSettings.general.followup,
-        ),
+        followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
         setFollowup(value: "queue" | "steer") {
-          setStore("general", "followup", value === "queue" ? "steer" : value)
-        },
-        showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),
-        setShowFileTree(value: boolean) {
-          setStore("general", "showFileTree", value)
-        },
-        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
-        setShowNavigation(value: boolean) {
-          setStore("general", "showNavigation", value)
-        },
-        showSearch: withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch),
-        setShowSearch(value: boolean) {
-          setStore("general", "showSearch", value)
-        },
-        showStatus: withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus),
-        setShowStatus(value: boolean) {
-          setStore("general", "showStatus", value)
-        },
-        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
-        setShowTerminal(value: boolean) {
-          setStore("general", "showTerminal", value)
+          setStore("general", "followup", value)
         },
         showReasoningSummaries: withFallback(
           () => store.general?.showReasoningSummaries,
@@ -255,13 +229,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
         },
-        showSessionProgressBar: withFallback(
-          () => store.general?.showSessionProgressBar,
-          defaultSettings.general.showSessionProgressBar,
-        ),
-        setShowSessionProgressBar(value: boolean) {
-          setStore("general", "showSessionProgressBar", value)
-        },
       },
       updates: {
         startup: withFallback(() => store.updates?.startup, defaultSettings.updates.startup),
@@ -274,17 +241,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
         },
-        font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
+        font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
         setFont(value: string) {
-          setStore("appearance", "mono", value.trim() ? value : "")
-        },
-        uiFont: withFallback(() => store.appearance?.sans, defaultSettings.appearance.sans),
-        setUIFont(value: string) {
-          setStore("appearance", "sans", value.trim() ? value : "")
-        },
-        terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
-        setTerminalFont(value: string) {
-          setStore("appearance", "terminal", value.trim() ? value : "")
+          setStore("appearance", "font", value)
         },
         zoomLevel: createMemo(() => store.appearance?.zoomLevel ?? defaultSettings.appearance.zoomLevel),
         setZoomLevel(value: number) {

@@ -450,7 +450,7 @@ export function ModelSelectorPopover(props: {
             resizeObserver.observe(el)
           }}
           data-component="popover-content"
-          class="w-72 h-80 flex flex-col p-2 overflow-hidden"
+          class="w-72 h-[26rem] max-h-[calc(100vh-96px)] flex flex-col p-2 overflow-hidden"
           style={props.style}
           onEscapeKeyDown={(event) => {
             logModelOpen("close", {

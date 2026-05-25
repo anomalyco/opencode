@@ -120,32 +120,6 @@ function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
   return item.type === "file" && !!item.comment?.trim()
 }
 
-function createPromptActions(
-  setStore: SetStoreFunction<{
-    prompt: Prompt
-    cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
-) {
-  return {
-    set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
-      batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-      })
-    },
-    reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-      })
-    },
-  }
-}
-
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
@@ -180,14 +154,11 @@ function createPromptSession(dir: string, id: string | undefined) {
       },
     }),
   )
-
-  const actions = createPromptActions(setStore)
-
   return {
     ready,
-    current: () => store.prompt,
+    current: createMemo(() => store.prompt),
     cursor: createMemo(() => store.cursor),
-    dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
+    dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {
@@ -284,20 +255,11 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       return entry.value
     }
 
-    const session = createMemo(() => {
-      console.log("[DEBUG PromptProvider session memo] params", {
-        dir: params.dir,
-        id: params.id,
-      })
-      const result = load(params.dir!, params.id)
-      console.log("[DEBUG PromptProvider session memo] result", {
-        sessionKey: `${params.dir}:${params.id ?? WORKSPACE_KEY}`,
-      })
-      return result
-    })
+    const session = createMemo(() => load(params.dir!, params.id))
+    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
 
     return {
-      ready: () => session().ready,
+      ready: () => session().ready(),
       current: () => session().current(),
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
