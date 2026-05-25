@@ -588,6 +588,20 @@ describe("session HttpApi", () => {
         })
         expect(createdWithoutContentType.id).toBeTruthy()
 
+        const invalidCreate = yield* request(SessionPaths.create, {
+          method: "POST",
+          headers,
+          body: "{",
+        })
+        expect(invalidCreate.status).toBe(400)
+
+        const createdWhitespace = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers,
+          body: "  \n",
+        })
+        expect(createdWhitespace.id).toBeTruthy()
+
         const created = yield* requestJson<Session.Info>(SessionPaths.create, {
           method: "POST",
           headers,
@@ -616,6 +630,23 @@ describe("session HttpApi", () => {
           },
         )
         expect(forkedWithoutContentType.id).not.toBe(created.id)
+
+        const invalidFork = yield* request(pathFor(SessionPaths.fork, { sessionID: created.id }), {
+          method: "POST",
+          headers,
+          body: "{",
+        })
+        expect(invalidFork.status).toBe(400)
+
+        const forkedWhitespace = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.fork, { sessionID: created.id }),
+          {
+            method: "POST",
+            headers,
+            body: "  \n",
+          },
+        )
+        expect(forkedWhitespace.id).not.toBe(created.id)
 
         expect(
           yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: created.id }), {
