@@ -225,6 +225,27 @@ permission:
 
 不行。**session.cwd 永远是 home base(~/.opencode/feishu-workspace)**。跨目录访问必须用绝对路径(`~/projects/foo/file.md` 或 `/Users/me/projects/foo/file.md`)。
 
+### Q7:我想完全换一个 agent,不用 imbot 怎么办
+
+**默认路径**(推荐 99% user):**不要换**。imbot 是 DeskFox 为飞书桥接设计的安全 agent,把 bash/edit/write 等收紧为 ask。换其他 agent 会绕过这层防线。
+
+**Opt-out 路径**(研发能力 user 自担风险):编辑 `~/.opencode/feishu-config.json`,把对应账号的 `agent` 字段从 `"imbot"` 改成其他 agent 名(如 `"build"`)。这是开源软件"默认安全 + 显式 opt-out"范式,DeskFox 故意不在 GUI 暴露这个选项 — 但 config 编辑能力对研发 user 开放。
+
+```jsonc
+{
+  "accounts": {
+    "cli_xxx": {
+      // ...其他字段...
+      "agent": "build",   // ← 从 imbot 改成其他 agent,自担风险
+    }
+  }
+}
+```
+
+⚠️ **改完后下条消息 imbot 的安全收紧不再生效**,bash/edit/write 等可能不弹权限卡片直接执行。**只在你 100% 信任飞书 IM 端 user 不会发恶意 prompt 时才开**(典型场景:本机自己跟自己的 bot 聊;或团队内部高信任群)。
+
+详 [架构决策 ADR §1.1](file:///Volumes/ExtSSD/OPENCODE-PLAN/架构决策/im桥接-imbot单一架构.md)。
+
 ## 八、最佳实践
 
 1. **prompt 短而具体**:50-200 行最佳,LLM 注意力有限,堆砌噪音降效果
