@@ -85,6 +85,7 @@ function stripUnknownKeys(data: unknown): unknown {
   const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(data)) {
     if (infoKeys.has(key)) result[key] = value
+    else log.warn("config key is not recognized and will be ignored", { key })
   }
   return result
 }
