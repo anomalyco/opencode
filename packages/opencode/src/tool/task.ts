@@ -28,8 +28,10 @@ const BACKGROUND_DESCRIPTION = [
   "",
   "",
   [
-    "Background mode: background=true launches the subagent asynchronously.",
-    "The parent agent is notified automatically when the background task finishes.",
+    "Background mode: background=true launches the subagent asynchronously and returns immediately.",
+    "Foreground is the default; use it when you need the result before continuing.",
+    "Use background only for independent work that can run while you continue elsewhere.",
+    "You will be notified automatically when it finishes.",
   ].join(" "),
 ].join("\n")
 
@@ -54,7 +56,7 @@ export const Parameters = Schema.Struct({
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
   background: Schema.optional(Schema.Boolean).annotate({
-    description: "When true, launch the subagent in the background and return immediately",
+    description: "Run the agent in the background and deliver a notification when it completes",
   }),
 })
 
@@ -74,7 +76,8 @@ function backgroundOutput(sessionID: SessionID) {
     "state: running",
     "",
     "<task_result>",
-    "Background task started. The parent agent will be notified automatically when it finishes.",
+    "Background task started. You will be notified automatically when it finishes; do not poll for progress.",
+    "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
     "</task_result>",
   ].join("\n")
 }
