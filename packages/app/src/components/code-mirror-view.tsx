@@ -30,7 +30,12 @@ export default function CodeMirrorView(props: Props) {
       lineNumbers(),
       highlightActiveLine(),
       history(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      // md-editing-iter-3 矫正 ⑤(2026-05-25):去掉 { fallback: true } — CM6 fallback 语义是
+      // "仅当无其他 highlighter 时才用",一旦 markdownSyntaxHighlight 注册,default 整个 bail out
+      // 导致 fenced code block 内 JS/TS/Python/SQL 等语言 keyword/string/number tag 拿不到着色。
+      // 平级共存:CM 按 tag 逐个 resolve,markdown spec 匹配 heading/strong/link 等,
+      //          代码块内部语言 tag 走 default(无冲突,各管各的 tag 集)
+      syntaxHighlighting(defaultHighlightStyle),
       // FORK: md-editing-iter-2 — 长行软换行,避免水平滚动 2026-05-09
       EditorView.lineWrapping,
       // FORK: md-editing-iter-2 — drawSelection 让多行选区底色完整连贯(行尾空白也绘) 2026-05-09
