@@ -16,23 +16,23 @@ type Row = {
 const ROWS: Row[] = [
   {
     feature: "入力が社外に漏洩しない",
-    generic: { mark: "○", note: "規約・契約で信頼" },
-    securecode: { mark: "◎", note: "TEE による物理的隔離" },
+    generic: { mark: "○", note: "規約・契約で担保" },
+    securecode: { mark: "◎", note: "TEE で物理的に隔離して担保" },
   },
   {
     feature: "実行環境を検証できる",
     generic: { mark: "—" },
-    securecode: { mark: "◎", note: "リモートアテステーション" },
+    securecode: { mark: "◎", note: "リモートアテステーションで担保" },
   },
   {
     feature: "外部アクセス先の制限",
-    generic: { mark: "○", note: "ユーザーが設定" },
-    securecode: { mark: "◎", note: "管理者が強制" },
+    generic: { mark: "○", note: "個別設定に依存" },
+    securecode: { mark: "◎", note: "管理者ポリシーで一元強制" },
   },
   {
     feature: "操作ごとの柔軟な権限設定",
-    generic: { mark: "○", note: "ユーザーが設定" },
-    securecode: { mark: "◎", note: "管理者が強制" },
+    generic: { mark: "○", note: "個別設定に依存" },
+    securecode: { mark: "◎", note: "管理者ポリシーで一元強制" },
   },
 ]
 
@@ -54,9 +54,8 @@ export function SectionComparison() {
             「仕組み」で守るのか。
           </h2>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
-            一般的なコーディングエージェントの安全性は、最終的に
-            「提供者・運用者を信頼する契約」に行き着く。Acompanyセキュアコードは、
-            同じ観点を信頼ではなく物理的な隔離と組織側のポリシーで担保する。
+            一般的なコーディングエージェントの安全性は、最終的に運用元への信頼に依存している。
+            Acompanyセキュアコードは、同じ観点を信頼ではなく物理的な隔離と組織側のポリシーで担保する。
           </p>
         </motion.div>
 
@@ -88,10 +87,10 @@ export function SectionComparison() {
 
         <div className="mt-6 grid gap-3 text-center font-mono text-[11px] text-sc-text-dim md:grid-cols-3">
           <span>
-            <span className="text-sc-text-mid">○</span> 人 (規約・契約・運用) を信頼することで担保
+            <span className="text-sc-text-mid">○</span> 人 (規約・契約・個別運用) を信頼することで担保
           </span>
           <span>
-            <span className="text-sc-ember">◎</span> 仕組み (TEE・設定・管理者統制) で物理的に担保
+            <span className="text-sc-ember">◎</span> 仕組み (TEE・設定ファイル・管理者統制) で機械的に担保
           </span>
           <span>
             <span className="text-sc-text-dim">—</span> 非対応・対象外

@@ -145,7 +145,7 @@ export function SectionCoding() {
           </motion.div>
         </div>
 
-        <MicroCta label="実機デモを依頼する" />
+        <MicroCta label="実機を試したい旨を相談する" />
       </div>
     </section>
   )

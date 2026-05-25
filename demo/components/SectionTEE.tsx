@@ -13,12 +13,12 @@ const STEPS = [
   {
     id: "attest",
     title: "01. リモートアテステーション",
-    body: "接続先の TEE が発行する署名済みレポートを検証し、改ざんされた実行環境を拒否する。正当性を確認できてから鍵を渡す。",
+    body: "接続先サーバーが本当に TEE 上で動いており、想定通りのコードを実行していることを CPU 製造元の署名付きレポートで検証する。想定外のコードや設定が動いている環境には鍵を渡さない。",
   },
   {
     id: "send",
     title: "02. 暗号化して送信",
-    body: "プロンプトとソースコードを TEE の公開鍵で暗号化して送出し、TEE 内で復号する。平文はネットワークにも我々のサーバにも残らない。",
+    body: "TEE と DH 鍵交換で共有した共通鍵でプロンプトとソースコードを暗号化して送出し、TEE 内で復号する。平文は TEE の外に一切露出しない。",
   },
   {
     id: "infer",
@@ -28,7 +28,7 @@ const STEPS = [
   {
     id: "return",
     title: "04. 暗号化して返信",
-    body: "戻り値も同じ秘匿経路で暗号化し、開発者の手元で復号。平文は最後まで TEE の外に出ない。",
+    body: "戻り値も同じ共通鍵で暗号化し、開発者の手元で復号。平文は最後まで TEE の外に出ない。",
   },
 ] as const
 
@@ -129,7 +129,7 @@ export function SectionTEE() {
             だから、誰も中を覗けない。
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
-            TEE (Trusted Execution Environment) は CPU 内に物理的に隔離された
+            Trusted Execution Environment (TEE) は CPU 内に物理的に隔離された
             実行領域。推論中の平文がメモリ上に展開されても、インフラ事業者を含む
             第三者からは参照できない。
           </p>
