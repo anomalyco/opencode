@@ -294,12 +294,7 @@ export namespace Referral {
         .select({ workspaceID: ReferralCodeTable.workspaceID })
         .from(ReferralCodeTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, ReferralCodeTable.workspaceID))
-        .where(
-          and(
-            eq(ReferralCodeTable.code, referralCode),
-            isNull(WorkspaceTable.timeDeleted),
-          ),
-        )
+        .where(and(eq(ReferralCodeTable.code, referralCode), isNull(WorkspaceTable.timeDeleted)))
         .then((rows) => rows[0])
       if (!code) throw new Error("Referral code invalid")
 

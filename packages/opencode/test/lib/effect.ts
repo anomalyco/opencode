@@ -1,13 +1,14 @@
 import { test, type TestOptions } from "bun:test"
 import { Cause, Duration, Effect, Exit, Layer } from "effect"
-import type * as Scope from "effect/Scope"
+import * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import * as TestConsole from "effect/testing/TestConsole"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import type { Config } from "@/config/config"
 import { TestInstance, withTmpdirInstance } from "../fixture/fixture"
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
-type InstanceOptions = { git?: boolean; config?: Partial<Config.Info> }
+type InstanceOptions = { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) }
 
 function isInstanceOptions(options: InstanceOptions | number | TestOptions | undefined): options is InstanceOptions {
   return !!options && typeof options === "object" && ("git" in options || "config" in options)
@@ -24,7 +25,9 @@ function instanceArgs(
 
 const body = <A, E, R>(value: Body<A, E, R>) => Effect.suspend(() => (typeof value === "function" ? value() : value))
 
-const run = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer<R, E2>) =>
+type Runner = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer<R, E2>) => Promise<A>
+
+const isolatedRun: Runner = (value, layer) =>
   Effect.gen(function* () {
     const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(layer), Effect.exit)
     if (Exit.isFailure(exit)) {
@@ -35,7 +38,25 @@ const run = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer
     return yield* exit
   }).pipe(Effect.runPromise)
 
-const make = <R, E>(testLayer: Layer.Layer<R, E>, liveLayer: Layer.Layer<R, E>) => {
+// Builds the test layer through the shared process-wide memoMap so cached
+// services (Bus, Session, …) match Server.Default's instances. Use for tests
+// that publish to an in-process HTTP server and need pub/sub identity with
+// the server's handlers.
+const sharedRun: Runner = (value, layer) =>
+  Effect.gen(function* () {
+    const scope = yield* Scope.make()
+    const ctx = yield* Layer.buildWithMemoMap(layer, memoMap, scope)
+    const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(ctx), Effect.exit)
+    yield* Scope.close(scope, Exit.void)
+    if (Exit.isFailure(exit)) {
+      for (const err of Cause.prettyErrors(exit.cause)) {
+        yield* Effect.logError(err)
+      }
+    }
+    return yield* exit
+  }).pipe(Effect.runPromise)
+
+const make = <R, E>(testLayer: Layer.Layer<R, E>, liveLayer: Layer.Layer<R, E>, run: Runner = isolatedRun) => {
   const effect = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
     test(name, () => run(value, testLayer), opts)
 
@@ -109,6 +130,13 @@ export const it = make(testEnv, liveEnv)
 
 export const testEffect = <R, E>(layer: Layer.Layer<R, E>) =>
   make(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv))
+
+// Variant of `testEffect` that builds the test layer through the shared
+// process-wide memoMap so services like Bus/Session resolve to the same
+// instances Server.Default uses. Use when a test needs pub/sub identity with
+// an in-process HTTP server — most tests should stick with `testEffect`.
+export const testEffectShared = <R, E>(layer: Layer.Layer<R, E>) =>
+  make(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv), sharedRun)
 
 export const awaitWithTimeout = <A, E, R>(
   self: Effect.Effect<A, E, R>,

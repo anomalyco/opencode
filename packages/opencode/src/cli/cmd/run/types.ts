@@ -163,6 +163,7 @@ export type FooterView =
 
 export type FooterPromptRoute =
   | { type: "composer" }
+  | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
   | { type: "model" }

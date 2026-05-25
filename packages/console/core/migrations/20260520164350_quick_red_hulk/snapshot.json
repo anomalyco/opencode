@@ -2,10 +2,7 @@
   "version": "6",
   "dialect": "mysql",
   "id": "a946ea14-a35d-49cc-a10a-8c93c30a3cb1",
-  "prevIds": [
-    "9a7123cb-5c2c-47f6-b22f-8fd6a02dcb03",
-    "dc498f8b-c8e7-4da5-b70a-419427dd5901"
-  ],
+  "prevIds": ["9a7123cb-5c2c-47f6-b22f-8fd6a02dcb03", "dc498f8b-c8e7-4da5-b70a-419427dd5901"],
   "ddl": [
     {
       "name": "account",
@@ -2620,201 +2617,139 @@
       "table": "workspace"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "account",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "auth",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "benchmark",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "billing",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "email",
-        "type"
-      ],
+      "columns": ["email", "type"],
       "name": "PRIMARY",
       "table": "coupon",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "lite",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "payment",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "subscription",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "usage",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "ip",
-        "interval"
-      ],
+      "columns": ["ip", "interval"],
       "name": "PRIMARY",
       "table": "ip_rate_limit",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "ip"
-      ],
+      "columns": ["ip"],
       "name": "PRIMARY",
       "table": "ip",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "key",
-        "interval"
-      ],
+      "columns": ["key", "interval"],
       "name": "PRIMARY",
       "table": "key_rate_limit",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "model_sticky_provider",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id",
-        "interval"
-      ],
+      "columns": ["id", "interval"],
       "name": "PRIMARY",
       "table": "model_tpm_rate_limit",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id",
-        "interval"
-      ],
+      "columns": ["id", "interval"],
       "name": "PRIMARY",
       "table": "model_tps_rate_limit",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "key",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "model",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "provider",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id"
-      ],
+      "columns": ["workspace_id"],
       "name": "PRIMARY",
       "table": "referral_code",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "referral_id"
-      ],
+      "columns": ["workspace_id", "referral_id"],
       "name": "PRIMARY",
       "table": "referral_reward",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "referral",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "workspace_id",
-        "id"
-      ],
+      "columns": ["workspace_id", "id"],
       "name": "PRIMARY",
       "table": "user",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "name": "PRIMARY",
       "table": "workspace",
       "entityType": "pks"

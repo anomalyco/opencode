@@ -1,3 +1,5 @@
+export * as EventV2 from "./event"
+
 import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Location } from "./location"
 import { withStatics } from "./schema"
@@ -153,5 +155,3 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer
-
-export * as EventV2 from "./event"

@@ -4,7 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
 import { LLMClient } from "../../src/route"
-import * as BedrockConverse from "../../src/protocols/bedrock-converse"
+import { AmazonBedrock } from "../../src/providers"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import {
@@ -52,11 +52,10 @@ const eventStreamBody = (...payloads: ReadonlyArray<readonly [string, object]>) 
 const fixedBytes = (bytes: Uint8Array) =>
   fixedResponse(bytes.slice().buffer, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
 
-const model = BedrockConverse.model({
-  id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+const model = AmazonBedrock.configure({
   baseURL: "https://bedrock-runtime.test",
   apiKey: "test-bearer",
-})
+}).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
 
 const baseRequest = LLM.request({
   id: "req_1",
@@ -146,6 +145,55 @@ describe("Bedrock Converse route", () => {
                 toolResult: {
                   toolUseId: "tool_1",
                   content: [{ json: { forecast: "sunny" } }],
+                  status: "success",
+                },
+              },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("lowers image content in tool-result messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_image",
+          model,
+          messages: [
+            Message.user("Capture the screen."),
+            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "tool_1",
+              name: "screenshot",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Screenshot captured." },
+                  { type: "media", mediaType: "image/png", data: "AAAA" },
+                ],
+              },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { role: "user", content: [{ text: "Capture the screen." }] },
+          {
+            role: "assistant",
+            content: [{ toolUse: { toolUseId: "tool_1", name: "screenshot", input: {} } }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                toolResult: {
+                  toolUseId: "tool_1",
+                  content: [{ text: "Screenshot captured." }, { image: { format: "png", source: { bytes: "AAAA" } } }],
                   status: "success",
                 },
               },
@@ -249,39 +297,32 @@ describe("Bedrock Converse route", () => {
 
   it.effect("rejects requests with no auth path", () =>
     Effect.gen(function* () {
-      const unsignedModel = BedrockConverse.model({
-        id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      const unsignedModel = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
-      })
+      }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
       const error = yield* LLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel })).pipe(
         Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),
         Effect.flip,
       )
 
-      expect(error.message).toContain("Bedrock Converse requires either model.apiKey")
+      expect(error.message).toContain("Bedrock Converse requires either route bearer auth or AWS credentials")
     }),
   )
 
   it.effect("signs requests with SigV4 when AWS credentials are provided (deterministic plumbing check)", () =>
     Effect.gen(function* () {
-      const signed = BedrockConverse.model({
-        id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      const signed = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
         credentials: {
           region: "us-east-1",
           accessKeyId: "AKIAIOSFODNN7EXAMPLE",
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
-      })
+      }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
       const prepared = yield* LLMClient.prepare(LLM.updateRequest(baseRequest, { model: signed }))
 
       expect(prepared.route).toBe("bedrock-converse")
-      // The prepare phase doesn't sign — toHttp does. We assert the credential
-      // is plumbed onto the model native field for the signer to find.
-      expect(prepared.model.native).toMatchObject({
-        aws_credentials: { region: "us-east-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
-        aws_region: "us-east-1",
-      })
+      expect(prepared.model).toBe(signed)
     }),
   )
 
@@ -531,18 +572,17 @@ describe("Bedrock Converse route", () => {
 const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 
 const recordedModel = () =>
-  BedrockConverse.model({
+  AmazonBedrock.configure({
     // Most newer Anthropic models on Bedrock require a cross-region inference
     // profile (`us.` prefix). Nova does not require an Anthropic use-case form
     // and is on-demand-throughput accessible by default for most accounts.
-    id: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-micro-v1:0",
     credentials: {
       region: RECORDING_REGION,
       accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "fixture",
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "fixture",
       sessionToken: process.env.AWS_SESSION_TOKEN,
     },
-  })
+  }).model(process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-micro-v1:0")
 
 const recorded = recordedTests({
   prefix: "bedrock-converse",
@@ -598,7 +638,6 @@ describe("Bedrock Converse recorded", () => {
 
   recorded.effect.with("drives a tool loop", { tags: ["tool", "tool-loop", "golden"] }, () =>
     Effect.gen(function* () {
-      const llm = yield* LLMClient.Service
       expectWeatherToolLoop(
         yield* runWeatherToolLoop(
           weatherToolLoopRequest({

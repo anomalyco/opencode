@@ -3,7 +3,12 @@ import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
-import { notFound } from "../../errors"
+import { ProviderNotFoundError, ServiceUnavailableError } from "../../errors"
+
+const catalogUnavailable = new ServiceUnavailableError({
+  message: "Provider catalog is unavailable",
+  service: "catalog",
+})
 
 export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.provider", (handlers) =>
   Effect.gen(function* () {
@@ -13,7 +18,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.provid
         Effect.fn(function* () {
           const catalog = yield* Catalog.Service
           const pluginBoot = yield* PluginBoot.Service
-          yield* pluginBoot.wait()
+          yield* pluginBoot.wait().pipe(Effect.catchDefect(() => Effect.fail(catalogUnavailable)))
           return yield* catalog.provider.available()
         }),
       )
@@ -22,10 +27,17 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.provid
         Effect.fn(function* (ctx) {
           const catalog = yield* Catalog.Service
           const pluginBoot = yield* PluginBoot.Service
-          yield* pluginBoot.wait()
-          return yield* catalog.provider
-            .get(ctx.params.providerID)
-            .pipe(Effect.catchTag("CatalogV2.ProviderNotFound", () => Effect.fail(notFound("Provider not found"))))
+          yield* pluginBoot.wait().pipe(Effect.catchDefect(() => Effect.fail(catalogUnavailable)))
+          return yield* catalog.provider.get(ctx.params.providerID).pipe(
+            Effect.catchTag("CatalogV2.ProviderNotFound", (error) =>
+              Effect.fail(
+                new ProviderNotFoundError({
+                  providerID: error.providerID,
+                  message: `Provider not found: ${error.providerID}`,
+                }),
+              ),
+            ),
+          )
         }),
       )
   }),

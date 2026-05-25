@@ -47,6 +47,11 @@ const it = testEffect(
         Skill.Service,
         Skill.Service.of({
           get: (name) => Effect.succeed(skills.find((skill) => skill.name === name)),
+          require: (name) => {
+            const info = skills.find((skill) => skill.name === name)
+            if (info) return Effect.succeed(info)
+            return Effect.fail(new Skill.NotFoundError({ name, available: skills.map((skill) => skill.name) }))
+          },
           all: () => Effect.succeed(skills),
           dirs: () => Effect.succeed([]),
           available: () => Effect.succeed(skills),
