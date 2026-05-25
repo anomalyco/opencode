@@ -2816,7 +2816,13 @@ export default function ConfigPage() {
     return next
   }
 
-  const [tree] = createResource(currentSkillRoot, async (root) => loadTree(root))
+  const [tree] = createResource(currentSkillRoot, async (root) => ({ root, list: await loadTree(root) }))
+  const currentTree = createMemo(() => {
+    const root = currentSkillRoot()
+    const value = tree.latest
+    if (!root || value?.root !== root) return []
+    return value.list
+  })
   const treeOpen = (path: string) => !state.treeClosed[path]
   const toggleTree = (path: string) => setState("treeClosed", path, (value) => !value)
   const groupOpen = (key: string) => !!state.treeClosed[`skill-group:${key}`]
@@ -4539,7 +4545,7 @@ export default function ConfigPage() {
                           text={state.text}
                           dirty={dirty()}
                           busy={state.busy}
-                          tree={tree()}
+                          tree={currentTree()}
                           treeRoot={currentSkillRoot()}
                           treeBusy={tree.loading}
                           treeOpen={treeOpen}
