@@ -429,7 +429,7 @@ export const layer = Layer.effect(
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
-            log.error("invalid config", { path: source, cause })
+            log.error("invalid config: config file could not be parsed", { path: source })
             return Schema.decodeSync(Info)({})
           }),
         ),
