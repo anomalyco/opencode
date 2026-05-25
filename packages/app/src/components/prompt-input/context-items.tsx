@@ -19,8 +19,9 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
   return (
     <Show when={props.items.length > 0}>
       {/* FORK: 卡片多了从横向滚改为自动换行,max-h 兜底防止挤压聊天区
+            (3 行卡片高度 = 3×48 + 2×8 gap + 2×8 padding ≈ 180px)
             [feat: 聊天选区-卡片化-换行] 2026-05-25 */}
-      <div class="flex flex-wrap items-start gap-2 p-2 max-h-[140px] overflow-y-auto">
+      <div class="flex flex-wrap items-start gap-2 p-2 max-h-[180px] overflow-y-auto">
         <For each={props.items}>
           {(item) => {
             const directory = getDirectory(item.path)
