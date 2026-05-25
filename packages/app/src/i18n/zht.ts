@@ -1058,9 +1058,10 @@ export const dict = {
   // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
   "settings.feishu.edit.modelSectionTitle": "模型",
   "settings.feishu.edit.advancedSectionTitle": "進階功能",
-  "settings.feishu.edit.enableAutoGroupCreate.label": "允許 AI 自動建立新群組",
-  "settings.feishu.edit.enableAutoGroupCreate.hint":
-    "開啟後私訊說「幫我建群」AI 會發確認卡片,你點准才真建。預設關閉 防 prompt injection 誘導 AI 建群。",
+  // FORK: [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 刪 enableAutoGroupCreate flag
+  // 老 key 已刪,新 key groupCommand.info 描述 /group 用法
+  "settings.feishu.edit.groupCommand.info":
+    "建群方式:私訊發送 `/group <群名>`(例:`/group 專案討論`),AI 彈確認卡片,點確認才真建。",
   // FORK: [feat: feishu-group-mention-policy] 2026-05-24 → [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 反轉 + 改 key
   "settings.feishu.edit.allowReadAll.label": "允許 AI 免@ 讀取群組裡所有訊息",
   "settings.feishu.edit.allowReadAll.hint":

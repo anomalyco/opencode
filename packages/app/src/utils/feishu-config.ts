@@ -76,8 +76,7 @@ export interface AccountSummary {
   enabled?: boolean
   model?: ModelRef | null
   bot_name?: string | null
-  /** [feat: feishu-create-group-toggle-gui] 2026-05-24 当前 enableAutoGroupCreate flag */
-  enable_auto_group_create?: boolean | null
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enable_auto_group_create 字段
   /** [feat: feishu-group-mention-policy] 2026-05-24 当前 requireMention flag */
   require_mention?: boolean | null
 }
@@ -133,19 +132,18 @@ export async function feishuUpdateAccountModel(
   })
 }
 
-/** Partial 更新账号 settings — 当前支持 model + enableAutoGroupCreate。
+/** Partial 更新账号 settings — 当前支持 model + requireMention。
  *
  * 字段语义(对齐 Rust Option<Option<T>> 编码):
  *   - model: undefined = 不动;null = 清除走 default;ModelRef = 设置
- *   - enableAutoGroupCreate: undefined = 不动;true / false = 改
+ *   - requireMention: undefined = 不动;true / false = 改
  *
  * [feat: feishu-create-group-toggle-gui] 2026-05-24
+ * [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate 字段
  */
 export interface UpdateAccountSettingsPatch {
   /** undefined 不动 / null 清除 / ModelRef 设置 */
   model?: ModelRef | null
-  /** undefined 不动 / true|false 改 */
-  enableAutoGroupCreate?: boolean
   /** [feat: feishu-group-mention-policy] 2026-05-24 — undefined 不动 / true|false 改 */
   requireMention?: boolean
 }
@@ -161,9 +159,6 @@ export async function feishuUpdateAccountSettings(
   const request: Record<string, unknown> = { account_id: accountId }
   if (patch.model !== undefined) {
     request.model = patch.model
-  }
-  if (patch.enableAutoGroupCreate !== undefined) {
-    request.enable_auto_group_create = patch.enableAutoGroupCreate
   }
   if (patch.requireMention !== undefined) {
     request.require_mention = patch.requireMention

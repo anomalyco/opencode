@@ -1079,9 +1079,10 @@ export const dict = {
   // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
   "settings.feishu.edit.modelSectionTitle": "Model",
   "settings.feishu.edit.advancedSectionTitle": "Advanced",
-  "settings.feishu.edit.enableAutoGroupCreate.label": "Allow AI to auto-create groups",
-  "settings.feishu.edit.enableAutoGroupCreate.hint":
-    "When on, saying \"create a group\" in DM makes AI send a confirmation card — group is only created after you tap confirm. Off by default to prevent prompt-injection-induced group creation.",
+  // FORK: [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — deleted enableAutoGroupCreate flag
+  // Old keys removed; new key groupCommand.info describes /group usage
+  "settings.feishu.edit.groupCommand.info":
+    "Group creation: in DM, send `/group <name>` (e.g. `/group project-talk`); AI sends a confirmation card and the group is only created after you tap confirm.",
   // FORK: [feat: feishu-group-mention-policy] 2026-05-24 → [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 inverted + renamed key
   "settings.feishu.edit.allowReadAll.label":
     "Allow AI to read all group messages without @ mention",

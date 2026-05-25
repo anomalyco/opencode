@@ -319,27 +319,29 @@ describe("updateAccountSettings", () => {
     })
   }
 
-  test("只 patch enableAutoGroupCreate → flag 更新,其他字段不动", () => {
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+  // 原"只 patch enableAutoGroupCreate" / "model + flag 同时 patch" 两 case 删 — flag 已删
+  test("只 patch requireMention → flag 更新,其他字段不动", () => {
     seedAccount("acc1")
     const before = loadConfig(configPath()).accounts["acc1"]
-    expect(before.enableAutoGroupCreate).toBe(false)
+    expect(before.requireMention).toBe(true) // 默认 true
     expect(before.model).toBeUndefined()
     expect(before.appSecret).toBeDefined()
 
-    const r = updateAccountSettings("acc1", { enableAutoGroupCreate: true }, configPath())
+    const r = updateAccountSettings("acc1", { requireMention: false }, configPath())
     expect(r).toBe(true)
 
     const after = loadConfig(configPath()).accounts["acc1"]
-    expect(after.enableAutoGroupCreate).toBe(true)
+    expect(after.requireMention).toBe(false)
     expect(after.model).toBeUndefined()
     expect(after.appSecret).toEqual(before.appSecret)
     expect(after.agent).toEqual(before.agent)
     expect(after.threadSession).toEqual(before.threadSession)
   })
 
-  test("只 patch model → model 更新,flag 不动(向后兼容 updateAccountModel)", () => {
+  test("只 patch model → model 更新,requireMention 不动", () => {
     seedAccount("acc2")
-    updateAccountSettings("acc2", { enableAutoGroupCreate: true }, configPath())
+    updateAccountSettings("acc2", { requireMention: false }, configPath())
 
     const r = updateAccountSettings(
       "acc2",
@@ -350,16 +352,16 @@ describe("updateAccountSettings", () => {
 
     const after = loadConfig(configPath()).accounts["acc2"]
     expect(after.model).toEqual({ providerID: "anthropic", modelID: "claude-sonnet-4-6" })
-    expect(after.enableAutoGroupCreate).toBe(true) // 先前 true 保留
+    expect(after.requireMention).toBe(false) // 先前 false 保留
   })
 
-  test("同时 patch model + flag → 两者都更新", () => {
+  test("同时 patch model + requireMention → 两者都更新", () => {
     seedAccount("acc3")
     const r = updateAccountSettings(
       "acc3",
       {
         model: { providerID: "openai", modelID: "gpt-4" },
-        enableAutoGroupCreate: true,
+        requireMention: false,
       },
       configPath(),
     )
@@ -367,7 +369,7 @@ describe("updateAccountSettings", () => {
 
     const after = loadConfig(configPath()).accounts["acc3"]
     expect(after.model).toEqual({ providerID: "openai", modelID: "gpt-4" })
-    expect(after.enableAutoGroupCreate).toBe(true)
+    expect(after.requireMention).toBe(false)
   })
 
   test("model: null → 清除 model 字段(走 user default)", () => {
@@ -396,46 +398,31 @@ describe("updateAccountSettings", () => {
   test("account 不存在 → false", () => {
     const r = updateAccountSettings(
       "never-existed",
-      { enableAutoGroupCreate: true },
+      { requireMention: false },
       configPath(),
     )
     expect(r).toBe(false)
   })
 
-  test("toggle flag false → true → false 持久化", () => {
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+  // 原 "toggle flag false → true → false 持久化" 测试改用 requireMention(enableAutoGroupCreate 已删)
+  test("toggle requireMention true → false → true 持久化(取代旧 enableAutoGroupCreate toggle 测试)", () => {
     seedAccount("acc6")
-    expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(false)
+    expect(loadConfig(configPath()).accounts["acc6"].requireMention).toBe(true)
 
-    updateAccountSettings("acc6", { enableAutoGroupCreate: true }, configPath())
-    expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(true)
+    updateAccountSettings("acc6", { requireMention: false }, configPath())
+    expect(loadConfig(configPath()).accounts["acc6"].requireMention).toBe(false)
 
-    updateAccountSettings("acc6", { enableAutoGroupCreate: false }, configPath())
-    expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(false)
+    updateAccountSettings("acc6", { requireMention: true }, configPath())
+    expect(loadConfig(configPath()).accounts["acc6"].requireMention).toBe(true)
   })
 
-  // [feat: feishu-group-mention-policy] 2026-05-24
-  test("只 patch requireMention → flag 更新,其他字段不动", () => {
-    seedAccount("acc_rm1")
-    const before = loadConfig(configPath()).accounts["acc_rm1"]
-    expect(before.requireMention).toBe(true) // default
-
-    const r = updateAccountSettings("acc_rm1", { requireMention: false }, configPath())
-    expect(r).toBe(true)
-
-    const after = loadConfig(configPath()).accounts["acc_rm1"]
-    expect(after.requireMention).toBe(false)
-    expect(after.enableAutoGroupCreate).toBe(false) // 不动
-    expect(after.appSecret).toEqual(before.appSecret) // 不动
-    expect(after.agent).toEqual(before.agent) // 不动
-  })
-
-  test("model + flag + requireMention 三方同时改 → 都更新", () => {
+  test("model + requireMention 同时改 → 都更新", () => {
     seedAccount("acc_rm2")
     const r = updateAccountSettings(
       "acc_rm2",
       {
         model: { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
-        enableAutoGroupCreate: true,
         requireMention: false,
       },
       configPath(),
@@ -444,7 +431,6 @@ describe("updateAccountSettings", () => {
 
     const after = loadConfig(configPath()).accounts["acc_rm2"]
     expect(after.model).toEqual({ providerID: "anthropic", modelID: "claude-sonnet-4-6" })
-    expect(after.enableAutoGroupCreate).toBe(true)
     expect(after.requireMention).toBe(false)
   })
 
