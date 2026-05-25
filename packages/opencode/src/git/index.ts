@@ -14,6 +14,8 @@ const cfg = [
   "core.symlinks=true",
   "-c",
   "core.quotepath=false",
+  "-c",
+  "diff.mnemonicprefix=false",
 ] as const
 
 const out = (result: { text(): string }) => result.text().trim()
