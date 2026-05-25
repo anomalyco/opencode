@@ -870,7 +870,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               if (empty(chunk.rawValue)) {
                 return
               }
-              finishReason = "error"
+              finishReason = { unified: "error", raw: undefined }
               controller.enqueue({ type: "error", error: chunk.error })
               return
             }

@@ -343,7 +343,7 @@ export async function convertToOpenAIResponsesInput({
             })
             continue
           }
-          const output = part.output
+          const output = part.output as { type: string; value: unknown; providerOptions?: Record<string, unknown> }
 
           if (output.type === "execution-denied") {
             const approvalId = (output.providerOptions?.openai as { approvalId?: string } | undefined)?.approvalId

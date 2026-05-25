@@ -361,7 +361,7 @@ describe("tool calls", () => {
               type: "content",
               value: [
                 { type: "text", text: "User attached an image" },
-                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+                { type: "media" as any, mediaType: "image/png", data: "AAECAw==" },
               ],
             },
           },
@@ -398,7 +398,7 @@ describe("tool calls", () => {
               type: "content",
               value: [
                 { type: "text", text: "User attached an image" },
-                { type: "media", mediaType: "image/png", data: "data:image/png;base64,AAECAw==" },
+                { type: "media" as any, mediaType: "image/png", data: "data:image/png;base64,AAECAw==" },
               ],
             },
           },
@@ -435,7 +435,7 @@ describe("tool calls", () => {
               type: "content",
               value: [
                 { type: "text", text: "User attached an image" },
-                { type: "media", mediaType: "image/png", data: "data:image/png;base64,data:image/png;base64,AAECAw==" },
+                { type: "media" as any, mediaType: "image/png", data: "data:image/png;base64,data:image/png;base64,AAECAw==" },
               ],
             },
           },

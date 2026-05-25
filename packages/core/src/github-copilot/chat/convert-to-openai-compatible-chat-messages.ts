@@ -86,7 +86,7 @@ function toolText(output: { type: string; value: unknown }) {
   return JSON.stringify(output.value)
 }
 
-export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Prompt): OpenAICompatibleChatPrompt {
+export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Prompt): OpenAICompatibleChatPrompt {
   const messages: OpenAICompatibleChatPrompt = []
   for (const { role, content, ...message } of prompt) {
     const metadata = getOpenAIMetadata({ ...message })
@@ -203,7 +203,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
           if (toolResponse.type === "tool-approval-response") {
             continue
           }
-          const output = toolResponse.output
+          const output = toolResponse.output as { type: string; value: unknown }
 
           const contentValue = toolText(output)
           const media = toolMedia(output)
