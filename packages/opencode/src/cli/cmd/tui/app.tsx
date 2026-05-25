@@ -42,6 +42,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
+import { DialogProviderDisconnect } from "@tui/component/dialog-provider-disconnect"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -104,6 +105,7 @@ const appBindingCommands = [
   "variant.cycle",
   "variant.list",
   "provider.connect",
+  "provider.disconnect",
   "console.org.switch",
   "opencode.status",
   "theme.switch",
@@ -621,6 +623,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashName: "connect",
         run: () => {
           dialog.replace(() => <DialogProviderList />)
+        },
+        category: "Provider",
+      },
+      {
+        name: "provider.disconnect",
+        title: "Disconnect provider",
+        suggested: sync.data.provider_next.connected.length > 0,
+        enabled: sync.data.provider_next.connected.length > 0,
+        slashName: "disconnect",
+        run: () => {
+          dialog.replace(() => <DialogProviderDisconnect />)
         },
         category: "Provider",
       },
