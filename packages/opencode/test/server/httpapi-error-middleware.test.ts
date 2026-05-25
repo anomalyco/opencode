@@ -53,7 +53,7 @@ describe("HttpApi error middleware", () => {
     }),
   )
 
-  it.live("does not expose config defects from generic middleware", () =>
+  it.live("returns config validation defects for startup requests", () =>
     Effect.gen(function* () {
       const configError = new ConfigError.InvalidError({
         path: "/tmp/opencode.json",
@@ -68,13 +68,42 @@ describe("HttpApi error middleware", () => {
 
       const response = yield* HttpClientRequest.get("/config-error").pipe(HttpClient.execute)
       const body = yield* response.json
-      const serialized = JSON.stringify(body)
 
-      expect(response.status).toBe(500)
-      expectUnknownErrorBody(body)
-      expect(serialized).not.toContain("/tmp/opencode.json")
-      expect(serialized).not.toContain("provider")
-      expect(serialized).not.toContain("anthropic")
+      expect(response.status).toBe(400)
+      expect(body).toEqual({
+        name: "ConfigInvalidError",
+        data: {
+          path: "/tmp/opencode.json",
+          issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
+        },
+      })
+    }),
+  )
+
+  it.live("returns config json defects for startup requests", () =>
+    Effect.gen(function* () {
+      const configError = new ConfigError.JsonError({
+        path: "/tmp/opencode.jsonc",
+        message: "ValueExpected at line 3, column 1",
+      })
+
+      yield* HttpRouter.add("GET", "/config-json-error", Effect.die(configError)).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.get("/config-json-error").pipe(HttpClient.execute)
+      const body = yield* response.json
+
+      expect(response.status).toBe(400)
+      expect(body).toEqual({
+        name: "ConfigJsonError",
+        data: {
+          path: "/tmp/opencode.jsonc",
+          message: "ValueExpected at line 3, column 1",
+        },
+      })
     }),
   )
 
