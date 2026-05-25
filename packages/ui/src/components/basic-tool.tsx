@@ -29,6 +29,8 @@ export interface BasicToolProps {
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   forceOpen?: boolean
   defer?: boolean
   locked?: boolean
@@ -83,7 +85,7 @@ export function BasicTool(props: BasicToolProps) {
     open: props.defaultOpen ?? false,
     ready: !props.defer && (props.defaultOpen ?? false),
   })
-  const open = () => state.open
+  const open = () => props.open ?? state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
   const hasChildren = () => (props.defer ? "children" in props : props.children)
@@ -110,8 +112,15 @@ export function BasicTool(props: BasicToolProps) {
     if (props.defer && open()) scheduleReady(true)
   })
 
+  const setOpen = (value: boolean) => {
+    if (props.open === undefined) setState("open", value)
+    props.onOpenChange?.(value)
+  }
+
   createEffect(() => {
-    if (props.forceOpen) setState("open", true)
+    if (!props.forceOpen) return
+    if (open()) return
+    setOpen(true)
   })
 
   createEffect(
@@ -166,7 +175,7 @@ export function BasicTool(props: BasicToolProps) {
   const handleOpenChange = (value: boolean) => {
     if (pending()) return
     if (props.locked && !value) return
-    setState("open", value)
+    setOpen(value)
   }
 
   const trigger = () => (

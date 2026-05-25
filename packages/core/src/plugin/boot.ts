@@ -1,6 +1,6 @@
 export * as PluginBoot from "./boot"
 
-import { Context, Deferred, Effect, Layer, Scope } from "effect"
+import { Context, Deferred, Effect, Layer } from "effect"
 import { AccountV2 } from "../account"
 import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"

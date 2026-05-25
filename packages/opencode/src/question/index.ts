@@ -98,6 +98,10 @@ export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Que
   }
 }
 
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Question.NotFoundError", {
+  requestID: QuestionID,
+}) {}
+
 interface PendingEntry {
   info: Request
   deferred: Deferred.Deferred<ReadonlyArray<Answer>, RejectedError>
@@ -115,8 +119,11 @@ export interface Interface {
     questions: ReadonlyArray<Info>
     tool?: Tool
   }) => Effect.Effect<ReadonlyArray<Answer>, RejectedError>
-  readonly reply: (input: { requestID: QuestionID; answers: ReadonlyArray<Answer> }) => Effect.Effect<void>
-  readonly reject: (requestID: QuestionID) => Effect.Effect<void>
+  readonly reply: (input: {
+    requestID: QuestionID
+    answers: ReadonlyArray<Answer>
+  }) => Effect.Effect<void, NotFoundError>
+  readonly reject: (requestID: QuestionID) => Effect.Effect<void, NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -180,7 +187,7 @@ export const layer = Layer.effect(
       const existing = pending.get(input.requestID)
       if (!existing) {
         log.warn("reply for unknown request", { requestID: input.requestID })
-        return
+        return yield* new NotFoundError({ requestID: input.requestID })
       }
       pending.delete(input.requestID)
       log.info("replied", { requestID: input.requestID, answers: input.answers })
@@ -197,7 +204,7 @@ export const layer = Layer.effect(
       const existing = pending.get(requestID)
       if (!existing) {
         log.warn("reject for unknown request", { requestID })
-        return
+        return yield* new NotFoundError({ requestID })
       }
       pending.delete(requestID)
       log.info("rejected", { requestID })

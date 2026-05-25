@@ -160,6 +160,32 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
+  it.effect("keeps OpenAI-compatible Vertex endpoint templates regional for eu", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
+      yield* plugin.add(GoogleVertexPlugin)
+      const load = yield* catalog.loader()
+      yield* load((catalog) =>
+        catalog.provider.update(ProviderV2.ID.make("google-vertex"), (provider) => {
+          provider.endpoint = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
+          }
+          provider.options.aisdk.provider.project = "config-project"
+          provider.options.aisdk.provider.location = "eu"
+        }),
+      )
+      const provider = yield* catalog.provider.get(ProviderV2.ID.make("google-vertex"))
+      expect(provider.endpoint).toEqual({
+        type: "aisdk",
+        package: "@ai-sdk/openai-compatible",
+        url: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu",
+      })
+    }),
+  )
+
   it.effect("defaults location to us-central1 when only project is configured", () =>
     withEnv(
       {

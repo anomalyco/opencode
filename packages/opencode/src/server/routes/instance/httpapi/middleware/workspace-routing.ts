@@ -131,7 +131,7 @@ function proxyRemote(
     const response = yield* HttpApiProxy.http(client, proxyURL, target.headers, request)
     const sync = Fence.parse(new Headers(response.headers))
     if (sync) {
-      const syncFailure = yield* Fence.waitEffect(
+      const syncFailure = yield* Fence.wait(
         workspace.id,
         sync,
         request.source instanceof Request ? request.source.signal : undefined,

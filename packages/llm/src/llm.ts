@@ -14,7 +14,6 @@ import {
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  ToolCallPart,
   ToolResultPart,
 } from "./schema"
 import { make as makeTool, type ToolSchema } from "./tool"

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -13,6 +13,7 @@ import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
+import * as HttpSessionError from "../../src/server/routes/instance/httpapi/handlers/session-errors"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
@@ -215,6 +216,22 @@ afterEach(async () => {
 })
 
 describe("session HttpApi", () => {
+  it.effect("maps busy sessions to public session busy errors", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.descending()
+      const exit = yield* HttpSessionError.mapBusy(Effect.fail(new Session.BusyError({ sessionID }))).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({
+          _tag: "SessionBusyError",
+          sessionID,
+          message: `Session is busy: ${sessionID}`,
+        })
+      }
+    }),
+  )
+
   it.instance(
     "returns declared not found errors for read routes",
     () =>
@@ -804,19 +821,24 @@ describe("session HttpApi", () => {
           }),
         ).toMatchObject({ id: session.id })
 
-        expect(
-          yield* requestJson<boolean>(
-            pathFor(SessionPaths.permissions, {
-              sessionID: session.id,
-              permissionID: String(PermissionID.ascending()),
-            }),
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ response: "once" }),
-            },
-          ),
-        ).toBe(true)
+        const permissionID = String(PermissionID.ascending())
+        const permission = yield* request(
+          pathFor(SessionPaths.permissions, {
+            sessionID: session.id,
+            permissionID,
+          }),
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ response: "once" }),
+          },
+        )
+        expect(permission.status).toBe(404)
+        expect(yield* responseJson(permission)).toEqual({
+          _tag: "PermissionNotFoundError",
+          requestID: permissionID,
+          message: `Permission request not found: ${permissionID}`,
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
