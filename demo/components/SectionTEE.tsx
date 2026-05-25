@@ -407,7 +407,7 @@ export function SectionTEE() {
             </div>
 
             {/* === ステップリスト === */}
-            <ol className="hidden self-center md:block md:space-y-2 lg:space-y-3">
+            <ol className="hidden self-center md:block md:space-y-1 lg:space-y-3">
               <Step progress={a0} index={0} step={STEPS[0]} />
               <Step progress={a1} index={1} step={STEPS[1]} />
               <Step progress={a2} index={2} step={STEPS[2]} />
@@ -456,7 +456,7 @@ function Step({
   return (
     <motion.li
       style={{ opacity, x, borderColor }}
-      className="rounded-md border bg-sc-bg-soft/60 p-3 lg:p-4 backdrop-blur-sm"
+      className="rounded-md border bg-sc-bg-soft/60 py-2.5 px-3 lg:p-4 backdrop-blur-sm"
     >
       <div className="mb-1 flex items-center gap-2">
         <motion.span
@@ -467,8 +467,8 @@ function Step({
           STEP {String(index + 1).padStart(2, "0")}
         </span>
       </div>
-      <h3 className="text-base font-medium text-sc-text">{step.title}</h3>
-      <p className="mt-1 text-xs leading-relaxed text-sc-text-mid">
+      <h3 className="text-sm font-medium text-sc-text lg:text-base">{step.title}</h3>
+      <p className="mt-1 text-[11px] leading-relaxed text-sc-text-mid lg:text-xs">
         {step.body}
       </p>
     </motion.li>
