@@ -40,12 +40,14 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
       return yield* serveHealthz()
     }
 
-    // GET / — collab landing.  Authenticated users are bounced to
-    // /collab/new (which lists their existing sessions in the sidebar +
-    // shows the create form).  Unauthenticated users get a small sign-in
-    // page rather than the bare opencode home — this deployment is
+    // GET / and GET /collab — collab landing.  Authenticated users are
+    // bounced to /collab/new (which lists their existing sessions in the
+    // sidebar + shows the create form).  Unauthenticated users get a small
+    // sign-in page rather than the bare opencode home — this deployment is
     // collab-first, the standalone opencode UI never makes sense here.
-    if (req.method === "GET" && pathname === "/") {
+    // /collab (no trailing path) is included because the SPA's router has
+    // no route for it — falling through served a blank shell.
+    if (req.method === "GET" && (pathname === "/" || pathname === "/collab")) {
       const webRequest = yield* HttpServerRequest.toWeb(req)
       return yield* Effect.sync(() => HttpServerResponse.fromWeb(serveCollabLanding(webRequest)))
     }
