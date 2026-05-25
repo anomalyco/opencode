@@ -114,12 +114,7 @@ export const loaderLayer = Layer.effect(
         return yield* Effect.gen(function* () {
           const providers = yield* provider.list()
           const [agents, defaultAgent, commands, defaultModel] = yield* Effect.all(
-            [
-              agent.list(),
-              agent.defaultInfo(),
-              command.list(),
-              provider.defaultModel().pipe(Effect.option),
-            ],
+            [agent.list(), agent.defaultInfo(), command.list(), provider.defaultModel().pipe(Effect.option)],
             { concurrency: "unbounded" },
           )
           return build({
@@ -161,7 +156,7 @@ export const layer = Layer.effect(
     })
 
     const get = Effect.fn("ACPNextDirectory.get")(function* (directory: string) {
-      return yield* (yield* cached(directory))
+      return yield* yield* cached(directory)
     })
 
     const refresh = Effect.fn("ACPNextDirectory.refresh")(function* (directory: string) {

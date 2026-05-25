@@ -107,10 +107,7 @@ export const layer = Layer.effect(
       return yield* new ACPNextError.SessionNotFoundError({ sessionId })
     })
 
-    const update = Effect.fn("ACPNext.Session.update")(function* (
-      sessionId: string,
-      fn: (session: Info) => Info,
-    ) {
+    const update = Effect.fn("ACPNext.Session.update")(function* (sessionId: string, fn: (session: Info) => Info) {
       const result = yield* Ref.modify(sessions, (state) => {
         const session = state.get(sessionId)
         if (!session) return [undefined, state] as const
@@ -143,20 +140,20 @@ export const layer = Layer.effect(
       update(sessionId, (session) => ({ ...session, modeId })),
     )
 
-    const recordPartMetadata: Interface["recordPartMetadata"] = Effect.fn("ACPNext.Session.recordPartMetadata")(
-      (input) => {
-        const metadata = {
-          messageId: input.messageId,
-          partId: input.partId,
-          toolCallId: input.toolCallId,
-          metadata: input.metadata,
-        }
-        return update(input.sessionId, (session) => ({
-          ...session,
-          knownParts: new Map(session.knownParts).set(partMetadataKey(input), metadata),
-        })).pipe(Effect.as(metadata))
-      },
-    )
+    const recordPartMetadata: Interface["recordPartMetadata"] = Effect.fn("ACPNext.Session.recordPartMetadata")((
+      input,
+    ) => {
+      const metadata = {
+        messageId: input.messageId,
+        partId: input.partId,
+        toolCallId: input.toolCallId,
+        metadata: input.metadata,
+      }
+      return update(input.sessionId, (session) => ({
+        ...session,
+        knownParts: new Map(session.knownParts).set(partMetadataKey(input), metadata),
+      })).pipe(Effect.as(metadata))
+    })
 
     return Service.of({
       create: store,
