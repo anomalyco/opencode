@@ -7,13 +7,29 @@
 > the ADRs are the open work items that must close before this is production-
 > safe.
 >
+> **Default branch + CI**: this fork's default branch is **`collab`** (was
+> `dev` until 2026-05-25).  Active CI is intentionally narrow — only
+> `test.yml`, `typecheck.yml`, and `deploy-collab.yml` live in
+> `.github/workflows/`.  The 26 upstream sst/opencode workflows (npm
+> publishing, docs translation, Nix eval, VSCode/Zed extension publishing,
+> upstream community automation, etc.) have been purged.  See the
+> [CI Surface](#ci-surface) section below.
+>
+> **Existing clones** need a one-time HEAD update after the default-branch
+> flip:
+> ```sh
+> git fetch origin
+> git remote set-head origin -a    # updates origin/HEAD → origin/collab
+> ```
+> New clones pick up `collab` automatically.
+>
 > **Utils dev deployment (`https://collab.utils.unleashlive.com`) is
 > automated via Terragrunt + GitHub Actions.**  See the runbook at
 > [`unleashlive/devops/terraform/opencode-collab/README.md`](https://github.com/unleashlive/devops/blob/master/terraform/opencode-collab/README.md)
 > for the bootstrap recipe, plus `.github/workflows/deploy-collab.yml` in
-> this repo for the deploy button (`workflow_dispatch` only).  The
-> walkthrough below is the prod-oriented narrative; it still describes
-> the same shape (ECS Fargate + ALB + EFS + Secrets Manager).
+> this repo for the deploy button (`workflow_dispatch` only — no auto-deploy
+> on push).  The walkthrough below is the prod-oriented narrative; it still
+> describes the same shape (ECS Fargate + ALB + EFS + Secrets Manager).
 >
 > **GH Actions repository secret required**: `AWS_UTILS_ACCOUNT_ID = 637226132752`.
 >
@@ -440,6 +456,44 @@ aws ecs wait services-stable \
 ```
 
 If you see `opencode-claude-auth: Claude credentials are expired and could not be refreshed` in the logs, that's the signal — the refresh token has aged out and a fresh dump is required.
+
+---
+
+## CI surface
+
+`collab` is the integration branch.  Three workflows live in `.github/workflows/`:
+
+| Workflow | Triggers | Purpose |
+|---|---|---|
+| `test.yml` | push to `collab`, any PR, `workflow_dispatch` | Unit test matrix across runtimes |
+| `typecheck.yml` | push to `collab`, PR targeting `collab`, `workflow_dispatch` | TS typecheck (`bun typecheck`) |
+| `deploy-collab.yml` | `workflow_dispatch` only | Build image + push to ECR + ECS rollout to utils account |
+
+No auto-deploy on push.  Deploys are always operator-initiated:
+
+```sh
+# From a terminal (preferred):
+gh workflow run deploy-collab.yml --ref collab
+
+# Or via the GitHub Actions UI:
+#   Actions → "Deploy collab" → Run workflow → leave image_tag empty
+#   (defaults to "latest") → Run workflow
+```
+
+The deploy job builds the image, tags it both `latest` and
+`sha-<short>`, registers a new task definition revision pointing at the
+sha-tagged image, calls `update-service --force-new-deployment`, waits
+for `services-stable`, and probes `/healthz`.
+
+### Deploy mechanism — bootstrap branches deprecated
+
+Earlier iterations of this work used temporary `deploy/*-bootstrap`
+branches that carried a `push:` trigger in the workflow file to fire
+deploys without a workflow file being on the default branch.  That
+workaround is gone — now that `collab` is the default and carries the
+workflow file, `workflow_dispatch` is sufficient.  Do not re-introduce
+the push trigger; it widens the deploy surface to anyone who can push
+to `deploy/*` and has no benefit over the explicit dispatch.
 
 ---
 
