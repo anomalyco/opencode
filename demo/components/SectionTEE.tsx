@@ -94,30 +94,20 @@ export function SectionTEE() {
   // バッジ 04 は出現したら消さずに残す
   const retBadgeOpacity = useTransform(a3, [0, 0.12], [0, 1], { clamp: true })
 
-  // Mobile: step card slide transitions (右からスライドイン、左へスライドアウト)
-  const mob0Op = useTransform(scrollYProgress, [0.00, 0.10, 0.22, 0.32], [0, 1, 1, 0], { clamp: true })
-  const mob0X = useTransform(scrollYProgress, [0.00, 0.10, 0.22, 0.32], [20, 0, 0, -20], { clamp: true })
-  const mob1Op = useTransform(scrollYProgress, [0.26, 0.36, 0.48, 0.58], [0, 1, 1, 0], { clamp: true })
-  const mob1X = useTransform(scrollYProgress, [0.26, 0.36, 0.48, 0.58], [20, 0, 0, -20], { clamp: true })
-  const mob2Op = useTransform(scrollYProgress, [0.52, 0.62, 0.70, 0.78], [0, 1, 1, 0], { clamp: true })
-  const mob2X = useTransform(scrollYProgress, [0.52, 0.62, 0.70, 0.78], [20, 0, 0, -20], { clamp: true })
-  const mob3Op = useTransform(scrollYProgress, [0.74, 0.84, 1.00, 1.00], [0, 1, 1, 1], { clamp: true })
-  const mob3X = useTransform(scrollYProgress, [0.74, 0.84], [20, 0], { clamp: true })
-
   return (
     <>
     <section
       id="tee"
       ref={ref}
-      className="relative w-full h-[420vh]"
+      className="relative w-full md:h-[420vh]"
     >
       {/*
-       * Desktop (>= md): sticky + h-[100dvh] で scrollytelling として、
+       * Desktop (>= md): sticky + h-dvh で scrollytelling。
        *   外側 h-[420vh] の 4 倍スクロール範囲で a0..a3 を進行させる。
-       * Mobile (< md):  h-[420vh] + sticky で desktop と同じ scrollytelling。
-        *   図とステップカードが sticky viewport 内で同期アニメーション。
-        */}
-      <div className="flex w-full flex-col sticky top-0 h-[100dvh] min-h-[640px] overflow-hidden">
+       * Mobile (< md): sticky なし・静的レイアウト。
+       *   図は非表示にして 4 ステップを縦に並列表示する。
+       */}
+      <div className="flex w-full flex-col md:sticky md:top-0 md:h-dvh md:min-h-160 md:overflow-hidden">
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_70%_30%,rgba(3,76,255,0.12)_0%,transparent_55%)]"
@@ -145,7 +135,7 @@ export function SectionTEE() {
 
           <div className="mt-6 flex flex-1 flex-col gap-4 md:grid md:grid-cols-[1fr_1fr] md:gap-8 lg:grid-cols-[1.8fr_1fr]">
             {/* === 図 === */}
-            <div className="relative flex min-h-0 flex-[3] items-center justify-center">
+            <div className="relative hidden min-h-0 flex-6 items-center justify-center md:flex">
               <svg
                 viewBox="0 0 520 420"
                 className="h-full w-full max-h-[62vh]"
@@ -414,20 +404,12 @@ export function SectionTEE() {
               <Step progress={a3} index={3} step={STEPS[3]} />
             </ol>
 
-            {/* モバイル: スライドイン/アウト */}
-            <div className="relative min-h-0 flex-[2] md:hidden">
-              <motion.div style={{ opacity: mob0Op, x: mob0X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={0} step={STEPS[0]} />
-              </motion.div>
-              <motion.div style={{ opacity: mob1Op, x: mob1X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={1} step={STEPS[1]} />
-              </motion.div>
-              <motion.div style={{ opacity: mob2Op, x: mob2X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={2} step={STEPS[2]} />
-              </motion.div>
-              <motion.div style={{ opacity: mob3Op, x: mob3X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={3} step={STEPS[3]} />
-              </motion.div>
+            {/* モバイル: 静的 4 ステップ一覧 */}
+            <div className="flex flex-col gap-3 md:hidden">
+              <MobileStepCard index={0} step={STEPS[0]} />
+              <MobileStepCard index={1} step={STEPS[1]} />
+              <MobileStepCard index={2} step={STEPS[2]} />
+              <MobileStepCard index={3} step={STEPS[3]} />
             </div>
           </div>
         </div>
