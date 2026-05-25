@@ -10,6 +10,7 @@ import {
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import * as ACPNextError from "./error"
 import * as ACPNextService from "./service"
 
 export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
@@ -45,16 +46,10 @@ export class Agent implements ACPAgent {
 }
 
 function run<A>(effect: Effect.Effect<A, ACPNextService.Error>) {
-  return Effect.runPromise(effect.pipe(Effect.mapError(toRequestError)))
-}
-
-function toRequestError(error: ACPNextService.Error) {
-  switch (error._tag) {
-    case "ACPNextUnknownAuthMethodError":
-      return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
-    case "ACPNextUnsupportedOperationError":
-      return RequestError.methodNotFound(error.method)
-  }
+  return Effect.runPromise(effect.pipe(Effect.mapError(ACPNextError.toRequestError))).catch((defect: unknown) => {
+    if (defect instanceof RequestError) throw defect
+    throw ACPNextError.toRequestError(ACPNextError.fromUnknownDefect(defect))
+  })
 }
 
 export * as ACPNext from "./agent"
