@@ -9,6 +9,7 @@ import type { Provider } from "@/provider/provider"
 
 const providerID = ProviderID.make("test")
 const modelID = ModelID.make("test-model")
+const configuredModelID = ModelID.make("configured-model")
 
 const provider: Provider.Info = {
   id: providerID,
@@ -54,6 +55,39 @@ const provider: Provider.Info = {
         high: { reasoningEffort: "high" },
       },
     },
+    [configuredModelID]: {
+      id: configuredModelID,
+      providerID,
+      api: {
+        id: configuredModelID,
+        url: "https://example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Configured Model",
+      family: "test",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+    },
   },
 }
 
@@ -64,6 +98,7 @@ describe("ACP next service sessions", () => {
     const sdk = {
       config: {
         providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        get: () => Promise.resolve({ data: {} }),
       },
       app: {
         agents: () =>
@@ -88,6 +123,7 @@ describe("ACP next service sessions", () => {
       session: {
         create: () => Promise.resolve({ data: { id: "ses_new" } }),
         get: () => Promise.resolve({ data: { id: "ses_loaded" } }),
+        list: () => Promise.resolve({ data: [] }),
         messages: () => Promise.resolve({ data: messages }),
       },
       mcp: {
@@ -185,6 +221,7 @@ describe("ACP next service sessions", () => {
       sdk: {
         config: {
           providers: () => Promise.reject({ name: "ProviderAuthError", data: { providerID: "test" } }),
+          get: () => Promise.resolve({ data: {} }),
         },
         app: {
           agents: () => Promise.resolve({ data: [] }),
@@ -207,14 +244,15 @@ describe("ACP next service sessions", () => {
   it("does not cache failed directory snapshots", async () => {
     let providersCalls = 0
     const sdk = {
-      config: {
-        providers: () => {
+        config: {
+          providers: () => {
           providersCalls++
           if (providersCalls === 1) {
             return Promise.reject({ name: "ProviderAuthError", data: { providerID: "test" } })
           }
           return Promise.resolve({ data: { providers: [provider], default: { test: modelID } } })
-        },
+          },
+          get: () => Promise.resolve({ data: {} }),
       },
       app: {
         agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
@@ -225,6 +263,7 @@ describe("ACP next service sessions", () => {
       },
       session: {
         create: () => Promise.resolve({ data: { id: "ses_retry" } }),
+        list: () => Promise.resolve({ data: [] }),
       },
       mcp: {
         add: () => Promise.resolve({ data: {} }),
@@ -242,6 +281,35 @@ describe("ACP next service sessions", () => {
     expect(first.code).toBe(-32000)
     expect(second.sessionId).toBe("ses_retry")
     expect(providersCalls).toBe(2)
+  })
+
+  it("uses the configured model as the new session default", async () => {
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        get: () => Promise.resolve({ data: { model: "test/configured-model" } }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: (input: { model?: { id?: string } }) => Promise.resolve({ data: { id: input.model?.id } }),
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(result.sessionId).toBe("configured-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/configured-model")
   })
 })
 

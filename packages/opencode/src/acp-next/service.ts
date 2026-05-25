@@ -20,8 +20,8 @@ import { Context, Effect } from "effect"
 import * as ACPNextError from "./error"
 import { buildConfigOptions } from "./config-option"
 import { Directory } from "./directory"
-import type { ModelID, ProviderID } from "@/provider/schema"
-import type { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
 export const AuthMethodID = "opencode-login"
@@ -245,7 +245,7 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
     ProviderID,
     Provider.Info
   >
-  const defaultModel = defaultModelFromProviders(providersData.default, providers)
+  const defaultModel = await defaultModelFromSdk(sdk, directory, providers)
   const modes = agents
     .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
     .map((agent) => ({
@@ -276,19 +276,51 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
   })
 }
 
-function defaultModelFromProviders(
-  defaults: Record<string, string>,
+async function defaultModelFromSdk(
+  sdk: OpencodeClient,
+  directory: string,
   providers: Record<ProviderID, Provider.Info>,
-): Directory.DefaultModel | undefined {
-  const entry = Object.entries(defaults)
-    .map(([providerID, modelID]) => ({ providerID: providerID as ProviderID, modelID: modelID as ModelID }))
-    .find((item) => providers[item.providerID]?.models[item.modelID])
-  if (entry) return entry
+): Promise<Directory.DefaultModel | undefined> {
+  const configured = await sdk.config
+    .get({ directory }, { throwOnError: true })
+    .then((response) => (response.data?.model ? Provider.parseModel(response.data.model) : undefined))
+    .catch(() => undefined)
+  if (configured && providers[configured.providerID]?.models[configured.modelID]) return configured
 
-  const provider = Object.values(providers)[0]
-  const model = provider ? Object.values(provider.models)[0] : undefined
-  if (!provider || !model) return undefined
-  return { providerID: provider.id, modelID: model.id }
+  const lastUsed = await lastUsedModel(sdk, directory, providers)
+  if (lastUsed) return lastUsed
+
+  const opencodeProvider = providers[ProviderID.make("opencode")]
+  const opencodeModel = opencodeProvider ? Provider.sort(Object.values(opencodeProvider.models))[0] : undefined
+  if (opencodeProvider && opencodeModel) return { providerID: opencodeProvider.id, modelID: opencodeModel.id }
+
+  const best = Provider.sort(Object.values(providers).flatMap((provider) => Object.values(provider.models)))[0]
+  if (best) return { providerID: best.providerID, modelID: best.id }
+  if (configured) return configured
+}
+
+async function lastUsedModel(
+  sdk: OpencodeClient,
+  directory: string,
+  providers: Record<ProviderID, Provider.Info>,
+): Promise<Directory.DefaultModel | undefined> {
+  const session = await sdk.session
+    .list({ directory, roots: true, limit: 1 }, { throwOnError: true })
+    .then((response) => response.data?.[0])
+    .catch(() => undefined)
+  if (!session) return
+
+  const lastUser = await sdk.session
+    .messages({ directory, sessionID: session.id, limit: 20 }, { throwOnError: true })
+    .then((response) => response.data?.findLast((message) => message.info.role === "user")?.info)
+    .catch(() => undefined)
+  if (lastUser?.role !== "user") return
+  if (!providers[ProviderID.make(lastUser.model.providerID)]?.models[ModelID.make(lastUser.model.modelID)]) return
+
+  return {
+    providerID: ProviderID.make(lastUser.model.providerID),
+    modelID: ModelID.make(lastUser.model.modelID),
+  }
 }
 
 function selectDefaultModel(snapshot: Directory.Snapshot) {
