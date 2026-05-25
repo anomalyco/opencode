@@ -627,6 +627,7 @@ export function QuickAssistant() {
           }}
         >
           <div class="flex flex-col">
+            <QuickAssistantMessages list={list()} parts={data()?.part} busy={busy()} />
             <QuickAssistantInput
               setRef={(next) => {
                 input = next
@@ -643,7 +644,6 @@ export function QuickAssistant() {
               onContext={toggleContext}
               onSend={() => void submit()}
             />
-            <QuickAssistantMessages list={list()} parts={data()?.part} busy={busy()} />
           </div>
         </div>
       </Show>

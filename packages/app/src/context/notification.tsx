@@ -43,6 +43,8 @@ const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
 const ERROR_SOUND_LOG = "opencode.error-sound.dat"
 const ERROR_SOUND_KEY = "error-sound.v1"
 const ERROR_SOUND_MAX = 200
+const QUICK_ASSISTANT_TITLE = "Quick Assistant"
+const QUICK_ASSISTANT_DIR = "quick-assistant"
 
 type ErrorSoundLog = {
   time: number
@@ -68,6 +70,15 @@ function errorText(error: EventSessionError["properties"]["error"]) {
   if (data && typeof data === "object" && "message" in data && typeof data.message === "string") return data.message
   if ("name" in error && typeof error.name === "string") return error.name
   return JSON.stringify(error)
+}
+
+function joinPath(root: string, child: string) {
+  const slash = /^[A-Za-z]:\\|\\\\/.test(root) || root.includes("\\") ? "\\" : "/"
+  return root.replace(/[\\/]+$/, "") + slash + child
+}
+
+function normalizePath(value: string) {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
 }
 
 async function logErrorSound(
@@ -331,6 +342,13 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       return sessionID === activeSession
     }
 
+    const isQuickAssistantSession = (directory: string, session: { title?: string } | undefined) => {
+      const config = globalSync.data.path.config
+      if (!config) return false
+      if (session?.title !== QUICK_ASSISTANT_TITLE) return false
+      return normalizePath(directory) === normalizePath(joinPath(config, QUICK_ASSISTANT_DIR))
+    }
+
     const handleSessionIdle = (
       directory: string,
       event: { properties: { sessionID?: string } },
@@ -342,6 +360,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (meta.disposed) return
         if (!session) return
         if (session.parentID) return
+        if (isQuickAssistantSession(directory, session)) return
 
         if (settings.sounds.agentEnabled()) {
           void playSoundById(settings.sounds.agent())
