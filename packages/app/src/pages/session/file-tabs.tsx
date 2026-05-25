@@ -786,6 +786,25 @@ export function FileTabContent(props: {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
+  // FORK: md-editing-iter-3 矫正 ⑦ — Cmd+Shift+E 进编辑模式 keybind
+  // 起源:Tauri WKWebView + SolidJS Portal 互操作,合成 click 事件(cliclick/osascript/
+  //      CGEventPost)打不到右键菜单内 button,导致 GUI 自动化测试无法触发"编辑"按钮。
+  //      加键盘快捷键给 user 便利 + 让 e2e 测试能键盘驱动。2026-05-25
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (activeFileTab() !== props.tab) return
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || !event.shiftKey) return
+      if (event.key.toLowerCase() !== "e") return
+      if (editing()) return // 已在编辑模式
+      if (!canEdit() || !state()?.loaded) return
+      event.preventDefault()
+      event.stopPropagation()
+      void startEdit()
+    }
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+  })
+
   // FORK-BEGIN: 文件查看器 Ctrl/Cmd+C — 修非 .md 内容(@pierre/diffs shadow DOM)原生 Ctrl+C 拿不到选区的 bug 2026-05-04
   // 现象:.md 走 light DOM 原生 Ctrl+C 工作;代码 / HTML / PDF / office 预览走 <diffs-container> shadow DOM,
   // window.getSelection().toString() 对 shadow 内容返回空 → 系统剪贴板拿不到东西 → "Ctrl+C 没反应"。
