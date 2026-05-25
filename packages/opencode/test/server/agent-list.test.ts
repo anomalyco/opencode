@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Effect } from "effect"
 import { tmpdir } from "../fixture/fixture"
-import { Server } from "../../src/server/server"
+import { Agent } from "../../src/agent/agent"
+import { Plugin } from "../../src/plugin"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { InstanceStore } from "../../src/project/instance-store"
 
 async function writePlugin(dir: string) {
   const root = path.join(dir, ".opencode")
@@ -35,11 +39,19 @@ describe("server agent list", () => {
   test("includes project plugin agents for the requested directory", async () => {
     await using tmp = await tmpdir({ init: writePlugin })
 
-    const app = Server.createApp({})
-    const res = await app.request("http://localhost/agent?directory=" + encodeURIComponent(tmp.path))
-    expect(res.status).toBe(200)
-
-    const data = (await res.json()) as Array<{ name: string; mode: string; hidden?: boolean }>
+    const data = await AppRuntime.runPromise(
+      InstanceStore.Service.use((store) =>
+        store.provide(
+          { directory: tmp.path },
+          Effect.gen(function* () {
+            const plugin = yield* Plugin.Service
+            const agent = yield* Agent.Service
+            yield* plugin.init()
+            return yield* agent.list()
+          }),
+        ),
+      ),
+    )
     expect(data.some((item) => item.name === "Alpha Agent" && item.mode === "primary" && !item.hidden)).toBe(true)
   })
 })

@@ -84,14 +84,6 @@ function ToastProgressFill(props: ComponentProps<typeof Kobalte.ProgressFill>) {
   return <Kobalte.ProgressFill data-slot="toast-progress-fill" {...props} />
 }
 
-function ToastCountdown() {
-  return (
-    <ToastProgressTrack>
-      <ToastProgressFill />
-    </ToastProgressTrack>
-  )
-}
-
 export const Toast = Object.assign(ToastRoot, {
   Region: ToastRegion,
   Icon: ToastIcon,
@@ -160,9 +152,6 @@ export function showToast(options: ToastOptions | string) {
           </Toast.Actions>
         </Show>
       </Toast.Content>
-      <Show when={!opts.persistent}>
-        <ToastCountdown />
-      </Show>
       <Toast.CloseButton />
     </Toast>
   ))
@@ -190,7 +179,6 @@ export function showPromiseToast<T, U = unknown>(
           {props.state === "rejected" && options.error?.(props.error)}
         </Toast.Description>
       </Toast.Content>
-      <ToastCountdown />
       <Toast.CloseButton />
     </Toast>
   ))

@@ -8,6 +8,7 @@ export const ProjectTable = sqliteTable("project", {
   vcs: text(),
   name: text(),
   icon_url: text(),
+  icon_url_override: text(),
   icon_color: text(),
   ...Timestamps,
   time_initialized: integer(),

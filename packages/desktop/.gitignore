@@ -8,8 +8,14 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+out
 dist
 dist-ssr
+resources/icons
+resources/sidecars
+resources/*.metainfo.xml
+src-tauri/sidecars
+src-tauri/target
 *.local
 
 # Editor directories and files

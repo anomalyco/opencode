@@ -1,5 +1,13 @@
 import { $ } from "bun"
 
+export type Channel = "dev" | "beta" | "prod"
+
+export function resolveChannel(): Channel {
+  const raw = Bun.env.OPENCODE_CHANNEL
+  if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  return "dev"
+}
+
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",
@@ -44,8 +52,6 @@ function nativeTarget() {
 }
 
 export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
-  if (!target) throw new Error("RUST_TARGET not set")
-
   const binaryConfig = SIDECAR_BINARIES.find((b) => b.rustTarget === target)
   if (!binaryConfig) throw new Error(`Sidecar configuration not available for Rust target '${target}'`)
 
@@ -54,10 +60,22 @@ export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
 
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET ?? nativeTarget()) {
   await $`mkdir -p src-tauri/sidecars`
+  await $`mkdir -p resources/sidecars`
   const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
+  const resourceDest = windowsify(`resources/sidecars/opencode-cli-${target}`)
   await $`cp ${source} ${dest}`
+  await $`cp ${source} ${resourceDest}`
+  if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
+    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
+    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${resourceDest}`
+  }
+  if (process.platform === "darwin") {
+    await $`codesign --force --sign - ${dest}`
+    await $`codesign --force --sign - ${resourceDest}`
+  }
 
   console.log(`Copied ${source} to ${dest}`)
+  console.log(`Copied ${source} to ${resourceDest}`)
 }
 
 export function windowsify(path: string) {

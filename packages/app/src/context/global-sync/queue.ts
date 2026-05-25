@@ -2,22 +2,25 @@ type QueueInput = {
   paused: () => boolean
   bootstrap: () => Promise<void>
   bootstrapInstance: (directory: string) => Promise<void> | void
+  key?: (directory: string) => string
 }
 
 export function createRefreshQueue(input: QueueInput) {
-  const queued = new Set<string>()
+  const queued = new Map<string, string>()
   let root = false
   let running = false
   let timer: ReturnType<typeof setTimeout> | undefined
+
+  const keyOf = input.key ?? ((directory: string) => directory)
 
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   const take = (count: number) => {
     if (queued.size === 0) return [] as string[]
     const items: string[] = []
-    for (const item of queued) {
-      queued.delete(item)
-      items.push(item)
+    for (const [k, dir] of queued) {
+      queued.delete(k)
+      items.push(dir)
       if (items.length >= count) break
     }
     return items
@@ -35,7 +38,7 @@ export function createRefreshQueue(input: QueueInput) {
 
   const push = (directory: string) => {
     if (!directory) return
-    queued.add(directory)
+    queued.set(keyOf(directory), directory)
     if (input.paused()) return
     schedule()
   }
@@ -81,7 +84,7 @@ export function createRefreshQueue(input: QueueInput) {
     push,
     refresh,
     clear(directory: string) {
-      queued.delete(directory)
+      queued.delete(keyOf(directory))
     },
     dispose() {
       if (refreshTimer) {

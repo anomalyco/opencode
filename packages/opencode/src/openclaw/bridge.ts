@@ -6,11 +6,11 @@ import os from "node:os"
 import path from "node:path"
 import { mkdir } from "node:fs/promises"
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "node:crypto"
-import { Installation } from "@/installation"
-import { Global } from "@/global"
-import { Log } from "@/util/log"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/core/global"
+import { Log } from "@opencode-ai/core/util/log"
 import { Identifier } from "@/id/id"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 
 type Opts = {
   hostname: string
@@ -1027,7 +1027,7 @@ class GwClient {
                     client: {
                       id: clientID,
                       displayName: "OpenCode",
-                      version: Installation.VERSION,
+                      version: InstallationVersion,
                       platform: "bun",
                       mode: "backend",
                     },
@@ -1578,7 +1578,7 @@ export namespace OpenClawBridge {
       .get("/global/health", async (c) => {
         try {
           await sessions(gw)
-          return c.json({ healthy: true, version: Installation.VERSION })
+          return c.json({ healthy: true, version: InstallationVersion })
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
           log.error("openclaw health failed", { error: message })

@@ -28,7 +28,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       isBedrock
         ? `${providerApi}/model/${isBedrockModelArn ? encodeURIComponent(providerModel) : providerModel}/${isStream ? "invoke-with-response-stream" : "invoke"}`
         : providerApi + "/messages",
-    modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+    modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
       if (isBedrock || isDatabricks) {
         headers.set("Authorization", `Bearer ${apiKey}`)
       } else {
@@ -53,9 +53,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
               anthropic_version: "bedrock-2023-05-31",
               anthropic_beta: supports1m ? ["context-1m-2025-08-07"] : undefined,
             }
-          : {
-              service_tier: "standard_only",
-            }),
+          : {}),
     }),
     createBinaryStreamDecoder: () => {
       if (!isBedrock) return undefined
@@ -148,12 +146,14 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       return {
         parse: (chunk: string) => {
           const data = chunk.split("\n")[1]
-          if (!data.startsWith("data: ")) return
+          // Claude models start with "data: {"
+          // Alibaba models start with "data:{"
+          if (!data.startsWith("data:")) return
 
           let json
           try {
-            json = JSON.parse(data.slice(6))
-          } catch (e) {
+            json = JSON.parse(data.replace(/^data:\s*/, ""))
+          } catch {
             return
           }
 

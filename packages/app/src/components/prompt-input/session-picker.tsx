@@ -2,7 +2,7 @@ import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Popover } from "@opencode-ai/ui/popover"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { useSessionHistory, type SessionHistoryEntry } from "@/context/session-history"
 
 export interface SessionPickerPopoverProps {

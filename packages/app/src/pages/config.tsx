@@ -26,6 +26,7 @@ import { applyEdits, modify } from "jsonc-parser"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { paint } from "@/components/prompt-input/expand"
 import { DialogConnectProvider } from "@/components/dialog-connect-provider"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import {
   OPENAI_COMPATIBLE,
   headerRow as blankHeaderRow,
@@ -89,7 +90,7 @@ type DocItem = {
 
 type SkillItem = {
   name: string
-  description: string
+  description?: string
   location: string
   content: string
   editable: boolean
@@ -228,7 +229,8 @@ function stem(path: string) {
   return path.replace(/\.(?:md|mdx|d\.ts|ts|js|mjs|cjs)$/i, "")
 }
 
-function pkg(spec: string) {
+function pkg(spec: string | [string, Record<string, unknown>]) {
+  if (Array.isArray(spec)) spec = spec[0]
   if (spec.startsWith("file://")) return
   if (spec.includes("\\") || spec.startsWith("/") || /^[A-Za-z]:\//.test(spec)) return
   const last = spec.lastIndexOf("@")
@@ -536,6 +538,7 @@ function clawCfg(input?: OpenclawConfig) {
     token: input?.token ?? "",
     saving: false,
     testing: false,
+    detecting: false,
     err: {
       url: "",
     },
@@ -602,40 +605,28 @@ function SectionButton(props: { current: boolean; title: string; icon: IconProps
   return (
     <button
       type="button"
-      class="group flex w-full items-center justify-between gap-3 border-b border-border-weak-base px-3 py-3 text-left transition-colors"
+      class="group flex w-full items-center justify-between gap-3 px-2.5 py-4 text-left transition-colors"
       classList={{
         "bg-surface-base hover:bg-surface-base-hover": !props.current,
-        "border-border-success-base bg-surface-success-base": props.current,
+        "border-border-base bg-surface-base-active": props.current,
       }}
       onClick={props.onClick}
     >
-      <div class="flex min-w-0 items-center gap-2.5">
+      <div class="flex min-w-0 items-center gap-3">
         <div
-          class="flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors"
+          class="flex size-8 shrink-0 items-center justify-center transition-colors"
           classList={{
-            "border-border-weak-base bg-background-base text-text-weak": !props.current,
-            "border-border-success-base/60 bg-surface-success-base text-text-on-success-base": props.current,
+            "text-text-weak": !props.current,
+            "text-text-strong": props.current,
           }}
         >
-          <Icon name={props.icon} size="small" />
+          <Icon name={props.icon} size="medium" />
         </div>
-        <div
-          class="truncate text-15-medium transition-colors"
-          classList={{
-            "text-text-strong": !props.current,
-            "text-text-on-success-base": props.current,
-          }}
-        >
+        <div class="truncate text-16-medium text-text-strong transition-colors">
           {props.title}
         </div>
       </div>
-      <div
-        class="size-2 rounded-full transition-colors"
-        classList={{
-          "bg-border-strong": !props.current,
-          "bg-icon-success-base": props.current,
-        }}
-      />
+      <div class="size-2 rounded-full bg-border-strong transition-colors" />
     </button>
   )
 }
@@ -656,7 +647,7 @@ function ListButton(props: {
       class="group flex w-full items-start justify-between gap-3 border-b border-border-weak-base px-3 py-3 text-left transition-colors"
       classList={{
         "bg-surface-base hover:bg-surface-base-hover": !props.active,
-        "border-border-success-base bg-surface-success-base": props.active,
+        "border-border-base bg-surface-base-active": props.active,
       }}
       onClick={props.onClick}
     >
@@ -666,8 +657,7 @@ function ListButton(props: {
             class="truncate text-13-medium transition-colors"
             classList={{
               "text-text-danger-base": props.tone === "danger",
-              "text-text-strong": !props.active && props.tone !== "danger",
-              "text-text-on-success-base": props.active && props.tone !== "danger",
+              "text-text-strong": props.tone !== "danger",
             }}
           >
             {props.title}
@@ -681,7 +671,7 @@ function ListButton(props: {
             class="mt-1 line-clamp-2 text-12-regular transition-colors"
             classList={{
               "text-text-weak": !props.active,
-              "text-text-on-success-weak": props.active,
+              "text-text-base": props.active,
             }}
           >
             {props.note}
@@ -692,7 +682,7 @@ function ListButton(props: {
             class="mt-2 break-all font-mono text-[12px] leading-5 transition-colors"
             classList={{
               "text-text-weak": !props.active,
-              "text-text-on-success-weak": props.active,
+              "text-text-base": props.active,
             }}
           >
             {props.meta}
@@ -1130,15 +1120,73 @@ function ProviderDetail(props: {
   )
 }
 
+function ClawFormActions(props: {
+  dirty: boolean
+  busy: boolean
+  canTest: boolean
+  canDetect?: boolean
+  saving: boolean
+  testing: boolean
+  detecting?: boolean
+  onSave: () => void
+  onTest: () => void
+  onDetect?: () => void
+  onAbort?: () => void
+}) {
+  const language = useLanguage()
+
+  return (
+    <div class="flex flex-wrap items-center justify-end gap-2">
+      <Show when={props.canDetect && props.onDetect}>
+        <Button
+          size="small"
+          variant="ghost"
+          icon="magnifying-glass"
+          onClick={() => props.onDetect?.()}
+          disabled={props.busy || props.saving || props.testing || props.detecting}
+        >
+          <Show when={props.detecting} fallback={language.t("config.claws.action.detect")}>
+            <span class="inline-flex items-center gap-2">
+              <Spinner class="size-3" />
+              {language.t("config.claws.action.detecting")}
+            </span>
+          </Show>
+        </Button>
+      </Show>
+      <Button
+        size="small"
+        variant="ghost"
+        icon="reset"
+        onClick={props.onTest}
+        disabled={!props.canTest || props.busy || props.saving || props.testing || props.detecting}
+      >
+        {language.t("config.claws.action.test")}
+      </Button>
+      <Show when={props.testing && props.onAbort}>
+        <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
+          {language.t("config.claws.action.abort")}
+        </Button>
+      </Show>
+      <SaveButton
+        label={language.t("config.claws.action.save")}
+        onClick={props.onSave}
+        disabled={props.busy || props.saving || props.testing || props.detecting || !props.dirty}
+      />
+    </div>
+  )
+}
+
 function ClawEditor(props: {
   item?: ClawItem
   form: ReturnType<typeof clawCfg>
   dirty: boolean
   busy: boolean
   canTest: boolean
+  canDetect: boolean
   onChange: (key: "enabled" | "url" | "token", value: string | boolean) => void
   onSave: () => void
   onTest: () => void
+  onDetect: () => void
   onAbort?: () => void
 }) {
   const language = useLanguage()
@@ -1163,72 +1211,54 @@ function ClawEditor(props: {
             <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              variant="ghost"
-              icon="reset"
-              onClick={props.onTest}
-              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            <Toggle
+              checked={props.form.enabled}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("enabled", value)}
             >
-              {language.t("config.claws.action.test")}
-            </Button>
-            <Show when={props.form.testing && props.onAbort}>
-              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
-                {language.t("config.claws.action.abort")}
-              </Button>
-            </Show>
-            <SaveButton
-              label={language.t("config.claws.action.save")}
-              onClick={props.onSave}
-              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
-            />
+              {language.t("config.claws.field.enabled")}
+            </Toggle>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
-            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
-              <div class="flex flex-col gap-5">
-                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
-                  <div class="min-w-0">
-                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      {language.t("config.claws.field.enabledDescription")}
-                    </div>
-                  </div>
-                  <Toggle
-                    checked={props.form.enabled}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("enabled", value)}
-                  >
-                    {language.t("config.claws.field.enabled")}
-                  </Toggle>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.url")}
-                    description={language.t("config.claws.field.urlDescription")}
-                    placeholder="ws://127.0.0.1:18789"
-                    value={props.form.url}
-                    validationState={props.form.err.url ? "invalid" : undefined}
-                    error={props.form.err.url}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("url", value)}
-                  />
-                  <TextField
-                    type="password"
-                    label={language.t("config.claws.field.token")}
-                    description={language.t("config.claws.field.tokenDescription")}
-                    placeholder={language.t("config.claws.field.tokenPlaceholder")}
-                    value={props.form.token}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("token", value)}
-                  />
-                </div>
-              </div>
+          <div class="flex w-full flex-col gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.url")}
+                description={language.t("config.claws.field.urlDescription")}
+                placeholder="ws://127.0.0.1:18789"
+                value={props.form.url}
+                validationState={props.form.err.url ? "invalid" : undefined}
+                error={props.form.err.url}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("url", value)}
+              />
+              <TextField
+                type="password"
+                label={language.t("config.claws.field.token")}
+                description={language.t("config.claws.field.tokenDescription")}
+                placeholder={language.t("config.claws.field.tokenPlaceholder")}
+                value={props.form.token}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("token", value)}
+              />
             </div>
+
+            <ClawFormActions
+              dirty={props.dirty}
+              busy={props.busy}
+              canTest={props.canTest}
+              canDetect={props.canDetect}
+              saving={props.form.saving}
+              testing={props.form.testing}
+              detecting={props.form.detecting}
+              onSave={props.onSave}
+              onTest={props.onTest}
+              onDetect={props.onDetect}
+              onAbort={props.onAbort}
+            />
 
             <Show when={props.form.testing || !!props.form.test}>
               <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
@@ -1289,6 +1319,7 @@ function GenericAgentEditor(props: {
   busy: boolean
   canTest: boolean
   onChange: (key: "enabled" | "pythonExecutable" | "genericAgentDir", value: string | boolean) => void
+  onChooseDir: () => void
   onSave: () => void
   onTest: () => void
   onAbort?: () => void
@@ -1315,72 +1346,76 @@ function GenericAgentEditor(props: {
             <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              variant="ghost"
-              icon="reset"
-              onClick={props.onTest}
-              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            <Toggle
+              checked={props.form.enabled}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("enabled", value)}
             >
-              {language.t("config.claws.action.test")}
-            </Button>
-            <Show when={props.form.testing && props.onAbort}>
-              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
-                {language.t("config.claws.action.abort")}
-              </Button>
-            </Show>
-            <SaveButton
-              label={language.t("config.claws.action.save")}
-              onClick={props.onSave}
-              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
-            />
+              {language.t("config.claws.field.enabled")}
+            </Toggle>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
-            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
-              <div class="flex flex-col gap-5">
-                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
-                  <div class="min-w-0">
-                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      {language.t("config.claws.field.enabledDescription")}
-                    </div>
+          <div class="flex w-full flex-col gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="min-w-0">
+                <div class="mb-1.5 flex min-w-0 items-center justify-between gap-3">
+                  <div class="min-w-0 truncate text-14-medium text-text-base">
+                    {language.t("config.claws.field.genericAgentDir")}
                   </div>
-                  <Toggle
-                    checked={props.form.enabled}
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    icon="folder-add-left"
+                    onClick={props.onChooseDir}
                     disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("enabled", value)}
                   >
-                    {language.t("config.claws.field.enabled")}
-                  </Toggle>
+                    {language.t("session.new.genericagent.cwd.choose")}
+                  </Button>
                 </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.genericAgentDir")}
-                    description={language.t("config.claws.field.genericAgentDirDescription")}
-                    placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
-                    value={props.form.genericAgentDir}
-                    validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
-                    error={props.form.err.genericAgentDir}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("genericAgentDir", value)}
-                  />
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.pythonExecutable")}
-                    description={language.t("config.claws.field.pythonExecutableDescription")}
-                    placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
-                    value={props.form.pythonExecutable}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("pythonExecutable", value)}
-                  />
-                </div>
+                <TextField
+                  type="text"
+                  hideLabel
+                  label={language.t("config.claws.field.genericAgentDir")}
+                  placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
+                  value={props.form.genericAgentDir}
+                  validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
+                  disabled={props.busy || props.form.saving || props.form.testing}
+                  onChange={(value) => props.onChange("genericAgentDir", value)}
+                />
+                <Show
+                  when={props.form.err.genericAgentDir}
+                  fallback={
+                    <div class="mt-2 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.genericAgentDirDescription")}
+                    </div>
+                  }
+                >
+                  {(error) => <div class="mt-2 text-12-regular text-text-danger-base">{error()}</div>}
+                </Show>
               </div>
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.pythonExecutable")}
+                description={language.t("config.claws.field.pythonExecutableDescription")}
+                placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
+                value={props.form.pythonExecutable}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("pythonExecutable", value)}
+              />
             </div>
+
+            <ClawFormActions
+              dirty={props.dirty}
+              busy={props.busy}
+              canTest={props.canTest}
+              saving={props.form.saving}
+              testing={props.form.testing}
+              onSave={props.onSave}
+              onTest={props.onTest}
+              onAbort={props.onAbort}
+            />
 
             <Show when={props.form.testing || !!props.form.test}>
               <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
@@ -1443,6 +1478,7 @@ function HermesEditor(props: {
   busy: boolean
   canTest: boolean
   onChange: (key: "enabled" | "pythonExecutable" | "hermesDir" | "hermesHome", value: string | boolean) => void
+  onChooseDir: () => void
   onSave: () => void
   onTest: () => void
   onAbort?: () => void
@@ -1469,82 +1505,86 @@ function HermesEditor(props: {
             <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              variant="ghost"
-              icon="reset"
-              onClick={props.onTest}
-              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            <Toggle
+              checked={props.form.enabled}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("enabled", value)}
             >
-              {language.t("config.claws.action.test")}
-            </Button>
-            <Show when={props.form.testing && props.onAbort}>
-              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
-                {language.t("config.claws.action.abort")}
-              </Button>
-            </Show>
-            <SaveButton
-              label={language.t("config.claws.action.save")}
-              onClick={props.onSave}
-              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
-            />
+              {language.t("config.claws.field.enabled")}
+            </Toggle>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
-            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
-              <div class="flex flex-col gap-5">
-                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
-                  <div class="min-w-0">
-                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      {language.t("config.claws.field.enabledDescription")}
-                    </div>
+          <div class="flex w-full flex-col gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="min-w-0">
+                <div class="mb-1.5 flex min-w-0 items-center justify-between gap-3">
+                  <div class="min-w-0 truncate text-14-medium text-text-base">
+                    {language.t("config.claws.field.hermesDir")}
                   </div>
-                  <Toggle
-                    checked={props.form.enabled}
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    icon="folder-add-left"
+                    onClick={props.onChooseDir}
                     disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("enabled", value)}
                   >
-                    {language.t("config.claws.field.enabled")}
-                  </Toggle>
+                    {language.t("session.new.genericagent.cwd.choose")}
+                  </Button>
                 </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.hermesDir")}
-                    description={language.t("config.claws.field.hermesDirDescription")}
-                    placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
-                    value={props.form.hermesDir}
-                    validationState={props.form.err.hermesDir ? "invalid" : undefined}
-                    error={props.form.err.hermesDir}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("hermesDir", value)}
-                  />
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.pythonExecutable")}
-                    description={language.t("config.claws.field.pythonExecutableDescription")}
-                    placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
-                    value={props.form.pythonExecutable}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("pythonExecutable", value)}
-                  />
-                </div>
-
                 <TextField
                   type="text"
-                  label={language.t("config.claws.field.hermesHome")}
-                  description={language.t("config.claws.field.hermesHomeDescription")}
-                  placeholder={language.t("config.claws.field.hermesHomePlaceholder")}
-                  value={props.form.hermesHome}
+                  hideLabel
+                  label={language.t("config.claws.field.hermesDir")}
+                  placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
+                  value={props.form.hermesDir}
+                  validationState={props.form.err.hermesDir ? "invalid" : undefined}
                   disabled={props.busy || props.form.saving || props.form.testing}
-                  onChange={(value) => props.onChange("hermesHome", value)}
+                  onChange={(value) => props.onChange("hermesDir", value)}
                 />
+                <Show
+                  when={props.form.err.hermesDir}
+                  fallback={
+                    <div class="mt-2 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.hermesDirDescription")}
+                    </div>
+                  }
+                >
+                  {(error) => <div class="mt-2 text-12-regular text-text-danger-base">{error()}</div>}
+                </Show>
               </div>
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.pythonExecutable")}
+                description={language.t("config.claws.field.pythonExecutableDescription")}
+                placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
+                value={props.form.pythonExecutable}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("pythonExecutable", value)}
+              />
             </div>
+
+            <TextField
+              type="text"
+              label={language.t("config.claws.field.hermesHome")}
+              description={language.t("config.claws.field.hermesHomeDescription")}
+              placeholder={language.t("config.claws.field.hermesHomePlaceholder")}
+              value={props.form.hermesHome}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("hermesHome", value)}
+            />
+
+            <ClawFormActions
+              dirty={props.dirty}
+              busy={props.busy}
+              canTest={props.canTest}
+              saving={props.form.saving}
+              testing={props.form.testing}
+              onSave={props.onSave}
+              onTest={props.onTest}
+              onAbort={props.onAbort}
+            />
 
             <Show when={props.form.testing || !!props.form.test}>
               <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
@@ -2073,8 +2113,8 @@ export default function ConfigPage() {
         origin: source.origin,
         root: source.root,
         warn:
-          !item.name.trim() || !item.description.trim()
-            ? `Incomplete metadata. Add ${[!item.name.trim() && "`name`", !item.description.trim() && "`description`"]
+          !item.name.trim() || !item.description?.trim()
+            ? `Incomplete metadata. Add ${[!item.name.trim() && "`name`", !item.description?.trim() && "`description`"]
                 .filter((part): part is string => !!part)
                 .join(t("config.common.and"))} ${t("config.skills.warn.metadataSuffix")}`
             : undefined,
@@ -2542,7 +2582,8 @@ export default function ConfigPage() {
       })
     }
 
-    for (const spec of on) {
+    for (const entry of on) {
+      const spec = Array.isArray(entry) ? entry[0] : entry
       const key = pluginKey(spec)
       const item = map.get(key)
       if (item) {
@@ -2599,7 +2640,7 @@ export default function ConfigPage() {
   const claws = createMemo<ClawItem[]>(() => {
     const list: ClawItem[] = []
     if (clawsEnabled()) {
-      const cfg = openclaw()
+      const cfg = openclaw.latest
       list.push({
         id: "claw:openclaw",
         label: "OpenClaw",
@@ -2609,7 +2650,7 @@ export default function ConfigPage() {
       })
     }
     if (hmPlatformEnabled()) {
-      const cfg = hermes()
+      const cfg = hermes.latest
       list.push({
         id: "claw:hermes",
         label: "Hermes",
@@ -2619,7 +2660,7 @@ export default function ConfigPage() {
       })
     }
     if (gaPlatformEnabled()) {
-      const cfg = genericagent()
+      const cfg = genericagent.latest
       list.push({
         id: "claw:genericagent",
         label: "GenericAgent",
@@ -2745,7 +2786,7 @@ export default function ConfigPage() {
   )
   const dirty = createMemo(() => !!currentDoc() && state.doc === state.pick && state.text !== state.saved)
   const clawDirty = createMemo(() => {
-    const cfg = openclaw()
+    const cfg = openclaw.latest
     if (!cfg || state.section !== "claws") return false
     return (
       state.claw.enabled !== (cfg.enabled ?? false) ||
@@ -2755,7 +2796,7 @@ export default function ConfigPage() {
   })
 
   const gaDirty = createMemo(() => {
-    const cfg = genericagent()
+    const cfg = genericagent.latest
     if (!cfg || state.section !== "claws") return false
     return (
       state.ga.enabled !== (cfg.enabled ?? false) ||
@@ -2765,7 +2806,7 @@ export default function ConfigPage() {
   })
 
   const hmDirty = createMemo(() => {
-    const cfg = hermes()
+    const cfg = hermes.latest
     if (!cfg || state.section !== "claws") return false
     return (
       state.hm.enabled !== (cfg.enabled ?? false) ||
@@ -2855,7 +2896,13 @@ export default function ConfigPage() {
     return next
   }
 
-  const [tree] = createResource(currentSkillRoot, async (root) => loadTree(root))
+  const [tree] = createResource(currentSkillRoot, async (root) => ({ root, list: await loadTree(root) }))
+  const currentTree = createMemo(() => {
+    const root = currentSkillRoot()
+    const value = tree.latest
+    if (!root || value?.root !== root) return []
+    return value.list
+  })
   const treeOpen = (path: string) => !state.treeClosed[path]
   const toggleTree = (path: string) => setState("treeClosed", path, (value) => !value)
   const groupOpen = (key: string) => !!state.treeClosed[`skill-group:${key}`]
@@ -3154,6 +3201,69 @@ export default function ConfigPage() {
       })
   }
 
+  async function detectClaw() {
+    if (!platform.detectOpenclawConfig) return
+    setState("claw", "detecting", true)
+    setState("claw", "test", undefined)
+    await platform
+      .detectOpenclawConfig()
+      .then((item) => {
+        const config = item.config
+        if (!item.ok || !config?.url) {
+          setState("claw", "test", { ok: false, logs: item.logs })
+          showToast({
+            title: t("config.claws.detect.failed"),
+            description: item.logs[item.logs.length - 1] ?? t("common.requestFailed"),
+          })
+          return
+        }
+        batch(() => {
+          setState("claw", "enabled", config.enabled ?? true)
+          setState("claw", "url", config.url ?? "")
+          setState("claw", "token", config.token ?? "")
+          setState("claw", "err", "url", "")
+          setState("claw", "test", { ok: true, logs: item.logs })
+        })
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: t("config.claws.action.detect"),
+          description: item.source
+            ? t("config.claws.detect.successSource", { source: item.source })
+            : t("config.claws.detect.success"),
+        })
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        if (message.includes("No handler registered for 'detect-openclaw-config'")) {
+          const url = "ws://127.0.0.1:18789"
+          batch(() => {
+            setState("claw", "enabled", true)
+            setState("claw", "url", url)
+            setState("claw", "err", "url", "")
+            setState("claw", "test", {
+              ok: true,
+              logs: [
+                "Desktop main process has not registered detect-openclaw-config yet.",
+                `Using default OpenClaw gateway candidate ${url}.`,
+                "Restart the desktop app to enable full auto-detection from environment variables and config files.",
+              ],
+            })
+          })
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: t("config.claws.action.detect"),
+            description: t("config.claws.detect.fallbackRestart"),
+          })
+          return
+        }
+        setState("claw", "test", { ok: false, logs: [message] })
+        showToast({ title: t("config.claws.detect.failed"), description: message })
+      })
+      .finally(() => setState("claw", "detecting", false))
+  }
+
   async function abortClaw() {
     setState("claw", "run", (value) => value + 1)
     setState("claw", "testing", false)
@@ -3257,6 +3367,19 @@ export default function ConfigPage() {
     setState("ga", key, value)
     if (key === "genericAgentDir") setState("ga", "err", "genericAgentDir", "")
     setState("ga", "test", undefined)
+  }
+
+  function chooseGenericAgentDir() {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title={t("config.claws.field.genericAgentDir")}
+        domain={mainDomain}
+        onSelect={(value) => {
+          if (typeof value !== "string") return
+          setGa("genericAgentDir", value)
+        }}
+      />
+    ))
   }
 
   function validateHm(required = state.hm.enabled) {
@@ -3366,6 +3489,19 @@ export default function ConfigPage() {
     setState("hm", key, value)
     if (key === "hermesDir") setState("hm", "err", "hermesDir", "")
     setState("hm", "test", undefined)
+  }
+
+  function chooseHermesDir() {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title={t("config.claws.field.hermesDir")}
+        domain={mainDomain}
+        onSelect={(value) => {
+          if (typeof value !== "string") return
+          setHm("hermesDir", value)
+        }}
+      />
+    ))
   }
 
   function openFolder() {
@@ -3716,9 +3852,10 @@ export default function ConfigPage() {
     const prev = cfg().plugin ?? []
     const nextSpec = item.spec ?? (item.path ? spec(item.path) : item.name)
     const key = pluginKey(nextSpec)
+    const keyOf = (entry: string | [string, Record<string, unknown>]) => pluginKey(Array.isArray(entry) ? entry[0] : entry)
     const next = enabled
-      ? Array.from(new Set([...prev.filter((entry) => pluginKey(entry) !== key), nextSpec]))
-      : prev.filter((entry) => pluginKey(entry) !== key)
+      ? Array.from(new Set([...prev.filter((entry) => keyOf(entry) !== key), nextSpec]))
+      : prev.filter((entry) => keyOf(entry) !== key)
     void update({ plugin: next })
   }
 
@@ -3727,13 +3864,13 @@ export default function ConfigPage() {
       <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.03),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)] xl:flex-row">
         <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
-            <div class="border-b border-border-weak-base px-4 py-4">
+            <div class="border-b border-border-weak-base px-3 py-4">
               <div class="min-w-0">
                 <div class="text-18-medium text-text-strong">{t("config.title")}</div>
                 <div class="mt-1 text-12-regular text-text-weak">{t("config.description")}</div>
               </div>
             </div>
-            <div class="flex-1 overflow-y-auto p-3">
+            <div class="flex-1 overflow-y-auto p-2">
               <div class="flex flex-col">
                 <SectionButton
                   current={state.section === "agents-md"}
@@ -3775,7 +3912,7 @@ export default function ConfigPage() {
                 )}
               </div>
             </div>
-            <div class="border-t border-border-weak-base p-3">
+            <div class="border-t border-border-weak-base p-2">
               <Button
                 variant="ghost"
                 class="h-10 w-full justify-start gap-2 rounded-lg border border-border-weak-base bg-background-base px-3 text-13-medium text-text-weak hover:border-border-strong hover:bg-surface-base-hover hover:text-text-strong active:border-border-base active:bg-surface-base-active"
@@ -4124,7 +4261,13 @@ export default function ConfigPage() {
                             meta={item.meta}
                             onClick={() => setState("pick", item.id)}
                             extra={
-                              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                              <span
+                                class="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em]"
+                                classList={{
+                                  "border-border-success-base/60 bg-surface-success-base text-text-on-success-base": item.enabled,
+                                  "border-transparent bg-surface-secondary text-text-weak": !item.enabled,
+                                }}
+                              >
                                 {item.enabled ? t("config.claws.badge.enabled") : t("config.claws.badge.disabled")}
                               </span>
                             }
@@ -4476,9 +4619,11 @@ export default function ConfigPage() {
                       dirty={clawDirty()}
                       busy={openclaw.loading}
                       canTest={!!platform.testOpenclawConfig}
+                      canDetect={!!platform.detectOpenclawConfig}
                       onChange={setClaw}
                       onSave={() => void saveClaw()}
                       onTest={() => void testClaw()}
+                      onDetect={() => void detectClaw()}
                       onAbort={platform.abortOpenclawTest ? () => void abortClaw() : undefined}
                     />
                   }
@@ -4491,6 +4636,7 @@ export default function ConfigPage() {
                       busy={hermes.loading}
                       canTest={!!platform.testHermesConfig}
                       onChange={setHm}
+                      onChooseDir={chooseHermesDir}
                       onSave={() => void saveHm()}
                       onTest={() => void testHm()}
                       onAbort={platform.abortHermesTest ? () => void abortHm() : undefined}
@@ -4504,6 +4650,7 @@ export default function ConfigPage() {
                       busy={genericagent.loading}
                       canTest={!!platform.testGenericagentConfig}
                       onChange={setGa}
+                      onChooseDir={chooseGenericAgentDir}
                       onSave={() => void saveGa()}
                       onTest={() => void testGa()}
                       onAbort={platform.abortGenericagentTest ? () => void abortGa() : undefined}
@@ -4572,7 +4719,7 @@ export default function ConfigPage() {
                           text={state.text}
                           dirty={dirty()}
                           busy={state.busy}
-                          tree={tree()}
+                          tree={currentTree()}
                           treeRoot={currentSkillRoot()}
                           treeBusy={tree.loading}
                           treeOpen={treeOpen}

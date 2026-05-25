@@ -17,7 +17,7 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
@@ -27,7 +27,7 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Session, type Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -50,8 +50,8 @@ import {
 } from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
@@ -95,9 +95,11 @@ import {
   extraAgentByDirectory,
   extraAgentConfig,
   extraAgentDir,
+  extraAgentLabelKey,
   extraAgentProject,
-  domainFromDirectory,
+  isExtraAgentDirectory,
   mainDomain,
+  sidebarExtraAgents,
 } from "./layout/extra-agents"
 import {
   collectNewSessionDeepLinks,
@@ -115,6 +117,17 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { TrellisTasksPanel } from "./layout/trellis-tasks-panel"
+
+const QUICK_ASSISTANT_DIR = "quick-assistant"
+
+function joinPath(root: string, child: string) {
+  const slash = /^[A-Za-z]:\\|\\\\/.test(root) || root.includes("\\") ? "\\" : "/"
+  return root.replace(/[\\/]+$/, "") + slash + child
+}
+
+function normalizeDirectory(value: string) {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+}
 
 export default function Layout(props: ParentProps) {
   type CurrentProject = LocalProject & {
@@ -190,6 +203,11 @@ export default function Layout(props: ParentProps) {
   // resolvers keep working, but the icon should not look "selected".
   const onConfigRoute = createMemo(() => /\/config(?:\/|$)/.test(location.pathname))
   const tasksPanelActive = createMemo(() => store.sidebarPanel === "tasks")
+  const canConfigureExtraAgents = createMemo(
+    () =>
+      platform.platform === "desktop" &&
+      !!(platform.getOpenclawConfig || platform.getHermesConfig || platform.getGenericagentConfig),
+  )
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -218,23 +236,6 @@ export default function Layout(props: ParentProps) {
     q: "",
   })
   const [switching, setSwitching] = createSignal<string | undefined>()
-
-  createEffect(
-    on(
-      () => [pageReady(), routeDir(), server.domain] as const,
-      async ([ready, dir, domain]) => {
-        if (!ready || !dir) return
-        const routeDomain = domainFromDirectory(dir)
-        if (routeDomain === domain) return
-
-        const key = server.lastFor(routeDomain)
-        if (!key) return
-        server.setActive(key)
-        await waitServer(key)
-      },
-      { defer: true },
-    ),
-  )
   let findInput: HTMLInputElement | undefined
 
   const closeFindbar = () => {
@@ -508,6 +509,10 @@ export default function Layout(props: ParentProps) {
             : language.t("notification.question.title")
         const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
         const directory = e.name
+        const quickAssistantDirectory = globalSync.data.path.config
+          ? normalizeDirectory(joinPath(globalSync.data.path.config, QUICK_ASSISTANT_DIR))
+          : ""
+        if (quickAssistantDirectory && normalizeDirectory(directory) === quickAssistantDirectory) return
         const props = e.details.properties
         if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
 
@@ -1494,15 +1499,24 @@ export default function Layout(props: ParentProps) {
   }
 
   function openExtraAgent(id: Parameters<typeof extraAgentDir>[0]) {
-    console.debug("[layout] open extra agent", {
-      id,
-      current: server.current?.integration ?? null,
-      directory: routeDir() || null,
-    })
+    console.debug(
+      `[layout] open extra agent id=${id} current=${server.current?.integration ?? "none"} directory=${routeDir() || "none"}`,
+    )
     const conn = server.list.find((item) => item.integration === id)
     if (!conn) {
       const cfg = extraAgentConfig(id)
-      openConfig(cfg?.section, cfg?.pick)
+      showToast({
+        title: `${language.t(extraAgentLabelKey(id) as keyof typeof enDict)} ${language.t("config.claws.badge.disabled")}`,
+        description: language.t("config.claws.field.enabledDescription"),
+        actions: cfg
+          ? [
+              {
+                label: language.t("config.claws.title"),
+                onClick: () => openConfig(cfg.section, cfg.pick),
+              },
+            ]
+          : undefined,
+      })
       return
     }
     if (
@@ -1512,17 +1526,10 @@ export default function Layout(props: ParentProps) {
         pathname: location.pathname,
       })
     ) {
-      console.debug("[layout] extra agent already active", {
-        id,
-        directory: routeDir() || null,
-        pathname: location.pathname,
-      })
+      console.debug(`[layout] extra agent already active id=${id} directory=${routeDir() || "none"} path=${location.pathname}`)
       return
     }
-    console.debug("[layout] navigate to extra agent", {
-      id,
-      directory: extraAgentDir(id),
-    })
+    console.debug(`[layout] navigate to extra agent id=${id} directory=${extraAgentDir(id)}`)
     void navigateToProject(extraAgentDir(id))
   }
 
@@ -2093,7 +2100,7 @@ export default function Layout(props: ParentProps) {
           .update({
             directory: session.directory,
             sessionID: session.id,
-            time: { archived: null },
+            time: { archived: undefined },
           })
           .then((x) => x.data)
         if (!restored) throw new Error(language.t("common.requestFailed"))
@@ -2533,7 +2540,7 @@ export default function Layout(props: ParentProps) {
 
     if (!created?.directory) return
 
-    setWorkspaceName(created.directory, created.branch, project.id, created.branch)
+    setWorkspaceName(created.directory, created.branch ?? "", project.id, created.branch)
 
     const local = project.worktree
     const key = workspaceKey(created.directory)
@@ -3000,14 +3007,18 @@ export default function Layout(props: ParentProps) {
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
       extraAgents={() =>
-        enabledExtraAgents(server.list).map((agent) => ({
-          id: agent.id,
-          label: () => language.t(agent.labelKey),
-          active: () => routeDir() === agent.directory,
-          healthy: () => server.healthyFor(`extra-agent/${agent.id}`),
-          icon: agent.icon,
-          onOpen: () => openExtraAgent(agent.id),
-        }))
+        sidebarExtraAgents(server.list, { includeConfigurable: canConfigureExtraAgents() }).map((agent) => {
+          const enabled = !!server.list.find((item) => item.integration === agent.id)
+          return {
+            id: agent.id,
+            label: () => language.t(agent.labelKey),
+            active: () => routeDir() === agent.directory,
+            available: () => enabled,
+            healthy: enabled ? () => server.healthyFor(`extra-agent/${agent.id}`) : undefined,
+            icon: agent.icon,
+            onOpen: () => openExtraAgent(agent.id),
+          }
+        })
       }
       configLabel={() => "Config"}
       configActive={onConfigRoute}

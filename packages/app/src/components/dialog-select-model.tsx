@@ -10,6 +10,7 @@ import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
@@ -50,6 +51,51 @@ const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ReturnType<typeof useLocal>["model"]
+
+const CurrentModelSummary: Component<{ model: ModelState; class?: string }> = (props) => {
+  const language = useLanguage()
+  const current = createMemo(() => props.model.current())
+  const showIDs = createMemo(() => {
+    const item = current()
+    if (!item) return false
+    return (
+      item.provider.id.toLowerCase() !== item.provider.name.toLowerCase() ||
+      item.id.toLowerCase() !== item.name.toLowerCase()
+    )
+  })
+
+  return (
+    <div
+      class={`mx-1 mb-2 rounded-md border border-border-weak-base bg-surface-base px-2.5 py-2 ${props.class ?? ""}`}
+    >
+      <div class="mb-1 text-11-medium uppercase tracking-wide text-text-weak">
+        {language.t("dialog.model.current")}
+      </div>
+      <Show
+        when={current()}
+        fallback={<div class="text-13-regular text-text-subtle">{language.t("dialog.model.select.title")}</div>}
+      >
+        {(item) => (
+          <div class="flex min-w-0 items-start gap-2">
+            <ProviderIcon id={item().provider.id} class="mt-0.5 size-4 shrink-0 icon-strong-base" />
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-center gap-1 text-13-medium text-text-strong">
+                <span class="truncate">{item().provider.name}</span>
+                <span class="shrink-0 text-text-weak">/</span>
+                <span class="truncate">{item().name}</span>
+              </div>
+              <Show when={showIDs()}>
+                <div class="truncate font-mono text-11-regular text-text-subtle">
+                  {item().provider.id}/{item().id}
+                </div>
+              </Show>
+            </div>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
 
 const ModelList: Component<{
   provider?: string
@@ -404,7 +450,7 @@ export function ModelSelectorPopover(props: {
             resizeObserver.observe(el)
           }}
           data-component="popover-content"
-          class="w-72 h-80 flex flex-col p-2 overflow-hidden"
+          class="w-72 h-[26rem] max-h-[calc(100vh-96px)] flex flex-col p-2 overflow-hidden"
           style={props.style}
           onEscapeKeyDown={(event) => {
             logModelOpen("close", {
@@ -460,6 +506,7 @@ export function ModelSelectorPopover(props: {
           }}
         >
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
+          <CurrentModelSummary model={model} />
           <ModelList
             provider={props.provider}
             model={props.model}
@@ -500,6 +547,7 @@ export function ModelSelectorPopover(props: {
 export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+  const model = props.model ?? useLocal().model
 
   return (
     <Dialog
@@ -515,6 +563,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
         </Button>
       }
     >
+      <CurrentModelSummary model={model} class="mx-0" />
       <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
       <Button
         variant="ghost"

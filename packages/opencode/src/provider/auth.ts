@@ -1,251 +1,228 @@
-import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
-import { NamedError } from "@opencode-ai/util/error"
+import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
+import { serviceUse } from "@/effect/service-use"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
-import z from "zod"
+import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
 
-export namespace ProviderAuth {
-  export const Method = z
-    .object({
-      type: z.union([z.literal("oauth"), z.literal("api")]),
-      label: z.string(),
-      prompts: z
-        .array(
-          z.union([
-            z.object({
-              type: z.literal("text"),
-              key: z.string(),
-              message: z.string(),
-              placeholder: z.string().optional(),
-              when: z
-                .object({
-                  key: z.string(),
-                  op: z.union([z.literal("eq"), z.literal("neq")]),
-                  value: z.string(),
-                })
-                .optional(),
-            }),
-            z.object({
-              type: z.literal("select"),
-              key: z.string(),
-              message: z.string(),
-              options: z.array(
-                z.object({
-                  label: z.string(),
-                  value: z.string(),
-                  hint: z.string().optional(),
-                }),
-              ),
-              when: z
-                .object({
-                  key: z.string(),
-                  op: z.union([z.literal("eq"), z.literal("neq")]),
-                  value: z.string(),
-                })
-                .optional(),
-            }),
-          ]),
-        )
-        .optional(),
-    })
-    .meta({
-      ref: "ProviderAuthMethod",
-    })
-  export type Method = z.infer<typeof Method>
+const When = Schema.Struct({
+  key: Schema.String,
+  op: Schema.Literals(["eq", "neq"]),
+  value: Schema.String,
+})
 
-  export const Authorization = z
-    .object({
-      url: z.string(),
-      method: z.union([z.literal("auto"), z.literal("code")]),
-      instructions: z.string(),
-    })
-    .meta({
-      ref: "ProviderAuthAuthorization",
-    })
-  export type Authorization = z.infer<typeof Authorization>
+const TextPrompt = Schema.Struct({
+  type: Schema.Literal("text"),
+  key: Schema.String,
+  message: Schema.String,
+  placeholder: optionalOmitUndefined(Schema.String),
+  when: optionalOmitUndefined(When),
+})
 
-  export const OauthMissing = NamedError.create("ProviderAuthOauthMissing", z.object({ providerID: ProviderID.zod }))
+const SelectOption = Schema.Struct({
+  label: Schema.String,
+  value: Schema.String,
+  hint: optionalOmitUndefined(Schema.String),
+})
 
-  export const OauthCodeMissing = NamedError.create(
-    "ProviderAuthOauthCodeMissing",
-    z.object({ providerID: ProviderID.zod }),
-  )
+const SelectPrompt = Schema.Struct({
+  type: Schema.Literal("select"),
+  key: Schema.String,
+  message: Schema.String,
+  options: Schema.Array(SelectOption),
+  when: optionalOmitUndefined(When),
+})
 
-  export const OauthCallbackFailed = NamedError.create("ProviderAuthOauthCallbackFailed", z.object({}))
+const Prompt = Schema.Union([TextPrompt, SelectPrompt])
 
-  export const ValidationFailed = NamedError.create(
-    "ProviderAuthValidationFailed",
-    z.object({
-      field: z.string(),
-      message: z.string(),
-    }),
-  )
+export class Method extends Schema.Class<Method>("ProviderAuthMethod")({
+  type: Schema.Literals(["oauth", "api"]),
+  label: Schema.String,
+  prompts: optionalOmitUndefined(Schema.Array(Prompt)),
+}) {}
 
-  export type Error =
-    | Auth.AuthError
-    | InstanceType<typeof OauthMissing>
-    | InstanceType<typeof OauthCodeMissing>
-    | InstanceType<typeof OauthCallbackFailed>
-    | InstanceType<typeof ValidationFailed>
+export const Methods = Schema.Record(Schema.String, Schema.Array(Method))
+export type Methods = typeof Methods.Type
 
-  type Hook = NonNullable<Hooks["auth"]>
+export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuthorization")({
+  url: Schema.String,
+  method: Schema.Literals(["auto", "code"]),
+  instructions: Schema.String,
+}) {}
 
-  export interface Interface {
-    readonly methods: () => Effect.Effect<Record<ProviderID, Method[]>>
-    readonly authorize: (input: {
+export const AuthorizeInput = Schema.Struct({
+  method: Schema.Finite.annotate({ description: "Auth method index" }),
+  inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
+})
+export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
+
+export const CallbackInput = Schema.Struct({
+  method: Schema.Finite.annotate({ description: "Auth method index" }),
+  code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
+})
+export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
+
+export class OauthMissing extends Schema.TaggedErrorClass<OauthMissing>()("ProviderAuthOauthMissing", {
+  providerID: ProviderID,
+}) {}
+
+export class OauthCodeMissing extends Schema.TaggedErrorClass<OauthCodeMissing>()("ProviderAuthOauthCodeMissing", {
+  providerID: ProviderID,
+}) {}
+
+export class OauthCallbackFailed extends Schema.TaggedErrorClass<OauthCallbackFailed>()(
+  "ProviderAuthOauthCallbackFailed",
+  {},
+) {}
+
+export class ValidationFailed extends Schema.TaggedErrorClass<ValidationFailed>()("ProviderAuthValidationFailed", {
+  field: Schema.String,
+  message: Schema.String,
+}) {}
+
+export type Error = Auth.AuthError | OauthMissing | OauthCodeMissing | OauthCallbackFailed | ValidationFailed
+
+type Hook = NonNullable<Hooks["auth"]>
+
+export interface Interface {
+  readonly methods: () => Effect.Effect<Methods>
+  readonly authorize: (
+    input: {
       providerID: ProviderID
-      method: number
-      inputs?: Record<string, string>
-    }) => Effect.Effect<Authorization | undefined, Error>
-    readonly callback: (input: { providerID: ProviderID; method: number; code?: string }) => Effect.Effect<void, Error>
-  }
+    } & AuthorizeInput,
+  ) => Effect.Effect<Authorization | undefined, Error>
+  readonly callback: (input: { providerID: ProviderID } & CallbackInput) => Effect.Effect<void, Error>
+}
 
-  interface State {
-    hooks: Record<ProviderID, Hook>
-    pending: Map<ProviderID, AuthOuathResult>
-  }
+interface State {
+  hooks: Record<ProviderID, Hook>
+  pending: Map<ProviderID, AuthOAuthResult>
+}
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
-  export const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const auth = yield* Auth.Service
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("ProviderAuth.state")(() =>
-          Effect.promise(async () => {
-            const plugins = await Plugin.list()
-            return {
-              hooks: Record.fromEntries(
-                Arr.filterMap(plugins, (x) =>
-                  x.auth?.provider !== undefined
-                    ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
-                    : Result.failVoid,
-                ),
-              ),
-              pending: new Map<ProviderID, AuthOuathResult>(),
-            }
-          }),
-        ),
-      )
+export const use = serviceUse(Service)
 
-      const methods = Effect.fn("ProviderAuth.methods")(function* () {
-        const hooks = (yield* InstanceState.get(state)).hooks
-        return Record.map(hooks, (item) =>
-          item.methods.map(
-            (method): Method => ({
-              type: method.type,
-              label: method.label,
-              prompts: method.prompts?.map((prompt) => {
+export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const auth = yield* Auth.Service
+    const plugin = yield* Plugin.Service
+    const state = yield* InstanceState.make<State>(
+      Effect.fn("ProviderAuth.state")(function* () {
+        const plugins = yield* plugin.list()
+        return {
+          hooks: Record.fromEntries(
+            Arr.filterMap(plugins, (x) =>
+              x.auth?.provider !== undefined
+                ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
+                : Result.failVoid,
+            ),
+          ),
+          pending: new Map<ProviderID, AuthOAuthResult>(),
+        }
+      }),
+    )
+
+    const decode = Schema.decodeUnknownSync(Methods)
+    const methods = Effect.fn("ProviderAuth.methods")(function* () {
+      const hooks = (yield* InstanceState.get(state)).hooks
+      return decode(
+        Record.map(hooks, (item) =>
+          item.methods.map((method) => ({
+            type: method.type,
+            label: method.label,
+            ...(method.prompts && {
+              prompts: method.prompts.map((prompt) => {
                 if (prompt.type === "select") {
                   return {
                     type: "select" as const,
                     key: prompt.key,
                     message: prompt.message,
                     options: prompt.options,
-                    when: prompt.when,
+                    ...(prompt.when && { when: prompt.when }),
                   }
                 }
                 return {
                   type: "text" as const,
                   key: prompt.key,
                   message: prompt.message,
-                  placeholder: prompt.placeholder,
-                  when: prompt.when,
+                  ...(prompt.placeholder && { placeholder: prompt.placeholder }),
+                  ...(prompt.when && { when: prompt.when }),
                 }
               }),
             }),
-          ),
-        )
-      })
+          })),
+        ),
+      )
+    })
 
-      const authorize = Effect.fn("ProviderAuth.authorize")(function* (input: {
-        providerID: ProviderID
-        method: number
-        inputs?: Record<string, string>
-      }) {
-        const { hooks, pending } = yield* InstanceState.get(state)
-        const method = hooks[input.providerID].methods[input.method]
-        if (method.type !== "oauth") return
+    const authorize = Effect.fn("ProviderAuth.authorize")(function* (
+      input: { providerID: ProviderID } & AuthorizeInput,
+    ) {
+      const { hooks, pending } = yield* InstanceState.get(state)
+      const method = hooks[input.providerID].methods[input.method]
+      if (method.type !== "oauth") return
 
-        if (method.prompts && input.inputs) {
-          for (const prompt of method.prompts) {
-            if (prompt.type === "text" && prompt.validate && input.inputs[prompt.key] !== undefined) {
-              const error = prompt.validate(input.inputs[prompt.key])
-              if (error) return yield* Effect.fail(new ValidationFailed({ field: prompt.key, message: error }))
-            }
+      if (method.prompts && input.inputs) {
+        for (const prompt of method.prompts) {
+          if (prompt.type === "text" && prompt.validate && input.inputs[prompt.key] !== undefined) {
+            const error = prompt.validate(input.inputs[prompt.key])
+            if (error) return yield* new ValidationFailed({ field: prompt.key, message: error })
           }
         }
+      }
 
-        const result = yield* Effect.promise(() => method.authorize(input.inputs))
-        pending.set(input.providerID, result)
-        return {
-          url: result.url,
-          method: result.method,
-          instructions: result.instructions,
-        }
-      })
+      const result = yield* Effect.promise(() => method.authorize(input.inputs))
+      pending.set(input.providerID, result)
+      return {
+        url: result.url,
+        method: result.method,
+        instructions: result.instructions,
+      }
+    })
 
-      const callback = Effect.fn("ProviderAuth.callback")(function* (input: {
-        providerID: ProviderID
-        method: number
-        code?: string
-      }) {
-        const pending = (yield* InstanceState.get(state)).pending
-        const match = pending.get(input.providerID)
-        if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
-        if (match.method === "code" && !input.code) {
-          return yield* Effect.fail(new OauthCodeMissing({ providerID: input.providerID }))
-        }
+    const callback = Effect.fn("ProviderAuth.callback")(function* (input: { providerID: ProviderID } & CallbackInput) {
+      const pending = (yield* InstanceState.get(state)).pending
+      const match = pending.get(input.providerID)
+      if (!match) return yield* new OauthMissing({ providerID: input.providerID })
+      if (match.method === "code" && !input.code) {
+        return yield* new OauthCodeMissing({ providerID: input.providerID })
+      }
 
-        const result = yield* Effect.promise(() =>
-          match.method === "code" ? match.callback(input.code!) : match.callback(),
-        )
-        if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
+      const result = yield* Effect.promise(() =>
+        match.method === "code" ? match.callback(input.code!) : match.callback(),
+      )
+      if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
 
-        if ("key" in result) {
-          yield* auth.set(input.providerID, {
-            type: "api",
-            key: result.key,
-          })
-        }
+      if ("key" in result) {
+        yield* auth.set(input.providerID, {
+          type: "api",
+          key: result.key,
+          ...(result.metadata ? { metadata: result.metadata } : {}),
+        })
+      }
 
-        if ("refresh" in result) {
-          yield* auth.set(input.providerID, {
-            type: "oauth",
-            access: result.access,
-            refresh: result.refresh,
-            expires: result.expires,
-            ...(result.accountId ? { accountId: result.accountId } : {}),
-          })
-        }
-      })
+      if ("refresh" in result) {
+        const { type: _, provider: __, refresh, access, expires, ...extra } = result
+        yield* auth.set(input.providerID, {
+          type: "oauth",
+          access,
+          refresh,
+          expires,
+          ...extra,
+        })
+      }
+    })
 
-      return Service.of({ methods, authorize, callback })
-    }),
-  )
+    return Service.of({ methods, authorize, callback })
+  }),
+)
 
-  export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
+)
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
-
-  export async function methods() {
-    return runPromise((svc) => svc.methods())
-  }
-
-  export async function authorize(input: {
-    providerID: ProviderID
-    method: number
-    inputs?: Record<string, string>
-  }): Promise<Authorization | undefined> {
-    return runPromise((svc) => svc.authorize(input))
-  }
-
-  export async function callback(input: { providerID: ProviderID; method: number; code?: string }) {
-    return runPromise((svc) => svc.callback(input))
-  }
-}
+export * as ProviderAuth from "./auth"

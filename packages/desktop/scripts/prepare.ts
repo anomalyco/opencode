@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
-
 import { Script } from "@opencode-ai/script"
-import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
+import { getCurrentSidecar, windowsify, copyBinaryToSidecarFolder } from "./utils"
+
+await import("./prebuild")
 
 await $`bun ../../script/sync-version.ts ${Script.version}`
 console.log(`Updated manifests to ${Script.version}`)

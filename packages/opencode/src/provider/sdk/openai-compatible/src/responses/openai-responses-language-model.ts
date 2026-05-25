@@ -17,6 +17,7 @@ import {
   parseProviderOptions,
   type ParseResult,
   postJsonToApi,
+  zodSchema,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 import type { OpenAIConfig } from "./openai-config"
@@ -193,11 +194,11 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       warnings.push({ type: "unsupported-setting", setting: "stopSequences" })
     }
 
-    const openaiOptions = await parseProviderOptions({
+    const openaiOptions = (await parseProviderOptions({
       provider: "openai",
       providerOptions,
-      schema: openaiResponsesProviderOptionsSchema,
-    })
+      schema: (zodSchema as any)(openaiResponsesProviderOptionsSchema),
+    })) as OpenAIResponsesProviderOptions | undefined
 
     const { input, warnings: inputWarnings } = await convertToOpenAIResponsesInput({
       prompt,
@@ -402,7 +403,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
 
     const {
       responseHeaders,
-      value: response,
+      value: responseValue,
       rawValue: rawResponse,
     } = await postJsonToApi({
       url,
@@ -410,7 +411,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       body,
       failedResponseHandler: openaiFailedResponseHandler,
       successfulResponseHandler: createJsonResponseHandler(
-        z.object({
+        (zodSchema as any)(
+          z.object({
           id: z.string(),
           created_at: z.number(),
           error: z
@@ -490,11 +492,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
           service_tier: z.string().nullish(),
           incomplete_details: z.object({ reason: z.string() }).nullish(),
           usage: usageSchema,
-        }),
+          }),
+        ),
       ),
       abortSignal: options.abortSignal,
       fetch: this.config.fetch,
     })
+    const response = responseValue as any
 
     if (response.error) {
       throw new APICallError({
@@ -692,7 +696,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             result: {
               queries: part.queries,
               results:
-                part.results?.map((result) => ({
+                part.results?.map((result: any) => ({
                   attributes: result.attributes,
                   fileId: result.file_id,
                   filename: result.filename,
@@ -785,7 +789,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
         stream: true,
       },
       failedResponseHandler: openaiFailedResponseHandler,
-      successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema),
+      successfulResponseHandler: createEventSourceResponseHandler((zodSchema as any)(openaiResponsesChunkSchema)),
       abortSignal: options.abortSignal,
       fetch: this.config.fetch,
     })

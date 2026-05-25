@@ -1,6 +1,6 @@
 import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
 import { Portal } from "solid-js/web"
@@ -28,7 +28,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
   return (
     <DataProvider
-      data={sync.data}
+      data={sync.data as never}
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}

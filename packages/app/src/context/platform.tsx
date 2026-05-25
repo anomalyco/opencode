@@ -52,6 +52,8 @@ export type TrellisTask = {
   createdAt?: string
   completedAt?: string
   path: string
+  worktreeRoot: string
+  worktreeName: string
   current: boolean
 }
 
@@ -76,6 +78,13 @@ export type OpenclawServer = {
 
 export type OpenclawTest = {
   ok: boolean
+  logs: string[]
+}
+
+export type OpenclawDetection = {
+  ok: boolean
+  config?: OpenclawConfig
+  source?: string
   logs: string[]
 }
 
@@ -184,6 +193,21 @@ export type Platform = {
   /** Install updates (Tauri only) */
   update?(): Promise<void>
 
+  /** Install pending update and relaunch (desktop only) */
+  updateAndRestart?(): Promise<void>
+
+  /** Export bundled debug log archive path (desktop only) */
+  exportDebugLogs?(): Promise<string>
+
+  /** Forward a fatal renderer error to the main process for logging (desktop only) */
+  recordFatalRendererError?(error: {
+    error: string
+    url: string
+    version?: string
+    platform: string
+    os?: string
+  }): Promise<void> | void
+
   /** Fetch override */
   fetch?: typeof fetch
 
@@ -207,6 +231,9 @@ export type Platform = {
 
   /** Save and test the configured OpenClaw integration (desktop only) */
   testOpenclawConfig?(config: OpenclawConfig): Promise<OpenclawTest>
+
+  /** Detect local OpenClaw gateway settings (desktop only) */
+  detectOpenclawConfig?(): Promise<OpenclawDetection>
 
   /** Abort a running OpenClaw connection test (desktop only) */
   abortOpenclawTest?(): Promise<boolean>
@@ -247,6 +274,12 @@ export type Platform = {
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 
+  /** Get pinch-zoom enabled flag (desktop only) */
+  getPinchZoomEnabled?(): Promise<boolean>
+
+  /** Set pinch-zoom enabled flag (desktop only) */
+  setPinchZoomEnabled?(enabled: boolean): Promise<void>
+
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
 
@@ -282,6 +315,9 @@ export type Platform = {
 
   /** List a local directory without bootstrapping an opencode workspace (desktop only) */
   listLocalDirectory?(path: string): Promise<ConfigTreeItem[]>
+
+  /** Invoke a desktop menu action handler (desktop only) */
+  runDesktopMenuAction?(action: import("@/desktop-menu").DesktopMenuAction): Promise<void> | void
 }
 
 export type DisplayBackend = "auto" | "wayland"

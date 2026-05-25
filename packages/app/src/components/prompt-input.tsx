@@ -35,9 +35,10 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { extraAgentByDirectory, extraAgentCapabilities } from "@/pages/layout/extra-agents"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -66,7 +67,7 @@ import { shouldRender } from "./prompt-input/sync"
 import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
 import { Popover } from "@opencode-ai/ui/popover"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { merge, value } from "./prompt-input/expand"
 import { SessionPickerPopover } from "./prompt-input/session-picker"
 import { type SessionHistoryEntry } from "@/context/session-history"
@@ -396,9 +397,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   type DictKey = keyof typeof enDict
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   const platform = usePlatform()
+  const server = useServer()
   const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const { params, tabs, view } = useSessionLayout()
-  const extraAgentIntegration = createMemo(() => extraAgentByDirectory(sdk.directory)?.id)
+  const extraAgentIntegration = createMemo(() => extraAgentByDirectory(sdk.directory)?.id ?? server.current?.integration)
   const extraAgentCaps = createMemo(() => extraAgentCapabilities(extraAgentIntegration()))
   const hasAgentChoose = createMemo(() => !!extraAgentCaps()?.agentChoose)
   const hideAgentSelector = createMemo(() => !!extraAgentCaps()?.hideAgent)

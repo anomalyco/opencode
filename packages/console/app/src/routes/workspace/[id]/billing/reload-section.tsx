@@ -12,7 +12,7 @@ import { formError, formErrorReloadAmountMin, formErrorReloadTriggerMin, localiz
 
 const reload = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(await withActor(() => Billing.reload(), workspaceID), {
     revalidate: queryBillingInfo.key,
@@ -21,11 +21,11 @@ const reload = action(async (form: FormData) => {
 
 const setReload = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const reloadValue = form.get("reload")?.toString() === "true"
-  const amountStr = form.get("reloadAmount")?.toString()
-  const triggerStr = form.get("reloadTrigger")?.toString()
+  const reloadValue = (form.get("reload") as string | null) === "true"
+  const amountStr = form.get("reloadAmount") as string | null
+  const triggerStr = form.get("reloadTrigger") as string | null
 
   const reloadAmount = amountStr && amountStr.trim() !== "" ? parseInt(amountStr) : null
   const reloadTrigger = triggerStr && triggerStr.trim() !== "" ? parseInt(triggerStr) : null
@@ -90,9 +90,9 @@ export function ReloadSection() {
     }
     const info = billingInfo()!
     setStore("show", true)
-    setStore("reload", info.reload ? true : true)
-    setStore("reloadAmount", info.reloadAmount.toString())
-    setStore("reloadTrigger", info.reloadTrigger.toString())
+    setStore("reload", true)
+    setStore("reloadAmount", String(info.reloadAmount))
+    setStore("reloadTrigger", String(info.reloadTrigger))
   }
 
   function hide() {
@@ -152,11 +152,11 @@ export function ReloadSection() {
                 data-component="input"
                 name="reloadAmount"
                 type="number"
-                min={billingInfo()?.reloadAmountMin.toString()}
+                min={String(billingInfo()?.reloadAmountMin ?? "")}
                 step="1"
                 value={store.reloadAmount}
                 onInput={(e) => setStore("reloadAmount", e.currentTarget.value)}
-                placeholder={billingInfo()?.reloadAmount.toString()}
+                placeholder={String(billingInfo()?.reloadAmount ?? "")}
                 disabled={!store.reload}
               />
             </div>
@@ -166,11 +166,11 @@ export function ReloadSection() {
                 data-component="input"
                 name="reloadTrigger"
                 type="number"
-                min={billingInfo()?.reloadTriggerMin.toString()}
+                min={String(billingInfo()?.reloadTriggerMin ?? "")}
                 step="1"
                 value={store.reloadTrigger}
                 onInput={(e) => setStore("reloadTrigger", e.currentTarget.value)}
-                placeholder={billingInfo()?.reloadTrigger.toString()}
+                placeholder={String(billingInfo()?.reloadTrigger ?? "")}
                 disabled={!store.reload}
               />
             </div>

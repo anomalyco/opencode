@@ -20,8 +20,8 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
-import { Binary } from "@opencode-ai/util/binary"
-import { getFilename } from "@opencode-ai/util/path"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -70,9 +70,12 @@ const toolLimit = 8
 const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
+const FOLLOW_SNAP_DISTANCE = 900
+const FOLLOW_MAX_STEP = 180
+const FOLLOW_EASE = 0.32
 
-const heightCacheKey = (sessionId: string, msgId: string, stage: string) =>
-  `opencode.h.${sessionId}.${msgId}.${stage}`
+const heightCacheKey = (sessionId: string, msgId: string, stage: string, signature: string) =>
+  `opencode.h2.${signature}.${sessionId}.${msgId}.${stage}`
 
 const rankByStage = {
   lite: 0,
@@ -115,9 +118,9 @@ const deleteStageCache = (sessionId: string, msgId: string) => {
 
 const maxStage = (a: MarkdownStage, b: MarkdownStage) => (rankByStage[a] >= rankByStage[b] ? a : b)
 
-const readHeightCache = (sessionId: string, msgId: string, stage: string): number | undefined => {
+const readHeightCache = (sessionId: string, msgId: string, stage: string, signature: string): number | undefined => {
   try {
-    const v = sessionStorage.getItem(heightCacheKey(sessionId, msgId, stage))
+    const v = sessionStorage.getItem(heightCacheKey(sessionId, msgId, stage, signature))
     if (v === null) return undefined
     const n = Number(v)
     return Number.isFinite(n) && n > 0 ? n : undefined
@@ -126,9 +129,9 @@ const readHeightCache = (sessionId: string, msgId: string, stage: string): numbe
   }
 }
 
-const writeHeightCache = (sessionId: string, msgId: string, stage: string, height: number) => {
+const writeHeightCache = (sessionId: string, msgId: string, stage: string, signature: string, height: number) => {
   try {
-    sessionStorage.setItem(heightCacheKey(sessionId, msgId, stage), String(height))
+    sessionStorage.setItem(heightCacheKey(sessionId, msgId, stage, signature), String(height))
   } catch {
     // QuotaExceededError — silently drop
   }
@@ -169,9 +172,6 @@ type Estimate = {
   part: number
   tool: number
 }
-
-const visibleEstimatePart = (part: Part) => part.type !== "tool" || part.tool !== "hook"
-const visibleToolPart = (part: Part) => part.type === "tool" && part.tool !== "hook"
 
 function mathMode(): MathMode {
   if (typeof window === "undefined") return "markdown"
@@ -378,6 +378,18 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
   })
+  const pref = createMemo(() => settings.general.shellToolPartsExpanded())
+  const shell = createMemo(() => (platform.platform === "desktop" ? false : pref()))
+  const heightSignature = createMemo(() =>
+    [
+      `reasoning:${settings.general.showReasoningSummaries() ? 1 : 0}`,
+      `hooks:${settings.general.showCustomHookParts() ? 1 : 0}`,
+      `shell:${shell() ? 1 : 0}`,
+      `edit:${settings.general.editToolPartsExpanded() ? 1 : 0}`,
+      `width:${settings.appearance.contentWidth()}`,
+      `font:${settings.appearance.fontSize()}`,
+    ].join("|"),
+  )
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
@@ -419,9 +431,8 @@ export function MessageTimeline(props: {
       if (!id) continue
 
       const parts = sync.data.part[msg.id] ?? []
-      const visibleParts = parts.filter(visibleEstimatePart)
-      part += visibleParts.length
-      tool += visibleParts.filter((item) => item.type !== "text").length
+      part += parts.length
+      tool += parts.filter((item) => item.type !== "text").length
       const body = parts
         .filter((item): item is TextPart => item.type === "text" && !(item as TextPart).synthetic)
         .map((item) => item.text)
@@ -435,30 +446,46 @@ export function MessageTimeline(props: {
     return map
   })
 
-  const follow = (root: HTMLDivElement, src: string) => {
+  const follow = (root: HTMLDivElement, src: string, mode: "smooth" | "auto" = "smooth") => {
     if (props.hasScrollGesture()) {
       const now = Date.now()
       if (now - skipped > 300) {
-        console.debug("[timeline] follow held", { src })
+        console.debug(`[timeline] follow held src=${src}`)
         skipped = now
       }
       return
     }
 
-    root.scrollTop = root.scrollHeight
+    const top = Math.max(0, root.scrollHeight - root.clientHeight)
+    const dist = top - root.scrollTop
+    if (Math.abs(dist) <= 1) {
+      root.scrollTop = top
+      props.onScheduleScrollState(root)
+      return
+    }
+
+    if (mode === "auto" || Math.abs(dist) > FOLLOW_SNAP_DISTANCE) {
+      root.scrollTop = top
+      props.onScheduleScrollState(root)
+      return
+    }
+
+    const step = Math.sign(dist) * Math.min(Math.max(Math.abs(dist) * FOLLOW_EASE, 1), FOLLOW_MAX_STEP)
+    root.scrollTop += step
     props.onScheduleScrollState(root)
   }
   const estimateTurnHeight = (id: string) => {
     const runtime = turnHeights.get(id)
     const sid = sessionID()
     const stage = stageOf(id)
+    const signature = heightSignature()
     let cached: number | undefined
     if (sid) {
-      cached = readHeightCache(sid, id, stage)
+      cached = readHeightCache(sid, id, stage, signature)
       if (cached === undefined && stage === "full") {
-        cached = readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
+        cached = readHeightCache(sid, id, "structure", signature) ?? readHeightCache(sid, id, "lite", signature)
       } else if (cached === undefined && stage === "structure") {
-        cached = readHeightCache(sid, id, "lite")
+        cached = readHeightCache(sid, id, "lite", signature)
       }
     }
     if (runtime !== undefined && cached !== undefined) return Math.max(runtime, cached)
@@ -573,8 +600,6 @@ export function MessageTimeline(props: {
   })
   const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
-  const pref = createMemo(() => settings.general.shellToolPartsExpanded())
-  const shell = createMemo(() => (platform.platform === "desktop" ? false : pref()))
   const [prefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const openApps = createMemo(() => apps(os(platform)))
 
@@ -582,6 +607,24 @@ export function MessageTimeline(props: {
     on(shell, (open) => {
       console.debug(`[session:shell] platform=${platform.platform} pref=${pref()} defaultOpen=${open}`)
     }),
+  )
+
+  createEffect(
+    on(
+      heightSignature,
+      (next, prev) => {
+        if (prev === undefined || next === prev) return
+        turnHeights.clear()
+        windowAdjustVersion += 1
+        contentRef?.querySelectorAll<HTMLElement>("[data-message-id]").forEach((node) => {
+          node.style.minHeight = ""
+        })
+        setRevision((value) => value + 1)
+        scheduleWindow()
+        schedulePin("height-signature")
+      },
+      { defer: true },
+    ),
   )
   // Windowing is only disabled while the active reply is still growing. Static
   // sessions may stay pinned to the bottom and still use history windowing;
@@ -1036,8 +1079,7 @@ export function MessageTimeline(props: {
     }
     if (same && !seek) {
       if ((pinned || jumping) && root) {
-        root.scrollTop = root.scrollHeight
-        props.onScheduleScrollState(root)
+        follow(root, jumping ? "window:jump-steady" : "window:pinned-steady", jumping ? "auto" : "smooth")
       }
       if (jumping) props.onClearJumpIntent()
       return
@@ -1068,15 +1110,12 @@ export function MessageTimeline(props: {
         if (!root) return
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
         const before = snap(root)
-        root.scrollTop = root.scrollHeight
+        follow(root, "window:streaming", "smooth")
         const after = snap(root)
         seq += 1
-        console.debug("[timeline] streaming window bottom follow", {
-          before: before.gap,
-          after: after.gap,
-          pinned,
-        })
-        props.onScheduleScrollState(root)
+        console.debug(
+          `[timeline] streaming window bottom follow before=${before.gap} after=${after.gap} pinned=${pinned}`,
+        )
       })
       return
     }
@@ -1094,8 +1133,7 @@ export function MessageTimeline(props: {
         const root = viewport
         if (!root) return
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
-        root.scrollTop = root.scrollHeight
-        props.onScheduleScrollState(root)
+        follow(root, "window:jump", "auto")
       })
       return
     }
@@ -1267,11 +1305,10 @@ export function MessageTimeline(props: {
       return
     }
 
-    root.scrollTop = top
+    follow(root, source, "smooth")
     console.debug(
       `[timeline] bottom pin: source=${source} dist=${Math.round(dist)} top=${Math.round(root.scrollTop)} scrollHeight=${Math.round(root.scrollHeight)} clientHeight=${Math.round(root.clientHeight)}`,
     )
-    props.onScheduleScrollState(root)
   }
 
   const schedulePin = (source: string) => {
@@ -1474,46 +1511,6 @@ export function MessageTimeline(props: {
   })
 
   createEffect(
-    on(
-      () => {
-        const id = sessionID()
-        if (!id) return "none"
-        const messages = sync.data.message[id] ?? emptyMessages
-        const last = messages.at(-1)
-        if (!last) return `${id}:none`
-        const parts = sync.data.part[last.id] ?? []
-        const tool = parts.findLast(visibleToolPart)
-        if (!tool || tool.type !== "tool") return `${id}:${last.id}:none`
-        return `${id}:${last.id}:${tool.id}:${tool.tool}:${tool.state.status}`
-      },
-      (key) => {
-        if (key.split(":").at(-1) === "none") return
-        console.debug(
-          `[tool-freeze] timeline latest-tool t=${performance.now().toFixed(1)} key=${key} rendered=${rendered().length} visible=${visibleRendered().length} canWindow=${canWindow() ? 1 : 0} live=${props.live ? 1 : 0} working=${isWorking() ? 1 : 0}`,
-        )
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => [visibleRendered().join(","), windowed.start, windowed.end, windowed.top, windowed.bottom] as const,
-      ([ids]) => {
-        const activeID = activeMessageID()
-        if (!activeID) return
-        const parts = sessionMessages().flatMap((message) => sync.data.part[message.id] ?? [])
-        const tool = parts.findLast(visibleToolPart)
-        if (!tool || tool.type !== "tool") return
-        console.debug(
-          `[tool-freeze] timeline window t=${performance.now().toFixed(1)} active=${activeID} latestTool=${tool.tool} status=${tool.state.status} visibleCount=${visibleRendered().length} rendered=${rendered().length} window=[${windowed.start},${windowed.end}] top=${Math.round(windowed.top)} bottom=${Math.round(windowed.bottom)} idsLen=${ids.length}`,
-        )
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
     on(activeMessageID, (id, prev) => {
       if (id === prev) return
       if (props.seekingMessageId)
@@ -1686,14 +1683,14 @@ export function MessageTimeline(props: {
   const shareMutation = useMutation(() => ({
     mutationFn: (id: string) => globalSDK.client.session.share({ sessionID: id, directory: sdk.directory }),
     onError: (err) => {
-      console.error("Failed to share session", err)
+      console.error(`Failed to share session: ${err instanceof Error ? err.message : String(err)}`)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
     mutationFn: (id: string) => globalSDK.client.session.unshare({ sessionID: id, directory: sdk.directory }),
     onError: (err) => {
-      console.error("Failed to unshare session", err)
+      console.error(`Failed to unshare session: ${err instanceof Error ? err.message : String(err)}`)
     },
   }))
 
@@ -2385,16 +2382,8 @@ export function MessageTimeline(props: {
       return "defer"
     })
     const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
-      const start = performance.now()
       if (active()) return turnMessages(sessionMessages(), item.messageID)
       const next = turnMessages(sessionMessages(), item.messageID)
-      const took = performance.now() - start
-      const tool = next.flatMap((message) => sync.data.part[message.id] ?? []).findLast(visibleToolPart)
-      if (tool?.type === "tool" && (active() || took > 8)) {
-        console.debug(
-          `[tool-freeze] timeline turn-messages t=${performance.now().toFixed(1)} took=${took.toFixed(1)} message=${item.messageID} active=${active() ? 1 : 0} count=${next.length} tool=${tool.tool} status=${tool.state.status}`,
-        )
-      }
       return prev && sameMessages(prev, next) ? prev : next
     }, emptyMessages)
     const comments = createMemo(() => messageComments(sync.data.part[item.messageID] ?? []), [], {
@@ -2430,7 +2419,7 @@ export function MessageTimeline(props: {
       if (rootRef && rootRef.style.minHeight) rootRef.style.minHeight = ""
       const sid = sessionID()
       const bucket = stageOf(item.messageID)
-      if (sid) writeHeightCache(sid, item.messageID, bucket, next)
+      if (sid) writeHeightCache(sid, item.messageID, bucket, heightSignature(), next)
       setRevision((value) => value + 1)
       const delta = prev === undefined ? 0 : Math.round(next - prev)
       seq += 1
@@ -2513,15 +2502,9 @@ export function MessageTimeline(props: {
             performance.mark("submit:dom-mount")
             performance.measure("submit:to-dom-mount", "submit:start", "submit:dom-mount")
             const m = performance.getEntriesByName("submit:to-dom-mount", "measure").at(-1)
-            console.debug(`[perf:submit] message DOM mounted: ${Math.round(m?.duration ?? 0)}ms after submit`, { messageID: item.messageID })
-          }
-          const tool = messages().flatMap((message) => sync.data.part[message.id] ?? []).findLast(visibleToolPart)
-          if (tool?.type === "tool") {
-            requestAnimationFrame(() => {
-              console.debug(
-                `[tool-freeze] timeline turn-dom t=${performance.now().toFixed(1)} message=${item.messageID} index=${item.index} active=${active() ? 1 : 0} tool=${tool.tool} status=${tool.state.status} height=${Math.round(el.getBoundingClientRect().height)} visible=${visible(el) ? 1 : 0}`,
-              )
-            })
+            console.debug(
+              `[perf:submit] message DOM mounted after=${Math.round(m?.duration ?? 0)}ms messageID=${item.messageID}`,
+            )
           }
         }}
         id={props.anchor(item.messageID)}

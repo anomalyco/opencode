@@ -1,4 +1,4 @@
-import type { FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff as FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
@@ -26,7 +26,7 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode, checksum } from "@opencode-ai/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -69,6 +69,9 @@ const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
 const settleMs = 1_500
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
+const smoothBottomSnapDistance = 900
+const smoothBottomMaxStep = 180
+const smoothBottomEase = 0.32
 
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
@@ -619,14 +622,6 @@ export default function Page() {
       .map(([key, value]) => `${key}=${String(value)}`)
       .join(" ")
     console.debug(`[lag] ${kind} ${line}`)
-  }
-
-  const toolFreeze = (kind: string, fields: Record<string, string | number | boolean | undefined>) => {
-    const line = Object.entries(fields)
-      .filter(([, value]) => value !== undefined)
-      .map(([key, value]) => `${key}=${String(value)}`)
-      .join(" ")
-    console.debug(`[tool-freeze] session ${kind} ${line}`)
   }
 
   const sampleDom = () => {
@@ -1274,88 +1269,6 @@ export default function Page() {
     if (!id) return false
     return working(sync.data.session_status[id], sync.data.message[id])
   }
-
-  createEffect(
-    on(
-      () => {
-        const id = params.id
-        const status = id ? sync.data.session_status[id]?.type ?? "none" : "none"
-        const messages = id ? sync.data.message[id] : undefined
-        const last = messages?.at(-1)
-        const lastRole = last?.role ?? "none"
-        const lastMessage = last?.id ?? "none"
-        const completed = last?.role === "assistant" && typeof last.time.completed === "number" ? 1 : 0
-        const run = id ? working(sync.data.session_status[id], messages) : false
-        return `${id ?? "none"}|${status}|${messages?.length ?? 0}|${lastRole}|${lastMessage}|${completed}|${run ? 1 : 0}`
-      },
-      (state) => {
-        const [sessionID, status, count, lastRole, lastMessage, completed, run] = state.split("|")
-        console.debug(
-          `[aether-flow] stage=session-running session=${sessionID} status=${status} messages=${count} lastRole=${lastRole} lastMessage=${lastMessage} completed=${completed} running=${run}`,
-        )
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(() => {
-    if (!running()) return
-    const sessionID = params.id
-    let last = performance.now()
-    const timer = window.setInterval(() => {
-      const now = performance.now()
-      const gap = now - last - 250
-      last = now
-      if (gap < 80) return
-      const dom = sampleDom()
-      toolFreeze("event-loop-lag", {
-        t: now.toFixed(1),
-        session: sessionID ?? "none",
-        gap: Math.round(gap),
-        nodes: dom?.nodes ?? "none",
-        markdown: dom?.markdown ?? "none",
-        full: dom?.full ?? "none",
-        structure: dom?.structure ?? "none",
-        lite: dom?.lite ?? "none",
-        katex: dom?.katex ?? "none",
-        scrollTop: dom?.scrollTop ?? "none",
-        scrollHeight: dom?.scrollHeight ?? "none",
-        clientHeight: dom?.clientHeight ?? "none",
-      })
-    }, 250)
-
-    let observer: PerformanceObserver | undefined
-    if (
-      typeof PerformanceObserver !== "undefined" &&
-      (PerformanceObserver.supportedEntryTypes ?? []).includes("longtask")
-    ) {
-      observer = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          if (entry.duration < 50) continue
-          const dom = sampleDom()
-          toolFreeze("longtask", {
-            t: performance.now().toFixed(1),
-            session: sessionID ?? "none",
-            start: Math.round(entry.startTime),
-            duration: Math.round(entry.duration),
-            nodes: dom?.nodes ?? "none",
-            markdown: dom?.markdown ?? "none",
-            full: dom?.full ?? "none",
-            structure: dom?.structure ?? "none",
-            lite: dom?.lite ?? "none",
-            katex: dom?.katex ?? "none",
-          })
-        }
-      })
-      observer.observe({ type: "longtask", buffered: true })
-    }
-
-    onCleanup(() => {
-      window.clearInterval(timer)
-      observer?.disconnect()
-    })
-  })
-
   const autoScroll = createAutoScroll({
     working: running,
     overflowAnchor: "none",
@@ -1383,14 +1296,20 @@ export default function Page() {
   // Streaming stability depends on locking the outer timeline directly to the
   // physical bottom. This avoids relying on the auto-scroll state machine once
   // content height is already changing every frame.
-  const lockBottom = (el: HTMLDivElement, source: string) => {
+  const lockBottom = (el: HTMLDivElement, source: string, mode: "auto" | "smooth" = "auto") => {
     const next = Math.max(0, el.scrollHeight - el.clientHeight)
     const dist = next - el.scrollTop
     if (Math.abs(dist) <= 1) {
       debug("lock-bottom:skip", el, { source, dist: Math.round(dist) })
       return
     }
-    el.scrollTop = next
+    if (mode === "smooth" && Math.abs(dist) <= smoothBottomSnapDistance) {
+      const step =
+        Math.sign(dist) * Math.min(Math.max(Math.abs(dist) * smoothBottomEase, 1), smoothBottomMaxStep)
+      el.scrollTop += step
+    } else {
+      el.scrollTop = next
+    }
     debug("lock-bottom:write", el, { source, dist: Math.round(dist) })
   }
 
@@ -1429,7 +1348,7 @@ export default function Page() {
     }
 
     const gap = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
-    if (Math.abs(gap) > 1) console.debug("[session] initial bottom settle", { gap })
+    if (Math.abs(gap) > 1) console.debug(`[session] initial bottom settle gap=${gap}`)
     lockBottom(root, "initial-scroll:settle")
     scheduleScrollState(root)
 
@@ -1468,7 +1387,7 @@ export default function Page() {
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
       if ((live() || settling()) && !hasScrollTarget() && !hasScrollGesture()) {
-        lockBottom(root, "content:resize:lock-bottom")
+        lockBottom(root, "content:resize:lock-bottom", live() ? "smooth" : "auto")
         if (root.style.visibility === "hidden") {
           const gap = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
           if (Math.abs(gap) <= 1) {
@@ -1486,7 +1405,7 @@ export default function Page() {
     if (!el.isConnected || el.clientHeight <= 0 || el.scrollHeight <= 0) return
     debug("state:before", el)
     if ((live() || settling()) && !hasScrollGesture() && !hasScrollTarget()) {
-      lockBottom(el, "state:live-lock")
+      lockBottom(el, "state:live-lock", live() ? "smooth" : "auto")
     }
     const top = clamp(el)
     const max = el.scrollHeight - el.clientHeight

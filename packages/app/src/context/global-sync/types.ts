@@ -2,7 +2,7 @@ import type {
   Agent,
   Command,
   Config,
-  FileDiff,
+  SnapshotFileDiff as FileDiff,
   LspStatus,
   McpStatus,
   Message,

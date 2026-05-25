@@ -1,5 +1,5 @@
 import type {
-  FileDiff,
+  SnapshotFileDiff as FileDiff,
   Message,
   Part,
   PermissionRequest,

@@ -1,7 +1,7 @@
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@opencode-ai/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
-  FileDiff,
+  SnapshotFileDiff as FileDiff,
   Message,
   Part,
   PermissionRequest,
@@ -176,9 +176,6 @@ export function applyDirectoryEvent(input: {
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
       input.setStore("session_status", props.sessionID, reconcile(props.status))
-      console.debug(
-        `[aether-flow] stage=reducer-status dir=${input.directory} session=${props.sessionID} status=${props.status.type}`,
-      )
       break
     }
     case "message.updated": {
@@ -247,38 +244,8 @@ export function applyDirectoryEvent(input: {
       const part = (event.properties as { part: Part }).part
       if (SKIP_PARTS.has(part.type)) break
       const parts = input.store.part[part.messageID]
-      const partStart = performance.now()
-      const traceToolPart = part.type === "tool" && part.tool !== "hook"
-      const traceTextPart = part.type === "text"
-      const traceReasoningPart = part.type === "reasoning"
-      if (traceTextPart) {
-        console.debug(
-          `[aether-flow] stage=reducer-part-start dir=${input.directory} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=text len=${part.text?.length ?? 0} end=${part.time?.end ? 1 : 0} existing=${parts?.length ?? 0} tail="${(part.text ?? "").slice(-60)}"`,
-        )
-      }
-      if (traceReasoningPart) {
-        console.debug(
-          `[aether-flow] stage=reducer-part-start dir=${input.directory} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=reasoning len=${part.text?.length ?? 0} end=${part.time?.end ? 1 : 0} existing=${parts?.length ?? 0}`,
-        )
-      }
-      if (traceToolPart) {
-        const status = part.state.status
-        console.debug(
-          `[tool-freeze] reducer part-start t=${partStart.toFixed(1)} session=${part.sessionID} message=${part.messageID} part=${part.id} tool=${part.tool} status=${status} existing=${parts?.length ?? 0}`,
-        )
-      }
       if (!parts) {
         input.setStore("part", part.messageID, [part])
-        if (traceTextPart || traceReasoningPart) {
-          console.debug(
-            `[aether-flow] stage=reducer-part-end dir=${input.directory} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=${part.type} op=create-list len=${"text" in part ? part.text?.length ?? 0 : 0} end=${"time" in part && part.time?.end ? 1 : 0}`,
-          )
-        }
-        if (traceToolPart) {
-          console.debug(
-            `[tool-freeze] reducer part-end t=${performance.now().toFixed(1)} took=${(performance.now() - partStart).toFixed(1)} session=${part.sessionID} message=${part.messageID} part=${part.id} tool=${part.tool} status=${part.state.status} op=create-list`,
-          )
-        }
         break
       }
       const result = Binary.search(parts, part.id, (p) => p.id)
@@ -287,23 +254,18 @@ export function applyDirectoryEvent(input: {
         const prev = item?.type === "text" ? (item.text ?? "") : ""
         const next = part.text ?? ""
         if (next.length < prev.length) {
-          console.warn(
-            `[aether-flow] stage=reducer-text-rollback dir=${input.directory} message=${part.messageID} part=${part.id} prev=${prev.length} next=${next.length} prevTail="${prev.slice(-60)}" nextTail="${next.slice(-60)}"`,
-          )
+          console.warn("[sync] text rollback", {
+            msg: part.messageID,
+            part: part.id,
+            prev: prev.length,
+            next: next.length,
+            prevTail: prev.slice(-40),
+            nextTail: next.slice(-40),
+          })
         }
       }
       if (result.found) {
         input.setStore("part", part.messageID, result.index, reconcile(part))
-        if (traceTextPart || traceReasoningPart) {
-          console.debug(
-            `[aether-flow] stage=reducer-part-end dir=${input.directory} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=${part.type} op=reconcile index=${result.index} len=${"text" in part ? part.text?.length ?? 0 : 0} end=${"time" in part && part.time?.end ? 1 : 0}`,
-          )
-        }
-        if (traceToolPart) {
-          console.debug(
-            `[tool-freeze] reducer part-end t=${performance.now().toFixed(1)} took=${(performance.now() - partStart).toFixed(1)} session=${part.sessionID} message=${part.messageID} part=${part.id} tool=${part.tool} status=${part.state.status} op=reconcile index=${result.index}`,
-          )
-        }
         break
       }
       input.setStore(
@@ -313,16 +275,6 @@ export function applyDirectoryEvent(input: {
           draft.splice(result.index, 0, part)
         }),
       )
-      if (traceToolPart) {
-        console.debug(
-          `[tool-freeze] reducer part-end t=${performance.now().toFixed(1)} took=${(performance.now() - partStart).toFixed(1)} session=${part.sessionID} message=${part.messageID} part=${part.id} tool=${part.tool} status=${part.state.status} op=insert index=${result.index}`,
-        )
-      }
-      if (traceTextPart || traceReasoningPart) {
-        console.debug(
-          `[aether-flow] stage=reducer-part-end dir=${input.directory} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=${part.type} op=insert index=${result.index} len=${"text" in part ? part.text?.length ?? 0 : 0} end=${"time" in part && part.time?.end ? 1 : 0}`,
-        )
-      }
       break
     }
     case "message.part.removed": {
@@ -348,16 +300,24 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { messageID: string; partID: string; field: string; delta: string }
       const parts = input.store.part[props.messageID]
       if (!parts) {
-        console.warn(
-          `[aether-flow] stage=reducer-delta-drop reason=no-parts dir=${input.directory} message=${props.messageID} part=${props.partID} field=${props.field} len=${props.delta.length} tail="${props.delta.slice(-60)}"`,
-        )
+        console.warn("[sync] delta without parts", {
+          msg: props.messageID,
+          part: props.partID,
+          field: props.field,
+          len: props.delta.length,
+          tail: props.delta.slice(-40),
+        })
         break
       }
       const result = Binary.search(parts, props.partID, (p) => p.id)
       if (!result.found) {
-        console.warn(
-          `[aether-flow] stage=reducer-delta-drop reason=no-target dir=${input.directory} message=${props.messageID} part=${props.partID} field=${props.field} len=${props.delta.length} tail="${props.delta.slice(-60)}"`,
-        )
+        console.warn("[sync] delta without target", {
+          msg: props.messageID,
+          part: props.partID,
+          field: props.field,
+          len: props.delta.length,
+          tail: props.delta.slice(-40),
+        })
         break
       }
       const hit = parts[result.index]
@@ -423,23 +383,13 @@ export function applyDirectoryEvent(input: {
     case "question.asked": {
       const question = event.properties as QuestionRequest
       const questions = input.store.question[question.sessionID]
-      const questionStart = performance.now()
-      console.debug(
-        `[tool-freeze] reducer question-start t=${questionStart.toFixed(1)} session=${question.sessionID} request=${question.id} questions=${question.questions.length} existing=${questions?.length ?? 0}`,
-      )
       if (!questions) {
         input.setStore("question", question.sessionID, [question])
-        console.debug(
-          `[tool-freeze] reducer question-end t=${performance.now().toFixed(1)} took=${(performance.now() - questionStart).toFixed(1)} session=${question.sessionID} request=${question.id} op=create-list`,
-        )
         break
       }
       const result = Binary.search(questions, question.id, (q) => q.id)
       if (result.found) {
         input.setStore("question", question.sessionID, result.index, reconcile(question))
-        console.debug(
-          `[tool-freeze] reducer question-end t=${performance.now().toFixed(1)} took=${(performance.now() - questionStart).toFixed(1)} session=${question.sessionID} request=${question.id} op=reconcile index=${result.index}`,
-        )
         break
       }
       input.setStore(
@@ -448,9 +398,6 @@ export function applyDirectoryEvent(input: {
         produce((draft) => {
           draft.splice(result.index, 0, question)
         }),
-      )
-      console.debug(
-        `[tool-freeze] reducer question-end t=${performance.now().toFixed(1)} took=${(performance.now() - questionStart).toFixed(1)} session=${question.sessionID} request=${question.id} op=insert index=${result.index}`,
       )
       break
     }
@@ -461,19 +408,12 @@ export function applyDirectoryEvent(input: {
       if (!questions) break
       const result = Binary.search(questions, props.requestID, (q) => q.id)
       if (!result.found) break
-      const questionStart = performance.now()
-      console.debug(
-        `[tool-freeze] reducer question-remove-start t=${questionStart.toFixed(1)} type=${event.type} session=${props.sessionID} request=${props.requestID} existing=${questions.length}`,
-      )
       input.setStore(
         "question",
         props.sessionID,
         produce((draft) => {
           draft.splice(result.index, 1)
         }),
-      )
-      console.debug(
-        `[tool-freeze] reducer question-remove-end t=${performance.now().toFixed(1)} took=${(performance.now() - questionStart).toFixed(1)} type=${event.type} session=${props.sessionID} request=${props.requestID} index=${result.index}`,
       )
       break
     }

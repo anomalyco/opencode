@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "エンタープライズ",
   "nav.zen": "Zen",
   "nav.login": "ログイン",
-  "nav.free": "無料",
+  "nav.free": "ダウンロード",
   "nav.home": "ホーム",
   "nav.openMenu": "メニューを開く",
   "nav.getStartedFree": "無料ではじめる",
@@ -250,7 +250,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
   "go.meta.description":
-    "Goは最初の月$5、その後$10/月で、GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7に対して5時間のゆとりあるリクエスト上限があります。",
+    "Goは最初の月$5、その後$10/月で、GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7、DeepSeek V4 Pro、DeepSeek V4 Flashに対して5時間のゆとりあるリクエスト上限があります。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
@@ -299,7 +299,8 @@ export const dict = {
   "go.problem.item1": "低価格なサブスクリプション料金",
   "go.problem.item2": "十分な制限と安定したアクセス",
   "go.problem.item3": "できるだけ多くのプログラマーのために構築",
-  "go.problem.item4": "GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7を含む",
+  "go.problem.item4":
+    "GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7、DeepSeek V4 Pro、DeepSeek V4 Flashを含む",
   "go.how.title": "Goの仕組み",
   "go.how.body": "Goは最初の月$5、その後$10/月で始まります。OpenCodeまたは任意のエージェントで使えます。",
   "go.how.step1.title": "アカウントを作成",
@@ -321,11 +322,10 @@ export const dict = {
   "go.faq.a1":
     "Goは、エージェント型コーディングのための有能なオープンソースモデルへの安定したアクセスを提供する低価格なサブスクリプションです。",
   "go.faq.q2": "Goにはどのモデルが含まれますか？",
-  "go.faq.a2":
-    "Goには、GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7が含まれており、十分な制限と安定したアクセスが提供されます。",
+  "go.faq.a2": "Go には、十分な利用上限と安定したアクセスを備えた、以下のモデルが含まれます。",
   "go.faq.q3": "GoはZenと同じですか？",
   "go.faq.a3":
-    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7のオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
+    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7、DeepSeek V4 Pro、DeepSeek V4 Flashのオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
   "go.faq.q4": "Goの料金は？",
   "go.faq.a4.p1.beforePricing": "Goは",
   "go.faq.a4.p1.pricingLink": "最初の月$5",
@@ -335,8 +335,7 @@ export const dict = {
   "go.faq.a4.p3": "いつでもキャンセル可能です。",
   "go.faq.q5": "データとプライバシーは？",
   "go.faq.a5.body":
-    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。",
-  "go.faq.a5.contactAfter": "ご質問がございましたら。",
+    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。プロバイダーはゼロ保持ポリシーに従い、お客様のデータをモデルのトレーニングに使用しません。",
   "go.faq.a5.beforeExceptions":
     "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "go.faq.a5.exceptionsLink": "以下の例外",
@@ -350,7 +349,7 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7が含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7、DeepSeek V4 Pro、DeepSeek V4 Flashが含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
 
   "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
   "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
@@ -361,8 +360,12 @@ export const dict = {
   "zen.api.error.invalidApiKey": "無効なAPIキーです。",
   "zen.api.error.subscriptionQuotaExceeded":
     "サブスクリプションの制限を超えました。{{retryIn}} 後に再試行してください。",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "サブスクリプションの制限を超えました。無料モデルは引き続きご利用いただけます。",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "5時間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "週間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "月間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "お支払い方法がありません。こちらからお支払い方法を追加してください: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "残高が不足しています。こちらから請求を管理してください: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -370,6 +373,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{membersUrl}}",
   "zen.api.error.modelDisabled": "モデルが無効です",
+  "zen.api.error.trialEnded":
+    "{{model}} の無料プロモーションは終了しました。OpenCode Go を購読するとモデルを引き続き使用できます - {{link}}",
 
   "black.meta.title": "OpenCode Black | 世界最高峰のコーディングモデルすべてにアクセス",
   "black.meta.description": "OpenCode Black サブスクリプションプランで、Claude、GPT、Gemini などにアクセス。",
@@ -563,6 +568,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "現在の使用状況（",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "）は $",
 
+  "workspace.redeem.title": "クーポンを利用",
+  "workspace.redeem.subtitle": "クーポンコードを利用して、クレジットや特典を受け取ります。",
+  "workspace.redeem.placeholder": "クーポンコードを入力",
+  "workspace.redeem.redeem": "利用する",
+  "workspace.redeem.redeeming": "利用中...",
+  "workspace.redeem.success": "クーポンを利用しました。",
+
   "workspace.reload.title": "自動チャージ",
   "workspace.reload.disabled.before": "自動チャージは",
   "workspace.reload.disabled.state": "無効",
@@ -655,6 +667,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "リダイレクト中...",
   "workspace.lite.promo.otherMethods": "その他の支払い方法",
   "workspace.lite.promo.selectMethod": "支払い方法を選択",
+
+  "workspace.referral.copyLink": "リンクをコピー",
+  "workspace.referral.copied": "コピーしました",
+  "workspace.referral.overview.title": "友達を招待",
+  "workspace.referral.overview.subtitle": "友達がサブスクライブすると $5 を獲得。友達にも $5 が付与されます。",
+  "workspace.referral.instructions.share": "リファラルリンクをシェア",
+  "workspace.referral.instructions.subscribe": "友達が参加して Go にサブスクライブ",
+  "workspace.referral.instructions.claim": "二人とも $5 の利用クレジットを獲得し、Go の利用上限に充当できます",
+  "workspace.referral.rewards.title": "リファラル特典",
+  "workspace.referral.rewards.description": "利用可能なリファラルクレジットを Go の利用に適用します。",
+  "workspace.referral.rewards.subtitle": "{{applied}} / {{total}} 件の特典を適用済み。",
+  "workspace.referral.rewards.empty": "リファラル特典はまだありません。",
+  "workspace.referral.table.reward": "特典",
+  "workspace.referral.table.referral": "説明",
+  "workspace.referral.table.date": "日付",
+  "workspace.referral.reward.description.inviter": "{{email}} を招待しました",
+  "workspace.referral.reward.description.invitee": "{{email}} に招待されました",
+  "workspace.referral.reward.action.subscribeUnlock": "サブスクライブしてアンロック",
+  "workspace.referral.reward.action.view": "特典を表示",
+  "workspace.referral.reward.action.applied": "特典を適用済み",
+  "workspace.referral.reward.source.pendingInviter": "友達のサブスクライブ待ち",
+  "workspace.referral.reward.source.pendingInvitee": "サブスクライブして特典をアンロック",
+  "workspace.referral.reward.source.available": "特典は適用可能です",
+  "workspace.referral.reward.source.applied": "特典を適用済み",
+  "workspace.referral.reward.status.applied": "特典を適用済み",
+  "workspace.referral.reward.status.pendingInviter": "サブスクライブしてアンロック",
+  "workspace.referral.reward.status.pendingInvitee": "サブスクライブしてアンロック",
+  "workspace.referral.apply.noGo": "サブスクライブしてアンロック",
+  "workspace.referral.apply.preview": "特典を表示",
+  "workspace.referral.apply.action": "適用",
+  "workspace.referral.apply.confirmTitle": "特典を適用",
+  "workspace.referral.apply.confirmBody": "{{amount}} を適用して、このワークスペースの現在の使用量を減らします。",
+  "workspace.referral.apply.confirmAction": "適用",
 
   "download.title": "OpenCode | ダウンロード",
   "download.meta.description": "OpenCode を macOS、Windows、Linux 向けにダウンロード",

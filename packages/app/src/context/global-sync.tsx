@@ -8,7 +8,7 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import {
   getOwner,
   createEffect,
@@ -514,36 +514,6 @@ function createGlobalSync() {
     const emittingDomain = e.domain
     const dirDomain = directory === "global" ? emittingDomain : domainFromDirectory(directory)
     const recent = !!bootingRoot.get(dirDomain) || Date.now() - (bootedAt.get(dirDomain) ?? 0) < 1500
-    const flowEvent = () => {
-      if (event.type === "message.part.updated") {
-        const part = (event.properties as { part?: { id?: string; messageID?: string; sessionID?: string; type?: string; text?: string; time?: { end?: number }; tool?: string; state?: { status?: string } } }).part
-        if (!part) return
-        if (part.type === "text") {
-          return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} session=${part.sessionID ?? "none"} message=${part.messageID ?? "none"} part=${part.id ?? "none"} partType=text len=${part.text?.length ?? 0} end=${part.time?.end ? 1 : 0} tail="${(part.text ?? "").slice(-60)}"`
-        }
-        if (part.type === "reasoning") {
-          return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} session=${part.sessionID ?? "none"} message=${part.messageID ?? "none"} part=${part.id ?? "none"} partType=reasoning len=${part.text?.length ?? 0} end=${part.time?.end ? 1 : 0}`
-        }
-        if (part.type === "tool") {
-          return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} session=${part.sessionID ?? "none"} message=${part.messageID ?? "none"} part=${part.id ?? "none"} partType=tool tool=${part.tool ?? "none"} status=${part.state?.status ?? "none"}`
-        }
-        return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} session=${part.sessionID ?? "none"} message=${part.messageID ?? "none"} part=${part.id ?? "none"} partType=${part.type}`
-      }
-      if (event.type === "message.part.delta") {
-        const props = event.properties as { messageID?: string; partID?: string; field?: string; delta?: string }
-        return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} message=${props.messageID ?? "none"} part=${props.partID ?? "none"} field=${props.field ?? "none"} len=${props.delta?.length ?? 0} tail="${(props.delta ?? "").slice(-60)}"`
-      }
-      if (event.type === "session.status") {
-        const props = event.properties as { sessionID?: string; status?: { type?: string } }
-        return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} session=${props.sessionID ?? "none"} status=${props.status?.type ?? "none"}`
-      }
-      if (event.type === "session.error") {
-        const props = event.properties as { sessionID?: string; error?: { name?: string } }
-        return `[aether-flow] stage=global-sync-receive dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain} type=${event.type} session=${props.sessionID ?? "none"} error=${props.error?.name ?? "none"}`
-      }
-    }
-    const flow = flowEvent()
-    if (flow) console.debug(flow)
 
     if (directory === "global") {
       // Route to the emitting domain's bucket regardless of which domain is visible.
@@ -574,49 +544,12 @@ function createGlobalSync() {
 
     // Cross-domain event bleed guard: a directory event coming from a different
     // domain than the directory itself is a bug — drop it instead of applying.
-    if (emittingDomain !== dirDomain) {
-      if (flow) console.debug(`[aether-flow] stage=global-sync-drop reason=cross-domain dir=${directory} domain=${emittingDomain} dirDomain=${dirDomain}`)
-      return
-    }
-    if (isolated(directory)) {
-      if (flow) console.debug(`[aether-flow] stage=global-sync-drop reason=isolated dir=${directory} domain=${emittingDomain}`)
-      return
-    }
+    if (emittingDomain !== dirDomain) return
+    if (isolated(directory)) return
     const existing = managerOf(directory).children[directory]
-    if (!existing) {
-      if (flow) console.debug(`[aether-flow] stage=global-sync-drop reason=no-store dir=${directory} domain=${emittingDomain}`)
-      return
-    }
+    if (!existing) return
     children.mark(directory)
     const [store, setStore] = existing
-    const reduceStart = performance.now()
-    const toolPart =
-      event.type === "message.part.updated"
-        ? (event.properties as { part?: { id?: string; messageID?: string; sessionID?: string; type?: string; tool?: string; state?: { status?: string } } }).part
-        : undefined
-    const questionProps =
-      event.type === "question.asked" || event.type === "question.replied" || event.type === "question.rejected"
-        ? (event.properties as { sessionID?: string; id?: string; requestID?: string; questions?: unknown[] })
-        : undefined
-    const permissionProps =
-      event.type === "permission.asked" ? (event.properties as { sessionID?: string; id?: string; permission?: string }) : undefined
-    const sessionProps = event.type === "session.created" ? (event.properties as { info?: { id?: string; parentID?: string } }) : undefined
-    const interesting =
-      (toolPart?.type === "tool" &&
-        toolPart.tool !== "hook" &&
-        `tool-part session=${toolPart.sessionID ?? "none"} message=${toolPart.messageID ?? "none"} part=${toolPart.id ?? "none"} tool=${toolPart.tool ?? "none"} status=${toolPart.state?.status ?? "none"}`) ||
-      (questionProps &&
-        `question session=${questionProps.sessionID ?? "none"} request=${questionProps.id ?? questionProps.requestID ?? "none"} questions=${questionProps.questions?.length ?? "none"}`) ||
-      (permissionProps?.permission === "task" &&
-        `task-permission session=${permissionProps.sessionID ?? "none"} request=${permissionProps.id ?? "none"}`) ||
-      (sessionProps?.info?.parentID &&
-        `child-session session=${sessionProps.info.id ?? "none"} parent=${sessionProps.info.parentID ?? "none"}`) ||
-      undefined
-    if (interesting) {
-      console.debug(
-        `[tool-freeze] global-sync reduce-start t=${reduceStart.toFixed(1)} dir=${directory} type=${event.type} ${interesting}`,
-      )
-    }
     try {
       applyDirectoryEvent({
         event,
@@ -632,14 +565,8 @@ function createGlobalSync() {
             .then((x) => setStore("lsp", x.data ?? []))
         },
       })
-      const reduceTook = performance.now() - reduceStart
-      if (interesting || reduceTook > 50) {
-        console.debug(
-          `[tool-freeze] global-sync reduce-end t=${performance.now().toFixed(1)} took=${reduceTook.toFixed(1)} dir=${directory} type=${event.type} detail=${interesting ?? "none"}`,
-        )
-      }
     } catch (err) {
-      const props = event.properties as
+      const props = (event as { properties?: unknown }).properties as
         | {
             messageID?: string
             partID?: string
@@ -802,6 +729,19 @@ function createGlobalSync() {
 }
 
 export { createGlobalSync, useGlobalSync }
+
+export function useQueryOptions() {
+  return {
+    mcp: (directory: string) => ({ queryKey: [directory, "mcp"] as const }),
+    lsp: (directory: string) => ({ queryKey: [directory, "lsp"] as const }),
+    agents: (directory: string) => ({ queryKey: [directory, "agents"] as const }),
+    providers: (directory: string | null) => ({ queryKey: [directory, "providers"] as const }),
+    path: (directory: string | null) => ({ queryKey: [directory, "path"] as const }),
+    sessions: (directory: string) => ({ queryKey: [directory, "loadSessions"] as const }),
+    projects: () => ({ queryKey: ["projects"] as const }),
+    globalConfig: () => ({ queryKey: ["globalConfig"] as const }),
+  }
+}
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()

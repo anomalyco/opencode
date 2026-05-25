@@ -28,7 +28,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     createEffect(() => {
       const dir = directory()
       const unsub = globalSDK.eventFor(domainFromDirectory(dir)).on(dir, (event) => {
-        emitter.emit(event.type, event)
+        if (event.type === "sync") return
+        emitter.emit(event.type, event as Extract<Event, { type: typeof event.type }>)
       })
       onCleanup(unsub)
     })

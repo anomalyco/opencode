@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type {
-  FileDiff,
+  SnapshotFileDiff as FileDiff,
   Message,
   Part,
   PermissionRequest,

@@ -1,4 +1,7 @@
-import { createProviderDefinedToolFactoryWithOutputSchema } from "@ai-sdk/provider-utils"
+import {
+  createProviderToolFactoryWithOutputSchema as createProviderDefinedToolFactoryWithOutputSchema,
+  zodSchema,
+} from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 export const codeInterpreterInputSchema = z.object({
@@ -76,9 +79,8 @@ export const codeInterpreterToolFactory = createProviderDefinedToolFactoryWithOu
   CodeInterpreterArgs
 >({
   id: "openai.code_interpreter",
-  name: "code_interpreter",
-  inputSchema: codeInterpreterInputSchema,
-  outputSchema: codeInterpreterOutputSchema,
+  inputSchema: (zodSchema as any)(codeInterpreterInputSchema),
+  outputSchema: (zodSchema as any)(codeInterpreterOutputSchema),
 })
 
 export const codeInterpreter = (

@@ -3,6 +3,7 @@ node_modules
 .worktrees
 .sst
 .env
+.env.local
 .idea
 .vscode
 .codex
@@ -65,9 +66,9 @@ packages/desktop/app-icon-*.svg
 
 # Local dev files
 opencode-dev
+UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
-tsconfig.tsbuildinfo
 
 # Trellis workflow (developer-specific)
 .trellis/workspace/

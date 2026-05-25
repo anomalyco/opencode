@@ -2,7 +2,7 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import { Log } from "./util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { ConsoleCommand } from "./cli/cmd/account"
 import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
@@ -11,11 +11,14 @@ import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
-import { NamedError } from "@opencode-ai/util/error"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
-import { Filesystem } from "./util/filesystem"
+import { Filesystem } from "@/util/filesystem"
+import { errorMessage } from "@/util/error"
+import { isRecord } from "@/util/record"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -34,30 +37,56 @@ import { DbCommand } from "./cli/cmd/db"
 import { OpenClawServeCommand } from "./cli/cmd/openclaw-serve"
 import { ExtraAgentServeCommand } from "./cli/cmd/extra-agent-serve"
 import path from "path"
-import { Global } from "./global"
+import { Global } from "@opencode-ai/core/global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { Heap } from "./cli/heap"
+import { drizzle } from "drizzle-orm/bun-sqlite"
+
+function isResolveMessage(value: unknown): value is {
+  name: string
+  message: string
+  code?: string
+  specifier?: string
+  referrer?: string
+  position?: unknown
+  importKind?: string
+} {
+  return isRecord(value) && value.name === "ResolveMessage" && typeof value.message === "string"
+}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
-let cli = yargs(hideBin(process.argv))
+const args = hideBin(process.argv)
+const processMetadata = ensureProcessMetadata("main")
+
+function show(out: string) {
+  const text = out.trimStart()
+  if (!text.startsWith("opencode ")) {
+    process.stderr.write(UI.logo() + EOL + EOL)
+    process.stderr.write(text)
+    return
+  }
+  process.stderr.write(out)
+}
+
+let cli = yargs(args)
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
-  .version("version", "show version number", Installation.VERSION)
+  .version("version", "show version number", InstallationVersion)
   .alias("version", "v")
   .option("print-logs", {
     describe: "print logs to stderr",
@@ -67,6 +96,10 @@ let cli = yargs(hideBin(process.argv))
     describe: "log level",
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
+  })
+  .option("pure", {
+    describe: "run without external plugins",
+    type: "boolean",
   })
   .middleware(async (opts) => {
     const start = Date.now()
@@ -79,6 +112,8 @@ let cli = yargs(hideBin(process.argv))
         return "INFO"
       })(),
     })
+
+    Heap.start()
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
@@ -93,8 +128,10 @@ let cli = yargs(hideBin(process.argv))
     })
 
     Log.Default.info("opencode", {
-      version: Installation.VERSION,
+      version: InstallationVersion,
       args: process.argv.slice(2),
+      process_role: processMetadata.processRole,
+      run_id: processMetadata.runID,
     })
 
     const marker = path.join(Global.Path.data, "opencode.db")
@@ -109,7 +146,7 @@ let cli = yargs(hideBin(process.argv))
       let last = -1
       if (tty) process.stderr.write("\x1b[?25l")
       try {
-        await JsonMigration.run(Database.Client().$client, {
+        await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
           progress: (event) => {
             const percent = Math.floor((event.current / event.total) * 100)
             if (percent === last && event.current !== event.total) return
@@ -136,7 +173,7 @@ let cli = yargs(hideBin(process.argv))
       process.stderr.write("Database migration complete." + EOL)
     }
   })
-  .usage("\n" + UI.logo())
+  .usage("")
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
@@ -164,10 +201,6 @@ let cli = yargs(hideBin(process.argv))
   .command(OpenClawServeCommand)
   .command(ExtraAgentServeCommand)
 
-if (Installation.isLocal()) {
-  cli = cli.command(WorkspaceServeCommand)
-}
-
 cli = cli
   .fail((msg, err) => {
     if (
@@ -176,7 +209,7 @@ cli = cli
       msg?.startsWith("Invalid values:")
     ) {
       if (err) throw err
-      cli.showHelp("log")
+      cli.showHelp(show)
     }
     if (err) throw err
     process.exit(1)
@@ -184,16 +217,17 @@ cli = cli
   .strict()
 
 try {
-  await cli.parse()
+  if (args.includes("-h") || args.includes("--help")) {
+    await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
+      if (err) throw err
+      if (!out) return
+      show(out)
+    })
+  } else {
+    await cli.parse()
+  }
 } catch (e) {
   let data: Record<string, any> = {}
-  if (e instanceof NamedError) {
-    const obj = e.toObject()
-    Object.assign(data, {
-      ...obj.data,
-    })
-  }
-
   if (e instanceof Error) {
     Object.assign(data, {
       name: e.name,
@@ -203,7 +237,17 @@ try {
     })
   }
 
-  if (e instanceof ResolveMessage) {
+  if (e instanceof NamedError) {
+    const obj = e.toObject()
+    if (isRecord(obj.data)) {
+      for (const [key, value] of Object.entries(obj.data)) {
+        if (key === "name" || key === "stack" || key === "cause") continue
+        data[key] = value
+      }
+    }
+  }
+
+  if (isResolveMessage(e)) {
     Object.assign(data, {
       name: e.name,
       message: e.message,
@@ -219,7 +263,7 @@ try {
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
     UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    process.stderr.write((e instanceof Error ? e.message : String(e)) + EOL)
+    process.stderr.write(errorMessage(e) + EOL)
   }
   process.exitCode = 1
 } finally {

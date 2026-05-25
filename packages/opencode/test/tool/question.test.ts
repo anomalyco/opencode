@@ -1,135 +1,141 @@
-import { describe, expect, test, spyOn, beforeEach, afterEach } from "bun:test"
-import { z } from "zod"
+import { describe, expect } from "bun:test"
+import { Effect, Fiber, Layer, Queue } from "effect"
 import { QuestionTool } from "../../src/tool/question"
-import * as QuestionModule from "../../src/question"
+import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Agent } from "../../src/agent/agent"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Truncate } from "@/tool/truncate"
+import { testEffect } from "../lib/effect"
+import { Bus } from "../../src/bus"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-session"),
-  messageID: MessageID.make("test-message"),
+  messageID: MessageID.make("msg_test-message"),
   callID: "test-call",
   agent: "test-agent",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
+const it = testEffect(
+  Layer.mergeAll(
+    Question.layer.pipe(Layer.provideMerge(Bus.layer)),
+    CrossSpawnSpawner.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
+)
+
+const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
+  const bus = yield* Bus.Service
+  const asked = yield* Queue.unbounded<void>()
+  const off = yield* bus.subscribeCallback(Question.Event.Asked, () => Queue.offerUnsafe(asked, undefined))
+  yield* Effect.addFinalizer(() => Effect.sync(off))
+
+  for (;;) {
+    const items = yield* question.list()
+    const item = items[0]
+    if (item) return item
+    yield* Queue.take(asked).pipe(Effect.timeout("2 seconds"))
+  }
+})
+
 describe("tool.question", () => {
-  let askSpy: any
-
-  beforeEach(() => {
-    askSpy = spyOn(QuestionModule.Question, "ask").mockImplementation(async () => {
-      return []
-    })
-  })
-
-  afterEach(() => {
-    askSpy.mockRestore()
-  })
-
-  test("should successfully execute with valid question parameters", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What is your favorite color?",
-        header: "Color",
-        options: [
-          { label: "Red", description: "The color of passion" },
-          { label: "Blue", description: "The color of sky" },
-        ],
-        multiple: false,
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([["Red"]])
-
-    const result = await tool.execute({ questions }, ctx)
-    expect(askSpy).toHaveBeenCalledTimes(1)
-    expect(result.title).toBe("Asked 1 question")
-  })
-
-  test("should now pass with a header longer than 12 but less than 30 chars", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What is your favorite animal?",
-        header: "This Header is Over 12",
-        options: [{ label: "Dog", description: "Man's best friend" }],
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([["Dog"]])
-
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
-  })
-
-  test("returns image answers as tool result attachments", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What do you see?",
-        header: "Image",
-        options: [{ label: "Attached", description: "Use the image" }],
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([
-      [
-        "Attached",
+  it.instance("should successfully execute with valid question parameters", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
         {
-          type: "image",
-          mime: "image/png",
-          url: "data:image/png;base64,AAAA",
-          filename: "proof.png",
+          question: "What is your favorite color?",
+          header: "Color",
+          options: [
+            { label: "Red", description: "The color of passion" },
+            { label: "Blue", description: "The color of sky" },
+          ],
+          multiple: false,
         },
-      ],
-    ])
+      ]
 
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.output).toContain(`"What do you see?"="Attached, [image: proof.png]"`)
-    expect(result.attachments).toEqual([
-      {
-        type: "file",
-        mime: "image/png",
-        url: "data:image/png;base64,AAAA",
-        filename: "proof.png",
-      },
-    ])
-  })
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [["Red"]] })
 
-  test("normalizes nested image answers before creating tool result attachments", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What do you see?",
-        header: "Image",
-        options: [{ label: "Attached", description: "Use the image" }],
-      },
-    ]
+      const result = yield* Fiber.join(fiber)
+      expect(result.title).toBe("Asked 1 question")
+    }),
+  )
 
-    askSpy.mockResolvedValueOnce([
-      [
+  it.instance("should now pass with a header longer than 12 but less than 30 chars", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
         {
-          type: "image",
-          mime: "image/png",
-          url: "data:image/png;base64,data:image/png;base64,AAAA",
-          filename: "proof.png",
+          question: "What is your favorite animal?",
+          header: "This Header is Over 12",
+          options: [{ label: "Dog", description: "Man's best friend" }],
         },
-      ],
-    ])
+      ]
 
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.attachments).toEqual([
-      {
-        type: "file",
-        mime: "image/png",
-        url: "data:image/png;base64,AAAA",
-        filename: "proof.png",
-      },
-    ])
-  })
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [["Dog"]] })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
+    }),
+  )
+
+  it.instance("returns selected answers in tool output", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
+        {
+          question: "What do you see?",
+          header: "Image",
+          options: [{ label: "Attached", description: "Use the image" }],
+        },
+      ]
+
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [["Attached"]] })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.output).toContain(`"What do you see?"="Attached"`)
+    }),
+  )
+
+  it.instance("preserves nested data URL strings as plain answers", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
+        {
+          question: "What do you see?",
+          header: "Image",
+          options: [{ label: "Attached", description: "Use the image" }],
+        },
+      ]
+      const answer = "data:image/png;base64,data:image/png;base64,AAAA"
+
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [[answer]] })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.output).toContain(answer)
+    }),
+  )
 
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {

@@ -1,7 +1,7 @@
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { Binary } from "@opencode-ai/util/binary"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
@@ -11,6 +11,7 @@ import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
+import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -18,7 +19,6 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
-import { extraAgentByDirectory } from "@/pages/layout/extra-agents"
 
 type PendingPrompt = {
   abort: AbortController
@@ -251,6 +251,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sync = useSync()
   const globalSync = useGlobalSync()
   const local = useLocal()
+  const server = useServer()
   const permission = usePermission()
   const prompt = usePrompt()
   const layout = useLayout()
@@ -383,9 +384,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    const currentExtraAgent = extraAgentByDirectory(sdk.directory)?.id
-    const openclaw = currentExtraAgent === "openclaw"
-    const genericagent = currentExtraAgent === "genericagent"
+    const openclaw = server.current?.integration === "openclaw"
+    const genericagent = server.current?.integration === "genericagent"
     const currentModel =
       local.model.current() ??
       (openclaw

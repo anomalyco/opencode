@@ -51,14 +51,14 @@ describe("Question tool with image attachments", () => {
   }
 
   const basePart = (messageID: string, partID: string) => ({
-    id: PartID.make(partID),
+    id: PartID.make(partID.startsWith("prt") ? partID : `prt_${partID}`),
     sessionID: SessionID.make("session-1"),
     messageID: MessageID.make(messageID),
   })
 
-  test("handles question tool with image attachment", () => {
-    const userID = "user-1"
-    const assistantID = "assistant-1"
+  test("handles question tool with image attachment", async () => {
+    const userID = "msg_user_1"
+    const assistantID = "msg_assistant_1"
 
     const input: MessageV2.WithParts[] = [
       {
@@ -146,7 +146,7 @@ describe("Question tool with image attachments", () => {
     ]
 
     // This should not throw an error
-    const result = MessageV2.toModelMessages(input, model)
+    const result = await MessageV2.toModelMessages(input, model)
 
     // Verify the structure
     expect(result).toBeDefined()
@@ -167,14 +167,14 @@ describe("Question tool with image attachments", () => {
 
       // Verify the file part has the correct structure
       const filePart = fileParts[0] as any
-      expect(filePart).toHaveProperty("url")
-      expect(filePart.url).toContain("data:image/png;base64,")
+      expect(filePart).toHaveProperty("data")
+      expect(filePart.mediaType).toBe("image/png")
     }
   })
 
-  test("handles nested data URL in question tool attachment", () => {
-    const userID = "user-1"
-    const assistantID = "assistant-1"
+  test("handles nested data URL in question tool attachment", async () => {
+    const userID = "msg_user_1"
+    const assistantID = "msg_assistant_1"
 
     // Simulate a nested data URL that might come from the frontend
     const nestedDataUrl =
@@ -258,7 +258,7 @@ describe("Question tool with image attachments", () => {
     ]
 
     // This should not throw an error
-    const result = MessageV2.toModelMessages(input, model)
+    const result = await MessageV2.toModelMessages(input, model)
 
     // Verify the nested data URL was cleaned up
     const userMessages = result.filter((msg) => msg.role === "user")
@@ -269,12 +269,11 @@ describe("Question tool with image attachments", () => {
       expect(fileParts.length).toBeGreaterThan(0)
 
       const filePart = fileParts[0] as any
-      expect(filePart.url).toBeDefined()
-      expect(filePart.url).toContain("data:image/png;base64,")
+      expect(filePart.data).toBeDefined()
+      expect(filePart.mediaType).toBe("image/png")
 
       // Verify there's only ONE data URL prefix
-      const dataUrlCount = (filePart.url.match(/data:image\/png;base64,/g) || []).length
-      expect(dataUrlCount).toBe(1)
+      expect(String(filePart.data)).not.toContain("data:image/png;base64,data:image/png;base64,")
     }
   })
 })

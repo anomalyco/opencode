@@ -1,4 +1,4 @@
-import { createProviderDefinedToolFactory } from "@ai-sdk/provider-utils"
+import { createProviderToolFactory as createProviderDefinedToolFactory, zodSchema } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 export const webSearchArgsSchema = z.object({
@@ -74,8 +74,7 @@ export const webSearchToolFactory = createProviderDefinedToolFactory<
   }
 >({
   id: "openai.web_search",
-  name: "web_search",
-  inputSchema: z.object({
+  inputSchema: (zodSchema as any)(z.object({
     action: z
       .discriminatedUnion("type", [
         z.object({
@@ -93,7 +92,7 @@ export const webSearchToolFactory = createProviderDefinedToolFactory<
         }),
       ])
       .nullish(),
-  }),
+  })),
 })
 
 export const webSearch = (

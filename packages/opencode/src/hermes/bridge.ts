@@ -4,11 +4,11 @@ import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { Installation } from "@/installation"
-import { Global } from "@/global"
-import { Log } from "@/util/log"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/core/global"
+import { Log } from "@opencode-ai/core/util/log"
 import { Identifier } from "@/id/id"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import shimSource from "./python/bridge_shim.py" with { type: "text" }
 import { probeHermesMeta } from "./meta"
 
@@ -108,7 +108,7 @@ const log = Log.create({ service: "hermes-bridge" })
 const directory = "/hermes"
 const projectID = "hermes"
 const providerID = "hermes"
-const version = Installation.VERSION
+const version = InstallationVersion
 const fallbackModelID = "hermes-agent"
 const DEFAULT_DIR = "/Users/lelouch/apps/hermes-agent"
 const DEFAULT_HOME = process.env.HERMES_HOME

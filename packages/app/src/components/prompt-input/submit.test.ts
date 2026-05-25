@@ -85,7 +85,7 @@ beforeAll(async () => {
     },
   }))
 
-  mock.module("@opencode-ai/util/encode", () => ({
+  mock.module("@opencode-ai/core/util/encode", () => ({
     base64Encode: (value: string) => value,
     base64Decode: (value: string) => value,
     checksum: (value: string) => value,
@@ -285,42 +285,6 @@ describe("prompt submit worktree selection", () => {
     expect(createdSessions).toEqual(["/repo/main"])
     expect(sentShell).toEqual(["/repo/main"])
     expect(promoted).toEqual([{ directory: "/repo/main", sessionID: "session-1" }])
-  })
-
-  test("treats a regular project directory as non-GenericAgent even if the server still reports GenericAgent", async () => {
-    integration = "genericagent"
-    current = "/repo/main"
-    root = "/repo/main"
-    selected = "/repo/worktree-a"
-
-    const submit = createPromptSubmit({
-      info: () => undefined,
-      imageAttachments: () => [],
-      commentCount: () => 0,
-      autoAccept: () => false,
-      mode: () => "shell",
-      working: () => false,
-      editor: () => undefined,
-      queueScroll: () => undefined,
-      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
-      addToHistory: () => undefined,
-      resetHistoryNavigation: () => undefined,
-      setMode: () => undefined,
-      setPopover: () => undefined,
-      resetInputUndo: () => undefined,
-      newSessionWorktree: () => selected,
-      onNewSessionWorktreeReset: () => undefined,
-      onSubmit: () => undefined,
-    })
-
-    const event = { preventDefault: () => undefined } as unknown as Event
-
-    await submit.handleSubmit(event)
-
-    expect(createdClients).toEqual([selected])
-    expect(createdSessions).toEqual([selected])
-    expect(sessionCreateOptions).toEqual([{ directory: selected }])
-    expect(promoted).toEqual([{ directory: selected, sessionID: "session-1" }])
   })
 
   test("keeps GenericAgent sessions on the extra-agent directory and sends selected cwd", async () => {

@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -24,6 +24,12 @@ type BrowseEntry = {
 type BrowseRow =
   | { type: "up"; key: string; name: string; path: string | null }
   | { type: "directory"; key: string; name: string; path: string }
+
+export function findDirectoryCompletionRow(rows: BrowseRow[], highlightedIndex: number) {
+  const highlighted = rows[highlightedIndex]
+  if (highlighted?.type === "directory") return highlighted
+  return rows.find((row) => row.type === "directory")
+}
 
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
@@ -262,6 +268,13 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     browseToEntry(row)
   }
 
+  function completeDirectoryFromRows() {
+    const row = findDirectoryCompletionRow(rows(), highlightedIndex())
+    if (!row) return false
+    browseToEntry(row)
+    return true
+  }
+
   async function resolve(absolute: string) {
     if (!absolute || selecting()) return
     setSelecting(true)
@@ -285,6 +298,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Tab" && !event.shiftKey) {
+      if (completeDirectoryFromRows()) event.preventDefault()
+      return
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault()
       setHighlightedIndex((index) => Math.min(rows().length - 1, index + 1))

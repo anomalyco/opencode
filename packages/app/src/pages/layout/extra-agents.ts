@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import type { IconName } from "@opencode-ai/ui/icon"
 import type { LocalProject } from "@/context/layout"
 import { decode64 } from "@/utils/base64"
@@ -252,6 +252,11 @@ export const extraAgentCapabilities = (id?: string): ExtraAgentCapabilities | un
 
 export const enabledExtraAgents = (list: Array<{ integration?: string }>) =>
   extraAgents.filter((agent) => list.some((item) => item.integration === agent.id))
+
+export const sidebarExtraAgents = (
+  list: Array<{ integration?: string }>,
+  options?: { includeConfigurable?: boolean },
+) => (options?.includeConfigurable ? extraAgents : enabledExtraAgents(list))
 
 export const extraAgentByDirectory = (directory?: string) => {
   if (!directory) return

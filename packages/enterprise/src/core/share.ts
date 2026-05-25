@@ -1,8 +1,11 @@
-import { FileDiff, Message, Model, Part, Session } from "@opencode-ai/sdk/v2"
-import { fn } from "@opencode-ai/util/fn"
-import { iife } from "@opencode-ai/util/iife"
+import { Message, Model, Part, Session, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import { iife } from "@opencode-ai/core/util/iife"
 import z from "zod"
 import { Storage } from "./storage"
+
+function fn<T extends z.ZodType, Result>(schema: T, cb: (input: z.infer<T>) => Result) {
+  return (input: z.infer<T>) => cb(schema.parse(input))
+}
 
 export namespace Share {
   export const Info = z.object({
@@ -27,7 +30,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("session_diff"),
-      data: z.custom<FileDiff[]>(),
+      data: z.custom<SnapshotFileDiff[]>(),
     }),
     z.object({
       type: z.literal("model"),

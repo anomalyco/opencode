@@ -18,6 +18,7 @@
     "@astrojs/starlight": "0.34.3",
     "@fontsource/ibm-plex-mono": "5.2.5",
     "@shikijs/transformers": "3.20.0",
+    "@solid-primitives/resize-observer": "2.1.5",
     "@types/luxon": "catalog:",
     "ai": "catalog:",
     "astro": "5.7.13",

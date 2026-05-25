@@ -2,90 +2,104 @@ import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
-import { Context } from "../util/context"
-import { lazy } from "../util/lazy"
-import { Global } from "../global"
-import { Log } from "../util/log"
-import { NamedError } from "@opencode-ai/util/error"
-import z from "zod"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { LocalContext } from "@/util/local-context"
+import { Global } from "@opencode-ai/core/global"
+import * as Log from "@opencode-ai/core/util/log"
+import { NamedError } from "@opencode-ai/core/util/error"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
-import { Installation } from "../installation"
-import { Flag } from "../flag/flag"
-import { iife } from "@/util/iife"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { EffectBridge } from "@/effect/bridge"
 import { init } from "#db"
+import { Effect, Schema } from "effect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
-export const NotFoundError = NamedError.create(
-  "NotFoundError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NotFoundError = NamedError.create("NotFoundError", {
+  message: Schema.String,
+})
 
 const log = Log.create({ service: "db" })
 
-export namespace Database {
-  export function getChannelPath() {
-    const channel = Installation.CHANNEL
-    if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
-      return path.join(Global.Path.data, "opencode.db")
-    const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
-    return path.join(Global.Path.data, `opencode-${safe}.db`)
+type DatabaseFlags = Pick<RuntimeFlags.Info, "disableChannelDb" | "skipMigrations">
+
+const readRuntimeFlags = () =>
+  Effect.runSync(RuntimeFlags.Service.useSync((flags) => flags).pipe(Effect.provide(RuntimeFlags.defaultLayer)))
+
+export function getChannelPath(flags: Pick<DatabaseFlags, "disableChannelDb"> = readRuntimeFlags()) {
+  if (["latest", "beta", "prod"].includes(InstallationChannel) || flags.disableChannelDb)
+    return path.join(Global.Path.data, "opencode.db")
+  const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
+  return path.join(Global.Path.data, `opencode-${safe}.db`)
+}
+
+export const getPath = (flags?: Pick<DatabaseFlags, "disableChannelDb">) => {
+  if (Flag.OPENCODE_DB) {
+    if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
+    return path.join(Global.Path.data, Flag.OPENCODE_DB)
   }
+  return getChannelPath(flags)
+}
 
-  export const Path = iife(() => {
-    if (Flag.OPENCODE_DB) {
-      if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
-      return path.join(Global.Path.data, Flag.OPENCODE_DB)
-    }
-    return getChannelPath()
-  })
+export type Transaction = SQLiteTransaction<"sync", void>
 
-  export type Transaction = SQLiteTransaction<"sync", void>
+type Client = ReturnType<typeof init>
 
-  type Client = SQLiteBunDatabase
+type Journal = { sql: string; timestamp: number; name: string }[]
 
-  type Journal = { sql: string; timestamp: number; name: string }[]
+// Drizzle's migrate overloads trigger expensive variance checks here; narrow to the journal overload we actually use.
+const migrateFromJournal = migrate as unknown as (db: SQLiteBunDatabase, entries: Journal) => void
 
-  function time(tag: string) {
-    const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
-    if (!match) return 0
-    return Date.UTC(
-      Number(match[1]),
-      Number(match[2]) - 1,
-      Number(match[3]),
-      Number(match[4]),
-      Number(match[5]),
-      Number(match[6]),
-    )
-  }
+function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
+  migrateFromJournal(db, entries)
+}
 
-  function migrations(dir: string): Journal {
-    const dirs = readdirSync(dir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
+function time(tag: string) {
+  const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
+  if (!match) return 0
+  return Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6]),
+  )
+}
 
-    const sql = dirs
-      .map((name) => {
-        const file = path.join(dir, name, "migration.sql")
-        if (!existsSync(file)) return
-        return {
-          sql: readFileSync(file, "utf-8"),
-          timestamp: time(name),
-          name,
-        }
-      })
-      .filter(Boolean) as Journal
+function migrations(dir: string): Journal {
+  const dirs = readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
 
-    return sql.sort((a, b) => a.timestamp - b.timestamp)
-  }
+  const sql = dirs
+    .map((name) => {
+      const file = path.join(dir, name, "migration.sql")
+      if (!existsSync(file)) return
+      return {
+        sql: readFileSync(file, "utf-8"),
+        timestamp: time(name),
+        name,
+      }
+    })
+    .filter(Boolean) as Journal
 
-  export const Client = lazy(() => {
-    log.info("opening database", { path: Path })
+  return sql.sort((a, b) => a.timestamp - b.timestamp)
+}
 
-    const db = init(Path)
+let client: Client | undefined
+let loaded = false
+
+export const Client = Object.assign(
+  (flags: DatabaseFlags = readRuntimeFlags()): Client => {
+    if (loaded) return client as Client
+
+    const dbPath = getPath(flags)
+    log.info("opening database", { path: dbPath })
+
+    const db = init(dbPath)
 
     db.run("PRAGMA journal_mode = WAL")
     db.run("PRAGMA synchronous = NORMAL")
@@ -104,74 +118,83 @@ export namespace Database {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
-      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+      if (flags.skipMigrations) {
         for (const item of entries) {
           item.sql = "select 1;"
         }
       }
-      migrate(db, entries)
+      applyMigrations(db, entries)
     }
 
+    client = db
+    loaded = true
     return db
-  })
-
-  export function close() {
-    Client().$client.close()
-    Client.reset()
-  }
-
-  export type TxOrDb = Transaction | Client
-
-  const ctx = Context.create<{
-    tx: TxOrDb
-    effects: (() => void | Promise<void>)[]
-  }>("database")
-
-  export function use<T>(callback: (trx: TxOrDb) => T): T {
-    try {
-      return callback(ctx.use().tx)
-    } catch (err) {
-      if (err instanceof Context.NotFound) {
-        const effects: (() => void | Promise<void>)[] = []
-        const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-        for (const effect of effects) effect()
-        return result
-      }
-      throw err
-    }
-  }
-
-  export function effect(fn: () => any | Promise<any>) {
-    try {
-      ctx.use().effects.push(fn)
-    } catch {
-      fn()
-    }
-  }
-
-  type NotPromise<T> = T extends Promise<any> ? never : T
-
-  export function transaction<T>(
-    callback: (tx: TxOrDb) => NotPromise<T>,
-    options?: {
-      behavior?: "deferred" | "immediate" | "exclusive"
+  },
+  {
+    reset: () => {
+      loaded = false
+      client = undefined
     },
-  ): NotPromise<T> {
-    try {
-      return callback(ctx.use().tx)
-    } catch (err) {
-      if (err instanceof Context.NotFound) {
-        const effects: (() => void | Promise<void>)[] = []
-        const result = Client().transaction(
-          (tx: TxOrDb) => {
-            return ctx.provide({ tx, effects }, () => callback(tx))
-          },
-          { behavior: options?.behavior },
-        )
-        for (const effect of effects) effect()
-        return result as NotPromise<T>
-      }
-      throw err
+    loaded: () => loaded,
+  },
+)
+
+export function close() {
+  if (!Client.loaded()) return
+  Client().$client.close()
+  Client.reset()
+}
+
+export type TxOrDb = Transaction | Client
+
+const ctx = LocalContext.create<{
+  tx: TxOrDb
+  effects: (() => void | Promise<void>)[]
+}>("database")
+
+export function use<T>(callback: (trx: TxOrDb) => T): T {
+  try {
+    return callback(ctx.use().tx)
+  } catch (err) {
+    if (err instanceof LocalContext.NotFound) {
+      const effects: (() => void | Promise<void>)[] = []
+      const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
+      for (const effect of effects) effect()
+      return result
     }
+    throw err
   }
 }
+
+export function effect(fn: () => any | Promise<any>) {
+  const bound = EffectBridge.bind(fn)
+  try {
+    ctx.use().effects.push(bound)
+  } catch {
+    bound()
+  }
+}
+
+type NotPromise<T> = T extends Promise<any> ? never : T
+
+export function transaction<T>(
+  callback: (tx: TxOrDb) => NotPromise<T>,
+  options?: {
+    behavior?: "deferred" | "immediate" | "exclusive"
+  },
+): NotPromise<T> {
+  try {
+    return callback(ctx.use().tx)
+  } catch (err) {
+    if (err instanceof LocalContext.NotFound) {
+      const effects: (() => void | Promise<void>)[] = []
+      const txCallback = EffectBridge.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
+      const result = Client().transaction(txCallback, { behavior: options?.behavior })
+      for (const effect of effects) effect()
+      return result as NotPromise<T>
+    }
+    throw err
+  }
+}
+
+export * as Database from "./db"

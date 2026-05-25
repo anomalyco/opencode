@@ -14,7 +14,7 @@ import {
   estimateSessionContextBreakdown,
   type SessionContextBreakdownKey,
 } from "@/components/session/session-context-breakdown"
-import { findLast } from "@opencode-ai/util/array"
+import { findLast } from "@opencode-ai/core/util/array"
 import type { Message, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { same } from "@/utils/same"
 

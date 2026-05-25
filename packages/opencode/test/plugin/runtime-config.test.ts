@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { Effect } from "effect"
 import { tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Plugin } from "../../src/plugin"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { InstanceStore } from "../../src/project/instance-store"
 
 async function writePlugin(dir: string, name: string, label: string) {
   const root = path.join(dir, ".opencode")
@@ -38,6 +40,22 @@ async function writePlugin(dir: string, name: string, label: string) {
   )
 }
 
+async function listAgents(directory: string) {
+  return AppRuntime.runPromise(
+    InstanceStore.Service.use((store) =>
+      store.provide(
+        { directory },
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          const agent = yield* Agent.Service
+          yield* plugin.init()
+          return yield* agent.list()
+        }),
+      ),
+    ),
+  )
+}
+
 describe("plugin runtime config", () => {
   test("plugin config hook can inject runtime agents", async () => {
     await using tmp = await tmpdir({
@@ -46,13 +64,7 @@ describe("plugin runtime config", () => {
       },
     })
 
-    const list = await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await Plugin.init()
-        return Agent.list()
-      },
-    })
+    const list = await listAgents(tmp.path)
 
     expect(list.some((item) => item.name === "Alpha Agent" && item.mode === "primary" && !item.hidden)).toBe(true)
   })
@@ -70,20 +82,8 @@ describe("plugin runtime config", () => {
     })
 
     const [left, right] = await Promise.all([
-      Instance.provide({
-        directory: a.path,
-        fn: async () => {
-          await Plugin.init()
-          return Agent.list()
-        },
-      }),
-      Instance.provide({
-        directory: b.path,
-        fn: async () => {
-          await Plugin.init()
-          return Agent.list()
-        },
-      }),
+      listAgents(a.path),
+      listAgents(b.path),
     ])
 
     expect(left.some((item) => item.name === "Alpha Agent")).toBe(true)

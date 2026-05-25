@@ -1,6 +1,14 @@
 import { Stripe } from "stripe"
-import { Database, eq, sql } from "./drizzle"
-import { BillingTable, LiteTable, PaymentTable, SubscriptionTable, UsageTable } from "./schema/billing.sql"
+import { and, Database, eq, isNull, sql } from "./drizzle"
+import {
+  BillingTable,
+  CouponTable,
+  CouponType,
+  LiteTable,
+  PaymentTable,
+  SubscriptionTable,
+  UsageTable,
+} from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
@@ -147,6 +155,56 @@ export namespace Billing {
     return amountInMicroCents
   }
 
+  export const subtractLiteUsage = async (workspaceID: string, amountInMicroCents: number) => {
+    await Database.transaction(async (tx) => {
+      const lite = await tx
+        .select({ id: LiteTable.id })
+        .from(LiteTable)
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!lite) throw new Error("Subscribe to Go before applying referral rewards")
+
+      await tx
+        .update(LiteTable)
+        .set({
+          monthlyUsage: sql`GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${amountInMicroCents})`,
+          weeklyUsage: sql`GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${amountInMicroCents})`,
+          rollingUsage: sql`GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${amountInMicroCents})`,
+        })
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+    })
+  }
+
+  export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
+    // validate coupon type
+    await (async () => {
+      if (type === "GO1MONTH50") return
+      const coupon = await Database.use((tx) =>
+        tx
+          .select()
+          .from(CouponTable)
+          .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type)))
+          .then((rows) => rows[0]),
+      )
+      if (!coupon) throw new Error("Invalid coupon code")
+      if (coupon.timeRedeemed) throw new Error("Coupon already redeemed")
+    })()
+
+    // handle coupon type
+    if (type === "BUILDATHON") await grantCredit(Actor.workspace(), 500)
+
+    await Database.use((tx) =>
+      tx
+        .insert(CouponTable)
+        .values({ email, type, timeRedeemed: sql`now()` })
+        .onDuplicateKeyUpdate({
+          set: {
+            timeRedeemed: sql`now()`,
+          },
+        }),
+    )
+  }
+
   export const setMonthlyLimit = fn(z.number(), async (input) => {
     return await Database.use((tx) =>
       tx
@@ -245,16 +303,35 @@ export namespace Billing {
       const user = Actor.assert("user")
       const { successUrl, cancelUrl, method } = input
 
-      const email = await User.getAuthEmail(user.properties.userID)
+      const email = (await User.getAuthEmail(user.properties.userID))!
       const billing = await Billing.get()
 
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
 
+      const coupons = await Database.use((tx) =>
+        tx
+          .select({ type: CouponTable.type, timeRedeemed: CouponTable.timeRedeemed })
+          .from(CouponTable)
+          .where(eq(CouponTable.email, email)),
+      )
+
+      const coupon = (() => {
+        if (coupons.some((coupon) => coupon.type === "GO12MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.twelveMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GO6MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.sixMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GO3MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.threeMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GOFREEMONTH" && !coupon.timeRedeemed))
+          return LiteData.firstMonth100Coupon
+        if (!coupons.some((coupon) => coupon.type === "GO1MONTH50")) return LiteData.firstMonth50Coupon
+        return undefined
+      })()
       const createSession = () =>
         Billing.stripe().checkout.sessions.create({
           mode: "subscription",
-          discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
+          discounts: coupon ? [{ coupon }] : undefined,
           ...(billing.customerID
             ? {
                 customer: billing.customerID,
@@ -264,7 +341,7 @@ export namespace Billing {
                 },
               }
             : {
-                customer_email: email!,
+                customer_email: email,
               }),
           ...(() => {
             if (method === "alipay") {
@@ -312,6 +389,8 @@ export namespace Billing {
             metadata: {
               workspaceID: Actor.workspace(),
               userID: user.properties.userID,
+              userEmail: email,
+              coupon,
               type: "lite",
             },
           },

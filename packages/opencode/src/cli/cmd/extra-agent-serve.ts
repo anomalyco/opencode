@@ -1,10 +1,12 @@
-import { cmd } from "./cmd"
+import { Effect } from "effect"
+import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { getBridge, listBridgeIds } from "@/extra-agent/registry"
 
-export const ExtraAgentServeCommand = cmd({
+export const ExtraAgentServeCommand = effectCmd({
   command: "extra-agent-serve",
   describe: "start an extra-agent bridge server by id",
+  instance: false,
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .option("id", {
@@ -16,13 +18,13 @@ export const ExtraAgentServeCommand = cmd({
         type: "string",
         describe: "JSON-encoded bridge config (agent-specific, e.g. '{\"gatewayUrl\":\"ws://...\"}')",
       }),
-  handler: async (args) => {
+  handler: Effect.fn("Cli.extraAgentServe")(function* (args) {
     const bridge = getBridge(args.id)
     if (!bridge) {
       const known = listBridgeIds().join(", ") || "(none)"
       throw new Error(`Unknown extra-agent id "${args.id}". Known: ${known}`)
     }
-    const net = await resolveNetworkOptions(args)
+    const net = yield* resolveNetworkOptions(args)
     let config: Record<string, unknown> | undefined
     if (args.config) {
       try {
@@ -60,6 +62,6 @@ export const ExtraAgentServeCommand = cmd({
     process.on("SIGINT", shutdown)
     process.on("SIGHUP", shutdown)
 
-    await new Promise(() => {})
-  },
+    yield* Effect.never
+  }),
 })

@@ -12,7 +12,7 @@ type Exit = ((reason?: unknown) => Promise<void>) & {
 
 export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   name: "Exit",
-  init: (input: { onExit?: () => Promise<void> }) => {
+  init: (input: { onBeforeExit?: () => Promise<void>; onExit?: () => Promise<void> }) => {
     const renderer = useRenderer()
     let message: string | undefined
     let task: Promise<void> | undefined
@@ -33,6 +33,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       (reason?: unknown) => {
         if (task) return task
         task = (async () => {
+          await input.onBeforeExit?.()
           // Reset window title before destroying renderer
           renderer.setTerminalTitle("")
           renderer.destroy()

@@ -1,9 +1,9 @@
-import { TuiConfig } from "@/config/tui"
+import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { createSimpleContext } from "./helper"
 
 export const { use: useTuiConfig, provider: TuiConfigProvider } = createSimpleContext({
   name: "TuiConfig",
-  init: (props: { config: TuiConfig.Info }) => {
+  init: (props: { config: TuiConfig.Resolved }) => {
     return props.config
   },
 })

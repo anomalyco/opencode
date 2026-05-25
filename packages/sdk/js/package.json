@@ -23,9 +23,12 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "0.90.10",
     "@tsconfig/node22": "catalog:",
+    "@types/cross-spawn": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
   },
-  "dependencies": {}
+  "dependencies": {
+    "cross-spawn": "catalog:"
+  }
 }

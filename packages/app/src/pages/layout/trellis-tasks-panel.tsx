@@ -5,7 +5,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Markdown } from "@opencode-ai/ui/markdown"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { useLanguage } from "@/context/language"
 import { usePlatform, type TrellisTask } from "@/context/platform"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -73,6 +73,9 @@ function TaskCard(props: { task: TrellisTask; onOpen: (path: string) => void | P
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <div class="min-w-0 truncate text-14-medium text-text-strong">{folderName()}</div>
+            <span class="shrink-0 rounded-full bg-surface-base/20 px-2 py-0.5 text-11-medium text-text-base">
+              {props.task.worktreeName}
+            </span>
             <Show when={props.task.current}>
               <span class="shrink-0 rounded-full bg-surface-info-base px-2 py-0.5 text-11-medium text-text-strong">
                 {language.t("trellis.tasks.current")}
@@ -122,26 +125,32 @@ export function TrellisTasksPanel(props: {
     (data()?.tasks ?? []).slice().sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title)),
   )
   const skipped = createMemo(() => data()?.skipped ?? 0)
-  const toRelative = (absolute: string) => {
-    const root = dir().replace(/\/+$/, "")
-    const canonRoot = root.replace(/\\/g, "/")
-    const canonAbs = absolute.replace(/\\/g, "/")
-    if (!canonAbs.startsWith(canonRoot)) return absolute
-    let rel = absolute.slice(root.length)
-    if (rel.startsWith("/") || rel.startsWith("\\")) rel = rel.slice(1)
-    return rel
-  }
 
   const open = async (path: string) => {
     const name = getFilename(path)
     const prdAbsPath = path.endsWith("/") ? path + "prd.md" : path + "/prd.md"
-    const prdPath = toRelative(prdAbsPath)
     let content: string | undefined
-    try {
-      const client = sdk.createClient({ directory: dir(), throwOnError: true })
-      const res = await client.file.read({ path: prdPath })
-      content = res.data?.content
-    } catch {
+    if (platform.readConfigFile) {
+      try {
+        content = (await platform.readConfigFile(prdAbsPath)) ?? undefined
+      } catch {
+      }
+    }
+    if (typeof content !== "string") {
+      try {
+        const root = dir().replace(/\/+$/, "")
+        const canonRoot = root.replace(/\\/g, "/")
+        const canonAbs = prdAbsPath.replace(/\\/g, "/")
+        let prdPath = prdAbsPath
+        if (canonAbs.startsWith(canonRoot)) {
+          prdPath = prdAbsPath.slice(root.length)
+          if (prdPath.startsWith("/") || prdPath.startsWith("\\")) prdPath = prdPath.slice(1)
+        }
+        const client = sdk.createClient({ directory: dir(), throwOnError: true })
+        const res = await client.file.read({ path: prdPath })
+        content = res.data?.content
+      } catch {
+      }
     }
     dialog.show(() => (
       <Dialog

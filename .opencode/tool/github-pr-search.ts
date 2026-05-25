@@ -7,7 +7,7 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
       Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers instanceof Headers ? Object.fromEntries(options.headers.entries()) : options.headers),
     },
   })
   if (!response.ok) {

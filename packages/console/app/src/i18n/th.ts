@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "องค์กร",
   "nav.zen": "Zen",
   "nav.login": "เข้าสู่ระบบ",
-  "nav.free": "ฟรี",
+  "nav.free": "ดาวน์โหลด",
   "nav.home": "หน้าหลัก",
   "nav.openMenu": "เปิดเมนู",
   "nav.getStartedFree": "เริ่มต้นฟรี",
@@ -250,7 +250,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
   "go.meta.description":
-    "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดคำขอ 5 ชั่วโมงที่เอื้อเฟื้อสำหรับ GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7",
+    "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดคำขอ 5 ชั่วโมงที่เอื้อเฟื้อสำหรับ GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro และ DeepSeek V4 Flash",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
@@ -297,7 +297,8 @@ export const dict = {
   "go.problem.item1": "ราคาการสมัครสมาชิกที่ต่ำ",
   "go.problem.item2": "ขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
   "go.problem.item3": "สร้างขึ้นเพื่อโปรแกรมเมอร์จำนวนมากที่สุดเท่าที่จะเป็นไปได้",
-  "go.problem.item4": "รวมถึง GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7",
+  "go.problem.item4":
+    "รวมถึง GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro และ DeepSeek V4 Flash",
   "go.how.title": "Go ทำงานอย่างไร",
   "go.how.body": "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน คุณสามารถใช้กับ OpenCode หรือเอเจนต์ใดก็ได้",
   "go.how.step1.title": "สร้างบัญชี",
@@ -319,11 +320,10 @@ export const dict = {
   "go.faq.a1":
     "Go คือการสมัครสมาชิกราคาประหยัดที่ให้คุณเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสำหรับการเขียนโค้ดแบบเอเจนต์ได้อย่างน่าเชื่อถือ",
   "go.faq.q2": "Go รวมโมเดลอะไรบ้าง?",
-  "go.faq.a2":
-    "Go รวมถึง GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7 พร้อมขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
+  "go.faq.a2": "Go รวมโมเดลด้านล่างนี้ พร้อมขีดจำกัดที่มากและการเข้าถึงที่เชื่อถือได้",
   "go.faq.q3": "Go เหมือนกับ Zen หรือไม่?",
   "go.faq.a3":
-    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ในขณะที่ Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์ส GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7 อย่างเชื่อถือได้",
+    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ในขณะที่ Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์ส GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro และ DeepSeek V4 Flash อย่างเชื่อถือได้",
   "go.faq.q4": "Go ราคาเท่าไหร่?",
   "go.faq.a4.p1.beforePricing": "Go ราคา",
   "go.faq.a4.p1.pricingLink": "$5 เดือนแรก",
@@ -333,8 +333,7 @@ export const dict = {
   "go.faq.a4.p3": "ยกเลิกได้ตลอดเวลา",
   "go.faq.q5": "แล้วเรื่องข้อมูลและความเป็นส่วนตัวล่ะ?",
   "go.faq.a5.body":
-    "แผนนี้ออกแบบมาเพื่อผู้ใช้งานระหว่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงทั่วโลกที่เสถียร",
-  "go.faq.a5.contactAfter": "หากคุณมีคำถามใดๆ",
+    "แผนนี้ออกแบบมาเพื่อผู้ใช้งานระหว่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงทั่วโลกที่เสถียร ผู้ให้บริการของเราปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูลและไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล",
   "go.faq.a5.beforeExceptions":
     "โมเดล Go โฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
   "go.faq.a5.exceptionsLink": "ข้อยกเว้นดังนี้",
@@ -347,7 +346,7 @@ export const dict = {
 
   "go.faq.q9": "ความแตกต่างระหว่างโมเดลฟรีและ Go คืออะไร?",
   "go.faq.a9":
-    "โมเดลฟรีรวมถึง Big Pickle บวกกับโมเดลโปรโมชั่นที่มีให้ในขณะนั้น ด้วยโควต้า 200 คำขอ/วัน Go รวมถึง GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7 ที่มีโควต้าคำขอสูงกว่า ซึ่งบังคับใช้ผ่านช่วงเวลาหมุนเวียน (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงจะแตกต่างกันไปตามโมเดลและการใช้งาน)",
+    "โมเดลฟรีรวมถึง Big Pickle บวกกับโมเดลโปรโมชั่นที่มีให้ในขณะนั้น ด้วยโควต้า 200 คำขอ/วัน Go รวมถึง GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro และ DeepSeek V4 Flash ที่มีโควต้าคำขอสูงกว่า ซึ่งบังคับใช้ผ่านช่วงเวลาหมุนเวียน (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงจะแตกต่างกันไปตามโมเดลและการใช้งาน)",
 
   "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
   "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
@@ -357,8 +356,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "ไม่มี API key",
   "zen.api.error.invalidApiKey": "API key ไม่ถูกต้อง",
   "zen.api.error.subscriptionQuotaExceeded": "โควต้าการสมัครสมาชิกเกินขีดจำกัด ลองใหม่ในอีก {{retryIn}}",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "โควต้าการสมัครสมาชิกเกินขีดจำกัด คุณสามารถดำเนินการต่อโดยใช้โมเดลฟรี",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "ถึงขีดจำกัดการใช้งานในรอบ 5 ชั่วโมงแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "ถึงขีดจำกัดการใช้งานรายสัปดาห์แล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "ถึงขีดจำกัดการใช้งานรายเดือนแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "ไม่มีวิธีการชำระเงิน เพิ่มวิธีการชำระเงินที่นี่: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "ยอดเงินคงเหลือไม่เพียงพอ จัดการการเรียกเก็บเงินของคุณที่นี่: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -366,6 +369,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "คุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{membersUrl}}",
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
+  "zen.api.error.trialEnded":
+    "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | เข้าถึงโมเดลเขียนโค้ดที่ดีที่สุดในโลก",
   "black.meta.description": "เข้าถึง Claude, GPT, Gemini และอื่นๆ ด้วยแผนสมาชิก OpenCode Black",
@@ -559,6 +564,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "การใช้งานปัจจุบันสำหรับ",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "คือ $",
 
+  "workspace.redeem.title": "แลกคูปอง",
+  "workspace.redeem.subtitle": "แลกรหัสคูปองเพื่อรับเครดิตหรือสิทธิพิเศษ",
+  "workspace.redeem.placeholder": "กรอกรหัสคูปอง",
+  "workspace.redeem.redeem": "แลก",
+  "workspace.redeem.redeeming": "กำลังแลก...",
+  "workspace.redeem.success": "แลกคูปองสำเร็จ",
+
   "workspace.reload.title": "โหลดซ้ำอัตโนมัติ",
   "workspace.reload.disabled.before": "การโหลดซ้ำอัตโนมัติ",
   "workspace.reload.disabled.state": "ปิดใช้งานอยู่",
@@ -650,6 +662,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "กำลังเปลี่ยนเส้นทาง...",
   "workspace.lite.promo.otherMethods": "วิธีการชำระเงินอื่นๆ",
   "workspace.lite.promo.selectMethod": "เลือกวิธีการชำระเงิน",
+
+  "workspace.referral.copyLink": "คัดลอกลิงก์",
+  "workspace.referral.copied": "คัดลอกแล้ว",
+  "workspace.referral.overview.title": "ชวนเพื่อน",
+  "workspace.referral.overview.subtitle": "รับ $5 เมื่อเพื่อนสมัครสมาชิก เพื่อนก็จะได้รับ $5 เช่นกัน",
+  "workspace.referral.instructions.share": "แชร์ลิงก์แนะนำของคุณ",
+  "workspace.referral.instructions.subscribe": "เพื่อนของคุณเข้าร่วมและสมัครสมาชิก Go",
+  "workspace.referral.instructions.claim": "คุณทั้งคู่จะได้รับเครดิตการใช้งาน $5 เพื่อใช้กับขีดจำกัดการใช้งาน Go",
+  "workspace.referral.rewards.title": "รางวัลการแนะนำ",
+  "workspace.referral.rewards.description": "ใช้เครดิตการแนะนำที่มีอยู่กับการใช้งาน Go ของคุณ",
+  "workspace.referral.rewards.subtitle": "ใช้แล้ว {{applied}} / {{total}} รางวัล",
+  "workspace.referral.rewards.empty": "ยังไม่มีรางวัลการแนะนำ",
+  "workspace.referral.table.reward": "รางวัล",
+  "workspace.referral.table.referral": "คำอธิบาย",
+  "workspace.referral.table.date": "วันที่",
+  "workspace.referral.reward.description.inviter": "เชิญ {{email}}",
+  "workspace.referral.reward.description.invitee": "ได้รับเชิญจาก {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "สมัครสมาชิกเพื่อปลดล็อก",
+  "workspace.referral.reward.action.view": "ดูรางวัล",
+  "workspace.referral.reward.action.applied": "ใช้รางวัลแล้ว",
+  "workspace.referral.reward.source.pendingInviter": "รอเพื่อนสมัครสมาชิก",
+  "workspace.referral.reward.source.pendingInvitee": "สมัครสมาชิกเพื่อปลดล็อกรางวัล",
+  "workspace.referral.reward.source.available": "รางวัลพร้อมใช้งาน",
+  "workspace.referral.reward.source.applied": "ใช้รางวัลแล้ว",
+  "workspace.referral.reward.status.applied": "ใช้รางวัลแล้ว",
+  "workspace.referral.reward.status.pendingInviter": "สมัครสมาชิกเพื่อปลดล็อก",
+  "workspace.referral.reward.status.pendingInvitee": "สมัครสมาชิกเพื่อปลดล็อก",
+  "workspace.referral.apply.noGo": "สมัครสมาชิกเพื่อปลดล็อก",
+  "workspace.referral.apply.preview": "ดูรางวัล",
+  "workspace.referral.apply.action": "ใช้",
+  "workspace.referral.apply.confirmTitle": "ใช้รางวัล",
+  "workspace.referral.apply.confirmBody": "ใช้ {{amount}} เพื่อลดการใช้งานปัจจุบันของ workspace นี้",
+  "workspace.referral.apply.confirmAction": "ใช้",
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",

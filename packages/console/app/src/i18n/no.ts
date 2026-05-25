@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Logg inn",
-  "nav.free": "Gratis",
+  "nav.free": "Last ned",
   "nav.home": "Hjem",
   "nav.openMenu": "Åpne meny",
   "nav.getStartedFree": "Kom i gang gratis",
@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
   "go.meta.description":
-    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7.",
+    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.hero.title": "Rimelige kodemodeller for alle",
   "go.hero.body":
     "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
@@ -299,7 +299,8 @@ export const dict = {
   "go.problem.item1": "Rimelig abonnementspris",
   "go.problem.item2": "Rause grenser og pålitelig tilgang",
   "go.problem.item3": "Bygget for så mange programmerere som mulig",
-  "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7",
+  "go.problem.item4":
+    "Inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash",
   "go.how.title": "Hvordan Go fungerer",
   "go.how.body":
     "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
@@ -322,10 +323,10 @@ export const dict = {
   "go.faq.a1":
     "Go er et rimelig abonnement som gir deg pålitelig tilgang til kapable åpen kildekode-modeller for agent-koding.",
   "go.faq.q2": "Hvilke modeller inkluderer Go?",
-  "go.faq.a2": "Go inkluderer GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7, med rause grenser og pålitelig tilgang.",
+  "go.faq.a2": "Go inkluderer modellene nedenfor, med høye grenser og pålitelig tilgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7.",
+    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.faq.q4": "Hva koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
   "go.faq.a4.p1.pricingLink": "$5 første måned",
@@ -335,8 +336,7 @@ export const dict = {
   "go.faq.a4.p3": "Avslutt når som helst.",
   "go.faq.q5": "Hva med data og personvern?",
   "go.faq.a5.body":
-    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang.",
-  "go.faq.a5.contactAfter": "hvis du har spørsmål.",
+    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang. Våre leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening.",
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "go.faq.a5.exceptionsLink": "følgende unntak",
@@ -350,7 +350,7 @@ export const dict = {
 
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller tilgjengelig på det tidspunktet, med en kvote på 200 forespørsler/dag. Go inkluderer GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7 med høyere kvoter håndhevet over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende $12 per 5 timer, $30 per uke og $60 per måned (faktiske forespørselsantall varierer etter modell og bruk).",
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller tilgjengelig på det tidspunktet, med en kvote på 200 forespørsler/dag. Go inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash med høyere kvoter håndhevet over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende $12 per 5 timer, $30 per uke og $60 per måned (faktiske forespørselsantall varierer etter modell og bruk).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
   "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",
@@ -360,8 +360,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Mangler API-nøkkel.",
   "zen.api.error.invalidApiKey": "Ugyldig API-nøkkel.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igjen om {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Abonnementskvote overskredet. Du kan fortsette å bruke gratis modeller.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "5-timers bruksgrense nådd. Tilbakestilles om {{retryIn}}. For å fortsette å bruke denne modellen nå, aktiver bruk fra din tilgjengelige saldo: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Ukentlig bruksgrense nådd. Tilbakestilles om {{retryIn}}. For å fortsette å bruke denne modellen nå, aktiver bruk fra din tilgjengelige saldo: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Månedlig bruksgrense nådd. Tilbakestilles om {{retryIn}}. For å fortsette å bruke denne modellen nå, aktiver bruk fra din tilgjengelige saldo: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Legg til en betalingsmetode her: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Utilstrekkelig saldo. Administrer faktureringen din her: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -369,6 +373,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Du har nådd din månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Modellen er deaktivert",
+  "zen.api.error.trialEnded":
+    "Den gratis kampanjen for {{model}} er avsluttet. Du kan fortsette å bruke modellen ved å abonnere på OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Få tilgang til verdens beste kodemodeller",
   "black.meta.description": "Få tilgang til Claude, GPT, Gemini og mer med OpenCode Black-abonnementer.",
@@ -562,6 +568,13 @@ export const dict = {
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Gjeldende forbruk for",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "er $",
 
+  "workspace.redeem.title": "Løs inn kupong",
+  "workspace.redeem.subtitle": "Løs inn en kupongkode for å få kreditt eller fordeler.",
+  "workspace.redeem.placeholder": "Skriv inn kupongkode",
+  "workspace.redeem.redeem": "Løs inn",
+  "workspace.redeem.redeeming": "Løser inn...",
+  "workspace.redeem.success": "Kupongen ble løst inn.",
+
   "workspace.reload.title": "Auto-påfyll",
   "workspace.reload.disabled.before": "Auto-påfyll er",
   "workspace.reload.disabled.state": "deaktivert",
@@ -653,6 +666,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "Omdirigerer...",
   "workspace.lite.promo.otherMethods": "Andre betalingsmetoder",
   "workspace.lite.promo.selectMethod": "Velg betalingsmetode",
+
+  "workspace.referral.copyLink": "Kopier lenke",
+  "workspace.referral.copied": "Kopiert",
+  "workspace.referral.overview.title": "Inviter venner",
+  "workspace.referral.overview.subtitle": "Få $5 når en venn abonnerer. De får også $5.",
+  "workspace.referral.instructions.share": "Del henvisningslenken din",
+  "workspace.referral.instructions.subscribe": "Vennen din blir med og abonnerer på Go",
+  "workspace.referral.instructions.claim": "Dere får begge $5 i brukskreditt å bruke på Go-bruksgrensene deres",
+  "workspace.referral.rewards.title": "Henvisningsbelønninger",
+  "workspace.referral.rewards.description": "Bruk tilgjengelige henvisningskreditter på Go-bruken din.",
+  "workspace.referral.rewards.subtitle": "{{applied}} / {{total}} belønninger brukt.",
+  "workspace.referral.rewards.empty": "Ingen henvisningsbelønninger ennå.",
+  "workspace.referral.table.reward": "Belønning",
+  "workspace.referral.table.referral": "Beskrivelse",
+  "workspace.referral.table.date": "Dato",
+  "workspace.referral.reward.description.inviter": "Inviterte {{email}}",
+  "workspace.referral.reward.description.invitee": "Invitert av {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "Abonner for å låse opp",
+  "workspace.referral.reward.action.view": "Vis belønning",
+  "workspace.referral.reward.action.applied": "Belønning brukt",
+  "workspace.referral.reward.source.pendingInviter": "Venter på at de abonnerer",
+  "workspace.referral.reward.source.pendingInvitee": "Abonner for å låse opp belønningen",
+  "workspace.referral.reward.source.available": "Belønning klar til bruk",
+  "workspace.referral.reward.source.applied": "Belønning brukt",
+  "workspace.referral.reward.status.applied": "Belønning brukt",
+  "workspace.referral.reward.status.pendingInviter": "Abonner for å låse opp",
+  "workspace.referral.reward.status.pendingInvitee": "Abonner for å låse opp",
+  "workspace.referral.apply.noGo": "Abonner for å låse opp",
+  "workspace.referral.apply.preview": "Vis belønning",
+  "workspace.referral.apply.action": "Bruk",
+  "workspace.referral.apply.confirmTitle": "Bruk belønning",
+  "workspace.referral.apply.confirmBody": "Bruk {{amount}} for å redusere dette workspacets nåværende forbruk.",
+  "workspace.referral.apply.confirmAction": "Bruk",
 
   "download.title": "OpenCode | Last ned",
   "download.meta.description": "Last ned OpenCode for macOS, Windows og Linux",

@@ -1,14 +1,54 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect } from "bun:test"
 import path from "path"
-import { Global } from "../../src/global"
-import { Installation } from "../../src/installation"
-import { Database } from "../../src/storage/db"
+import { Effect } from "effect"
+import { Global } from "@opencode-ai/core/global"
+import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { it } from "../lib/effect"
 
-describe("Database.Path", () => {
-  test("returns database path for the current channel", () => {
-    const expected = ["latest", "beta"].includes(Installation.CHANNEL)
-      ? path.join(Global.Path.data, "opencode.db")
-      : path.join(Global.Path.data, `opencode-${Installation.CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
-    expect(Database.getChannelPath()).toBe(expected)
-  })
+let Database: typeof import("../../src/storage/db").Database
+
+const prev = process.env["OPENCODE_DISABLE_CHANNEL_DB"]
+
+beforeAll(async () => {
+  process.env["OPENCODE_DISABLE_CHANNEL_DB"] = "0"
+  ;({ Database } = await import(`../../src/storage/db?test=${Date.now()}`))
+})
+
+afterAll(() => {
+  if (prev === undefined) {
+    delete process.env["OPENCODE_DISABLE_CHANNEL_DB"]
+    return
+  }
+  process.env["OPENCODE_DISABLE_CHANNEL_DB"] = prev
+})
+
+describe("Database.getChannelPath", () => {
+  it.effect("returns database path for the current channel", () =>
+    Effect.gen(function* () {
+      const flags = yield* RuntimeFlags.Service
+      const expected = ["latest", "beta", "prod"].includes(InstallationChannel)
+        ? path.join(Global.Path.data, "opencode.db")
+        : path.join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
+
+      expect(Database.getChannelPath(flags)).toBe(expected)
+    }).pipe(Effect.provide(RuntimeFlags.layer())),
+  )
+
+  it.effect("uses the shared database path when channel databases are disabled", () =>
+    Effect.gen(function* () {
+      const flags = yield* RuntimeFlags.Service
+
+      expect(Database.getChannelPath(flags)).toBe(path.join(Global.Path.data, "opencode.db"))
+    }).pipe(Effect.provide(RuntimeFlags.layer({ disableChannelDb: true }))),
+  )
+
+  it.effect("accepts RuntimeFlags with skipMigrations for database callers", () =>
+    Effect.gen(function* () {
+      const flags = yield* RuntimeFlags.Service
+
+      expect(flags.skipMigrations).toBe(true)
+      expect(Database.getChannelPath(flags)).toBe(Database.getChannelPath({ disableChannelDb: flags.disableChannelDb }))
+    }).pipe(Effect.provide(RuntimeFlags.layer({ skipMigrations: true }))),
+  )
 })
