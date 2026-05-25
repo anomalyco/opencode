@@ -1117,6 +1117,43 @@ function ProviderDetail(props: {
   )
 }
 
+function ClawFormActions(props: {
+  dirty: boolean
+  busy: boolean
+  canTest: boolean
+  saving: boolean
+  testing: boolean
+  onSave: () => void
+  onTest: () => void
+  onAbort?: () => void
+}) {
+  const language = useLanguage()
+
+  return (
+    <div class="flex flex-wrap items-center justify-end gap-2">
+      <Button
+        size="small"
+        variant="ghost"
+        icon="reset"
+        onClick={props.onTest}
+        disabled={!props.canTest || props.busy || props.saving || props.testing}
+      >
+        {language.t("config.claws.action.test")}
+      </Button>
+      <Show when={props.testing && props.onAbort}>
+        <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
+          {language.t("config.claws.action.abort")}
+        </Button>
+      </Show>
+      <SaveButton
+        label={language.t("config.claws.action.save")}
+        onClick={props.onSave}
+        disabled={props.busy || props.saving || props.testing || !props.dirty}
+      />
+    </div>
+  )
+}
+
 function ClawEditor(props: {
   item?: ClawItem
   form: ReturnType<typeof clawCfg>
@@ -1150,72 +1187,51 @@ function ClawEditor(props: {
             <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              variant="ghost"
-              icon="reset"
-              onClick={props.onTest}
-              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            <Toggle
+              checked={props.form.enabled}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("enabled", value)}
             >
-              {language.t("config.claws.action.test")}
-            </Button>
-            <Show when={props.form.testing && props.onAbort}>
-              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
-                {language.t("config.claws.action.abort")}
-              </Button>
-            </Show>
-            <SaveButton
-              label={language.t("config.claws.action.save")}
-              onClick={props.onSave}
-              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
-            />
+              {language.t("config.claws.field.enabled")}
+            </Toggle>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
-            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
-              <div class="flex flex-col gap-5">
-                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
-                  <div class="min-w-0">
-                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      {language.t("config.claws.field.enabledDescription")}
-                    </div>
-                  </div>
-                  <Toggle
-                    checked={props.form.enabled}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("enabled", value)}
-                  >
-                    {language.t("config.claws.field.enabled")}
-                  </Toggle>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.url")}
-                    description={language.t("config.claws.field.urlDescription")}
-                    placeholder="ws://127.0.0.1:18789"
-                    value={props.form.url}
-                    validationState={props.form.err.url ? "invalid" : undefined}
-                    error={props.form.err.url}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("url", value)}
-                  />
-                  <TextField
-                    type="password"
-                    label={language.t("config.claws.field.token")}
-                    description={language.t("config.claws.field.tokenDescription")}
-                    placeholder={language.t("config.claws.field.tokenPlaceholder")}
-                    value={props.form.token}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("token", value)}
-                  />
-                </div>
-              </div>
+          <div class="flex w-full flex-col gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.url")}
+                description={language.t("config.claws.field.urlDescription")}
+                placeholder="ws://127.0.0.1:18789"
+                value={props.form.url}
+                validationState={props.form.err.url ? "invalid" : undefined}
+                error={props.form.err.url}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("url", value)}
+              />
+              <TextField
+                type="password"
+                label={language.t("config.claws.field.token")}
+                description={language.t("config.claws.field.tokenDescription")}
+                placeholder={language.t("config.claws.field.tokenPlaceholder")}
+                value={props.form.token}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("token", value)}
+              />
             </div>
+
+            <ClawFormActions
+              dirty={props.dirty}
+              busy={props.busy}
+              canTest={props.canTest}
+              saving={props.form.saving}
+              testing={props.form.testing}
+              onSave={props.onSave}
+              onTest={props.onTest}
+              onAbort={props.onAbort}
+            />
 
             <Show when={props.form.testing || !!props.form.test}>
               <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
@@ -1302,72 +1318,51 @@ function GenericAgentEditor(props: {
             <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              variant="ghost"
-              icon="reset"
-              onClick={props.onTest}
-              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            <Toggle
+              checked={props.form.enabled}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("enabled", value)}
             >
-              {language.t("config.claws.action.test")}
-            </Button>
-            <Show when={props.form.testing && props.onAbort}>
-              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
-                {language.t("config.claws.action.abort")}
-              </Button>
-            </Show>
-            <SaveButton
-              label={language.t("config.claws.action.save")}
-              onClick={props.onSave}
-              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
-            />
+              {language.t("config.claws.field.enabled")}
+            </Toggle>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
-            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
-              <div class="flex flex-col gap-5">
-                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
-                  <div class="min-w-0">
-                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      {language.t("config.claws.field.enabledDescription")}
-                    </div>
-                  </div>
-                  <Toggle
-                    checked={props.form.enabled}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("enabled", value)}
-                  >
-                    {language.t("config.claws.field.enabled")}
-                  </Toggle>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.genericAgentDir")}
-                    description={language.t("config.claws.field.genericAgentDirDescription")}
-                    placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
-                    value={props.form.genericAgentDir}
-                    validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
-                    error={props.form.err.genericAgentDir}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("genericAgentDir", value)}
-                  />
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.pythonExecutable")}
-                    description={language.t("config.claws.field.pythonExecutableDescription")}
-                    placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
-                    value={props.form.pythonExecutable}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("pythonExecutable", value)}
-                  />
-                </div>
-              </div>
+          <div class="flex w-full flex-col gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.genericAgentDir")}
+                description={language.t("config.claws.field.genericAgentDirDescription")}
+                placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
+                value={props.form.genericAgentDir}
+                validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
+                error={props.form.err.genericAgentDir}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("genericAgentDir", value)}
+              />
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.pythonExecutable")}
+                description={language.t("config.claws.field.pythonExecutableDescription")}
+                placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
+                value={props.form.pythonExecutable}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("pythonExecutable", value)}
+              />
             </div>
+
+            <ClawFormActions
+              dirty={props.dirty}
+              busy={props.busy}
+              canTest={props.canTest}
+              saving={props.form.saving}
+              testing={props.form.testing}
+              onSave={props.onSave}
+              onTest={props.onTest}
+              onAbort={props.onAbort}
+            />
 
             <Show when={props.form.testing || !!props.form.test}>
               <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
@@ -1456,82 +1451,61 @@ function HermesEditor(props: {
             <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              variant="ghost"
-              icon="reset"
-              onClick={props.onTest}
-              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            <Toggle
+              checked={props.form.enabled}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("enabled", value)}
             >
-              {language.t("config.claws.action.test")}
-            </Button>
-            <Show when={props.form.testing && props.onAbort}>
-              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
-                {language.t("config.claws.action.abort")}
-              </Button>
-            </Show>
-            <SaveButton
-              label={language.t("config.claws.action.save")}
-              onClick={props.onSave}
-              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
-            />
+              {language.t("config.claws.field.enabled")}
+            </Toggle>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
-            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
-              <div class="flex flex-col gap-5">
-                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
-                  <div class="min-w-0">
-                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      {language.t("config.claws.field.enabledDescription")}
-                    </div>
-                  </div>
-                  <Toggle
-                    checked={props.form.enabled}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("enabled", value)}
-                  >
-                    {language.t("config.claws.field.enabled")}
-                  </Toggle>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-2">
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.hermesDir")}
-                    description={language.t("config.claws.field.hermesDirDescription")}
-                    placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
-                    value={props.form.hermesDir}
-                    validationState={props.form.err.hermesDir ? "invalid" : undefined}
-                    error={props.form.err.hermesDir}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("hermesDir", value)}
-                  />
-                  <TextField
-                    type="text"
-                    label={language.t("config.claws.field.pythonExecutable")}
-                    description={language.t("config.claws.field.pythonExecutableDescription")}
-                    placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
-                    value={props.form.pythonExecutable}
-                    disabled={props.busy || props.form.saving || props.form.testing}
-                    onChange={(value) => props.onChange("pythonExecutable", value)}
-                  />
-                </div>
-
-                <TextField
-                  type="text"
-                  label={language.t("config.claws.field.hermesHome")}
-                  description={language.t("config.claws.field.hermesHomeDescription")}
-                  placeholder={language.t("config.claws.field.hermesHomePlaceholder")}
-                  value={props.form.hermesHome}
-                  disabled={props.busy || props.form.saving || props.form.testing}
-                  onChange={(value) => props.onChange("hermesHome", value)}
-                />
-              </div>
+          <div class="flex w-full flex-col gap-6">
+            <div class="grid gap-4 lg:grid-cols-2">
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.hermesDir")}
+                description={language.t("config.claws.field.hermesDirDescription")}
+                placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
+                value={props.form.hermesDir}
+                validationState={props.form.err.hermesDir ? "invalid" : undefined}
+                error={props.form.err.hermesDir}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("hermesDir", value)}
+              />
+              <TextField
+                type="text"
+                label={language.t("config.claws.field.pythonExecutable")}
+                description={language.t("config.claws.field.pythonExecutableDescription")}
+                placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
+                value={props.form.pythonExecutable}
+                disabled={props.busy || props.form.saving || props.form.testing}
+                onChange={(value) => props.onChange("pythonExecutable", value)}
+              />
             </div>
+
+            <TextField
+              type="text"
+              label={language.t("config.claws.field.hermesHome")}
+              description={language.t("config.claws.field.hermesHomeDescription")}
+              placeholder={language.t("config.claws.field.hermesHomePlaceholder")}
+              value={props.form.hermesHome}
+              disabled={props.busy || props.form.saving || props.form.testing}
+              onChange={(value) => props.onChange("hermesHome", value)}
+            />
+
+            <ClawFormActions
+              dirty={props.dirty}
+              busy={props.busy}
+              canTest={props.canTest}
+              saving={props.form.saving}
+              testing={props.form.testing}
+              onSave={props.onSave}
+              onTest={props.onTest}
+              onAbort={props.onAbort}
+            />
 
             <Show when={props.form.testing || !!props.form.test}>
               <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
@@ -3714,13 +3688,13 @@ export default function ConfigPage() {
       <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.03),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)] xl:flex-row">
         <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
-            <div class="border-b border-border-weak-base px-4 py-4">
+            <div class="border-b border-border-weak-base px-3 py-4">
               <div class="min-w-0">
                 <div class="text-18-medium text-text-strong">{t("config.title")}</div>
                 <div class="mt-1 text-12-regular text-text-weak">{t("config.description")}</div>
               </div>
             </div>
-            <div class="flex-1 overflow-y-auto p-3">
+            <div class="flex-1 overflow-y-auto p-2">
               <div class="flex flex-col">
                 <SectionButton
                   current={state.section === "agents-md"}
@@ -3762,7 +3736,7 @@ export default function ConfigPage() {
                 )}
               </div>
             </div>
-            <div class="border-t border-border-weak-base p-3">
+            <div class="border-t border-border-weak-base p-2">
               <Button
                 variant="ghost"
                 class="h-10 w-full justify-start gap-2 rounded-lg border border-border-weak-base bg-background-base px-3 text-13-medium text-text-weak hover:border-border-strong hover:bg-surface-base-hover hover:text-text-strong active:border-border-base active:bg-surface-base-active"
@@ -4111,7 +4085,13 @@ export default function ConfigPage() {
                             meta={item.meta}
                             onClick={() => setState("pick", item.id)}
                             extra={
-                              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                              <span
+                                class="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em]"
+                                classList={{
+                                  "border-border-success-base/60 bg-surface-success-base text-text-on-success-base": item.enabled,
+                                  "border-transparent bg-surface-secondary text-text-weak": !item.enabled,
+                                }}
+                              >
                                 {item.enabled ? t("config.claws.badge.enabled") : t("config.claws.badge.disabled")}
                               </span>
                             }
