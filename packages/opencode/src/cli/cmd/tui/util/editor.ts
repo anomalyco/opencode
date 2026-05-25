@@ -6,7 +6,7 @@ import { CliRenderer } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 
-export async function open(opts: { value: string; renderer: CliRenderer }): Promise<string | undefined> {
+export async function open(opts: { value: string; renderer: CliRenderer; cwd?: string }): Promise<string | undefined> {
   const editor = process.env["VISUAL"] || process.env["EDITOR"]
   if (!editor) return
 
@@ -19,6 +19,7 @@ export async function open(opts: { value: string; renderer: CliRenderer }): Prom
   try {
     const parts = editor.split(" ")
     const proc = Process.spawn([...parts, filepath], {
+      cwd: opts.cwd,
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",

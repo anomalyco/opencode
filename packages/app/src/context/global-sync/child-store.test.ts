@@ -3,7 +3,7 @@ import { createRoot, getOwner, type Owner } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import type { State } from "./types"
-import type { QueryOptionsApi } from "../global-sync"
+import type { QueryOptionsApi } from "../server-sync"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 
