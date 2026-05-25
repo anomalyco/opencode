@@ -26,7 +26,7 @@
 //   5. lark.im.v1.message.create 发回飞书
 //   6. saveAccount/deleteAccount 后 server 触发 onAccountsChanged → hot-sync WSS
 
-import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
@@ -53,6 +53,24 @@ const PLUGIN_SERVER_PATH = join(homedir(), ".opencode", "feishu-plugin-server.js
  */
 const LEGACY_WORKSPACE = join(homedir(), ".opencode", "feishu-workspace")
 const IMBOT_WORKSPACE = join(homedir(), ".opencode", "imbot-workspace")
+
+/**
+ * [feat: imbot-workspace-rename-followup] 2026-05-25
+ * `chatSessionStore`(feishu-chat-sessions.json)里 session ID 还绑老 directory
+ * (feishu-workspace)→ LLM 用老 system prompt + 老 cwd → emit ATTACH 用老路径 ENOENT。
+ * 修法:user 升级首次启动清 chatSessionStore 让 plugin 重建 session 用新 directory。
+ * marker 文件保证幂等(只清一次)。详 docs/features/imbot-workspace-rename-followup/。
+ */
+const STALE_SESSIONS_CLEANUP_MARKER = join(
+  homedir(),
+  ".opencode",
+  ".imbot-workspace-rename-cleanup-applied",
+)
+const CHAT_SESSION_STORE_PATH = join(
+  homedir(),
+  ".opencode",
+  "feishu-chat-sessions.json",
+)
 
 /**
  * 把老 ~/.opencode/feishu-workspace/ 迁移到新 ~/.opencode/imbot-workspace/(原子 rename)。
@@ -105,6 +123,89 @@ export function migrateLegacyWorkspace(
     )
     return "failed"
   }
+}
+
+/**
+ * [feat: imbot-workspace-rename-followup] 2026-05-25
+ *
+ * `imbot-workspace-rename`(2026-05-25 落地)只改了 home base 路径,但
+ * `~/.opencode/feishu-chat-sessions.json` 里保留了重命名前创建的 opencode session
+ * ID。这些 session 在 opencode 内部绑死老 directory(feishu-workspace)+ 含老
+ * system prompt(ATTACH_MARKER_PROMPT 里那时候写的还是老路径)。
+ *
+ * 复用老 session 时,LLM 通过老 system prompt + 老 cwd 推断 → emit ATTACH marker
+ * 用老路径 → 实际文件在新路径 → ENOENT 报错。
+ *
+ * 修法:user 升级到本 feat 版本首次启动,清掉整个 chatSessionStore 让 plugin 重建
+ * session 用新 directory(IMBOT_WORKSPACE)+ 新 system prompt。marker 文件
+ * (~/.opencode/.imbot-workspace-rename-cleanup-applied)保证只清一次,后续启动
+ * no-op。
+ *
+ * Trade:user 失去所有 chat 的 multi-turn memory(one-time cost),换 stale path
+ * 长期错乱修复。
+ *
+ * 行为表(详 docs/features/imbot-workspace-rename-followup/1-spec.md §测试用例):
+ *   - marker 已存在 → "noop-already-applied"
+ *   - marker 不存在 + chatStore 不存在 → 写 marker,返 "noop-no-sessions"
+ *   - marker 不存在 + chatStore 存在 → 清 chatStore + 写 marker,返 "applied"
+ *   - 异常 → warn,返 "failed",不崩 plugin
+ */
+export type CleanupResult =
+  | "applied"
+  | "noop-already-applied"
+  | "noop-no-sessions"
+  | "failed"
+
+export function applyStaleSessionsCleanup(
+  markerPath: string,
+  chatSessionStorePath: string,
+  fs: {
+    existsSync: (p: string) => boolean
+    unlinkSync: (p: string) => void
+    writeFileSync: (p: string, data: string) => void
+  },
+  logger: { info: (m: string) => void; warn: (m: string) => void },
+): CleanupResult {
+  if (fs.existsSync(markerPath)) {
+    return "noop-already-applied"
+  }
+  const markerContent = JSON.stringify(
+    { appliedAt: new Date().toISOString(), feat: "imbot-workspace-rename" },
+    null,
+    2,
+  )
+  if (!fs.existsSync(chatSessionStorePath)) {
+    try {
+      fs.writeFileSync(markerPath, markerContent)
+      return "noop-no-sessions"
+    } catch (e) {
+      logger.warn(
+        `[feishu-plugin] failed to write cleanup marker ${markerPath}: ${(e as Error).message}`,
+      )
+      return "failed"
+    }
+  }
+  // marker 不存在 + chatStore 存在 → 清 + 写 marker
+  try {
+    fs.unlinkSync(chatSessionStorePath)
+  } catch (e) {
+    logger.warn(
+      `[feishu-plugin] failed to clear stale chat sessions ${chatSessionStorePath}: ${(e as Error).message}. Please rm manually + restart.`,
+    )
+    return "failed"
+  }
+  try {
+    fs.writeFileSync(markerPath, markerContent)
+  } catch (e) {
+    logger.warn(
+      `[feishu-plugin] cleared chat sessions but failed to write cleanup marker ${markerPath}: ${(e as Error).message}. Next start will clean again.`,
+    )
+    return "failed"
+  }
+  logger.info(
+    `[feishu-plugin] cleared stale chat sessions after workspace rename (${chatSessionStorePath} removed, marker written)`,
+  )
+  return "applied"
 }
 
 /**
@@ -190,6 +291,15 @@ async function initBackground(): Promise<void> {
     LEGACY_WORKSPACE,
     IMBOT_WORKSPACE,
     { existsSync, renameSync },
+    { info: (m) => console.log(m), warn: (m) => console.warn(m) },
+  )
+
+  // [feat: imbot-workspace-rename-followup] 2026-05-25
+  // 0a.5 清掉绑老 directory 的 stale chat sessions(marker 幂等只清一次)
+  applyStaleSessionsCleanup(
+    STALE_SESSIONS_CLEANUP_MARKER,
+    CHAT_SESSION_STORE_PATH,
+    { existsSync, unlinkSync, writeFileSync },
     { info: (m) => console.log(m), warn: (m) => console.warn(m) },
   )
 
