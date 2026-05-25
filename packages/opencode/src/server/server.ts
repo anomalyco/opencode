@@ -2,7 +2,7 @@ import "./init-projectors"
 
 import { handleCollabRequest } from "@/collab/router"
 import { parsePreviewPath, handlePreviewHttp, attachPreviewUpgrade } from "@/collab/preview-router"
-import { cookieAuthorizesRequest } from "@/collab/cookie-auth"
+import { cookieAuthorizesRequest, lookupCookieIdentity } from "@/collab/cookie-auth"
 import { Database } from "@/storage/db"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
@@ -38,6 +38,16 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
     // task out of rotation and ECS replaces it.
     if (pathname === "/healthz") {
       return yield* serveHealthz()
+    }
+
+    // GET / — collab landing.  Authenticated users are bounced to
+    // /collab/new (which lists their existing sessions in the sidebar +
+    // shows the create form).  Unauthenticated users get a small sign-in
+    // page rather than the bare opencode home — this deployment is
+    // collab-first, the standalone opencode UI never makes sense here.
+    if (req.method === "GET" && pathname === "/") {
+      const webRequest = yield* HttpServerRequest.toWeb(req)
+      return yield* Effect.sync(() => HttpServerResponse.fromWeb(serveCollabLanding(webRequest)))
     }
 
     // /preview/<port>/<rest> — HTTP reverse proxy to a dev server running
@@ -138,6 +148,66 @@ function pingDatabase(): boolean {
     return false
   }
 }
+
+/**
+ * GET / handler.
+ *   - cookie present + valid → 302 /collab/new (the session list / create form)
+ *   - else                   → 200 sign-in landing page
+ *
+ * The standalone opencode home page (HomeRoute in packages/app) doesn't
+ * apply to this deployment — every user goes through collab.
+ */
+function serveCollabLanding(req: Request): Response {
+  const id = lookupCookieIdentity(req)
+  if (id) {
+    return new Response(null, { status: 302, headers: { location: "/collab/new" } })
+  }
+  return new Response(SIGN_IN_LANDING_HTML, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  })
+}
+
+// Minimal inline HTML — no SPA bundle needed, no asset fetches, no client-
+// side router involved.  Dark-mode-only to match the SPA's default theme.
+// `next` is hardcoded to /collab/new because that page already shows the
+// "Rejoin Session" sidebar with the user's existing sessions.
+const SIGN_IN_LANDING_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>unleashlive collab — sign in</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon-v3.svg" />
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; color: #e4e4e7; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .page { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .card { max-width: 28rem; width: 100%; text-align: center; }
+    h1 { margin: 0 0 0.5rem 0; font-size: 1.5rem; font-weight: 600; color: #fafafa; }
+    p { margin: 0 0 1.5rem 0; color: #a1a1aa; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.1rem; background: #18181b; border: 1px solid #3f3f46; border-radius: 0.5rem; color: #fafafa; text-decoration: none; font-weight: 500; transition: background 120ms ease, border-color 120ms ease; }
+    .btn:hover { background: #27272a; border-color: #52525b; }
+    .btn svg { width: 18px; height: 18px; }
+    .foot { margin-top: 2rem; font-size: 12px; color: #71717a; }
+    .foot code { background: #18181b; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>unleashlive collab</h1>
+      <p>Sign in with GitHub to create or join a collaborative coding session.</p>
+      <a class="btn" href="/collab/auth/github?next=/collab/new">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.11.83-.26.83-.58v-2c-3.34.73-4.04-1.61-4.04-1.61-.54-1.4-1.34-1.77-1.34-1.77-1.1-.74.08-.72.08-.72 1.21.09 1.85 1.25 1.85 1.25 1.08 1.84 2.83 1.31 3.52 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.31-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.45 11.45 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.87.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .3"/></svg>
+        Sign in with GitHub
+      </a>
+      <p class="foot">Only members of <code>unleashlive</code> can sign in.  This is a developer-only environment.</p>
+    </div>
+  </div>
+</body>
+</html>
+`
 
 // GitHub status — cached for 5 minutes so /healthz doesn't HEAD api.github.com
 // on every probe (ECS hits this every 15 s).  Async probe runs lazily; the
