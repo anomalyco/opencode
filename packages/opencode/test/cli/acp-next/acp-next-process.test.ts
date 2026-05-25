@@ -5,11 +5,12 @@ import type {
   LoadSessionResponse,
   NewSessionResponse,
   SessionNotification,
+  SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 import { testProviderConfig } from "../../lib/test-provider"
-import { createAcpClient, expectOk, selectConfigOption } from "../acp/acp-test-client"
+import { createAcpClient, expectOk, firstAlternateValue, selectConfigOption } from "../acp/acp-test-client"
 
 describe("opencode acp-next (subprocess)", () => {
   cliIt.live(
@@ -99,6 +100,66 @@ describe("opencode acp-next (subprocess)", () => {
   )
 
   cliIt.live(
+    "switches model through config options behind OPENCODE_ACP_NEXT",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const acp = createAcpClient(
+          yield* opencode.acp({
+            env: {
+              OPENCODE_ACP_NEXT: "1",
+              OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)),
+            },
+          }),
+        )
+        yield* acp.request<InitializeResponse>("initialize", { protocolVersion: 1 })
+        const session = expectOk(yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] }))
+
+        const updated = expectOk(
+          yield* acp.request<SetSessionConfigOptionResponse>("session/set_config_option", {
+            sessionId: session.sessionId,
+            configId: "model",
+            value: "test/second-model",
+          }),
+        )
+
+        expect(selectConfigOption(updated.configOptions, "model")?.currentValue).toBe("test/second-model")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "switches effort through config options behind OPENCODE_ACP_NEXT",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const acp = createAcpClient(
+          yield* opencode.acp({
+            env: {
+              OPENCODE_ACP_NEXT: "1",
+              OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)),
+            },
+          }),
+        )
+        yield* acp.request<InitializeResponse>("initialize", { protocolVersion: 1 })
+        const session = expectOk(yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] }))
+        const effort = selectConfigOption(session.configOptions, "effort")
+        expect(effort?.category).toBe("thought_level")
+        const nextEffort = effort ? firstAlternateValue(effort) : undefined
+        expect(nextEffort).toBe("high")
+
+        const updated = expectOk(
+          yield* acp.request<SetSessionConfigOptionResponse>("session/set_config_option", {
+            sessionId: session.sessionId,
+            configId: "effort",
+            value: nextEffort,
+          }),
+        )
+
+        expect(selectConfigOption(updated.configOptions, "effort")?.currentValue).toBe(nextEffort)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
     "exits cleanly when flagged stdin is closed",
     ({ opencode }) =>
       Effect.gen(function* () {
@@ -133,4 +194,35 @@ function errorCode(error: unknown) {
   if (!error || typeof error !== "object") return undefined
   if (!("code" in error)) return undefined
   return typeof error.code === "number" ? error.code : undefined
+}
+
+function verifierConfig(llmUrl: string) {
+  const config = testProviderConfig(llmUrl)
+  return {
+    ...config,
+    model: "test/test-model",
+    provider: {
+      test: {
+        ...config.provider.test,
+        models: {
+          "test-model": {
+            ...config.provider.test.models["test-model"],
+            variants: {
+              low: {},
+              high: {},
+            },
+          },
+          "second-model": {
+            ...config.provider.test.models["test-model"],
+            id: "second-model",
+            name: "Second Test Model",
+            variants: {
+              medium: {},
+              max: {},
+            },
+          },
+        },
+      },
+    },
+  }
 }
