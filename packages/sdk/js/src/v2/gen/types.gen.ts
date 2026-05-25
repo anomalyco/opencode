@@ -1088,8 +1088,8 @@ export type ProviderConfig = {
         output: number
       }
       modalities?: {
-        input: Array<"text" | "audio" | "image" | "video" | "pdf">
-        output: Array<"text" | "audio" | "image" | "video" | "pdf">
+        input?: Array<"text" | "audio" | "image" | "video" | "pdf">
+        output?: Array<"text" | "audio" | "image" | "video" | "pdf">
       }
       experimental?: boolean
       status?: "alpha" | "beta" | "deprecated" | "active"
