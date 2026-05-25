@@ -92,7 +92,9 @@ export const build = (input: {
       ),
     ),
     availableModes: input.modes,
-    defaultModeID: input.defaultModeID,
+    defaultModeID: input.modes.some((mode) => mode.id === input.defaultModeID)
+      ? input.defaultModeID
+      : (input.modes[0]?.id ?? input.defaultModeID),
     availableCommands: input.commands,
     ...(input.defaultModel ? { defaultModel: input.defaultModel } : {}),
   }

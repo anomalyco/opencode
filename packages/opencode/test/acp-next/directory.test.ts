@@ -165,4 +165,21 @@ describe("ACP next directory snapshot", () => {
       expect(alpha.defaultModeID).toBe("build")
     }).pipe(Effect.provide(fakeLayer([]))),
   )
+
+  it.effect("falls back when the default mode is not available", () =>
+    Effect.sync(() => {
+      expect(
+        Directory.build({
+          directory: "alpha",
+          providers: {},
+          modes: [
+            { id: "build", name: "Build" },
+            { id: "plan", name: "Plan" },
+          ],
+          defaultModeID: "hidden",
+          commands: [],
+        }).defaultModeID,
+      ).toBe("build")
+    }),
+  )
 })
