@@ -602,40 +602,28 @@ function SectionButton(props: { current: boolean; title: string; icon: IconProps
   return (
     <button
       type="button"
-      class="group flex w-full items-center justify-between gap-3 border-b border-border-weak-base px-3 py-3 text-left transition-colors"
+      class="group flex w-full items-center justify-between gap-3 border-b border-border-weak-base px-4 py-4 text-left transition-colors"
       classList={{
         "bg-surface-base hover:bg-surface-base-hover": !props.current,
-        "border-border-success-base bg-surface-success-base": props.current,
+        "border-border-base bg-surface-base-active": props.current,
       }}
       onClick={props.onClick}
     >
-      <div class="flex min-w-0 items-center gap-2.5">
+      <div class="flex min-w-0 items-center gap-3">
         <div
-          class="flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors"
+          class="flex size-8 shrink-0 items-center justify-center transition-colors"
           classList={{
-            "border-border-weak-base bg-background-base text-text-weak": !props.current,
-            "border-border-success-base/60 bg-surface-success-base text-text-on-success-base": props.current,
+            "text-text-weak": !props.current,
+            "text-text-strong": props.current,
           }}
         >
-          <Icon name={props.icon} size="small" />
+          <Icon name={props.icon} size="medium" />
         </div>
-        <div
-          class="truncate text-15-medium transition-colors"
-          classList={{
-            "text-text-strong": !props.current,
-            "text-text-on-success-base": props.current,
-          }}
-        >
+        <div class="truncate text-16-medium text-text-strong transition-colors">
           {props.title}
         </div>
       </div>
-      <div
-        class="size-2 rounded-full transition-colors"
-        classList={{
-          "bg-border-strong": !props.current,
-          "bg-icon-success-base": props.current,
-        }}
-      />
+      <div class="size-2 rounded-full bg-border-strong transition-colors" />
     </button>
   )
 }
@@ -656,7 +644,7 @@ function ListButton(props: {
       class="group flex w-full items-start justify-between gap-3 border-b border-border-weak-base px-3 py-3 text-left transition-colors"
       classList={{
         "bg-surface-base hover:bg-surface-base-hover": !props.active,
-        "border-border-success-base bg-surface-success-base": props.active,
+        "border-border-base bg-surface-base-active": props.active,
       }}
       onClick={props.onClick}
     >
@@ -666,8 +654,7 @@ function ListButton(props: {
             class="truncate text-13-medium transition-colors"
             classList={{
               "text-text-danger-base": props.tone === "danger",
-              "text-text-strong": !props.active && props.tone !== "danger",
-              "text-text-on-success-base": props.active && props.tone !== "danger",
+              "text-text-strong": props.tone !== "danger",
             }}
           >
             {props.title}
@@ -681,7 +668,7 @@ function ListButton(props: {
             class="mt-1 line-clamp-2 text-12-regular transition-colors"
             classList={{
               "text-text-weak": !props.active,
-              "text-text-on-success-weak": props.active,
+              "text-text-base": props.active,
             }}
           >
             {props.note}
@@ -692,7 +679,7 @@ function ListButton(props: {
             class="mt-2 break-all font-mono text-[12px] leading-5 transition-colors"
             classList={{
               "text-text-weak": !props.active,
-              "text-text-on-success-weak": props.active,
+              "text-text-base": props.active,
             }}
           >
             {props.meta}
