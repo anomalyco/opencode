@@ -1,12 +1,10 @@
-import { defineConfig, PluginOption } from "vite"
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
+import { defineConfig, type PluginOption } from "vite"
 
 export default defineConfig({
   plugins: [
-    solidStart({
-      middleware: "./src/middleware.ts",
-    }) as PluginOption,
+    solidStart() as PluginOption,
     nitro({
       compatibilityDate: "2024-09-19",
       preset: "cloudflare-module",
@@ -19,9 +17,6 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
-    rollupOptions: {
-      external: ["cloudflare:workers"],
-    },
     minify: false,
   },
 })
