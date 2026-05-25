@@ -36,6 +36,7 @@ const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
+  hidden: Schema.optional(Schema.Boolean),
   location: Schema.String,
   content: Schema.String,
 })
@@ -49,11 +50,12 @@ const Issue = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-function isSkillFrontmatter(data: unknown): data is { name: string; description?: string } {
+function isSkillFrontmatter(data: unknown): data is { name: string; description?: string; hidden?: boolean } {
   return (
     isRecord(data) &&
     typeof data.name === "string" &&
-    (data.description === undefined || typeof data.description === "string")
+    (data.description === undefined || typeof data.description === "string") &&
+    (data.hidden === undefined || typeof data.hidden === "boolean")
   )
 }
 
@@ -135,6 +137,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
   state.skills[md.data.name] = {
     name: md.data.name,
     description: md.data.description,
+    hidden: md.data.hidden,
     location: match,
     content: md.content,
   }
@@ -305,7 +308,9 @@ export const layer = Layer.effect(
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
       const s = yield* InstanceState.get(state)
-      const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = Object.values(s.skills)
+        .filter((skill) => skill.hidden !== true)
+        .toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
