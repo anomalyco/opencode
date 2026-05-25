@@ -61,7 +61,7 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
     await fs.copyFile(thirdPartyLicensesSrc, path.join(tmp, "THIRD-PARTY-LICENSES.txt"))
   }
   await Bun.write(path.join(tmp, "README.txt"), note(name, win))
-  await copySetup(setupSrc, path.join(tmp, "setup"))
+  await copySetup(setupSrc, path.join(tmp, "setup"), win)
 
   if (ext === "zip") {
     await $`zip -rq ${arc} .`.cwd(tmp)
@@ -136,10 +136,14 @@ async function bin(dir: string, win: boolean) {
   }
 }
 
-async function copySetup(src: string, dst: string) {
+async function copySetup(src: string, dst: string, win: boolean) {
   if (!(await exists(src))) return
   await fs.cp(src, dst, { recursive: true })
   const installer = path.join(dst, "install.sh")
+  if (win) {
+    if (await exists(installer)) await fs.rm(installer)
+    return
+  }
   if (await exists(installer)) await fs.chmod(installer, 0o755)
 }
 
@@ -160,10 +164,16 @@ function note(name: string, win: boolean) {
     "  2. export SECURECODE_QWEN3_API_KEY=<Qwen3.6 API key issued by Acompany>",
     `  3. Run ${cmd} run \"Hello\"`,
     "",
-    "What setup/install.sh does:",
-    "  - seeds ~/.config/securecode/securecode.json (Acompany Qwen3.6 endpoint template)",
-    "  - seeds ~/.config/securecode/tui.json (selects the bundled `securecode` theme)",
-    "  - seeds ~/.config/securecode/themes/securecode.json (Acompany-branded TUI colors)",
+    win ? "What setup does:" : "What setup/install.sh does:",
+    win
+      ? "  - seeds %APPDATA%\\securecode\\securecode.json (Acompany Qwen3.6 endpoint template)"
+      : "  - seeds ~/.config/securecode/securecode.json (Acompany Qwen3.6 endpoint template)",
+    win
+      ? "  - seeds %APPDATA%\\securecode\\tui.json (selects the bundled `securecode` theme)"
+      : "  - seeds ~/.config/securecode/tui.json (selects the bundled `securecode` theme)",
+    win
+      ? "  - seeds %APPDATA%\\securecode\\themes\\securecode.json (Acompany-branded TUI colors)"
+      : "  - seeds ~/.config/securecode/themes/securecode.json (Acompany-branded TUI colors)",
     "  Existing files are preserved.",
     "",
     "Notes:",
