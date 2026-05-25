@@ -300,6 +300,31 @@ describe("Vcs diff", () => {
   )
 
   it.instance(
+    "diff('git') ignores mnemonic prefix config when rendering patches",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "file.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add file"])
+        yield* git(test.directory, ["config", "diff.mnemonicprefix", "true"])
+        yield* write(path.join(test.directory, "file.txt"), "changed\n")
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git")
+        const file = diff.find((item) => item.file === "file.txt")
+
+        expect(file?.patch).toContain("diff --git a/file.txt b/file.txt")
+        expect(file?.patch).toContain("--- a/file.txt")
+        expect(file?.patch).toContain("+++ b/file.txt")
+        expect(file?.patch).not.toContain("i/file.txt")
+        expect(file?.patch).not.toContain("w/file.txt")
+        expect(() => parsePatch(file?.patch ?? "")).not.toThrow()
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "diff('branch') returns changes against default branch",
     () =>
       Effect.gen(function* () {

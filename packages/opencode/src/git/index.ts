@@ -15,6 +15,7 @@ const cfg = [
   "-c",
   "core.quotepath=false",
 ] as const
+const patchPrefixArgs = ["--src-prefix=a/", "--dst-prefix=b/"] as const
 
 const out = (result: { text(): string }) => result.text().trim()
 const nuls = (text: string) => text.split("\0").filter(Boolean)
@@ -261,7 +262,17 @@ export const layer = Layer.effect(
 
     const patch = Effect.fn("Git.patch")(function* (cwd: string, ref: string, file: string, options?: PatchOptions) {
       const result = yield* run(
-        ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", file],
+        [
+          "diff",
+          "--patch",
+          "--no-ext-diff",
+          "--no-renames",
+          ...patchPrefixArgs,
+          `--unified=${options?.context ?? 3}`,
+          ref,
+          "--",
+          file,
+        ],
         { cwd, maxOutputBytes: options?.maxOutputBytes },
       )
       return { text: result.truncated ? "" : result.text(), truncated: result.truncated } satisfies Patch
@@ -269,7 +280,17 @@ export const layer = Layer.effect(
 
     const patchAll = Effect.fn("Git.patchAll")(function* (cwd: string, ref: string, options?: PatchOptions) {
       const result = yield* run(
-        ["diff", "--patch", "--no-ext-diff", "--no-renames", `--unified=${options?.context ?? 3}`, ref, "--", "."],
+        [
+          "diff",
+          "--patch",
+          "--no-ext-diff",
+          "--no-renames",
+          ...patchPrefixArgs,
+          `--unified=${options?.context ?? 3}`,
+          ref,
+          "--",
+          ".",
+        ],
         { cwd, maxOutputBytes: options?.maxOutputBytes },
       )
       return { text: result.text(), truncated: result.truncated } satisfies Patch
@@ -287,6 +308,7 @@ export const layer = Layer.effect(
           "--patch",
           "--no-ext-diff",
           "--no-renames",
+          ...patchPrefixArgs,
           `--unified=${options?.context ?? 3}`,
           "--",
           "/dev/null",
