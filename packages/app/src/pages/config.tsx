@@ -2560,7 +2560,7 @@ export default function ConfigPage() {
   const claws = createMemo<ClawItem[]>(() => {
     const list: ClawItem[] = []
     if (clawsEnabled()) {
-      const cfg = openclaw()
+      const cfg = openclaw.latest
       list.push({
         id: "claw:openclaw",
         label: "OpenClaw",
@@ -2570,7 +2570,7 @@ export default function ConfigPage() {
       })
     }
     if (hmPlatformEnabled()) {
-      const cfg = hermes()
+      const cfg = hermes.latest
       list.push({
         id: "claw:hermes",
         label: "Hermes",
@@ -2580,7 +2580,7 @@ export default function ConfigPage() {
       })
     }
     if (gaPlatformEnabled()) {
-      const cfg = genericagent()
+      const cfg = genericagent.latest
       list.push({
         id: "claw:genericagent",
         label: "GenericAgent",
@@ -2706,7 +2706,7 @@ export default function ConfigPage() {
   )
   const dirty = createMemo(() => !!currentDoc() && state.doc === state.pick && state.text !== state.saved)
   const clawDirty = createMemo(() => {
-    const cfg = openclaw()
+    const cfg = openclaw.latest
     if (!cfg || state.section !== "claws") return false
     return (
       state.claw.enabled !== (cfg.enabled ?? false) ||
@@ -2716,7 +2716,7 @@ export default function ConfigPage() {
   })
 
   const gaDirty = createMemo(() => {
-    const cfg = genericagent()
+    const cfg = genericagent.latest
     if (!cfg || state.section !== "claws") return false
     return (
       state.ga.enabled !== (cfg.enabled ?? false) ||
@@ -2726,7 +2726,7 @@ export default function ConfigPage() {
   })
 
   const hmDirty = createMemo(() => {
-    const cfg = hermes()
+    const cfg = hermes.latest
     if (!cfg || state.section !== "claws") return false
     return (
       state.hm.enabled !== (cfg.enabled ?? false) ||
