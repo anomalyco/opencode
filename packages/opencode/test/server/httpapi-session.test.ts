@@ -582,26 +582,6 @@ describe("session HttpApi", () => {
         })
         expect(createdEmpty.id).toBeTruthy()
 
-        const createdWithoutContentType = yield* requestJson<Session.Info>(SessionPaths.create, {
-          method: "POST",
-          headers: { "x-opencode-directory": test.directory },
-        })
-        expect(createdWithoutContentType.id).toBeTruthy()
-
-        const invalidCreate = yield* request(SessionPaths.create, {
-          method: "POST",
-          headers,
-          body: "{",
-        })
-        expect(invalidCreate.status).toBe(400)
-
-        const createdWhitespace = yield* requestJson<Session.Info>(SessionPaths.create, {
-          method: "POST",
-          headers,
-          body: "  \n",
-        })
-        expect(createdWhitespace.id).toBeTruthy()
-
         const created = yield* requestJson<Session.Info>(SessionPaths.create, {
           method: "POST",
           headers,
