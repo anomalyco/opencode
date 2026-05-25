@@ -1,7 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
 $src = Split-Path -Parent $PSCommandPath
-$dest = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'securecode'
+$appData = if ($env:APPDATA) { $env:APPDATA } else { [Environment]::GetFolderPath('ApplicationData') }
+$dest = Join-Path $appData 'securecode'
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
