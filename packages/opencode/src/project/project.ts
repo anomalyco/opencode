@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto"
-import z from "zod"
-import { and, Database, eq, sql } from "../storage/db"
+import { and } from "drizzle-orm"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -201,6 +201,21 @@ export const layer: Layer.Layer<
       type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
 
       const data: DiscoveryResult = yield* Effect.gen(function* () {
+        // fork-1.13.21 behavior: non-git directories used a `dir:<hash>` project id keyed by worktree
+        // path, so sessions created before the 1.15 rebase live under those ids rather than `global`.
+        // Reuse the existing row so listByProject lands on the correct project_id.
+        const existingByWorktree = yield* db((d) =>
+          d.select().from(ProjectTable).where(eq(ProjectTable.worktree, directory)).get(),
+        )
+        if (existingByWorktree?.id.startsWith("dir:")) {
+          return {
+            id: existingByWorktree.id as ProjectID,
+            worktree: directory,
+            sandbox: directory,
+            vcs: existingByWorktree.vcs === "git" ? ("git" as const) : undefined,
+          }
+        }
+
         const dotgitMatches = yield* fs.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
         const dotgit = dotgitMatches[0]
 
@@ -276,41 +291,16 @@ export const layer: Layer.Layer<
         return { id, sandbox, worktree, vcs: "git" as const }
       })
 
-      const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
-        const all = Date.now()
-        log.warn("[tcc-diagnostic] project.fromDirectory start", { directory })
-        log.info("project.discover", { directory, phase: "start" })
-
-        // Phase 1: discover git info
-        type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
-
-        const data: DiscoveryResult = yield* Effect.gen(function* () {
-          const at = Date.now()
-          const dotgitMatches = yield* fsys.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
-          const dotgit = dotgitMatches[0]
-          log.info("project.discover", {
-            directory,
-            phase: "find_git",
-            found: !!dotgit,
-            duration: Date.now() - at,
-          })
-
-          if (!dotgit) {
-            const dirId = ProjectID.make(
-              "dir:" + createHash("sha256").update(directory).digest("hex").slice(0, 16),
-            )
-            log.info("project.discover.nogit", {
-              directory,
-              projectId: dirId,
-              worktree: directory,
-              message: "No .git found, creating project from directory hash",
-            })
-            return {
-              id: dirId,
-              worktree: directory,
-              sandbox: directory,
-              vcs: fakeVcs,
-            }
+      // Phase 2: upsert
+      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+      const existing = row
+        ? fromRow(row)
+        : {
+            id: data.id,
+            worktree: data.worktree,
+            vcs: data.vcs,
+            sandboxes: [] as string[],
+            time: { created: Date.now(), updated: Date.now() },
           }
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
@@ -333,132 +323,26 @@ export const layer: Layer.Layer<
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
 
-          const commonAt = Date.now()
-          const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
-          log.info("project.discover", {
-            directory,
-            phase: "git_common_dir",
-            code: commonDir.code,
-            duration: Date.now() - commonAt,
+      yield* db((d) =>
+        d
+          .insert(ProjectTable)
+          .values({
+            id: result.id,
+            worktree: result.worktree,
+            vcs: result.vcs ?? null,
+            name: result.name,
+            icon_url: result.icon?.url,
+            icon_url_override: result.icon?.override,
+            icon_color: result.icon?.color,
+            time_created: result.time.created,
+            time_updated: result.time.updated,
+            time_initialized: result.time.initialized,
+            sandboxes: result.sandboxes,
+            commands: result.commands,
           })
-          if (commonDir.code !== 0) {
-            return {
-              id: id ?? ProjectID.global,
-              worktree: sandbox,
-              sandbox,
-              vcs: fakeVcs,
-            }
-          }
-          const worktree = (() => {
-            const common = resolveGitPath(sandbox, commonDir.text.trim())
-            return common === sandbox ? sandbox : pathSvc.dirname(common)
-          })()
-
-          if (id == null) {
-            id = yield* readCachedProjectId(pathSvc.join(worktree, ".git"))
-          }
-
-          if (!id) {
-            const rootAt = Date.now()
-            const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
-            const roots = revList.text
-              .split("\n")
-              .filter(Boolean)
-              .map((x) => x.trim())
-              .toSorted()
-            log.info("project.discover", {
-              directory,
-              phase: "git_root_commit",
-              code: revList.code,
-              count: roots.length,
-              duration: Date.now() - rootAt,
-            })
-
-            id = roots[0] ? ProjectID.make(roots[0]) : undefined
-            if (id) {
-              yield* fsys.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
-            }
-          }
-
-          if (!id) {
-            return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
-          }
-
-          const topAt = Date.now()
-          const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
-          log.info("project.discover", {
-            directory,
-            phase: "git_top_level",
-            code: topLevel.code,
-            duration: Date.now() - topAt,
-          })
-          if (topLevel.code !== 0) {
-            return {
-              id,
-              worktree: sandbox,
-              sandbox,
-              vcs: fakeVcs,
-            }
-          }
-          sandbox = resolveGitPath(sandbox, topLevel.text.trim())
-
-          return { id, sandbox, worktree, vcs: "git" as const }
-        })
-        log.info("project.discover", {
-          directory,
-          phase: "git_done",
-          projectID: data.id,
-          vcs: data.vcs,
-          worktree: data.worktree,
-          sandbox: data.sandbox,
-          duration: Date.now() - all,
-        })
-
-        // Phase 2: upsert
-        const dbAt = Date.now()
-        const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
-        const existing = row
-          ? fromRow(row)
-          : {
-              id: data.id,
-              worktree: data.worktree,
-              vcs: data.vcs,
-              sandboxes: [] as string[],
-              time: { created: Date.now(), updated: Date.now() },
-            }
-
-        log.warn("[tcc-diagnostic] project.fromDirectory before icon discovery", {
-          directory,
-          projectID: data.id,
-          vcs: data.vcs,
-          worktree: data.worktree,
-        })
-        if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY)
-          yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
-
-        const result: Info = {
-          ...existing,
-          worktree: data.worktree,
-          vcs: data.vcs,
-          time: { ...existing.time, updated: Date.now() },
-        }
-        if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-          result.sandboxes.push(data.sandbox)
-        result.sandboxes = yield* Effect.forEach(
-          result.sandboxes,
-          (s) =>
-            fsys.exists(s).pipe(
-              Effect.orDie,
-              Effect.map((exists) => (exists ? s : undefined)),
-            ),
-          { concurrency: "unbounded" },
-        ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
-
-        yield* db((d) =>
-          d
-            .insert(ProjectTable)
-            .values({
-              id: result.id,
+          .onConflictDoUpdate({
+            target: ProjectTable.id,
+            set: {
               worktree: result.worktree,
               vcs: result.vcs ?? null,
               name: result.name,
@@ -484,87 +368,75 @@ export const layer: Layer.Layer<
         )
       }
 
-        if (data.id !== ProjectID.global) {
-          yield* db((d) =>
-            d
-              .update(SessionTable)
-              .set({ project_id: data.id, time_updated: sql`${SessionTable.time_updated}` })
-              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
-              .run(),
-          )
-        }
-        log.info("project.discover", {
-          directory,
-          phase: "db_done",
-          projectID: result.id,
-          vcs: result.vcs,
-          duration: Date.now() - dbAt,
-        })
+      yield* emitUpdated(result)
+      return { project: result, sandbox: data.sandbox }
+    })
 
-        yield* emitUpdated(result)
-        log.warn("[tcc-diagnostic] project.fromDirectory done", {
-          directory,
-          projectID: result.id,
-          vcs: result.vcs,
-          worktree: result.worktree,
-          sandbox: data.sandbox,
-        })
-        log.info("project.discover", {
-          directory,
-          phase: "total",
-          projectID: result.id,
-          vcs: result.vcs,
-          duration: Date.now() - all,
-        })
-        return { project: result, sandbox: data.sandbox }
-      })
+    const discover = Effect.fn("Project.discover")(function* (input: Info) {
+      if (input.vcs !== "git") return
+      if (input.icon?.override) return
+      if (input.icon?.url) return
 
-      const discover = Effect.fn("Project.discover")(function* (input: Info) {
-        if (input.vcs !== "git") {
-          log.warn("[tcc-diagnostic] icon discover skip: not git", { vcs: input.vcs, projectID: input.id })
-          return
-        }
-        if (input.icon?.override) {
-          log.warn("[tcc-diagnostic] icon discover skip: has override", { projectID: input.id })
-          return
-        }
-        if (input.icon?.url) {
-          log.warn("[tcc-diagnostic] icon discover skip: has url", { projectID: input.id })
-          return
-        }
-
-        log.warn("[tcc-diagnostic] icon discover favicon glob start", {
-          projectID: input.id,
-          worktree: input.worktree,
+      const matches = yield* fs
+        .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+          cwd: input.worktree,
+          absolute: true,
+          include: "file",
         })
-        const matches = yield* fsys
-          .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
-            cwd: input.worktree,
-            absolute: true,
-            include: "file",
+        .pipe(Effect.orDie)
+      const shortest = matches.sort((a, b) => a.length - b.length)[0]
+      if (!shortest) return
+
+      const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
+      const base64 = Buffer.from(buffer).toString("base64")
+      const mime = AppFileSystem.mimeType(shortest)
+      const url = `data:${mime};base64,${base64}`
+      yield* update({ projectID: input.id, icon: { url } }).pipe(
+        Effect.catchTag("Project.NotFoundError", () => Effect.void),
+      )
+    })
+
+    const list = Effect.fn("Project.list")(function* () {
+      return yield* db((d) => d.select().from(ProjectTable).all().map(fromRow))
+    })
+
+    const get = Effect.fn("Project.get")(function* (id: ProjectID) {
+      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+      return row ? fromRow(row) : undefined
+    })
+
+    const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
+      const result = yield* db((d) =>
+        d
+          .update(ProjectTable)
+          .set({
+            name: input.name,
+            icon_url: input.icon?.url,
+            icon_url_override: input.icon?.override,
+            icon_color: input.icon?.color,
+            commands: input.commands,
+            time_updated: Date.now(),
           })
-          .pipe(Effect.orDie)
-        log.warn("[tcc-diagnostic] icon discover favicon glob done", {
-          projectID: input.id,
-          matchCount: matches.length,
-        })
-        const shortest = matches.sort((a, b) => a.length - b.length)[0]
-        if (!shortest) {
-          log.warn("[tcc-diagnostic] icon discover no favicon found", { projectID: input.id })
-          return
-        }
-        log.warn("[tcc-diagnostic] icon discover selected favicon", {
-          projectID: input.id,
-          path: shortest,
-        })
+          .where(eq(ProjectTable.id, input.projectID))
+          .returning()
+          .get(),
+      )
+      if (!result) return yield* new NotFoundError({ projectID: input.projectID })
+      const data = fromRow(result)
+      yield* emitUpdated(data)
+      return data
+    })
 
-        const buffer = yield* fsys.readFile(shortest).pipe(Effect.orDie)
-        const base64 = Buffer.from(buffer).toString("base64")
-        const mime = AppFileSystem.mimeType(shortest)
-        const url = `data:${mime};base64,${base64}`
-        yield* update({ projectID: input.id, icon: { url } })
-        log.warn("[tcc-diagnostic] icon discover update done", { projectID: input.id })
-      })
+    const initGit = Effect.fn("Project.initGit")(function* (input: { directory: string; project: Info }) {
+      if (input.project.vcs === "git") return input.project
+      if (!(yield* Effect.sync(() => which("git")))) throw new Error("Git is not installed")
+      const result = yield* git(["init", "--quiet"], { cwd: input.directory })
+      if (result.code !== 0) {
+        throw new Error(result.stderr.trim() || result.text.trim() || "Failed to initialize git repository")
+      }
+      const { project } = yield* fromDirectory(input.directory)
+      return project
+    })
 
     const setInitialized = Effect.fn("Project.setInitialized")(function* (id: ProjectID) {
       yield* db((d) =>
