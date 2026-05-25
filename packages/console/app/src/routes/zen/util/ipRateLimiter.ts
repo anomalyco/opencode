@@ -33,7 +33,7 @@ export function createRateLimiter(modelId: string, rateLimit: number | undefined
   return {
     check: async () => {
       const [counts, rows] = await Promise.all([
-        redis.mget<(string | number | null)[]>(isDefaultModel ? [lifetimeKey, dailyKey] : [dailyKey]),
+        redis.mget<(string | number | null)[]>(isDefaultModel ? [lifetimeKey, dailyKey] : [dailyKey]).catch(() => []),
         Database.use((tx) =>
           tx
             .select({ interval: IpRateLimitTable.interval, count: IpRateLimitTable.count })
@@ -57,7 +57,8 @@ export function createRateLimiter(modelId: string, rateLimit: number | undefined
       logger.debug(`rate limit lifetime: ${lifetimeCount}, daily: ${dailyCount}`)
 
       isNew = isDefaultModel && lifetimeCount < dailyLimit * 7
-      if (isDefaultModel && databaseLifetimeCount > redisLifetimeCount) await redis.set(lifetimeKey, databaseLifetimeCount)
+      if (isDefaultModel && databaseLifetimeCount > redisLifetimeCount)
+        await redis.set(lifetimeKey, databaseLifetimeCount).catch(() => {})
 
       if ((isNew && dailyCount >= dailyLimit * 2) || (!isNew && dailyCount >= dailyLimit))
         throw new FreeUsageLimitError(dict["zen.api.error.rateLimitExceeded"], retryAfter)
@@ -68,7 +69,7 @@ export function createRateLimiter(modelId: string, rateLimit: number | undefined
       pipeline.expire(dailyKey, retryAfter)
       if (isNew) pipeline.incr(lifetimeKey)
       await Promise.all([
-        pipeline.exec(),
+        pipeline.exec().catch(() => {}),
         Database.use((tx) =>
           tx
             .insert(IpRateLimitTable)
