@@ -76,7 +76,7 @@ function createServerSyncContext() {
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
-  if (!owner) throw new Error("GlobalSync must be created within owner")
+  if (!owner) throw new Error("ServerSync must be created within owner")
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
