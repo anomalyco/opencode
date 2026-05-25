@@ -1130,7 +1130,7 @@ export const dict = {
   "config.agents.badge.subagent": "子智能体",
   "config.agents.badge.primary": "主智能体",
   "config.agents.badge.all": "全能",
-  "config.claws.title": "Claws",
+  "config.claws.title": "外部智能体",
   "config.claws.header": "配置通过 gateway 适配器代理的 claw 服务。",
   "config.claws.empty": "从列表中选择一个 claw 服务来编辑它的设置。",
   "config.claws.note.openclaw": "桌面端 OpenClaw bridge 与 gateway 设置。",

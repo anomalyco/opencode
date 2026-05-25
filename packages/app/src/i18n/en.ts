@@ -1157,7 +1157,7 @@ export const dict = {
   "config.agents.badge.subagent": "subagent",
   "config.agents.badge.primary": "primary",
   "config.agents.badge.all": "all",
-  "config.claws.title": "Claws",
+  "config.claws.title": "External Agents",
   "config.claws.header": "Configure claw services that proxy through gateway adapters.",
   "config.claws.empty": "Choose a claw service from the list to edit its settings.",
   "config.claws.note.openclaw": "Desktop OpenClaw bridge and gateway settings.",
