@@ -28,13 +28,10 @@ export const markdownHighlightStyle = HighlightStyle.define([
   // 行内样式
   { tag: t.strong, fontWeight: "700" },
   { tag: t.emphasis, fontStyle: "italic" },
-  {
-    tag: t.monospace,
-    fontFamily: "var(--mono, Menlo, Consolas, monospace)",
-    background: "color-mix(in oklab, var(--text-base) 10%, transparent)",
-    borderRadius: "3px",
-    padding: "0 4px",
-  },
+  // monospace tag 没单独 spec — 因为 lezer-markdown 把 fenced code block 内容也标 monospace,
+  // 加 chip 背景会让代码块每个 token 都套 chip(视觉灾难)。CodeMirror 整个编辑器已是
+  // monospace 字体,源模式下 inline code 靠可见的反引号 ` ` 自识别(iA Writer / GitHub source
+  // view / Notion 源数据都是此处理)。chip 视觉留给预览侧 markdown.css。
   { tag: t.quote, color: "var(--text-weak)", fontStyle: "italic" },
   // 链接:GitHub Primer / Notion / Linear / Slack 现代办公文档共识 — 唯一的 accent 蓝色
   // 跟 packages/ui/src/components/markdown.css:48 预览侧链接色统一(切预览不跳变)

@@ -15,7 +15,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | 3 | `e44d40c80` | docs: 2-plan A/A/A/A/A 锁版 |
 | 4 | `f7b8c8bf8` | feat: markdownHighlightStyle + markdownSyntaxHighlight + 4 单测 **[R4 override-blacklist]** |
 | 5 | `9e92cda44` | docs: 3-changelog + INDEX done + 改动日志.md |
-| 6 | (本笔) | refactor: 色彩矫正 — `var(--primary)` 未定义 bug 修 + Option A 现代办公文档配色(`var(--text-interactive-base)` 链接 + list marker 回归 monochrome)|
+| 6 | `390356ed1` | refactor: 色彩矫正 ② — `var(--primary)` 未定义 bug 修 + Option A 现代办公文档配色(`var(--text-interactive-base)` 链接 + list marker 回归 monochrome)|
+| 7 | (本笔) | refactor: 色彩矫正 ③ — 删 monospace chip(lezer-markdown 把 fenced code block 内容也标 monospace,chip 套到每个 token 视觉灾难;源模式靠反引号自识别)|
 
 ## 行数 / 文件
 
@@ -25,7 +26,21 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - `packages/app/package.json` +1 / 0(`@lezer/highlight: 1.2.3` direct dep)
 - `bun.lock` +1 / 0
 
-## 色彩矫正 ②(本笔,Option A)
+## 色彩矫正 ③(本笔)— 删 monospace chip
+
+第 6 commit(色彩矫正 ②)后 user 装 .app 截图反馈:**inline code 灰 chip 应用到 fenced code block 每个 token**(bash / json / diff 等无 `codeLanguages` 注册的语言,所有 token 都 fallback 到 `t.monospace` tag,带 chip 样式后每个变量名 / 关键字 / 字符串都套了独立灰底圆角 = 视觉灾难)。
+
+**根因**:`packages/app/src/utils/lang-from-ext.ts` 的 `codeLanguages` 数组只注册了 js/ts/jsx/tsx,其它语言(bash / json / diff / yaml / python 等)的 fenced code block 内容全部 fallback 到 `t.monospace`。CodeMirror 6 lezer-markdown grammar 的 InlineCode 和 FencedCode 内容(无识别语言时)都 tag 为 monospace,HighlightStyle 无法在 spec 层级区分。
+
+**修法**:**完全删 `t.monospace` 的 spec rule**:
+- CodeMirror 编辑器整体已是 monospace 字体(`code-mirror-view.tsx` `.cm-scroller fontFamily: "Menlo, Consolas, monospace"`),inline code 不需要额外字体
+- 源模式下 inline code 通过**可见的反引号 `` ` `` 自识别**(iA Writer / GitHub source view / Notion 源数据视图都这处理)
+- chip 视觉留给预览侧 `packages/ui/src/components/markdown.css`(那里只处理 `<code>` 标签,不会误伤代码块内 token)
+- spec 条数 14 → 13;H3 单测 expect 同步改 13
+
+**Notion 一致性**:Notion 没有真正的 source mode(他们是 WYSIWYG),但他们 export 出来的 .md 源文件查看 / GitHub source view 都是这套"monochrome + 反引号识别 inline code + 链接蓝"的方案。本 feat 第 7 commit 后跟这套行业 source-mode 共识对齐。
+
+## 色彩矫正 ②(Option A,commit `390356ed1`)
 
 第 5 commit 后 user 实测反馈"用色不太美观",诊断发现:
 1. **`var(--primary)` 在 `packages/ui/src/styles/theme.css` 根本未定义**(只有 `--button-primary-base`),原 spec 的"蓝色 list marker / 蓝色 url / 蓝色 link" **从来没显示** — 全 fallback 到默认文字色
@@ -70,7 +85,7 @@ import { tags as t } from "@lezer/highlight"
 | `heading6` | 0.85em | 600 | var(--text-weak) | — | GitHub + muted |
 | `strong` | — | 700 | — | — | 普世 |
 | `emphasis` | — | — | — | italic | 普世 |
-| `monospace` | — | — | — | var(--mono) 字体 + 10% bg + 3px radius + 0/4px padding | Notion 同款 chip |
+| ~~`monospace`~~ | — | — | — | ~~chip 全 spec~~ | ~~色彩矫正 ③ 删除(lezer-markdown fenced code block 内容也 tag monospace,chip 套每 token 视觉灾难)~~ |
 | `quote` | — | — | var(--text-weak) | italic | Word / Notion 同款 |
 | `url` | — | — | var(--text-interactive-base) | — | GitHub Primer / Notion(色彩矫正 ②)|
 | `link` | — | — | var(--text-interactive-base) | — | GitHub Primer / Notion(色彩矫正 ②)|
