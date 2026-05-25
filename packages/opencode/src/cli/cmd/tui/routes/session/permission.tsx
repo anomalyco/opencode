@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"

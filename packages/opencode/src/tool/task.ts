@@ -2,17 +2,14 @@ import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
 import { BackgroundJob } from "@/background/job"
-import { Bus } from "@/bus"
 import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
-import { SessionStatus } from "@/session/status"
 import { Config } from "@/config/config"
-import { TuiEvent } from "@/cli/cmd/tui/event"
-import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
+import { Cause, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -20,7 +17,6 @@ export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
-  loop(input: SessionPrompt.LoopInput): Effect.Effect<MessageV2.WithParts>
 }
 
 const id = "task"
@@ -28,12 +24,14 @@ const BACKGROUND_DESCRIPTION = [
   "",
   "",
   [
-    "Background mode: background=true launches the subagent asynchronously.",
-    "Use task_status(task_id=..., wait=false) to poll, or wait=true to block until done.",
+    "Background mode: background=true launches the subagent asynchronously and returns immediately.",
+    "Foreground is the default; use it when you need the result before continuing.",
+    "Use background only for independent work that can run while you continue elsewhere.",
+    "You will be notified automatically when it finishes.",
   ].join(" "),
 ].join("\n")
 
-const BaseParameters = Schema.Struct({
+const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
@@ -42,40 +40,30 @@ const BaseParameters = Schema.Struct({
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
-})
+}
+
+const BaseParameters = Schema.Struct(BaseParameterFields)
 
 export const Parameters = Schema.Struct({
-  description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
-  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
-  subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
-  task_id: Schema.optional(Schema.String).annotate({
-    description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-  }),
-  command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  ...BaseParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({
-    description: "When true, launch the subagent in the background and return immediately",
+    description: "Run the agent in the background. You will be notified when it completes.",
   }),
 })
 
 function output(sessionID: SessionID, text: string) {
-  return [
-    `task_id: ${sessionID} (for resuming to continue this task if needed)`,
-    "",
-    "<task_result>",
-    text,
-    "</task_result>",
-  ].join("\n")
+  return [`<task id="${sessionID}" state="completed">`, "<task_result>", text, "</task_result>", "</task>"].join("\n")
 }
 
 function backgroundOutput(sessionID: SessionID) {
   return [
-    `task_id: ${sessionID} (for polling this task with task_status)`,
-    "state: running",
-    "",
+    `<task id="${sessionID}" state="running">`,
+    "<summary>Background task started</summary>",
     "<task_result>",
-    "Background task started. Continue your current work and call task_status when you need the result.",
+    "Background task started. You will be notified automatically when it finishes; do not poll for progress.",
+    "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
     "</task_result>",
+    "</task>",
   ].join("\n")
 }
 
@@ -90,9 +78,14 @@ function backgroundMessage(input: {
     input.state === "completed"
       ? `Background task completed: ${input.description}`
       : `Background task failed: ${input.description}`
-  return [title, `task_id: ${input.sessionID}`, `state: ${input.state}`, "", `<${tag}>`, input.text, `</${tag}>`].join(
-    "\n",
-  )
+  return [
+    `<task id="${input.sessionID}" state="${input.state}">`,
+    `<summary>${title}</summary>`,
+    `<${tag}>`,
+    input.text,
+    `</${tag}>`,
+    "</task>",
+  ].join("\n")
 }
 
 function errorText(error: unknown) {
@@ -105,11 +98,9 @@ export const TaskTool = Tool.define(
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const background = yield* BackgroundJob.Service
-    const bus = yield* Bus.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
-    const status = yield* SessionStatus.Service
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
@@ -141,9 +132,8 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
-      const taskID = params.task_id
-      const session = taskID
-        ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      const session = params.task_id
+        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
       const parentAgent = parent.agent
@@ -189,7 +179,6 @@ export const TaskTool = Tool.define(
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
-      const runCancel = yield* EffectBridge.make()
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
@@ -211,68 +200,34 @@ export const TaskTool = Tool.define(
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
-      const resumeWhenIdle: (input: { userID: MessageID; state: "completed" | "error" }) => Effect.Effect<void> =
-        Effect.fn("TaskTool.resumeWhenIdle")(function* (input: { userID: MessageID; state: "completed" | "error" }) {
-          const latest = yield* sessions
-            .findMessage(ctx.sessionID, (item) => item.info.role === "user")
-            .pipe(Effect.orDie)
-          if (Option.isNone(latest)) return
-          if (latest.value.info.id !== input.userID) return
-          if ((yield* status.get(ctx.sessionID)).type !== "idle") {
-            yield* Effect.sleep("300 millis")
-            return yield* resumeWhenIdle(input)
-          }
-          yield* bus.publish(TuiEvent.ToastShow, {
-            title: input.state === "completed" ? "Background task complete" : "Background task failed",
-            message:
-              input.state === "completed"
-                ? `Background task "${params.description}" finished. Resuming the main thread.`
-                : `Background task "${params.description}" failed. Resuming the main thread.`,
-            variant: input.state === "completed" ? "success" : "error",
-            duration: 5000,
-          })
-          yield* ops
-            .loop({ sessionID: ctx.sessionID })
-            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
-        })
-
-      const continueIfIdle = Effect.fn("TaskTool.continueIfIdle")(function* (input: {
-        userID: MessageID
-        state: "completed" | "error"
-      }) {
-        yield* resumeWhenIdle(input).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
-      })
-
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
         text: string,
       ) {
         const currentParent = yield* sessions.get(ctx.sessionID)
-        const message = yield* ops.prompt({
-          sessionID: ctx.sessionID,
-          noReply: true,
-          agent: currentParent.agent ?? ctx.agent,
-          parts: [
-            {
-              type: "text",
-              synthetic: true,
-              text: backgroundMessage({
-                sessionID: nextSession.id,
-                description: params.description,
-                state,
-                text,
-              }),
-            },
-          ],
-        })
-        yield* continueIfIdle({ userID: message.info.id, state })
+        yield* ops
+          .prompt({
+            sessionID: ctx.sessionID,
+            agent: currentParent.agent ?? ctx.agent,
+            parts: [
+              {
+                type: "text",
+                synthetic: true,
+                text: backgroundMessage({
+                  sessionID: nextSession.id,
+                  description: params.description,
+                  state,
+                  text,
+                }),
+              },
+            ],
+          })
+          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
       })
 
       const existing = yield* background.get(nextSession.id)
       if (existing?.status === "running") {
-        return yield* Effect.fail(
-          new Error(`Task ${nextSession.id} is already running. Use task_status to check progress.`),
-        )
+        return yield* Effect.fail(new Error(`Task ${nextSession.id} is already running.`))
       }
 
       if (runInBackground) {
@@ -302,6 +257,7 @@ export const TaskTool = Tool.define(
         }
       }
 
+      const runCancel = yield* EffectBridge.make()
       const cancel = ops.cancel(nextSession.id)
 
       function onAbort() {

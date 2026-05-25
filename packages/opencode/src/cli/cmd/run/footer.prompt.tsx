@@ -66,6 +66,7 @@ type PromptInput = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
+  subagents: Accessor<number>
   resources: Accessor<RunResource[]>
   commands: Accessor<RunCommand[] | undefined>
   keybinds: FooterKeybinds
@@ -81,6 +82,7 @@ type PromptInput = {
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
+  onSubagentMenu?: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
@@ -995,6 +997,23 @@ export function createPromptState(input: PromptInput): PromptState {
       }
     }
 
+    if (
+      key.name === "down" &&
+      !visible() &&
+      !event.ctrl &&
+      !event.meta &&
+      !event.shift &&
+      !event.super &&
+      area &&
+      !area.isDestroyed &&
+      area.plainText.length === 0 &&
+      input.subagents() > 0
+    ) {
+      event.preventDefault()
+      input.onSubagentMenu?.()
+      return
+    }
+
     if (promptHit(keys().clear, key)) {
       const handled = requestExit()
       if (handled) {
@@ -1049,7 +1068,12 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    if (input.view() === "command" || input.view() === "model" || input.view() === "variant") {
+    if (
+      input.view() === "command" ||
+      input.view() === "model" ||
+      input.view() === "variant" ||
+      input.view() === "subagent-menu"
+    ) {
       return
     }
 

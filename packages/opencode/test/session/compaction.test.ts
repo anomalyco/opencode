@@ -292,11 +292,13 @@ function createSummaryCompaction(sessionID: SessionID) {
 }
 
 function readCompactionPart(sessionID: SessionID) {
-  return SessionNs.Service.use((ssn) => ssn.messages({ sessionID })).pipe(
-    Effect.map((messages) =>
-      messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
-    ),
-  )
+  return SessionNs.use
+    .messages({ sessionID })
+    .pipe(
+      Effect.map((messages) =>
+        messages.at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction"),
+      ),
+    )
 }
 
 function llm() {

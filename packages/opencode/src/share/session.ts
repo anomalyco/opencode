@@ -4,7 +4,7 @@ import { SyncEvent } from "@/sync"
 import { Effect, Layer, Scope, Context } from "effect"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import * as ShareNext from "./share-next"
+import { ShareNext } from "./share-next"
 
 export interface Interface {
   readonly create: (input?: Session.CreateInput) => Effect.Effect<Session.Info>

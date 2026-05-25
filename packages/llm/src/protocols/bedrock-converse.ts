@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Route, type RouteModelInput } from "../route/client"
+import { Route } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Protocol } from "../route/protocol"
 import {
@@ -14,7 +14,7 @@ import {
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
-import { BedrockAuth, type Credentials as BedrockCredentials } from "./utils/bedrock-auth"
+import { BedrockAuth } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
 import { BedrockMedia } from "./utils/bedrock-media"
 import { Lifecycle } from "./utils/lifecycle"
@@ -23,23 +23,6 @@ import { ToolStream } from "./utils/tool-stream"
 const ADAPTER = "bedrock-converse"
 
 export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type BedrockConverseModelInput = RouteModelInput & {
-  /**
-   * Bearer API key (Bedrock's newer API key auth). Sets the `Authorization`
-   * header and bypasses SigV4 signing. Mutually exclusive with `credentials`.
-   */
-  readonly apiKey?: string
-  /**
-   * AWS credentials for SigV4 signing. The route signs each request at
-   * `toHttp` time using `aws4fetch`. Mutually exclusive with `apiKey`.
-   */
-  readonly credentials?: BedrockCredentials
-  readonly headers?: Record<string, string>
-}
 
 // =============================================================================
 // Request Body Schema
@@ -61,6 +44,7 @@ type BedrockToolUseBlock = Schema.Schema.Type<typeof BedrockToolUseBlock>
 const BedrockToolResultContentItem = Schema.Union([
   Schema.Struct({ text: Schema.String }),
   Schema.Struct({ json: Schema.Unknown }),
+  BedrockMedia.ImageBlock,
 ])
 
 const BedrockToolResultBlock = Schema.Struct({
@@ -261,15 +245,33 @@ const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   },
 })
 
-const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => ({
-  toolResult: {
-    toolUseId: part.id,
-    content:
-      part.result.type === "text" || part.result.type === "error"
-        ? [{ text: ProviderShared.toolResultText(part) }]
-        : [{ json: part.result.value }],
-    status: part.result.type === "error" ? "error" : "success",
-  },
+const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent")(function* (part: ToolResultPart) {
+  if (part.result.type === "text" || part.result.type === "error")
+    return [{ text: ProviderShared.toolResultText(part) }]
+  if (part.result.type === "json") return [{ json: part.result.value }]
+
+  const content: Array<Schema.Schema.Type<typeof BedrockToolResultContentItem>> = []
+  for (const item of part.result.value) {
+    if (item.type === "text") {
+      content.push({ text: item.text })
+      continue
+    }
+    const media = yield* BedrockMedia.lower(item)
+    if (!("image" in media))
+      return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
+    content.push(media)
+  }
+  return content
+})
+
+const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (part: ToolResultPart) {
+  return {
+    toolResult: {
+      toolUseId: part.id,
+      content: yield* lowerToolResultContent(part),
+      status: part.result.type === "error" ? "error" : "success",
+    },
+  } satisfies BedrockToolResultBlock
 })
 
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
@@ -331,7 +333,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
-      content.push(lowerToolResult(part))
+      content.push(yield* lowerToolResult(part))
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
@@ -597,11 +599,11 @@ export const protocol = Protocol.make({
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: "bedrock",
   protocol,
-  // Bedrock's URL embeds the region in the host (set on `model.baseURL` by
-  // the provider helper from credentials) and the validated modelId in the
-  // path. We read the validated body so the URL matches the body that gets
-  // signed.
+  // Bedrock's URL embeds the region in the route endpoint host and the
+  // validated modelId in the path. We read the validated body so the URL
+  // matches the body that gets signed.
   endpoint: Endpoint.path<BedrockConverseBody>(
     ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   ),
@@ -609,26 +611,6 @@ export const route = Route.make({
   framing,
 })
 
-export const nativeCredentials = BedrockAuth.nativeCredentials
-
-const bedrockModel = Route.model(
-  route,
-  {
-    provider: "bedrock",
-  },
-  {
-    mapInput: (input: BedrockConverseModelInput) => {
-      const { credentials, ...rest } = input
-      const region = credentials?.region ?? "us-east-1"
-      return {
-        ...rest,
-        baseURL: rest.baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com`,
-        native: nativeCredentials(input.native, credentials),
-      }
-    },
-  },
-)
-
-export const model = bedrockModel
+export const sigV4Auth = BedrockAuth.sigV4
 
 export * as BedrockConverse from "./bedrock-converse"
