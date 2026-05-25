@@ -430,6 +430,7 @@ export type UserMessage = {
     modelID: string
     variant?: string
   }
+  variant?: string
   system?: string
   tools?: {
     [key: string]: boolean
@@ -1599,6 +1600,16 @@ export type Path = {
 export type VcsInfo = {
   branch?: string
   default_branch?: string
+  branches?: Array<string>
+  worktrees?: Array<{
+    path: string
+    branch?: string
+    head?: string
+    bare?: boolean
+    detached?: boolean
+    locked?: string
+    prunable?: string
+  }>
 }
 
 export type VcsFileStatus = {
