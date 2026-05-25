@@ -639,6 +639,19 @@ it.instance("skips bad config file but merges others", () =>
   }),
 )
 
+it.instance("handles plugin resolution failure gracefully", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "has-plugin",
+      plugin: ["./non-existent-plugin.ts"],
+    })
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("has-plugin")
+  }),
+)
+
 it.instance("handles agent configuration", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

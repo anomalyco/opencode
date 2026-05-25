@@ -1,4 +1,3 @@
-import * as Cause from "effect/Cause"
 import * as Log from "@opencode-ai/core/util/log"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
@@ -73,6 +72,23 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
+const infoKeys = new Set([
+  "$schema", "shell", "logLevel", "server", "command", "skills",
+  "reference", "watcher", "snapshot", "plugin", "share", "autoshare",
+  "autoupdate", "disabled_providers", "enabled_providers", "model",
+  "small_model", "default_agent", "username", "mode", "agent",
+  "instructions", "account_token", "url", "headers",
+])
+
+function stripUnknownKeys(data: unknown): unknown {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return data
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (infoKeys.has(key)) result[key] = value
+  }
+  return result
+}
+
 async function substituteWellKnownRemoteConfig(input: {
   value: unknown
   dir: string
@@ -118,9 +134,11 @@ const WellKnownConfig = Schema.Struct({
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
   if (!config.plugin) return config
   for (let i = 0; i < config.plugin.length; i++) {
-    // Normalize path-like plugin specs while we still know which config file declared them.
-    // This prevents `./plugin.ts` from being reinterpreted relative to some later merge location.
-    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], filepath)
+    try {
+      config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], filepath)
+    } catch {
+      log.error("plugin resolution failed", { spec: config.plugin[i], path: filepath })
+    }
   }
   return config
 }
@@ -424,13 +442,14 @@ export const layer = Layer.effect(
       let parsedOk = false
       const data = yield* Effect.sync(() => {
         const parsed = ConfigParse.jsonc(expanded, source)
-        const result = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+        const cleaned = stripUnknownKeys(normalizeLoadedConfig(parsed, source))
+        const result = ConfigParse.schema(Info, cleaned, source)
         parsedOk = true
         return result
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
-            log.error("invalid config: config file could not be parsed", { path: source, cause: Cause.pretty(cause) })
+            log.error("invalid config: config file could not be parsed", { path: source })
             return {} as Info
           }),
         ),
@@ -438,9 +457,9 @@ export const layer = Layer.effect(
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path)).pipe(
-        Effect.catchCause((cause) =>
+        Effect.catchCause(() =>
           Effect.sync(() => {
-            log.error("plugin resolution failed", { path: source, cause: Cause.pretty(cause) })
+            log.error("plugin resolution failed", { path: source })
           }),
         ),
       )
