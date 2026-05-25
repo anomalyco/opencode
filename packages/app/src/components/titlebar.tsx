@@ -9,7 +9,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 
-import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
+import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -20,8 +20,9 @@ import { useServerSync } from "@/context/server-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
+import { ProjectAvatar } from "@opencode-ai/ui/v2/components/project-avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
+import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import {
@@ -489,6 +490,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             title={tab.info.title}
                             project={projectForSession(tab.info, projects(), projectByID())}
                             directory={tab.dir}
+                            sessionId={tab.info.id}
                             onClose={() => tabsStoreActions.removeTab(tab.href)}
                           />
                         </>
@@ -736,6 +738,8 @@ function TabNavItem(props: {
   title: string
   project?: LocalProject
   directory: string
+  sessionId: string
+  hideClose?: boolean
   onClose: () => void
 }) {
   const match = useMatch(() => props.href)
@@ -747,15 +751,17 @@ function TabNavItem(props: {
     >
       <a
         href={props.href}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
-        <ProjectTabAvatar project={props.project} directory={props.directory} />
-        <span class="text-clip leading-5">{props.title}</span>
+        <span data-slot="project-avatar-slot">
+          <ProjectTabAvatar project={props.project} directory={props.directory} sessionId={props.sessionId} />
+        </span>
+        <span class="min-w-0 flex-1 truncate">{props.title}</span>
       </a>
 
-      <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
+      <div class="absolute right-0 inset-y-0 flex flex-row items-center overflow-hidden rounded-r-[6px] pr-1 py-1 w-8 pl-2">
         <div
-          class="absolute inset-0 bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
+          class="absolute inset-0 rounded-r-[6px] bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
           style={{
             "--inactive-bg": "linear-gradient(to right, transparent 0%, var(--tab-bg) 80%)",
             "--active-bg": "linear-gradient(90deg, transparent 0%, var(--tab-bg) 25%)",
@@ -773,15 +779,17 @@ function TabNavItem(props: {
   )
 }
 
-function ProjectTabAvatar(props: { project?: LocalProject; directory: string }) {
+function ProjectTabAvatar(props: { project?: LocalProject; directory: string; sessionId: string }) {
+  const directory = () => props.directory
+  const sessionId = () => props.sessionId
+  const state = useSessionTabAvatarState(directory, sessionId)
   return (
-    <AvatarV2
+    <ProjectAvatar
       fallback={displayName(props.project ?? { worktree: props.directory })}
       src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
-      kind="org"
-      size="small"
-      {...getAvatarColors(props.project?.icon?.color)}
-      class="size-4 rounded"
+      variant={getProjectAvatarVariant(props.project?.icon?.color)}
+      unread={state.unread()}
+      loading={state.loading()}
     />
   )
 }

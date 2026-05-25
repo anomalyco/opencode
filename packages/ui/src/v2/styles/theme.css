@@ -63,6 +63,26 @@
     --v2-state-fg-info: var(--v2-blue-800);
     --v2-state-border-info: var(--v2-blue-300);
 
+    /* ── Project avatar ── */
+    --avatar-bg-orange: var(--v2-orange-700);
+    --avatar-border-orange: var(--v2-orange-800);
+    --avatar-bg-yellow: var(--v2-yellow-700);
+    --avatar-border-yellow: var(--v2-yellow-800);
+    --avatar-bg-cyan: var(--v2-cyan-700);
+    --avatar-border-cyan: var(--v2-cyan-800);
+    --avatar-bg-green: var(--v2-green-700);
+    --avatar-border-green: var(--v2-green-800);
+    --avatar-bg-red: var(--v2-red-700);
+    --avatar-border-red: var(--v2-red-800);
+    --avatar-bg-pink: var(--v2-pink-700);
+    --avatar-border-pink: var(--v2-pink-800);
+    --avatar-bg-blue: var(--v2-blue-700);
+    --avatar-border-blue: var(--v2-blue-800);
+    --avatar-bg-purple: var(--v2-purple-700);
+    --avatar-border-purple: var(--v2-purple-800);
+    --avatar-bg-gray: var(--v2-grey-700);
+    --avatar-border-gray: var(--v2-grey-800);
+
     /* ── Elevation ── */
     --v2-elevation-raised:
       0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8),
@@ -345,6 +365,25 @@
     --v2-state-bg-info: var(--v2-blue-1200);
     --v2-state-fg-info: var(--v2-blue-500);
     --v2-state-border-info: var(--v2-blue-900);
+
+    --avatar-bg-orange: var(--v2-orange-700);
+    --avatar-border-orange: var(--v2-orange-800);
+    --avatar-bg-yellow: var(--v2-yellow-700);
+    --avatar-border-yellow: var(--v2-yellow-800);
+    --avatar-bg-cyan: var(--v2-cyan-700);
+    --avatar-border-cyan: var(--v2-cyan-800);
+    --avatar-bg-green: var(--v2-green-700);
+    --avatar-border-green: var(--v2-green-800);
+    --avatar-bg-red: var(--v2-red-700);
+    --avatar-border-red: var(--v2-red-800);
+    --avatar-bg-pink: var(--v2-pink-700);
+    --avatar-border-pink: var(--v2-pink-800);
+    --avatar-bg-blue: var(--v2-blue-700);
+    --avatar-border-blue: var(--v2-blue-800);
+    --avatar-bg-purple: var(--v2-purple-700);
+    --avatar-border-purple: var(--v2-purple-800);
+    --avatar-bg-gray: var(--v2-grey-700);
+    --avatar-border-gray: var(--v2-grey-800);
 
     --v2-elevation-raised:
       0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30),

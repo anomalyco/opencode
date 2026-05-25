@@ -5,12 +5,12 @@ import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
+import { ProjectAvatar } from "@opencode-ai/ui/v2/components/project-avatar-v2.jsx"
 import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { MenuV2 } from "@opencode-ai/ui/v2/components/menu-v2.jsx"
-import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
+import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -35,9 +35,13 @@ import { useSettings } from "@/context/settings"
 import { shouldUseV2Settings } from "@/components/settings-layout"
 
 const HOME_SESSION_LIMIT = 15
-const HOME_ROW =
-  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-const HOME_PROJECT_NAV_ROW = `${HOME_ROW} h-7 gap-2 px-1.5 [&>span]:min-w-0 [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap`
+const HOME_ROW_LAYOUT =
+  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] bg-transparent text-left transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out focus-visible:outline-none"
+const HOME_ROW_BASE = `${HOME_ROW_LAYOUT} border-0`
+const HOME_ROW = `${HOME_ROW_BASE} [font-weight:530] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover`
+const HOME_PROJECT_NAV_LABEL =
+  "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+const HOME_PROJECT_NAV_ROW = `${HOME_ROW_LAYOUT} h-7 gap-2 px-1.5 [font-weight:440] text-v2-text-text-muted hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base hover:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:bg-v2-background-bg-layer-02 data-[selected]:text-v2-text-text-base data-[selected]:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)] data-[selected]:hover:bg-v2-background-bg-layer-02 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]`
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 
 type HomeSessionRecord = {
@@ -397,7 +401,7 @@ function HomeProjectColumn(props: {
           onClick={props.openSettings}
         >
           <IconV2 name="settings-gear" size="small" />
-          <span>{props.language.t("sidebar.settings")}</span>
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
         </button>
         <button
           type="button"
@@ -405,7 +409,7 @@ function HomeProjectColumn(props: {
           onClick={props.openHelp}
         >
           <IconV2 name="help" size="small" />
-          <span>{props.language.t("sidebar.help")}</span>
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
         </button>
       </div>
     </aside>
@@ -490,13 +494,10 @@ function HomeProjectRow(props: {
 function HomeProjectAvatar(props: { project: LocalProject }) {
   const name = createMemo(() => displayName(props.project))
   return (
-    <AvatarV2
+    <ProjectAvatar
       fallback={name()}
       src={getProjectAvatarSource(props.project.id, props.project.icon)}
-      kind="org"
-      size="small"
-      {...getAvatarColors(props.project.icon?.color)}
-      class="size-4 rounded"
+      variant={getProjectAvatarVariant(props.project.icon?.color)}
     />
   )
 }
