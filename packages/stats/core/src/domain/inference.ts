@@ -55,30 +55,46 @@ export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: S
 WITH filtered AS (
   SELECT
     from_iso8601_timestamp(event_timestamp) AS event_time,
-    COALESCE(NULLIF(tier, ''), 'unknown') AS tier,
-    COALESCE(NULLIF(provider, ''), 'unknown') AS provider,
+    CASE
+      WHEN source = 'lite' THEN 'Go'
+      WHEN model IN ('gpt-5-nano', 'grok-code', 'big-pickle') OR model LIKE '%-free' THEN 'Free'
+      ELSE 'Paid'
+    END AS tier,
+    COALESCE(NULLIF(
+      CASE
+        WHEN starts_with(provider, 'minimax-plan') THEN 'minimax-plan'
+        WHEN starts_with(provider, 'zai-plan') THEN 'zai-plan'
+        WHEN starts_with(provider, 'azure-databricks') THEN 'azure-databricks'
+        WHEN regexp_like(provider, '^azure[0-9]+') THEN 'azure-openai'
+        ELSE provider
+      END,
+      ''
+    ), 'unknown') AS provider,
     COALESCE(NULLIF(provider_model, ''), '') AS provider_model,
     COALESCE(NULLIF(model, ''), 'unknown') AS model,
     UPPER(COALESCE(NULLIF(cf_country, ''), 'ZZ')) AS country,
     COALESCE(NULLIF(cf_continent, ''), '') AS continent,
     session,
     status,
-    duration_ms,
-    ttfb_ms,
-    output_tps,
+    duration AS duration_ms,
+    time_to_first_byte AS ttfb_ms,
+    CASE
+      WHEN timestamp_last_byte - timestamp_first_byte < 100 THEN null
+      ELSE CAST(tokens_output AS double) / (timestamp_last_byte - timestamp_first_byte) * 1000
+    END AS output_tps,
     tokens_input,
     tokens_output,
     tokens_reasoning,
     tokens_cache_read,
-    tokens_total,
-    cost_input_microcents,
-    cost_output_microcents,
-    cost_total_microcents
+    COALESCE(tokens_cache_read, 0) + COALESCE(tokens_cache_write_5m, 0) + COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0) AS tokens_total,
+    COALESCE(cost_input_microcents, cost_input * 1000000) AS cost_input_microcents,
+    COALESCE(cost_output_microcents, cost_output * 1000000) AS cost_output_microcents,
+    COALESCE(cost_total_microcents, cost_total * 1000000) AS cost_total_microcents
   FROM ${sourceTable}
   WHERE event_type = 'completions'
     AND model IS NOT NULL
     AND model <> ''
-    AND user_agent LIKE '%opencode%'
+    AND (strpos(COALESCE(user_agent, ''), 'ai-sdk') > 0 OR strpos(COALESCE(user_agent, ''), 'opencode') > 0)
     AND event_timestamp >= ${periodStartValue}
     AND event_timestamp < ${periodEndValue}
 ), daily AS (

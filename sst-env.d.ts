@@ -155,22 +155,7 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
-    "Stat": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "UpstashRedisRestToken": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "UpstashRedisRestUrl": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "Stats": {
-      "type": "sst.cloudflare.SolidStart"
-      "url": string
-    }
+    "Stat": import("@cloudflare/workers-types").Service
     "StatsDatabase": {
       "database": string
       "host": string
@@ -191,6 +176,14 @@ declare module "sst" {
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
+    }
+    "UpstashRedisRestToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "UpstashRedisRestUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "Web": {
       "type": "sst.cloudflare.Astro"

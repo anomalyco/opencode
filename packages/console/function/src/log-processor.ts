@@ -78,60 +78,12 @@ export default {
 }
 
 function toLakeEvent(time: string, data: Record<string, unknown>) {
-  const tokensInput = integer(data, "tokens.input")
-  const tokensOutput = integer(data, "tokens.output")
-  const tokensReasoning = integer(data, "tokens.reasoning")
-  const tokensCacheRead = integer(data, "tokens.cache_read")
-  const tokensCacheWrite5m = integer(data, "tokens.cache_write_5m")
-  const tokensCacheWrite1h = integer(data, "tokens.cache_write_1h")
-  const timestampFirstByte = integer(data, "timestamp.first_byte")
-  const timestampLastByte = integer(data, "timestamp.last_byte")
-  const source = string(data, "source")
-
   return {
     _datalake_key: "inference.event",
     event_timestamp: time,
     event_date: time.slice(0, 10),
     event_type: string(data, "event_type"),
     dataset: "zen",
-    client: string(data, "client"),
-    source,
-    tier: source,
-    provider: string(data, "provider"),
-    provider_model: string(data, "provider.model"),
-    model: string(data, "model"),
-    session: string(data, "session"),
-    request: string(data, "request"),
-    user_agent: string(data, "user_agent"),
-    ip: string(data, "ip"),
-    status: integer(data, "status"),
-    is_stream: boolean(data, "is_stream"),
-    duration_ms: integer(data, "duration"),
-    ttfb_ms: integer(data, "time_to_first_byte"),
-    request_length: integer(data, "request_length"),
-    response_length: integer(data, "response_length"),
-    timestamp_first_byte: timestampFirstByte,
-    timestamp_last_byte: timestampLastByte,
-    tokens_input: tokensInput,
-    tokens_output: tokensOutput,
-    tokens_reasoning: tokensReasoning,
-    tokens_cache_read: tokensCacheRead,
-    tokens_cache_write_5m: tokensCacheWrite5m,
-    tokens_cache_write_1h: tokensCacheWrite1h,
-    tokens_total:
-      integer(data, "tokens") ??
-      (tokensInput ?? 0) +
-        (tokensOutput ?? 0) +
-        (tokensReasoning ?? 0) +
-        (tokensCacheRead ?? 0) +
-        (tokensCacheWrite5m ?? 0) +
-        (tokensCacheWrite1h ?? 0),
-    cost_input_microcents: integer(data, "cost.input.microcents"),
-    cost_output_microcents: integer(data, "cost.output.microcents"),
-    cost_cache_read_microcents: integer(data, "cost.cache_read.microcents"),
-    cost_cache_write_microcents: integer(data, "cost.cache_write.microcents"),
-    cost_total_microcents: integer(data, "cost.total.microcents"),
-    output_tps: number(data, "tps.output") ?? outputTps(tokensOutput, timestampFirstByte, timestampLastByte),
     cf_continent: string(data, "cf.continent"),
     cf_country: string(data, "cf.country"),
     cf_city: string(data, "cf.city"),
@@ -139,12 +91,53 @@ function toLakeEvent(time: string, data: Record<string, unknown>) {
     cf_latitude: number(data, "cf.latitude"),
     cf_longitude: number(data, "cf.longitude"),
     cf_timezone: string(data, "cf.timezone"),
+    duration: number(data, "duration"),
+    request_length: integer(data, "request_length"),
+    status: integer(data, "status"),
+    ip: string(data, "ip"),
+    is_stream: boolean(data, "is_stream"),
+    session: string(data, "session"),
+    request: string(data, "request"),
+    client: string(data, "client"),
+    user_agent: string(data, "user_agent"),
+    model_variant: string(data, "model.variant"),
+    source: string(data, "source"),
+    provider: string(data, "provider"),
+    provider_model: string(data, "provider.model"),
+    model: string(data, "model"),
+    llm_error_code: integer(data, "llm.error.code"),
+    llm_error_message: string(data, "llm.error.message"),
+    error_response: string(data, "error.response"),
+    error_type: string(data, "error.type"),
+    error_message: string(data, "error.message"),
+    error_cause: string(data, "error.cause"),
+    error_cause2: string(data, "error.cause2"),
+    api_key: string(data, "api_key"),
+    workspace: string(data, "workspace"),
+    is_subscription: boolean(data, "isSubscription"),
+    subscription: string(data, "subscription"),
+    response_length: integer(data, "response_length"),
+    time_to_first_byte: integer(data, "time_to_first_byte"),
+    timestamp_first_byte: integer(data, "timestamp.first_byte"),
+    timestamp_last_byte: integer(data, "timestamp.last_byte"),
+    tokens_input: integer(data, "tokens.input"),
+    tokens_output: integer(data, "tokens.output"),
+    tokens_reasoning: integer(data, "tokens.reasoning"),
+    tokens_cache_read: integer(data, "tokens.cache_read"),
+    tokens_cache_write_5m: integer(data, "tokens.cache_write_5m"),
+    tokens_cache_write_1h: integer(data, "tokens.cache_write_1h"),
+    cost_input_microcents: integer(data, "cost.input.microcents"),
+    cost_output_microcents: integer(data, "cost.output.microcents"),
+    cost_cache_read_microcents: integer(data, "cost.cache_read.microcents"),
+    cost_cache_write_microcents: integer(data, "cost.cache_write.microcents"),
+    cost_total_microcents: integer(data, "cost.total.microcents"),
+    cost_input: integer(data, "cost.input"),
+    cost_output: integer(data, "cost.output"),
+    cost_cache_read: integer(data, "cost.cache_read"),
+    cost_cache_write_5m: integer(data, "cost.cache_write_5m"),
+    cost_cache_write_1h: integer(data, "cost.cache_write_1h"),
+    cost_total: integer(data, "cost.total"),
   }
-}
-
-function outputTps(tokens: number | undefined, firstByte: number | undefined, lastByte: number | undefined) {
-  if (!tokens || !firstByte || !lastByte || lastByte <= firstByte) return undefined
-  return Number(((tokens / (lastByte - firstByte)) * 1000).toFixed(6))
 }
 
 function string(data: Record<string, unknown>, key: string) {
