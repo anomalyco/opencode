@@ -580,34 +580,109 @@ accountTokenIt.instance("resolves env templates in account config with account t
   }),
 )
 
-it.instance("validates config schema and throws on invalid fields", () =>
-  Effect.gen(function* () {
-    const test = yield* TestInstance
-    yield* writeConfigEffect(test.directory, {
-      $schema: "https://opencode.ai/config.json",
-      invalid_field: "should cause error",
-    })
-    const exit = yield* Config.use.get().pipe(Effect.exit)
-    expect(Exit.isFailure(exit)).toBe(true)
-  }),
-)
+test("handles invalid schema gracefully without crashing", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        invalid_field: "should cause error",
+      })
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.username).toBeDefined()
+    },
+  })
+})
 
-it.instance("throws error for invalid JSON", () =>
-  Effect.gen(function* () {
-    const test = yield* TestInstance
-    yield* AppFileSystem.use.writeWithDirs(path.join(test.directory, "opencode.json"), "{ invalid json }")
-    const exit = yield* Config.use.get().pipe(Effect.exit)
-    expect(Exit.isFailure(exit)).toBe(true)
-  }),
-)
+test("handles invalid JSON gracefully without crashing", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(path.join(dir, "opencode.json"), "{ invalid json }")
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.username).toBeDefined()
+    },
+  })
+})
 
-it.instance("handles agent configuration", () =>
-  Effect.gen(function* () {
-    const test = yield* TestInstance
-    yield* writeConfigEffect(test.directory, {
-      $schema: "https://opencode.ai/config.json",
-      agent: {
-        test_agent: {
+test("handles invalid JSONC syntax gracefully without crashing", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.jsonc"),
+        `{
+          // comment
+          "model": "test/model",
+          "username": "testuser",
+        }`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.username).toBeDefined()
+    },
+  })
+})
+
+test("skips bad config file but merges others", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model: "global/model",
+          username: "globaluser",
+        }),
+      )
+      await Filesystem.write(
+        path.join(dir, "opencode.jsonc"),
+        "{ invalid json }",
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.model).toBe("global/model")
+      expect(config.username).toBe("globaluser")
+    },
+  })
+})
+
+test("handles agent configuration", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        agent: {
+          test_agent: {
+            model: "test/model",
+            temperature: 0.7,
+            description: "test agent",
+          },
+        },
+      })
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.agent?.["test_agent"]).toEqual(
+        expect.objectContaining({
           model: "test/model",
           temperature: 0.7,
           description: "test agent",

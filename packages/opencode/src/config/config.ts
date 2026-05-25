@@ -413,24 +413,34 @@ export const layer = Layer.effect(
       env?: Record<string, string>,
     ) {
       const source = "path" in options ? options.path : options.source
-      const expanded = yield* Effect.promise(() =>
-        ConfigVariable.substitute(
-          "path" in options
-            ? { text, type: "path", path: options.path, env }
-            : { text, type: "virtual", ...options, env },
+      const result = yield* Effect.gen(function* () {
+        const expanded = yield* Effect.promise(() =>
+          ConfigVariable.substitute(
+            "path" in options
+              ? { text, type: "path", path: options.path, env }
+              : { text, type: "virtual", ...options, env },
+          ),
+        )
+        const parsed = ConfigParse.jsonc(expanded, source)
+        const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+        if (!("path" in options)) return data
+
+        yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
+        if (!data.$schema) {
+          data.$schema = "https://opencode.ai/config.json"
+          const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+          yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
+        }
+        return data
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            log.error("invalid config", { path: source, cause })
+            return {} as Info
+          }),
         ),
       )
-      const parsed = ConfigParse.jsonc(expanded, source)
-      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
-      if (!("path" in options)) return data
-
-      yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
-      if (!data.$schema) {
-        data.$schema = "https://opencode.ai/config.json"
-        const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
-      }
-      return data
+      return result
     })
 
     const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
