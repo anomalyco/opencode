@@ -57,24 +57,20 @@ export const Parameters = Schema.Struct({
 })
 
 function output(sessionID: SessionID, text: string) {
-  return [
-    `task_id: ${sessionID} (for resuming to continue this task if needed)`,
-    "",
-    "<task_result>",
-    text,
-    "</task_result>",
-  ].join("\n")
+  return [`<task id="${sessionID}" state="completed">`, "<task_result>", text, "</task_result>", "</task>"].join(
+    "\n",
+  )
 }
 
 function backgroundOutput(sessionID: SessionID) {
   return [
-    `task_id: ${sessionID}`,
-    "state: running",
-    "",
+    `<task id="${sessionID}" state="running">`,
+    "<summary>Background task started</summary>",
     "<task_result>",
     "Background task started. You will be notified automatically when it finishes; do not poll for progress.",
     "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
     "</task_result>",
+    "</task>",
   ].join("\n")
 }
 
@@ -89,9 +85,14 @@ function backgroundMessage(input: {
     input.state === "completed"
       ? `Background task completed: ${input.description}`
       : `Background task failed: ${input.description}`
-  return [title, `task_id: ${input.sessionID}`, `state: ${input.state}`, "", `<${tag}>`, input.text, `</${tag}>`].join(
-    "\n",
-  )
+  return [
+    `<task id="${input.sessionID}" state="${input.state}">`,
+    `<summary>${title}</summary>`,
+    `<${tag}>`,
+    input.text,
+    `</${tag}>`,
+    "</task>",
+  ].join("\n")
 }
 
 function errorText(error: unknown) {

@@ -236,7 +236,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
       expect(result.metadata.sessionId).toBe(child.id)
-      expect(result.output).toContain(`task_id: ${child.id}`)
+      expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
     }),
   )
@@ -369,7 +369,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(result.metadata.sessionId)
       expect(result.metadata.sessionId).not.toBe("ses_missing")
-      expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
+      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
     }),
   )
@@ -509,7 +509,7 @@ describe("tool.task", () => {
 
       const job = yield* jobs.get(result.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain("state: running")
+      expect(result.output).toContain(`state="running"`)
       expect(job?.status).toBe("running")
     }),
   )
