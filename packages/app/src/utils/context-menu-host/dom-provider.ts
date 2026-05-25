@@ -99,12 +99,14 @@ export class DomSelectionProvider implements SelectionProvider {
     if (!Number.isFinite(bboxTop) || !Number.isFinite(bboxBottom)) return null
 
     // 找 pdf-viewer 子树内所有 textLayer spans,过滤中心 y 在 bbox 内
+    // 注:**不过滤 whitespace-only spans** — pdf.js textLayer 用 " " span 表词间空格,
+    // 过滤掉就造成红色 overlay 间"天窗"(user 2026-05-25 实测漏 22 个空格 spans 截图反馈)
     const allSpans = pdfViewer.querySelectorAll<HTMLSpanElement>(".textLayer span")
     type Hit = { el: HTMLSpanElement; rect: DOMRect; cy: number }
     const hits: Hit[] = []
     allSpans.forEach((el) => {
       const t = el.textContent
-      if (!t || !t.trim()) return
+      if (!t) return // 空 textContent(只 br/嵌套元素)跳过
       const rect = el.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) return
       const cy = rect.top + rect.height / 2
@@ -119,7 +121,7 @@ export class DomSelectionProvider implements SelectionProvider {
       return a.rect.left - b.rect.left
     })
 
-    // 拼文本 — 同行 spans 之间无分隔,跨行加 \n
+    // 拼文本 — 同行 spans 之间无分隔(whitespace spans 自带 " "),跨行加 \n
     let text = ""
     let prevTop: number | null = null
     for (const h of hits) {

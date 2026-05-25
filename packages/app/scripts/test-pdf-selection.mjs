@@ -107,13 +107,14 @@ async function main() {
       if (s === endSpan) { cap = false; break }
     }
 
-    // 视觉 bbox 内 expected(新算法,catch 漏掉的字)
+    // 视觉 bbox 内 expected(新算法,catch 漏掉的字 — 包含 whitespace spans 防"天窗")
     const bboxTop = Math.min(startRect.top, endRect.top)
     const bboxBottom = Math.max(startRect.bottom, endRect.bottom)
     const visualSpans = allSpans.filter(s => {
       const r = s.getBoundingClientRect()
       const cy = r.top + r.height / 2
-      return cy >= bboxTop && cy <= bboxBottom && s.textContent && s.textContent.trim().length > 0
+      // 注:**不过滤 whitespace-only spans**,跟 production dom-provider.ts 一致
+      return cy >= bboxTop && cy <= bboxBottom && s.textContent && r.width > 0 && r.height > 0
     })
     visualSpans.sort((a, b) => {
       const ra = a.getBoundingClientRect()
@@ -221,7 +222,7 @@ async function main() {
     const hits = []
     allSpans.forEach(el => {
       const t = el.textContent
-      if (!t || !t.trim()) return
+      if (!t) return  // truly empty(无 text node)才过滤 — whitespace span 保留防"天窗"
       const r = el.getBoundingClientRect()
       if (r.width <= 0 || r.height <= 0) return
       const cy = r.top + r.height / 2
