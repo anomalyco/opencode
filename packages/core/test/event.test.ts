@@ -163,4 +163,106 @@ describe("EventV2", () => {
       expect(received).toEqual([SyncMessage.type, "stream"])
     }),
   )
+
+  it.effect("replays sync events through projectors", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      yield* events.project(SyncMessage, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+      const aggregateID = EventV2.ID.create()
+
+      yield* events.replay({
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "hello" },
+      })
+
+      expect(received[0]?.type).toBe(SyncMessage.type)
+      expect(received[0]?.data).toEqual({ id: aggregateID, text: "hello" })
+    }),
+  )
+
+  it.effect("replayAll validates contiguous aggregate events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const source = yield* events.replayAll([
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 0,
+          aggregateID,
+          data: { id: aggregateID, text: "one" },
+        },
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "two" },
+        },
+      ])
+
+      expect(source).toBe(aggregateID)
+    }),
+  )
+
+  it.effect("claim fences replay owners", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "seed" })
+      yield* events.claim(aggregateID, "owner-a")
+      yield* events.project(SyncMessage, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "ignored" },
+        },
+        { ownerID: "owner-b" },
+      )
+
+      expect(received).toHaveLength(0)
+    }),
+  )
+
+  it.effect("remove clears sync event sequence", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<EventV2.Payload>()
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "seed" })
+      yield* events.remove(aggregateID)
+      yield* events.project(SyncMessage, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      yield* events.replay({
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType(SyncMessage.type, 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "replayed" },
+      })
+
+      expect(received[0]?.data).toEqual({ id: aggregateID, text: "replayed" })
+    }),
+  )
 })
