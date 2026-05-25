@@ -1,12 +1,36 @@
 ---
 feat-id: im-account-agent-workspace-binding
-status: spec
+status: rejected-superseded
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
-# im-account-agent-workspace-binding — 1-spec(研究阶段)
+# im-account-agent-workspace-binding — 1-spec(研究阶段 → 否决)
 
-## 阶段标记
+## 🛑 2026-05-25 状态变更:本 feat 已否决,不实施
+
+**取代方案**:[`/Volumes/ExtSSD/OPENCODE-PLAN/架构决策/im桥接-imbot单一架构.md`](file:///Volumes/ExtSSD/OPENCODE-PLAN/架构决策/im桥接-imbot单一架构.md)
+
+**否决理由**(详见取代文档 §二):原方案是个"功能完整的局部最优",但有 6 个架构层面问题 —
+1. **抽象层错位**:`workspace` 加 feishu-specific schema,未来 telegram/钉钉 加入要么 DRY 违反要么大重构
+2. **1:1 account-workspace 锁死**:跟未来"1 bot 处理多项目"场景错配,折叠 opencode 原生 N:M 灵活模型
+3. **user-facing primitive 错位**:工作目录对 user 按"项目/话题"分,不是按"IM 账号"分
+4. **systemPrompt 已知不可靠**:opencode SDK 不支持 per-prompt system override,leaky abstraction
+5. **GUI 选 agent 是安全漏洞**:imbot 是安全 agent,GUI 暴露 = 给 user 绕过权限收紧的钥匙
+6. **解决未验证需求**:4 个触发条件全部未满足,样本数 = 1,DeskFox v1.x MVP 基础体验优先级更高
+
+**新架构核心思想**(取代后做法):所有 IM 共享 home base workspace,用唯一 `imbot` agent,定制能力放 `<home-base>/.opencode/agent/imbot.md` 单文件。**0 行代码改动解决相同场景**。
+
+**本 1-spec 保留作为审计快照**:记录"这条路被研究过,代码审计完成,为什么不走"。未来回头评估时省去重复研究成本。
+
+**对当前代码的含义**:**0 改动**。`FeishuAccountSchema` / `FEISHU_WORKSPACE` 硬编码 9 处 / `ChatSessionStore` 结构 / `update-settings` 白名单 / 全部保留现状。`account.systemPrompt` / `account.tools` 这两个 schema 历史遗留字段也**保留不动**(清理本身有改动成本 + 风险,保留只是 schema 上有点污染,无运行时影响)。
+
+**回头评估条件**(见取代文档 §六):imbot.md 表达力撞墙 / 跨 IM 行为差异成需求 / 企业级多租户 / opencode 上游加 per-session config override 任一出现。
+
+**imbot 定制指南**(取代方案的 user 操作面):[`../../governance/imbot-定制指南.md`](../../governance/imbot-定制指南.md)
+
+---
+
+## 以下为原研究阶段内容(保留作审计快照)
 
 **本文档是研究输出,不是实施 spec**。原始需求池文档(2026-05-24)还停留在 backlog;在启动实施前需要 user 拍板若干决策点(见 §5)。
 

@@ -123,6 +123,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 应用身份命名规则 | `docs/governance/应用身份-命名规则.md` | 两端规则统一:Mac Bundle ID 三档(已落地,与 `deskfox.ai` 域名对齐)+ Win AppId 三档(已落地 2026-04-30,commit `21c3f80f9`),merge upstream 维护规则 |
 | **版本号与发布渠道规范** | `docs/governance/版本号与发布渠道规范.md` | 3-tier 体系:Tier 1 稳定版(prod 无后缀)/ Tier 2 预览版(dev `-dev` 后缀,可对外发)/ Tier 3 本地测试版(raw exe 不发布);版本号 `YYYY.M.D.N[-env-suffix]` + N 序列双维度独立(平台 × env);Tier 1/2 ship 完整 SOP |
 | **双端协作 SOP** | `docs/governance/双端协作-SOP.md` | feat 分支生命周期(短命,合 main 即销毁,新项目新名字)+ Win/Mac 同时开发流程(rebase / merge / 删分支)+ 协作约定 |
+| **imbot 定制指南** | `docs/governance/imbot-定制指南.md` | DeskFox 用户怎么编辑 `~/.opencode/feishu-workspace/.opencode/agent/imbot.md` 定制 IM 桥接 bot 能力(2026-05-25 ADR 落地后的 user-facing 配套教程);架构决策详 `OPENCODE-PLAN/架构决策/im桥接-imbot单一架构.md` |
 | 跨平台协作 | `docs/governance/跨平台协作.md` | 三端环境(目前已收口 Win) |
 | 数字签名问题 | `docs/governance/数字签名问题.md` | installer 不签名决策 |
 | 改动索引 | `本仓 改动日志.md` | feature 索引(规范 v2 起,详细在 docs/features/) |
