@@ -222,7 +222,7 @@ function teeDiagram(cx: number, cy: number, scale: number) {
       ${text("AMD SEV-SNP  ·  NVIDIA CC", x0 + s(tee.x + tee.w / 2), y0 + s(46), s(11), { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle" })}
 
       ${node(llm, "#252121", PAL.borderStrong)}
-      ${text("Qwen3.6-35B-A3B-fp8", x0 + s(llm.x + llm.w / 2), y0 + s(llm.y + 28), s(13), { fill: PAL.text, family: "JetBrains Mono", anchor: "middle" })}
+      ${text("Qwen3.6", x0 + s(llm.x + llm.w / 2), y0 + s(llm.y + 28), s(13), { fill: PAL.text, family: "JetBrains Mono", anchor: "middle" })}
       ${text("decrypt → infer → encrypt", x0 + s(llm.x + llm.w / 2), y0 + s(llm.y + 50), s(10), { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle" })}
 
       ${arrow(tee.x + tee.w, res.x, 90)}

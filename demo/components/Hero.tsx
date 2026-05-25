@@ -92,7 +92,7 @@ export function Hero() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-sc-text-dim">
                   <span className="rounded bg-sc-bg px-1.5 py-0.5">Build</span>
-                  <span className="text-sc-text-mid">Qwen3.6-35B-A3B-fp8</span>
+                  <span className="text-sc-text-mid">Qwen3.6</span>
                   <span>securecode</span>
                 </div>
               </div>
