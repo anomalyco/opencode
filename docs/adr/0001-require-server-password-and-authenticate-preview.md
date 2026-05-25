@@ -1,6 +1,6 @@
 # ADR-0001: Refuse to start without `OPENCODE_SERVER_PASSWORD`; authenticate `/preview/*`
 
-- Status: Accepted (Phase 2: collab-cookie universal auth for utils deployment)
+- Status: Accepted (Phase 3: per-collab-session internal token for executor self-fetches)
 - Date: 2026-05-21
 - Implemented: 2026-05-22 (password enforcement in commit `ed22169b0`;
   preview proxy auth + cookie-or-basic auth gate in commit
@@ -8,6 +8,52 @@
 - Phase 2 amended: 2026-05-24 — `OPENCODE_AUTH_MODE=collab` makes the
   OAuth cookie the sole gate.  Basic auth is OFF in the utils deployment;
   preserved in the codebase for `opencode serve` localhost users.
+- Phase 3 amended: 2026-05-25 — collab executor's self-fetches to the
+  native HttpApi authenticate with a per-collab-session internal token
+  instead of the shared server password.
+
+## Phase 3 — per-collab-session internal token (utils deployment)
+
+Phase 2 removed `OPENCODE_SERVER_PASSWORD` from the utils task definition.
+That exposed a regression: the collab executor's self-fetches into the
+native HttpApi (via `nativeFetch` → `localhost:4096/session/*`) had been
+relying on `ServerAuth.headers()` returning a basic-auth header sourced
+from that password.  With the password gone, the header was `undefined`,
+the middleware's cookie-only branch fell through to `"fallthrough"`,
+collab mode mapped that to `deny`, and the executor's `POST /session?…`
+calls returned 401:
+
+```
+[collab] failed to create native session: 401
+```
+
+The fix replaces the shared-secret basic-auth header with a **per-collab-
+session internal token**:
+
+- `packages/opencode/src/collab/internal-token.ts` owns an in-memory
+  `Map<collabSessionId, token>` that mints lazily and revokes on session
+  delete.  Tokens are 32-byte random hex strings; comparisons go through
+  `timingSafeEqual`.  The map is process-local and never persisted.
+- `nativeFetch` accepts an optional `collabSessionId` field on its init
+  object.  When present, it attaches `x-opencode-internal-token: <token>`
+  and `x-opencode-collab-session: <id>` headers.
+- Both auth middlewares (`validateCredential` for HttpApi handlers and
+  `authorizationRouterMiddleware` for the router layer) short-circuit on
+  a valid internal-token header pair, ahead of cookie + basic-auth.
+- The token never crosses a network boundary — it travels exclusively
+  between `nativeFetch` and `fetch(localhost:4096/…)` inside the same
+  container.  Loss on process restart is fine: the next call re-mints.
+
+Scoping the token per collab session (rather than one process-wide
+internal token) bounds the blast radius if a token ever leaked: it grants
+access only to the workspace and native session owned by that one collab
+session.  `revokeInternalToken(collabSessionId)` runs in the
+`DELETE /collab/session/:id` handler so deleted sessions can't be
+impersonated either.
+
+Legacy basic-auth still works when `OPENCODE_SERVER_PASSWORD` is set —
+`nativeFetch` attaches both headers when both apply.  This keeps the
+non-collab `opencode serve` deployments untouched.
 
 ## Phase 2 — collab-cookie universal auth (utils deployment)
 

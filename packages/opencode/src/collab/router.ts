@@ -49,6 +49,7 @@ import { toggleReaction, isAllowedEmoji } from "./reactions"
 import { mentionsToEvents } from "./mentions"
 import { insertNote, listRecentNotes } from "./notes"
 import { nativeFetch } from "./native-api"
+import { revokeInternalToken } from "./internal-token"
 import { encryptToken, decryptToken, isEncrypted } from "./crypto"
 import { checkRateLimit, callerIp, rateLimitedResponse } from "./rate-limit"
 
@@ -215,6 +216,7 @@ async function ensureNativeSession(
         // Pass the collab session name through as the opencode session title
         // so the right-hand pane shows "Fix login bug" instead of "New Session".
         body: JSON.stringify({ title: collabSession.name }),
+        collabSessionId,
       },
     )
     if (!createRes.ok) {
@@ -267,7 +269,7 @@ function preWarmNativeSession(collabSessionId: string, workspacePath: string): v
       // session AND so the iframe immediately renders a conversation
       // (instead of an empty new-session view) when the user opens the page.
       if (nativeSessionId) {
-        await sendSeedPrompt(nativeSessionId, workspacePath, cs.name, cs.repos, cs.branch)
+        await sendSeedPrompt(collabSessionId, nativeSessionId, workspacePath, cs.name, cs.repos, cs.branch)
       }
     } catch (err) {
       // Non-fatal: the approve path will retry
@@ -283,6 +285,7 @@ function preWarmNativeSession(collabSessionId: string, workspacePath: string): v
  * conversation in the iframe so users aren't staring at an empty composer.
  */
 async function sendSeedPrompt(
+  collabSessionId: string,
   nativeSessionId: string,
   workspacePath: string,
   sessionName: string,
@@ -320,6 +323,7 @@ async function sendSeedPrompt(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ parts: [{ type: "text", text: seed }] }),
+        collabSessionId,
       },
     )
     if (!res.ok) {
@@ -355,6 +359,7 @@ async function executePromptOnNativeSession(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ parts: [{ type: "text", text: content }] }),
+      collabSessionId: collabSession.id,
     },
   )
   if (!promptRes.ok) {
@@ -997,8 +1002,11 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
     Session.deleteCollabSession(sessionId)
     broadcastSse(sessionId, { type: "collab:session_deleted", collabSessionId: sessionId })
-    // Clean up server workspace
+    // Clean up server workspace + drop the internal-token mint (the
+    // executor can't talk to a deleted session, so the token has no
+    // legitimate user left).
     cleanupSessionWorkspace(sessionId)
+    revokeInternalToken(sessionId)
     return json({ ok: true })
   }
 

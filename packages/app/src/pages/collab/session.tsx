@@ -156,6 +156,23 @@ function OpenPrButton() {
   const [busy, setBusy] = createSignal(false)
   const [prUrl, setPrUrl] = createSignal<string | null>(null)
   const [error, setError] = createSignal<string | null>(null)
+  // Lock the button out for the rest of the page lifetime when the branch
+  // has no commits yet.  The server-side wrap (github-pr.ts) returns a
+  // friendly 400 in that case; the SPA picks up on that exact wording so
+  // it doesn't have to know about the underlying GitHub 422.  Either side
+  // alone would do the job — keeping both is defence-in-depth (Q2 "both"
+  // path in the deploy review): the server stops bad PRs from being
+  // created, the client stops the user from re-clicking into the same
+  // error message a dozen times.
+  const [locked, setLocked] = createSignal(false)
+
+  /** Heuristic for the "no commits yet" condition.  Both the wrapped 400
+   *  ("No commits to open a PR with yet.") and the raw GitHub 422
+   *  ("No commits between …") fall in here, in case anything bypasses
+   *  the server-side wrap (older deployments, partial rollouts). */
+  function looksLikeEmptyBranch(message: string): boolean {
+    return /no commits (to open|between)/i.test(message)
+  }
 
   async function openPr() {
     setBusy(true)
@@ -166,7 +183,9 @@ function OpenPrButton() {
       // Auto-open the PR in a new tab for the Driver.
       window.open(url, "_blank", "noreferrer")
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      if (looksLikeEmptyBranch(message)) setLocked(true)
     } finally {
       setBusy(false)
     }
@@ -177,7 +196,8 @@ function OpenPrButton() {
       <button
         type="button"
         onClick={openPr}
-        disabled={busy()}
+        disabled={busy() || locked()}
+        title={locked() ? "No commits on the collab branch yet — ask the LLM to make a commit first." : undefined}
         class="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white transition-colors"
       >
         <Show

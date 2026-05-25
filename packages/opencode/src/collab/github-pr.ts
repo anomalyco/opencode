@@ -142,6 +142,19 @@ export async function openCollabPullRequest(
         }
       } catch { /* fall through */ }
     }
+    // 422 "No commits between <base> and <head>" — the collab branch has
+    // zero commits ahead of the default branch.  Surface this as a friendly
+    // 400 so the SPA can render a non-scary message + lock out the button,
+    // instead of dumping the raw GitHub validation JSON at the user.
+    if (res.status === 422 && /no commits between/i.test(detail)) {
+      return {
+        ok: false,
+        status: 400,
+        error:
+          `No commits to open a PR with yet. Ask the LLM to make at least one ` +
+          `commit on \`${branch}\` (the collab branch), then try again.`,
+      }
+    }
     return { ok: false, status: res.status, error: detail || `GitHub returned ${res.status}` }
   }
   const data = (await res.json()) as { html_url?: string; number?: number }

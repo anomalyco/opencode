@@ -5,6 +5,11 @@ import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
 import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
 import { isPublicUIPath } from "@/server/shared/public-ui"
 import { authMode, cookieAuthorizesRequest } from "@/collab/cookie-auth"
+import {
+  INTERNAL_COLLAB_SESSION_HEADER,
+  INTERNAL_TOKEN_HEADER,
+  internalTokenAuthorizes,
+} from "@/collab/internal-token"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
@@ -41,6 +46,13 @@ function validateCredential<A, E, R>(
     const url = new URL(request.url, "http://localhost")
     if (isPublicUIPath(request.method, url.pathname)) return yield* effect
 
+    // Server-internal self-fetch auth (ADR-0001 Phase 3).  `nativeFetch`
+    // attaches a per-collab-session internal token that never leaves the
+    // process; the middleware validates it against the in-memory mint
+    // table.  Short-circuits before cookie + basic-auth so the executor's
+    // self-calls into /session/* never depend on a shared password.
+    if (internalTokenFromHttpRequest(request)) return yield* effect
+
     // Cookie-based auth (the GitHub OAuth path).  See CONTEXT.md →
     // "Cookie Authorization Scope" + ADR-0001.  A valid cookie scoped to
     // the addressed workspace/native session passes the gate without ever
@@ -72,6 +84,29 @@ function validateCredential<A, E, R>(
     }
     return yield* effect
   })
+}
+
+/**
+ * Pull the internal-token header pair off an Effect HttpServerRequest and
+ * delegate to `internalTokenAuthorizes`.  Returns true iff both headers are
+ * present and the token matches the in-memory entry for the referenced
+ * collab session.
+ *
+ * Header values from Effect's HttpServerRequest are typed as `string |
+ * string[] | undefined`; we only ever set one value at the source so we
+ * pick the first array element when needed.
+ */
+function internalTokenFromHttpRequest(request: HttpServerRequest.HttpServerRequest): boolean {
+  const headerValue = (key: string): string | null => {
+    const raw = request.headers[key]
+    if (typeof raw === "string") return raw
+    if (Array.isArray(raw)) return raw[0] ?? null
+    return null
+  }
+  return internalTokenAuthorizes(
+    headerValue(INTERNAL_TOKEN_HEADER),
+    headerValue(INTERNAL_COLLAB_SESSION_HEADER),
+  )
 }
 
 /**
@@ -151,6 +186,11 @@ export const authorizationRouterMiddleware = HttpRouter.middleware()(
         const url = new URL(request.url, "http://localhost")
         if (isPublicUIPath(request.method, url.pathname)) return yield* effect
         if (hasPtyConnectTicketURL(url)) return yield* effect
+
+        // ADR-0001 Phase 3: per-collab-session internal token for the
+        // executor's self-fetches.  Same short-circuit as in
+        // validateCredential — see comment there.
+        if (internalTokenFromHttpRequest(request)) return yield* effect
 
         const cookieDecision = cookieDecisionFromHttpRequest(request, url)
         if (cookieDecision === "allow") return yield* effect
