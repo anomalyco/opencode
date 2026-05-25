@@ -157,6 +157,14 @@ function mediaKindFromPath(p: string | undefined): { kind: MediaKind; mimes: str
   return null
 }
 
+// FORK: pdf-like 检测(PDF + Office) — ContextMenuHost data-slot 条件性 wrap 用
+// 用 wrapper 替代直接改 packages/ui/.../pdf.tsx(后者在 R4 黑名单)。等价效果。
+// [feat: office-选中加聊天] 2026-05-24
+function isPdfLikePath(p: string | undefined): boolean {
+  if (!p) return false
+  return p.toLowerCase().endsWith(".pdf") || isOfficeDocument(p)
+}
+
 function rangeAt(source: string, offset: number, len: number) {
   const before = source.slice(0, offset)
   const inner = source.slice(offset, offset + len)
@@ -650,7 +658,7 @@ export function FileTabContent(props: {
     selection: SelectedLineRange
     comment: string
     preview?: string
-    origin?: "review" | "file"
+    origin?: "review" | "file" | "quote"
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? buildPreview(input.file, selection)
@@ -1461,7 +1469,12 @@ export function FileTabContent(props: {
   )
 
   // FORK: 默认渲染路径(@pierre/diffs / fileComponent)— 提取成独立 helper 以便 HTML 源码视图复用 2026-05-05
-  const renderDefault = (source: string) => (
+  //
+  // FORK: PDF/office 文件外层加 data-slot="pdf-viewer" wrap,让 ContextMenuHost 识别预览区
+  // 接管右键(capture 阶段 preventDefault,mdMenu 走 bubble 不会触发)。
+  // wrap 用 display:contents 不影响布局。[feat: office-选中加聊天] 2026-05-24
+  const renderDefault = (source: string) => {
+    const inner = (
     <div class="relative overflow-hidden pb-40" onMouseDown={handlePreContextCapture} onContextMenu={handleSelectionContextMenu}>
       <Dynamic
         component={fileComponent}
@@ -1563,7 +1576,46 @@ export function FileTabContent(props: {
         }}
       />
     </div>
-  )
+    )
+    if (isPdfLikePath(path())) {
+      // FORK: PDF/office 顶栏常驻"用本机软件打开"按钮 — soffice 转的 PDF 是只读栅格化输出,
+      // 公式/图表/艺术字光栅化后选不到。给"我就要编辑原始格式"的 user 永久兜底入口。
+      //
+      // FORK: select-text 必加 — root layout.tsx 全局 `select-none` 只白名单 input/textarea/contenteditable;
+      // PDF.js textLayer 的 spans 是普通 <span> 继承 select-none → 文字无法选中。在 wrap 这层
+      // 重新启用 user-select:text,CSS 继承传到 .pdf-page-wrapper → .textLayer → span。
+      // 跟 message-part.css:709-710 chat 区开 user-select:text 同套路。
+      // [feat: office-选中加聊天] 2026-05-24 hot-fix(user 实测 textLayer 选不中复现)
+      return (
+        <div data-slot="pdf-viewer" data-file-path={path() ?? ""} class="flex flex-col h-full select-text">
+          <div class="flex items-center justify-end gap-2 px-3 py-1 border-b border-border-base bg-surface-raised-stronger-non-alpha text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                const root = sdk.directory
+                const p = path()
+                if (!root || !p) return
+                const absPath = `${root}/${p}`.replace(/\\/g, "/")
+                invoke("open_path", { path: absPath, appName: null }).catch((e) => {
+                  showToast({
+                    variant: "error",
+                    title: "无法用本机软件打开",
+                    description: String(e),
+                  })
+                })
+              }}
+              class="px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+              title="用系统默认应用打开此文件(Word / Excel / PowerPoint / PDF Reader)"
+            >
+              用本机软件打开
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 overflow-hidden">{inner}</div>
+        </div>
+      )
+    }
+    return inner
+  }
 
   // FORK: HTML 预览 — iframe 占满,无顶部 toolbar;右键 → 编辑 进 CodeMirror html 源码模式
   // sandbox: allow-same-origin + allow-scripts(parent 跨 origin,MDN 警告不适用,详 html-viewer-allow-scripts)

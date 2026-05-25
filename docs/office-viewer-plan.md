@@ -124,7 +124,9 @@ LibreOffice 未安装时的 onboarding UI：
 
 ## 已知约束
 
-- **不支持编辑** —— PDF 是只读栅格化输出。编辑需要"用本机软件打开"按钮调外部应用。
+- **不支持 WYSIWYG 编辑** —— PDF 是只读栅格化输出。编辑路径有二:
+  - **外部软件编辑**:"用本机软件打开"按钮调外部应用(Word / LibreOffice / WPS)
+  - **AI agent 编辑**(2026-05-24 决策):通过「office 选中加聊天」feat 提供——user 选中 PDF 预览里的文字 → 加到聊天窗口 → 让 AI 用 python-docx / openpyxl / python-pptx 改原文件 → 重走 office→PDF 管线预览。**这条通道在产品语义上吃掉了"office 编辑"这一用户需求**,WYSIWYG 编辑器因此不重启。详见 [`OPENCODE-PLAN/需求池/office-选中加聊天-架构调研.md`](../../OPENCODE-PLAN/需求池/office-选中加聊天-架构调研.md) §1.4
 - **首次打开 office 文件需 1-3 秒**（LibreOffice 进程冷启动），之后通过磁盘缓存秒开。
 - **每个 office 文件首次打开**仍要冷启动 soffice，跨文件不复用进程（需要 UNO bridge 才能复用，工程量较大未做）。
 - **大 PPT 内存**：~300MB PDF 在 WebView2 内存峰值约 600-700MB（`fetch` ArrayBuffer 一份 + pdfjs 内部一份），仍在可控范围。

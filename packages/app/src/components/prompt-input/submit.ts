@@ -197,7 +197,7 @@ type CommentItem = {
   selection?: FileSelection
   comment?: string
   commentID?: string
-  commentOrigin?: "review" | "file"
+  commentOrigin?: "review" | "file" | "quote"
   preview?: string
 }
 
