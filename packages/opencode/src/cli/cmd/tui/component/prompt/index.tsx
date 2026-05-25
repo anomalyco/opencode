@@ -512,7 +512,12 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({
             value,
             renderer,
-            cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+            cwd:
+              (project.instance.path().worktree === "/"
+                ? undefined
+                : project.instance.path().worktree) ||
+              project.instance.directory() ||
+              process.cwd(),
           })
           if (!content) return
 
