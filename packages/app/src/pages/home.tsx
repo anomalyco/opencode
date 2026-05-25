@@ -19,7 +19,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
@@ -55,7 +55,7 @@ export default function Home() {
 }
 
 function HomeDesign() {
-  const sync = useGlobalSync()
+  const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -358,10 +358,10 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
 }
 
 function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (session: Session) => void }) {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
-  const [sessionStore] = globalSync.child(props.record.session.directory, { bootstrap: false })
+  const [sessionStore] = serverSync.child(props.record.session.directory, { bootstrap: false })
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const unseenCount = createMemo(() => notification.session.unseenCount(props.record.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.record.session.id))
@@ -459,7 +459,7 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
 }
 
 function LegacyHome() {
-  const sync = useGlobalSync()
+  const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
   const dialog = useDialog()
