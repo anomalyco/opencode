@@ -1464,9 +1464,7 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
-  const maxHeight = createMemo(
-    () => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)),
-  )
+  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
 
   return (
     <>
