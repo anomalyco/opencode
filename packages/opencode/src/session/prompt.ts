@@ -11,7 +11,7 @@ import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema } from "ai"
+import { type ModelMessage, type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
@@ -118,6 +118,77 @@ function toolOutput(result: { output: string; attachments?: Array<{ mime: string
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
+
+  function diag(message: string) {
+    process.stderr.write(`[tcc-diagnostic] [aether-flow] ${message}\n`)
+  }
+
+  function safeText(value: unknown) {
+    return String(value ?? "")
+      .replace(/\s+/g, " ")
+      .slice(0, 220)
+  }
+
+  function summarizeSessionMessages(messages: MessageV2.WithParts[]) {
+    return messages
+      .slice(-6)
+      .map((message) => {
+        const parts = message.parts
+          .map((part) => {
+            if (part.type === "text") return `text:${part.text.length}`
+            if (part.type === "reasoning") return `reasoning:${part.text.length}`
+            if (part.type === "tool") {
+              const state = part.state as {
+                status: string
+                input?: unknown
+                output?: string
+                error?: string
+              }
+              const inputKeys =
+                state.input && typeof state.input === "object" ? Object.keys(state.input).slice(0, 5).join(",") : ""
+              return `tool:${part.tool}:${state.status}:call=${part.callID}:out=${state.output?.length ?? 0}:err=${state.error ? 1 : 0}:keys=${inputKeys || "none"}`
+            }
+            return part.type
+          })
+          .join("|")
+        const info = message.info as { id: string; role: string; finish?: string; error?: unknown }
+        return `${info.role}:${info.id}:finish=${info.finish ?? "none"}:error=${info.error ? 1 : 0}:parts=${parts || "none"}`
+      })
+      .join(" ; ")
+  }
+
+  function summarizeModelMessages(messages: ModelMessage[]) {
+    return messages
+      .slice(-6)
+      .map((message) => {
+        const role = message.role
+        const content = (message as { content?: unknown }).content
+        const parts = Array.isArray(content)
+          ? content
+              .map((part) => {
+                if (!part || typeof part !== "object") return typeof part
+                const p = part as {
+                  type?: string
+                  toolName?: string
+                  toolCallId?: string
+                  text?: string
+                  output?: unknown
+                }
+                if (p.type === "text") return `text:${p.text?.length ?? 0}`
+                if (p.type === "tool-call") return `tool-call:${p.toolName ?? "none"}:${p.toolCallId ?? "none"}`
+                if (p.type === "tool-result") {
+                  const outputLen = typeof p.output === "string" ? p.output.length : JSON.stringify(p.output ?? "").length
+                  return `tool-result:${p.toolName ?? "none"}:${p.toolCallId ?? "none"}:out=${outputLen}`
+                }
+                if (p.type === "reasoning") return `reasoning:${p.text?.length ?? 0}`
+                return p.type ?? "unknown"
+              })
+              .join("|")
+          : `text:${String(content ?? "").length}`
+        return `${role}:parts=${parts || "none"}`
+      })
+      .join(" ; ")
+  }
 
   async function hookPart(input: {
     sessionID: SessionID
@@ -444,6 +515,8 @@ export namespace SessionPrompt {
 
   export async function cancel(sessionID: SessionID) {
     log.info("cancel", { sessionID })
+    console.log(`[aether-flow] backend-cancel-start session=${sessionID}`)
+    diag(`stage=backend-cancel-start session=${sessionID}`)
     const s = state()
     const match = s[sessionID]
     if (match) {
@@ -451,7 +524,11 @@ export namespace SessionPrompt {
       delete s[sessionID]
     }
     await finalizeAbort(sessionID)
+    console.log(`[aether-flow] backend-cancel-before-idle session=${sessionID}`)
+    diag(`stage=backend-cancel-before-idle session=${sessionID}`)
     await SessionStatus.set(sessionID, { type: "idle" })
+    console.log(`[aether-flow] backend-cancel-after-idle session=${sessionID}`)
+    diag(`stage=backend-cancel-after-idle session=${sessionID}`)
     return
   }
 
@@ -480,10 +557,25 @@ export namespace SessionPrompt {
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
+      const loopStart = performance.now()
       await SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
+      log.info("tool-freeze prompt loop start", {
+        sessionID,
+        step,
+        resumeExisting: resume_existing,
+      })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      log.info("tool-freeze prompt messages ready", {
+        sessionID,
+        step,
+        messages: msgs.length,
+        took: Math.round(performance.now() - loopStart),
+      })
+      diag(
+        `stage=prompt-messages-ready session=${sessionID} step=${step} messages=${msgs.length} took=${Math.round(performance.now() - loopStart)} tail="${safeText(summarizeSessionMessages(msgs))}"`,
+      )
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
@@ -755,6 +847,17 @@ export namespace SessionPrompt {
       }
 
       // normal processing
+      const normalStart = performance.now()
+      log.info("tool-freeze prompt normal start", {
+        sessionID,
+        step,
+        lastUser: lastUser.id,
+        lastAssistant: lastAssistant?.id,
+        lastFinished: lastFinished?.id,
+      })
+      diag(
+        `stage=prompt-normal-start session=${sessionID} step=${step} lastUser=${lastUser.id} lastAssistant=${lastAssistant?.id ?? "none"} lastFinished=${lastFinished?.id ?? "none"} lastFinishedFinish=${lastFinished?.finish ?? "none"}`,
+      )
       const agent = await Agent.get(lastUser.agent)
       if (!agent) {
         const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
@@ -772,6 +875,13 @@ export namespace SessionPrompt {
         messages: msgs,
         agent,
         session,
+      })
+      log.info("tool-freeze prompt normal context ready", {
+        sessionID,
+        step,
+        agent: agent.name,
+        messages: msgs.length,
+        took: Math.round(performance.now() - normalStart),
       })
 
       const processor = SessionProcessor.create({
@@ -810,6 +920,7 @@ export namespace SessionPrompt {
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
+      const resolveToolsStart = performance.now()
       const tools = await resolveTools({
         agent,
         session,
@@ -818,6 +929,13 @@ export namespace SessionPrompt {
         processor,
         bypassAgentCheck,
         messages: msgs,
+      })
+      log.info("tool-freeze prompt tools ready", {
+        sessionID,
+        step,
+        count: Object.keys(tools).length,
+        took: Math.round(performance.now() - resolveToolsStart),
+        sinceNormalStart: Math.round(performance.now() - normalStart),
       })
 
       // Inject StructuredOutput tool if JSON schema mode enabled
@@ -856,7 +974,14 @@ export namespace SessionPrompt {
         }
       }
 
+      const messagesTransformStart = performance.now()
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+      log.info("tool-freeze prompt messages transform end", {
+        sessionID,
+        step,
+        took: Math.round(performance.now() - messagesTransformStart),
+        sinceNormalStart: Math.round(performance.now() - normalStart),
+      })
 
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent)
@@ -869,7 +994,14 @@ export namespace SessionPrompt {
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
+      log.info("tool-freeze prompt system ready", {
+        sessionID,
+        step,
+        system: system.length,
+        sinceNormalStart: Math.round(performance.now() - normalStart),
+      })
 
+      const responseBeforeStart = performance.now()
       await Plugin.trigger(
         "assistant.response.before",
         {
@@ -886,7 +1018,31 @@ export namespace SessionPrompt {
         {},
         hookOpts(sessionID, processor.message.id),
       )
+      log.info("tool-freeze prompt response before end", {
+        sessionID,
+        step,
+        messageID: processor.message.id,
+        took: Math.round(performance.now() - responseBeforeStart),
+        sinceNormalStart: Math.round(performance.now() - normalStart),
+      })
 
+      const modelMessages = MessageV2.toModelMessages(msgs, model)
+      diag(
+        `stage=prompt-model-messages-ready session=${sessionID} step=${step} count=${modelMessages.length} tail="${safeText(summarizeModelMessages(modelMessages))}"`,
+      )
+      log.info("tool-freeze prompt processor start", {
+        sessionID,
+        step,
+        messageID: processor.message.id,
+        messages: modelMessages.length,
+        tools: Object.keys(tools).length,
+        system: system.length,
+        sinceNormalStart: Math.round(performance.now() - normalStart),
+      })
+      diag(
+        `stage=prompt-processor-start session=${sessionID} step=${step} message=${processor.message.id} messages=${modelMessages.length} tools=${Object.keys(tools).length} system=${system.length} sinceNormalStart=${Math.round(performance.now() - normalStart)}`,
+      )
+      const processorStart = performance.now()
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -894,12 +1050,25 @@ export namespace SessionPrompt {
         abort,
         sessionID,
         system: isLastStep ? [...system, MAX_STEPS] : system,
-        messages: MessageV2.toModelMessages(msgs, model),
+        messages: modelMessages,
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
+      log.info("tool-freeze prompt processor end", {
+        sessionID,
+        step,
+        messageID: processor.message.id,
+        result,
+        finish: processor.message.finish,
+        took: Math.round(performance.now() - processorStart),
+        sinceLoopStart: Math.round(performance.now() - loopStart),
+      })
+      diag(
+        `stage=prompt-processor-end session=${sessionID} step=${step} message=${processor.message.id} result=${result} finish=${processor.message.finish ?? "none"} error=${processor.message.error ? 1 : 0} took=${Math.round(performance.now() - processorStart)} sinceLoopStart=${Math.round(performance.now() - loopStart)}`,
+      )
 
+      const responseAfterStart = performance.now()
       await Plugin.trigger(
         "assistant.response.after",
         {
@@ -918,6 +1087,16 @@ export namespace SessionPrompt {
           error: processor.message.error,
         },
         hookOpts(sessionID, processor.message.id),
+      )
+      log.info("tool-freeze prompt response after end", {
+        sessionID,
+        step,
+        messageID: processor.message.id,
+        took: Math.round(performance.now() - responseAfterStart),
+        sinceLoopStart: Math.round(performance.now() - loopStart),
+      })
+      diag(
+        `stage=prompt-response-after-end session=${sessionID} step=${step} message=${processor.message.id} took=${Math.round(performance.now() - responseAfterStart)} sinceLoopStart=${Math.round(performance.now() - loopStart)}`,
       )
 
       // If structured output was captured, save it and exit immediately
@@ -1034,6 +1213,16 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
+          const toolStart = performance.now()
+          log.info("tool-freeze prompt tool execute start", {
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+            callID: ctx.callID,
+            tool: item.id,
+          })
+          diag(
+            `stage=prompt-tool-execute-start session=${ctx.sessionID} message=${input.processor.message.id} tool=${item.id} call=${ctx.callID}`,
+          )
           await Plugin.trigger(
             "tool.execute.before",
             {
@@ -1046,7 +1235,26 @@ export namespace SessionPrompt {
             },
             hookOpts(ctx.sessionID, input.processor.message.id),
           )
+          log.info("tool-freeze prompt tool before end", {
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+            callID: ctx.callID,
+            tool: item.id,
+            took: Math.round(performance.now() - toolStart),
+          })
+          const executeStart = performance.now()
           const result = await item.execute(args, ctx)
+          log.info("tool-freeze prompt tool execute result", {
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+            callID: ctx.callID,
+            tool: item.id,
+            took: Math.round(performance.now() - executeStart),
+            total: Math.round(performance.now() - toolStart),
+          })
+          diag(
+            `stage=prompt-tool-execute-result session=${ctx.sessionID} message=${input.processor.message.id} tool=${item.id} call=${ctx.callID} took=${Math.round(performance.now() - executeStart)} total=${Math.round(performance.now() - toolStart)}`,
+          )
           const output = {
             ...result,
             attachments: result.attachments?.map((attachment) => ({
@@ -1066,6 +1274,16 @@ export namespace SessionPrompt {
             },
             output,
             hookOpts(ctx.sessionID, input.processor.message.id),
+          )
+          log.info("tool-freeze prompt tool after end", {
+            sessionID: ctx.sessionID,
+            messageID: input.processor.message.id,
+            callID: ctx.callID,
+            tool: item.id,
+            total: Math.round(performance.now() - toolStart),
+          })
+          diag(
+            `stage=prompt-tool-after-end session=${ctx.sessionID} message=${input.processor.message.id} tool=${item.id} call=${ctx.callID} total=${Math.round(performance.now() - toolStart)}`,
           )
           return output
         },

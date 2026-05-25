@@ -621,6 +621,14 @@ export default function Page() {
     console.debug(`[lag] ${kind} ${line}`)
   }
 
+  const toolFreeze = (kind: string, fields: Record<string, string | number | boolean | undefined>) => {
+    const line = Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(" ")
+    console.debug(`[tool-freeze] session ${kind} ${line}`)
+  }
+
   const sampleDom = () => {
     const root = scroller
     if (!root) return
@@ -1266,6 +1274,88 @@ export default function Page() {
     if (!id) return false
     return working(sync.data.session_status[id], sync.data.message[id])
   }
+
+  createEffect(
+    on(
+      () => {
+        const id = params.id
+        const status = id ? sync.data.session_status[id]?.type ?? "none" : "none"
+        const messages = id ? sync.data.message[id] : undefined
+        const last = messages?.at(-1)
+        const lastRole = last?.role ?? "none"
+        const lastMessage = last?.id ?? "none"
+        const completed = last?.role === "assistant" && typeof last.time.completed === "number" ? 1 : 0
+        const run = id ? working(sync.data.session_status[id], messages) : false
+        return `${id ?? "none"}|${status}|${messages?.length ?? 0}|${lastRole}|${lastMessage}|${completed}|${run ? 1 : 0}`
+      },
+      (state) => {
+        const [sessionID, status, count, lastRole, lastMessage, completed, run] = state.split("|")
+        console.debug(
+          `[aether-flow] stage=session-running session=${sessionID} status=${status} messages=${count} lastRole=${lastRole} lastMessage=${lastMessage} completed=${completed} running=${run}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (!running()) return
+    const sessionID = params.id
+    let last = performance.now()
+    const timer = window.setInterval(() => {
+      const now = performance.now()
+      const gap = now - last - 250
+      last = now
+      if (gap < 80) return
+      const dom = sampleDom()
+      toolFreeze("event-loop-lag", {
+        t: now.toFixed(1),
+        session: sessionID ?? "none",
+        gap: Math.round(gap),
+        nodes: dom?.nodes ?? "none",
+        markdown: dom?.markdown ?? "none",
+        full: dom?.full ?? "none",
+        structure: dom?.structure ?? "none",
+        lite: dom?.lite ?? "none",
+        katex: dom?.katex ?? "none",
+        scrollTop: dom?.scrollTop ?? "none",
+        scrollHeight: dom?.scrollHeight ?? "none",
+        clientHeight: dom?.clientHeight ?? "none",
+      })
+    }, 250)
+
+    let observer: PerformanceObserver | undefined
+    if (
+      typeof PerformanceObserver !== "undefined" &&
+      (PerformanceObserver.supportedEntryTypes ?? []).includes("longtask")
+    ) {
+      observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.duration < 50) continue
+          const dom = sampleDom()
+          toolFreeze("longtask", {
+            t: performance.now().toFixed(1),
+            session: sessionID ?? "none",
+            start: Math.round(entry.startTime),
+            duration: Math.round(entry.duration),
+            nodes: dom?.nodes ?? "none",
+            markdown: dom?.markdown ?? "none",
+            full: dom?.full ?? "none",
+            structure: dom?.structure ?? "none",
+            lite: dom?.lite ?? "none",
+            katex: dom?.katex ?? "none",
+          })
+        }
+      })
+      observer.observe({ type: "longtask", buffered: true })
+    }
+
+    onCleanup(() => {
+      window.clearInterval(timer)
+      observer?.disconnect()
+    })
+  })
+
   const autoScroll = createAutoScroll({
     working: running,
     overflowAnchor: "none",

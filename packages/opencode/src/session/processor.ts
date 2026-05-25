@@ -21,6 +21,10 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  function diag(message: string) {
+    process.stderr.write(`[tcc-diagnostic] [aether-flow] ${message}\n`)
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -47,14 +51,79 @@ export namespace SessionProcessor {
         log.info("process")
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        let loop = 0
         while (true) {
+          loop++
+          const loopStart = performance.now()
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            log.info("tool-freeze processor loop start", {
+              sessionID: input.assistantMessage.sessionID,
+              messageID: input.assistantMessage.id,
+              loop,
+              attempt,
+            })
+            const streamOpenStart = performance.now()
+            log.info("tool-freeze processor stream open start", {
+              sessionID: input.assistantMessage.sessionID,
+              messageID: input.assistantMessage.id,
+              loop,
+              attempt,
+              providerID: input.model.providerID,
+              modelID: input.model.id,
+            })
+            diag(
+              `stage=processor-stream-open-start session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} attempt=${attempt} provider=${input.model.providerID} model=${input.model.id}`,
+            )
             const stream = await LLM.stream(streamInput)
+            const streamOpenEnd = performance.now()
+            log.info("tool-freeze processor stream open end", {
+              sessionID: input.assistantMessage.sessionID,
+              messageID: input.assistantMessage.id,
+              loop,
+              attempt,
+              took: Math.round(streamOpenEnd - streamOpenStart),
+            })
+            diag(
+              `stage=processor-stream-open-end session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} took=${Math.round(streamOpenEnd - streamOpenStart)}`,
+            )
+            let lastStreamEventAt = streamOpenEnd
+            let lastStreamEventType = "stream-open"
+            let streamEventCount = 0
 
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()
+              const streamEventAt = performance.now()
+              const streamGap = streamEventAt - lastStreamEventAt
+              streamEventCount++
+              const streamRaw = value as {
+                type: string
+                id?: string
+                toolName?: string
+                toolCallId?: string
+                text?: string
+              }
+              if (streamGap > 250 || streamRaw.type.startsWith("tool")) {
+                log.info("tool-freeze processor stream event", {
+                  sessionID: input.assistantMessage.sessionID,
+                  messageID: input.assistantMessage.id,
+                  loop,
+                  seq: streamEventCount,
+                  type: streamRaw.type,
+                  prevType: lastStreamEventType,
+                  gap: Math.round(streamGap),
+                  id: streamRaw.id,
+                  toolName: streamRaw.toolName,
+                  toolCallID: streamRaw.toolCallId,
+                  text: streamRaw.text?.length,
+                })
+                diag(
+                  `stage=processor-stream-event session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} seq=${streamEventCount} type=${streamRaw.type} prev=${lastStreamEventType} gap=${Math.round(streamGap)} id=${streamRaw.id ?? "none"} tool=${streamRaw.toolName ?? "none"} call=${streamRaw.toolCallId ?? "none"} textLen=${streamRaw.text?.length ?? 0}`,
+                )
+              }
+              lastStreamEventAt = streamEventAt
+              lastStreamEventType = streamRaw.type
               switch (value.type) {
                 case "start":
                   await SessionStatus.set(input.sessionID, { type: "busy" })
@@ -110,6 +179,15 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-start":
+                  log.info("tool-freeze processor tool input start", {
+                    sessionID: input.assistantMessage.sessionID,
+                    messageID: input.assistantMessage.id,
+                    callID: value.id,
+                    tool: value.toolName,
+                  })
+                  diag(
+                    `stage=processor-tool-input-start session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} tool=${value.toolName} call=${value.id}`,
+                  )
                   const part = await Session.updatePart({
                     id: toolcalls[value.id]?.id ?? PartID.ascending(),
                     messageID: input.assistantMessage.id,
@@ -123,6 +201,13 @@ export namespace SessionProcessor {
                       raw: "",
                     },
                   })
+                  log.info("tool-freeze processor tool pending published", {
+                    sessionID: input.assistantMessage.sessionID,
+                    messageID: input.assistantMessage.id,
+                    callID: value.id,
+                    partID: part.id,
+                    tool: value.toolName,
+                  })
                   toolcalls[value.id] = part as MessageV2.ToolPart
                   break
 
@@ -135,6 +220,14 @@ export namespace SessionProcessor {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
+                    const publishStart = performance.now()
+                    log.info("tool-freeze processor tool call start", {
+                      sessionID: input.assistantMessage.sessionID,
+                      messageID: input.assistantMessage.id,
+                      callID: value.toolCallId,
+                      partID: match.id,
+                      tool: value.toolName,
+                    })
                     const part = await Session.updatePart({
                       ...match,
                       tool: value.toolName,
@@ -146,6 +239,14 @@ export namespace SessionProcessor {
                         },
                       },
                       metadata: value.providerMetadata,
+                    })
+                    log.info("tool-freeze processor tool running published", {
+                      sessionID: input.assistantMessage.sessionID,
+                      messageID: input.assistantMessage.id,
+                      callID: value.toolCallId,
+                      partID: part.id,
+                      tool: value.toolName,
+                      took: Math.round(performance.now() - publishStart),
                     })
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
@@ -181,6 +282,17 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    const publishStart = performance.now()
+                    log.info("tool-freeze processor tool result start", {
+                      sessionID: input.assistantMessage.sessionID,
+                      messageID: input.assistantMessage.id,
+                      callID: value.toolCallId,
+                      partID: match.id,
+                      tool: match.tool,
+                    })
+                    diag(
+                      `stage=processor-tool-result-start session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} tool=${match.tool} call=${value.toolCallId} part=${match.id}`,
+                    )
                     await Session.updatePart({
                       ...match,
                       state: {
@@ -196,6 +308,17 @@ export namespace SessionProcessor {
                         attachments: value.output.attachments,
                       },
                     })
+                    log.info("tool-freeze processor tool result end", {
+                      sessionID: input.assistantMessage.sessionID,
+                      messageID: input.assistantMessage.id,
+                      callID: value.toolCallId,
+                      partID: match.id,
+                      tool: match.tool,
+                      took: Math.round(performance.now() - publishStart),
+                    })
+                    diag(
+                      `stage=processor-tool-result-end session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} tool=${match.tool} call=${value.toolCallId} part=${match.id} took=${Math.round(performance.now() - publishStart)}`,
+                    )
 
                     delete toolcalls[value.toolCallId]
                   }
@@ -243,6 +366,16 @@ export namespace SessionProcessor {
                   break
 
                 case "finish-step":
+                  const finishStepStart = performance.now()
+                  log.info("tool-freeze processor finish-step start", {
+                    sessionID: input.assistantMessage.sessionID,
+                    messageID: input.assistantMessage.id,
+                    loop,
+                    reason: value.finishReason,
+                  })
+                  diag(
+                    `stage=processor-finish-step-start session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} reason=${value.finishReason}`,
+                  )
                   const usage = Session.getUsage({
                     model: input.model,
                     usage: value.usage,
@@ -286,6 +419,17 @@ export namespace SessionProcessor {
                   ) {
                     needsCompaction = true
                   }
+                  log.info("tool-freeze processor finish-step end", {
+                    sessionID: input.assistantMessage.sessionID,
+                    messageID: input.assistantMessage.id,
+                    loop,
+                    reason: value.finishReason,
+                    took: Math.round(performance.now() - finishStepStart),
+                    needsCompaction,
+                  })
+                  diag(
+                    `stage=processor-finish-step-end session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} reason=${value.finishReason} needsCompaction=${needsCompaction ? 1 : 0} took=${Math.round(performance.now() - finishStepStart)}`,
+                  )
                   break
 
                 case "text-start":
@@ -341,6 +485,16 @@ export namespace SessionProcessor {
                   break
 
                 case "finish":
+                  log.info("tool-freeze processor finish", {
+                    sessionID: input.assistantMessage.sessionID,
+                    messageID: input.assistantMessage.id,
+                    loop,
+                    events: streamEventCount,
+                    elapsed: Math.round(performance.now() - loopStart),
+                  })
+                  diag(
+                    `stage=processor-finish session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} events=${streamEventCount} elapsed=${Math.round(performance.now() - loopStart)}`,
+                  )
                   break
 
                 default:
@@ -351,7 +505,21 @@ export namespace SessionProcessor {
               }
               if (needsCompaction) break
             }
+            log.info("tool-freeze processor stream drained", {
+              sessionID: input.assistantMessage.sessionID,
+              messageID: input.assistantMessage.id,
+              loop,
+              events: streamEventCount,
+              elapsed: Math.round(performance.now() - loopStart),
+              needsCompaction,
+            })
+            diag(
+              `stage=processor-stream-drained session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} loop=${loop} events=${streamEventCount} needsCompaction=${needsCompaction ? 1 : 0} elapsed=${Math.round(performance.now() - loopStart)}`,
+            )
           } catch (e: any) {
+            diag(
+              `stage=processor-error session=${input.assistantMessage.sessionID} message=${input.assistantMessage.id} error=${e instanceof Error ? e.message.replace(/\s+/g, " ").slice(0, 240) : String(e).replace(/\s+/g, " ").slice(0, 240)}`,
+            )
             log.error("process", {
               error: e,
               stack: JSON.stringify(e.stack),

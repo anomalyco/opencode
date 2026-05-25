@@ -17,29 +17,108 @@ const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
 
-async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
+function diag(message: string) {
+  process.stderr.write(`[tcc-diagnostic] [aether-flow] ${message}\n`)
+}
+
+type StreamItem = {
+  data: string
+  at: number
+  atEpoch: number
+  summary?: string
+}
+
+function summarizeToolFreezeEvent(raw: string) {
+  try {
+    const event = JSON.parse(raw) as {
+      directory?: string
+      payload?: {
+        type?: string
+        properties?: {
+          sessionID?: string
+          id?: string
+          requestID?: string
+          questions?: unknown[]
+          part?: {
+            id?: string
+            messageID?: string
+            sessionID?: string
+            type?: string
+            tool?: string
+            state?: { status?: string }
+          }
+        }
+      }
+    }
+    const payload = event.payload
+    if (!payload?.type) return
+    const directory = event.directory ?? "global"
+    if (payload.type === "session.status") {
+      const props = payload.properties
+      return `type=${payload.type} dir=${directory} session=${props?.sessionID ?? "none"} status=${(props as { status?: { type?: string } } | undefined)?.status?.type ?? "none"}`
+    }
+    if (payload.type === "question.asked" || payload.type === "question.replied" || payload.type === "question.rejected") {
+      const props = payload.properties
+      return `type=${payload.type} dir=${directory} session=${props?.sessionID ?? "none"} request=${props?.id ?? props?.requestID ?? "none"} questions=${props?.questions?.length ?? "none"}`
+    }
+    if (payload.type !== "message.part.updated") return
+    const part = payload.properties?.part
+    if (part?.type !== "tool") return
+    if (part.tool === "hook") return
+    return `type=${payload.type} dir=${directory} session=${part.sessionID ?? "none"} message=${part.messageID ?? "none"} part=${part.id ?? "none"} tool=${part.tool ?? "none"} status=${part.state?.status ?? "none"}`
+  } catch {
+    return
+  }
+}
+
+function streamItem(data: string): StreamItem {
+  return {
+    data,
+    at: performance.now(),
+    atEpoch: Date.now(),
+    summary: summarizeToolFreezeEvent(data),
+  }
+}
+
+function dataWithToolFreezeMeta(item: StreamItem, writeStart: number) {
+  if (!item.summary) return item.data
+  try {
+    const event = JSON.parse(item.data) as Record<string, unknown>
+    event.toolFreeze = {
+      serverCreatedAt: item.atEpoch,
+      serverWriteStartAt: Date.now(),
+      serverQueuedMs: Math.round(writeStart - item.at),
+      summary: item.summary,
+    }
+    return JSON.stringify(event)
+  } catch {
+    return item.data
+  }
+}
+
+async function streamEvents(c: Context, subscribe: (q: AsyncQueue<StreamItem | null>) => () => void) {
   return streamSSE(c, async (stream) => {
-    const q = new AsyncQueue<string | null>()
+    const q = new AsyncQueue<StreamItem | null>()
     let done = false
 
     q.push(
-      JSON.stringify({
+      streamItem(JSON.stringify({
         payload: {
           type: "server.connected",
           properties: {},
         },
-      }),
+      })),
     )
 
     // Send heartbeat every 10s to prevent stalled proxy streams.
     const heartbeat = setInterval(() => {
       q.push(
-        JSON.stringify({
+        streamItem(JSON.stringify({
           payload: {
             type: "server.heartbeat",
             properties: {},
           },
-        }),
+        })),
       )
     }, 10_000)
 
@@ -57,9 +136,27 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
     stream.onAbort(stop)
 
     try {
-      for await (const data of q) {
-        if (data === null) return
-        await stream.writeSSE({ data })
+      for await (const item of q) {
+        if (item === null) return
+        const start = performance.now()
+        if (item.summary) {
+          log.info("tool-freeze sse write start", {
+            queued: Math.round(start - item.at),
+            summary: item.summary,
+          })
+          diag(`stage=sse-write-start queued=${Math.round(start - item.at)} summary="${item.summary}"`)
+        }
+        await stream.writeSSE({ data: dataWithToolFreezeMeta(item, start) })
+        if (item.summary) {
+          log.info("tool-freeze sse write end", {
+            queued: Math.round(start - item.at),
+            took: Math.round(performance.now() - start),
+            summary: item.summary,
+          })
+          diag(
+            `stage=sse-write-end queued=${Math.round(start - item.at)} took=${Math.round(performance.now() - start)} summary="${item.summary}"`,
+          )
+        }
       }
     } finally {
       stop()
@@ -123,7 +220,7 @@ export const GlobalRoutes = lazy(() =>
 
         return streamEvents(c, (q) => {
           async function handler(event: any) {
-            q.push(JSON.stringify(event))
+            q.push(streamItem(JSON.stringify(event)))
           }
           GlobalBus.on("event", handler)
           return () => GlobalBus.off("event", handler)
@@ -164,12 +261,12 @@ export const GlobalRoutes = lazy(() =>
             // TODO: don't pass def, just pass the type (and it should
             // be versioned)
             q.push(
-              JSON.stringify({
+              streamItem(JSON.stringify({
                 payload: {
                   ...event,
                   type: SyncEvent.versionedType(def.type, def.version),
                 },
-              }),
+              })),
             )
           })
         })

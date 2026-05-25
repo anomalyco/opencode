@@ -696,12 +696,31 @@ export namespace Session {
 
   export const updatePart = fn(UpdatePartInput, async (part) => {
     const time = performance.now()
+    if (part.type === "tool") {
+      log.info("tool-freeze session part publish start", {
+        sessionID: part.sessionID,
+        messageID: part.messageID,
+        partID: part.id,
+        tool: part.tool,
+        status: part.state.status,
+      })
+    }
     SyncEvent.run(MessageV2.Event.PartUpdated, {
       sessionID: part.sessionID,
       part: structuredClone(part),
       time: Date.now(),
     })
     const took = performance.now() - time
+    if (part.type === "tool") {
+      log.info("tool-freeze session part publish end", {
+        sessionID: part.sessionID,
+        messageID: part.messageID,
+        partID: part.id,
+        tool: part.tool,
+        status: part.state.status,
+        took: Math.round(took),
+      })
+    }
     const size = partSize(part)
     if (took > PART_WARN_MS || size > PART_SIZE_WARN) {
       log.warn("slow part update", {

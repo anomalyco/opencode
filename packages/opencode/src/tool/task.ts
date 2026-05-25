@@ -12,6 +12,7 @@ import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { Truncate } from "./truncate"
+import { Log } from "@/util/log"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -27,6 +28,7 @@ const parameters = z.object({
 })
 
 export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("task", async (ctx) => {
+  const log = Log.create({ service: "tool.task" })
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
   // Filter agents by permissions if agent provided
@@ -46,7 +48,23 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      const started = performance.now()
+      log.info("tool-freeze task execute start", {
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        subagent: params.subagent_type,
+        resume: !!params.task_id,
+        bypassAgentCheck: !!ctx.extra?.bypassAgentCheck,
+      })
       if (ctx.agent && params.subagent_type === ctx.agent) {
+        log.info("tool-freeze task execute refused self", {
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          subagent: params.subagent_type,
+          took: Math.round(performance.now() - started),
+        })
         return {
           title: params.description,
           metadata: {
@@ -61,6 +79,13 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
+        const permissionStart = performance.now()
+        log.info("tool-freeze task permission start", {
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          subagent: params.subagent_type,
+        })
         await ctx.ask({
           permission: "task",
           patterns: [params.subagent_type],
@@ -70,13 +95,29 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
             subagent_type: params.subagent_type,
           },
         })
+        log.info("tool-freeze task permission end", {
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          subagent: params.subagent_type,
+          took: Math.round(performance.now() - permissionStart),
+        })
       }
 
+      const agentStart = performance.now()
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      log.info("tool-freeze task agent loaded", {
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        subagent: params.subagent_type,
+        took: Math.round(performance.now() - agentStart),
+      })
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
 
+      const sessionStart = performance.now()
       const session = await iife(async () => {
         if (params.task_id) {
           const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
@@ -109,6 +150,14 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
           ],
         })
       })
+      log.info("tool-freeze task session ready", {
+        sessionID: ctx.sessionID,
+        childSessionID: session.id,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        subagent: params.subagent_type,
+        took: Math.round(performance.now() - sessionStart),
+      })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
@@ -132,8 +181,27 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
       }
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      const resolveStart = performance.now()
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      log.info("tool-freeze task prompt parts ready", {
+        sessionID: ctx.sessionID,
+        childSessionID: session.id,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        subagent: params.subagent_type,
+        parts: promptParts.length,
+        took: Math.round(performance.now() - resolveStart),
+      })
 
+      const promptStart = performance.now()
+      log.info("tool-freeze task child prompt start", {
+        sessionID: ctx.sessionID,
+        childSessionID: session.id,
+        messageID: ctx.messageID,
+        childMessageID: messageID,
+        callID: ctx.callID,
+        subagent: params.subagent_type,
+      })
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -148,6 +216,15 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
+      })
+      log.info("tool-freeze task child prompt end", {
+        sessionID: ctx.sessionID,
+        childSessionID: session.id,
+        messageID: ctx.messageID,
+        childMessageID: messageID,
+        callID: ctx.callID,
+        subagent: params.subagent_type,
+        took: Math.round(performance.now() - promptStart),
       })
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""

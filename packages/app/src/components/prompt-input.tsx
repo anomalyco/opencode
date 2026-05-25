@@ -35,7 +35,6 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { extraAgentByDirectory, extraAgentCapabilities } from "@/pages/layout/extra-agents"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -397,10 +396,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   type DictKey = keyof typeof enDict
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   const platform = usePlatform()
-  const server = useServer()
   const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const { params, tabs, view } = useSessionLayout()
-  const extraAgentIntegration = createMemo(() => extraAgentByDirectory(sdk.directory)?.id ?? server.current?.integration)
+  const extraAgentIntegration = createMemo(() => extraAgentByDirectory(sdk.directory)?.id)
   const extraAgentCaps = createMemo(() => extraAgentCapabilities(extraAgentIntegration()))
   const hasAgentChoose = createMemo(() => !!extraAgentCaps()?.agentChoose)
   const hideAgentSelector = createMemo(() => !!extraAgentCaps()?.hideAgent)

@@ -1683,26 +1683,17 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const len = displayText().length
     const tail = clip(displayText())
     if (len < prev) {
-      console.warn("[text-part] text rollback", {
-        msg: props.message.id,
-        part: part.id,
-        prev,
-        next: len,
-        tail,
-      })
+      console.warn(
+        `[text-part] text rollback msg=${props.message.id} part=${part.id} prev=${prev} next=${len} tail=${tail}`,
+      )
     }
 
     const nextLast = isLastTextPart()
     const nextLive = streaming()
     if (nextLast !== last || nextLive !== live) {
-      console.debug("[text-part] stream mode", {
-        msg: props.message.id,
-        part: part.id,
-        len,
-        last: nextLast,
-        streaming: nextLive,
-        tail,
-      })
+      console.debug(
+        `[text-part] stream mode msg=${props.message.id} part=${part.id} len=${len} last=${nextLast} streaming=${nextLive} tail=${tail}`,
+      )
     }
 
     prev = len

@@ -16,6 +16,12 @@ type EventMap = { [key: string]: Event }
 type DomainEmitter = GlobalEmitter<EventMap>
 type DomainEvent = { name: string; details: Event; domain: DomainId }
 type DomainListener = (event: DomainEvent) => void
+type ToolFreezeMeta = {
+  serverCreatedAt?: number
+  serverWriteStartAt?: number
+  serverQueuedMs?: number
+  summary?: string
+}
 
 type Value = {
   url: string
@@ -153,6 +159,9 @@ export function GlobalSDKProvider(props: ParentProps) {
         }
       })()
       const eventSdk = createSdkForServer({ signal: abort.signal, fetch: eventFetch, server: conn.http })
+      console.debug(
+        `[aether-flow] stage=stream-config domain=${domain} url=${url} fetch=${eventFetch ? "platform" : "webview"}`,
+      )
       const next = (state()[domain]?.version ?? 0) + 1
       setState((prev) => ({ ...prev, [domain]: createRuntime(conn, next, domain) }))
       const domainEmitter = ensureEmitter(domain)
@@ -183,6 +192,68 @@ export function GlobalSDKProvider(props: ParentProps) {
       const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
       const aborted = (error: unknown) => abortError.safeParse(error).success
       const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
+      const aetherFlowEvent = (stage: string, directory: string, payload: Event) => {
+        if (payload.type === "message.part.updated") {
+          const part = payload.properties.part
+          if (part.type === "text") {
+            return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=text len=${part.text?.length ?? 0} end=${part.time?.end ? 1 : 0} tail="${(part.text ?? "").slice(-60)}"`
+          }
+          if (part.type === "reasoning") {
+            return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=reasoning len=${part.text?.length ?? 0} end=${part.time?.end ? 1 : 0}`
+          }
+          if (part.type === "tool") {
+            return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=tool tool=${part.tool} status=${part.state.status}`
+          }
+          return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} session=${part.sessionID} message=${part.messageID} part=${part.id} partType=${part.type}`
+        }
+        if (payload.type === "message.part.delta") {
+          const props = payload.properties
+          return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} message=${props.messageID} part=${props.partID} field=${props.field} len=${props.delta.length} tail="${props.delta.slice(-60)}"`
+        }
+        if (payload.type === "session.status") {
+          return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} session=${payload.properties.sessionID} status=${payload.properties.status.type}`
+        }
+        if (payload.type === "session.error") {
+          const props = payload.properties
+          return `[aether-flow] stage=${stage} dir=${directory} type=${payload.type} session=${props.sessionID} error=${props.error?.name ?? "none"}`
+        }
+      }
+      const toolFreezeMeta = (event: unknown): ToolFreezeMeta | undefined => {
+        if (!event || typeof event !== "object") return
+        const meta = (event as { toolFreeze?: ToolFreezeMeta }).toolFreeze
+        if (!meta?.summary) return
+        return meta
+      }
+      const toolFreezeTiming = (meta: ToolFreezeMeta | undefined, nowEpoch: number) => {
+        if (!meta) return "server=none"
+        const createdToClient = meta.serverCreatedAt ? Math.round(nowEpoch - meta.serverCreatedAt) : "none"
+        const writeToClient = meta.serverWriteStartAt ? Math.round(nowEpoch - meta.serverWriteStartAt) : "none"
+        return `serverQueued=${meta.serverQueuedMs ?? "none"}ms serverCreatedToClient=${createdToClient}ms serverWriteToClient=${writeToClient}ms`
+      }
+      const toolFreezeEvent = (directory: string, payload: Event) => {
+        if (payload.type === "question.asked" || payload.type === "question.replied" || payload.type === "question.rejected") {
+          const props = payload.properties as { sessionID?: string; id?: string; requestID?: string; questions?: unknown[] }
+          return `type=${payload.type} dir=${directory} session=${props.sessionID ?? "none"} request=${props.id ?? props.requestID ?? "none"} questions=${props.questions?.length ?? "none"}`
+        }
+        if (payload.type === "permission.asked") {
+          const props = payload.properties as { sessionID?: string; id?: string; permission?: string }
+          if (props.permission !== "task") return
+          return `type=${payload.type} dir=${directory} session=${props.sessionID ?? "none"} request=${props.id ?? "none"} permission=${props.permission}`
+        }
+        if (payload.type === "message.part.updated") {
+          const props = payload.properties as { part?: { id?: string; messageID?: string; sessionID?: string; type?: string; tool?: string; state?: { status?: string } } }
+          const part = props.part
+          if (part?.type !== "tool") return
+          if (part.tool === "hook") return
+          return `type=${payload.type} dir=${directory} session=${part.sessionID ?? "none"} message=${part.messageID ?? "none"} part=${part.id ?? "none"} tool=${part.tool ?? "none"} status=${part.state?.status ?? "none"}`
+        }
+        if (payload.type === "session.created") {
+          const props = payload.properties as { info?: { id?: string; parentID?: string; directory?: string } }
+          const info = props.info
+          if (!info?.parentID) return
+          return `type=${payload.type} dir=${directory} session=${info.id ?? "none"} parent=${info.parentID ?? "none"} child=1`
+        }
+      }
       const key = (directory: string, payload: Event) => {
         if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
         if (payload.type === "lsp.updated") return `lsp.updated:${directory}`
@@ -195,6 +266,7 @@ export function GlobalSDKProvider(props: ParentProps) {
         if (timer) clearTimeout(timer)
         timer = undefined
         if (queue.length === 0) return
+        const flushStart = performance.now()
         const events = queue
         const skip = stale.size > 0 ? new Set(stale) : undefined
         queue = buffer
@@ -203,18 +275,24 @@ export function GlobalSDKProvider(props: ParentProps) {
         coalesced.clear()
         stale.clear()
         last = Date.now()
+        const interesting = events.flatMap((event) => {
+          const summary = toolFreezeEvent(event.directory, event.payload)
+          return summary ? [summary] : []
+        })
+        if (interesting.length > 0) {
+          console.debug(
+            `[tool-freeze] global-sdk flush-start t=${flushStart.toFixed(1)} count=${events.length} interesting=${interesting.length} first="${interesting[0]}"`,
+          )
+        }
         for (const event of events) {
+          const flow = aetherFlowEvent("flush-emit", event.directory, event.payload)
+          if (flow) console.debug(flow)
           if (skip && event.payload.type === "message.part.delta") {
             const props = event.payload.properties
             if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) {
-              console.warn("[global-sdk] stale delta skipped", {
-                dir: event.directory,
-                msg: props.messageID,
-                part: props.partID,
-                field: props.field,
-                len: props.delta.length,
-                tail: props.delta.slice(-40),
-              })
+              console.warn(
+                `[aether-flow] stage=flush-skip-stale dir=${event.directory} type=${event.payload.type} message=${props.messageID} part=${props.partID} field=${props.field} len=${props.delta.length} tail="${props.delta.slice(-60)}"`,
+              )
               continue
             }
           }
@@ -229,9 +307,16 @@ export function GlobalSDKProvider(props: ParentProps) {
             try {
               entry.cb({ name: event.directory, details: event.payload, domain })
             } catch (err) {
-              console.error("[global-sdk] listenAll cb failed", err)
+              console.error(`[global-sdk] listenAll cb failed err=${String(err)}`)
             }
           }
+        }
+        const flushTook = performance.now() - flushStart
+        if (interesting.length > 0 || flushTook > 50) {
+          const first = interesting[0] ?? "none"
+          console.debug(
+            `[tool-freeze] global-sdk flush-end t=${performance.now().toFixed(1)} took=${flushTook.toFixed(1)} count=${events.length} interesting=${interesting.length} first="${first}"`,
+          )
         }
         buffer.length = 0
       }
@@ -259,6 +344,8 @@ export function GlobalSDKProvider(props: ParentProps) {
       if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility)
 
       void (async () => {
+        let lastRawToolFreezeAt = performance.now()
+        let lastYieldToolFreezeAt = performance.now()
         while (!abort.signal.aborted) {
           attempt = new AbortController()
           lastEventAt = Date.now()
@@ -271,6 +358,23 @@ export function GlobalSDKProvider(props: ParentProps) {
                 if (aborted(error) || streamErrorLogged) return
                 streamErrorLogged = true
               },
+              onSseEvent: (streamEvent) => {
+                const raw = streamEvent.data as { directory?: string; payload?: Event }
+                const payload = raw?.payload
+                if (payload) {
+                  const flow = aetherFlowEvent("raw-sse", raw.directory ?? "global", payload)
+                  if (flow) console.debug(flow)
+                }
+                const summary = payload ? toolFreezeEvent(raw.directory ?? "global", payload) : undefined
+                if (!summary) return
+                const meta = toolFreezeMeta(streamEvent.data)
+                const nowPerf = performance.now()
+                const nowEpoch = Date.now()
+                console.debug(
+                  `[tool-freeze] global-sdk raw-sse t=${nowPerf.toFixed(1)} sinceRaw=${Math.round(nowPerf - lastRawToolFreezeAt)}ms ${toolFreezeTiming(meta, nowEpoch)} first="${meta?.summary ?? summary}"`,
+                )
+                lastRawToolFreezeAt = nowPerf
+              },
             })
             let yielded = Date.now()
             resetHeartbeat()
@@ -281,6 +385,18 @@ export function GlobalSDKProvider(props: ParentProps) {
               failedAttempts = 0
               const directory = event.directory ?? "global"
               const payload = event.payload
+              const flow = aetherFlowEvent("stream-yield", directory, payload)
+              if (flow) console.debug(flow)
+              const summary = toolFreezeEvent(directory, payload)
+              if (summary) {
+                const nowPerf = performance.now()
+                const nowEpoch = Date.now()
+                const meta = toolFreezeMeta(event)
+                console.debug(
+                  `[tool-freeze] global-sdk stream-event t=${nowPerf.toFixed(1)} sinceYield=${Math.round(nowPerf - lastYieldToolFreezeAt)}ms ${toolFreezeTiming(meta, nowEpoch)} ${summary}`,
+                )
+                lastYieldToolFreezeAt = nowPerf
+              }
               const k = key(directory, payload)
               if (k) {
                 const i = coalesced.get(k)

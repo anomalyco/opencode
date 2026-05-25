@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
+import { Log } from "@/util/log"
 
 function extractBase64(url: string): string {
   // Recursively strip all data URL prefixes to get pure base64
@@ -44,10 +45,25 @@ export const QuestionTool = Tool.define("question", {
     questions: z.array(Question.Info.omit({ custom: true })).describe("Questions to ask"),
   }),
   async execute(params, ctx) {
+    const log = Log.create({ service: "tool.question" })
+    const start = performance.now()
+    log.info("tool-freeze question tool ask start", {
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      callID: ctx.callID,
+      questions: params.questions.length,
+    })
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: params.questions,
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+    })
+    log.info("tool-freeze question tool ask end", {
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      callID: ctx.callID,
+      questions: params.questions.length,
+      took: Math.round(performance.now() - start),
     })
 
     function formatAnswer(answer: Question.Answer | undefined) {
@@ -62,6 +78,14 @@ export const QuestionTool = Tool.define("question", {
         return next ? [next] : []
       }),
     )
+    log.info("tool-freeze question tool output ready", {
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      callID: ctx.callID,
+      questions: params.questions.length,
+      attachments: attachments.length,
+      took: Math.round(performance.now() - start),
+    })
 
     return {
       title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,

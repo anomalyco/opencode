@@ -11,7 +11,6 @@ import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
-import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -19,6 +18,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { extraAgentByDirectory } from "@/pages/layout/extra-agents"
 
 type PendingPrompt = {
   abort: AbortController
@@ -251,7 +251,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sync = useSync()
   const globalSync = useGlobalSync()
   const local = useLocal()
-  const server = useServer()
   const permission = usePermission()
   const prompt = usePrompt()
   const layout = useLayout()
@@ -384,8 +383,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    const openclaw = server.current?.integration === "openclaw"
-    const genericagent = server.current?.integration === "genericagent"
+    const currentExtraAgent = extraAgentByDirectory(sdk.directory)?.id
+    const openclaw = currentExtraAgent === "openclaw"
+    const genericagent = currentExtraAgent === "genericagent"
     const currentModel =
       local.model.current() ??
       (openclaw

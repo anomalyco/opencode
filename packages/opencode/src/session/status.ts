@@ -7,6 +7,10 @@ import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 
 export namespace SessionStatus {
+  function diag(message: string) {
+    process.stderr.write(`[tcc-diagnostic] [aether-flow] ${message}\n`)
+  }
+
   export const Info = z
     .union([
       z.object({
@@ -70,9 +74,15 @@ export namespace SessionStatus {
 
       const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
         const data = yield* InstanceState.get(state)
+        console.log(`[aether-flow] backend-status-set-start session=${sessionID} status=${status.type}`)
+        diag(`stage=backend-status-set-start session=${sessionID} status=${status.type}`)
         yield* Effect.promise(() => Bus.publish(Event.Status, { sessionID, status }))
+        console.log(`[aether-flow] backend-status-set-published session=${sessionID} status=${status.type}`)
+        diag(`stage=backend-status-set-published session=${sessionID} status=${status.type}`)
         if (status.type === "idle") {
           yield* Effect.promise(() => Bus.publish(Event.Idle, { sessionID }))
+          console.log(`[aether-flow] backend-status-idle-published session=${sessionID}`)
+          diag(`stage=backend-status-idle-published session=${sessionID}`)
           data.delete(sessionID)
           return
         }

@@ -170,6 +170,9 @@ type Estimate = {
   tool: number
 }
 
+const visibleEstimatePart = (part: Part) => part.type !== "tool" || part.tool !== "hook"
+const visibleToolPart = (part: Part) => part.type === "tool" && part.tool !== "hook"
+
 function mathMode(): MathMode {
   if (typeof window === "undefined") return "markdown"
   const value = window.localStorage.getItem("opencode.desktop.session.math")
@@ -416,8 +419,9 @@ export function MessageTimeline(props: {
       if (!id) continue
 
       const parts = sync.data.part[msg.id] ?? []
-      part += parts.length
-      tool += parts.filter((item) => item.type !== "text").length
+      const visibleParts = parts.filter(visibleEstimatePart)
+      part += visibleParts.length
+      tool += visibleParts.filter((item) => item.type !== "text").length
       const body = parts
         .filter((item): item is TextPart => item.type === "text" && !(item as TextPart).synthetic)
         .map((item) => item.text)
@@ -1470,6 +1474,46 @@ export function MessageTimeline(props: {
   })
 
   createEffect(
+    on(
+      () => {
+        const id = sessionID()
+        if (!id) return "none"
+        const messages = sync.data.message[id] ?? emptyMessages
+        const last = messages.at(-1)
+        if (!last) return `${id}:none`
+        const parts = sync.data.part[last.id] ?? []
+        const tool = parts.findLast(visibleToolPart)
+        if (!tool || tool.type !== "tool") return `${id}:${last.id}:none`
+        return `${id}:${last.id}:${tool.id}:${tool.tool}:${tool.state.status}`
+      },
+      (key) => {
+        if (key.split(":").at(-1) === "none") return
+        console.debug(
+          `[tool-freeze] timeline latest-tool t=${performance.now().toFixed(1)} key=${key} rendered=${rendered().length} visible=${visibleRendered().length} canWindow=${canWindow() ? 1 : 0} live=${props.live ? 1 : 0} working=${isWorking() ? 1 : 0}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [visibleRendered().join(","), windowed.start, windowed.end, windowed.top, windowed.bottom] as const,
+      ([ids]) => {
+        const activeID = activeMessageID()
+        if (!activeID) return
+        const parts = sessionMessages().flatMap((message) => sync.data.part[message.id] ?? [])
+        const tool = parts.findLast(visibleToolPart)
+        if (!tool || tool.type !== "tool") return
+        console.debug(
+          `[tool-freeze] timeline window t=${performance.now().toFixed(1)} active=${activeID} latestTool=${tool.tool} status=${tool.state.status} visibleCount=${visibleRendered().length} rendered=${rendered().length} window=[${windowed.start},${windowed.end}] top=${Math.round(windowed.top)} bottom=${Math.round(windowed.bottom)} idsLen=${ids.length}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
     on(activeMessageID, (id, prev) => {
       if (id === prev) return
       if (props.seekingMessageId)
@@ -2341,8 +2385,16 @@ export function MessageTimeline(props: {
       return "defer"
     })
     const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
+      const start = performance.now()
       if (active()) return turnMessages(sessionMessages(), item.messageID)
       const next = turnMessages(sessionMessages(), item.messageID)
+      const took = performance.now() - start
+      const tool = next.flatMap((message) => sync.data.part[message.id] ?? []).findLast(visibleToolPart)
+      if (tool?.type === "tool" && (active() || took > 8)) {
+        console.debug(
+          `[tool-freeze] timeline turn-messages t=${performance.now().toFixed(1)} took=${took.toFixed(1)} message=${item.messageID} active=${active() ? 1 : 0} count=${next.length} tool=${tool.tool} status=${tool.state.status}`,
+        )
+      }
       return prev && sameMessages(prev, next) ? prev : next
     }, emptyMessages)
     const comments = createMemo(() => messageComments(sync.data.part[item.messageID] ?? []), [], {
@@ -2462,6 +2514,14 @@ export function MessageTimeline(props: {
             performance.measure("submit:to-dom-mount", "submit:start", "submit:dom-mount")
             const m = performance.getEntriesByName("submit:to-dom-mount", "measure").at(-1)
             console.debug(`[perf:submit] message DOM mounted: ${Math.round(m?.duration ?? 0)}ms after submit`, { messageID: item.messageID })
+          }
+          const tool = messages().flatMap((message) => sync.data.part[message.id] ?? []).findLast(visibleToolPart)
+          if (tool?.type === "tool") {
+            requestAnimationFrame(() => {
+              console.debug(
+                `[tool-freeze] timeline turn-dom t=${performance.now().toFixed(1)} message=${item.messageID} index=${item.index} active=${active() ? 1 : 0} tool=${tool.tool} status=${tool.state.status} height=${Math.round(el.getBoundingClientRect().height)} visible=${visible(el) ? 1 : 0}`,
+              )
+            })
           }
         }}
         id={props.anchor(item.messageID)}

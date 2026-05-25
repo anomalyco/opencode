@@ -37,6 +37,22 @@ function mark(_name: string, _data: Mark = {}) {
 function markImpact(_kind: string, _data: Mark = {}) {
 }
 
+function debugLine(prefix: string, fields: Record<string, string | number | boolean | undefined>) {
+  const line = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.debug(`${prefix} ${line}`)
+}
+
+function warnLine(prefix: string, fields: Record<string, string | number | boolean | undefined>) {
+  const line = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ")
+  console.warn(`${prefix} ${line}`)
+}
+
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
@@ -788,6 +804,19 @@ export function Markdown(
         html: safe.length,
         took: Math.round(performance.now() - time),
       })
+      const parseTook = performance.now() - time
+      if (input.streaming || parseTook > 40) {
+        debugLine("[tool-freeze] markdown parse", {
+          t: performance.now().toFixed(1),
+          key: input.cacheKey ?? input.key ?? "none",
+          mode: input.mode,
+          math: input.math,
+          streaming: input.streaming,
+          text: input.markdown.length,
+          html: safe.length,
+          took: Math.round(parseTook),
+        })
+      }
       if (!input.streaming && key && input.hash) {
         touch(key, { hash: input.hash, html: safe })
       }
@@ -816,7 +845,7 @@ export function Markdown(
 
   onMount(() => {
     if (info.streaming) {
-      console.debug("[markdown] mount", {
+      debugLine("[markdown] mount", {
         key: info.key,
         text: info.text,
       })
@@ -827,7 +856,7 @@ export function Markdown(
   onCleanup(() => {
     live = false
     if (info.streaming) {
-      console.debug("[markdown] cleanup", {
+      debugLine("[markdown] cleanup", {
         key: info.key,
         text: info.text,
       })
@@ -845,7 +874,7 @@ export function Markdown(
         const observer = new IntersectionObserver(
           (entries) => {
             if (!live || !container.isConnected) {
-              console.debug("[markdown] skip stale visible observer", {
+              debugLine("[markdown] skip stale visible observer", {
                 key: info.key,
                 text: info.text,
               })
@@ -876,7 +905,7 @@ export function Markdown(
         const observer = new IntersectionObserver(
           (entries) => {
             if (!live || !container.isConnected) {
-              console.debug("[markdown] skip stale math observer", {
+              debugLine("[markdown] skip stale math observer", {
                 key: info.key,
                 text: info.text,
               })
@@ -949,7 +978,7 @@ export function Markdown(
     const time = performance.now()
 
     if (isStreaming && prevHtml && content.length < prevHtml.length) {
-      console.warn("[markdown] html rollback", {
+      warnLine("[markdown] html rollback", {
         key: local.cacheKey ?? "",
         prev: prevHtml.length,
         next: content.length,
@@ -963,10 +992,24 @@ export function Markdown(
       container.dataset.html = content
 
       if (took > DOM_WARN_MS) {
-        console.warn("[markdown] slow dom", {
+        warnLine("[markdown] slow dom", {
           key: local.cacheKey ?? "",
           mode,
           streaming: isStreaming,
+          text: local.text.length,
+          prev: prevHtml.length,
+          next: content.length,
+          nodes: container.childNodes.length,
+          took: Math.round(took),
+        })
+      }
+      if (isStreaming || upgrading || took > 24) {
+        debugLine("[tool-freeze] markdown dom", {
+          t: performance.now().toFixed(1),
+          key: local.cacheKey ?? "none",
+          mode,
+          streaming: isStreaming,
+          upgrading,
           text: local.text.length,
           prev: prevHtml.length,
           next: content.length,
@@ -1004,7 +1047,7 @@ export function Markdown(
           const jump = after.top - before.top
           const shrink = after.height - before.height
           if (jump < -24) {
-            console.warn("[markdown] scroll jump", {
+            warnLine("[markdown] scroll jump", {
               key: local.cacheKey ?? "",
               mode,
               jump,
@@ -1012,8 +1055,10 @@ export function Markdown(
               htmlPrev: prevHtml.length,
               htmlNext: content.length,
               text: local.text.length,
-              before,
-              after,
+              beforeTop: before.top,
+              beforeHeight: before.height,
+              afterTop: after.top,
+              afterHeight: after.height,
             })
           }
         }
@@ -1030,7 +1075,7 @@ export function Markdown(
       if (copySetupTimer) clearTimeout(copySetupTimer)
       copySetupTimer = setTimeout(() => {
         if (!live || !container.isConnected) {
-          console.debug("[markdown] skip stale copy setup", {
+          debugLine("[markdown] skip stale copy setup", {
             key: info.key,
             text: info.text,
           })
@@ -1099,7 +1144,7 @@ export function Markdown(
     if (isStreaming && prevHtml) {
       const prefix = prevHtml.slice(0, Math.max(0, prevHtml.lastIndexOf("<")))
       if (prefix && !content.startsWith(prefix)) {
-        console.warn("[markdown] non-prefix morph", {
+        warnLine("[markdown] non-prefix morph", {
           key: local.cacheKey ?? "",
           prev: prevHtml.length,
           next: content.length,
@@ -1116,7 +1161,7 @@ export function Markdown(
       onBeforeElUpdated: (fromEl, toEl) => {
         if (fromEl.isEqualNode(toEl)) return false
         if (stable(fromEl) && stable(toEl) && fromEl.textContent === toEl.textContent) {
-          console.debug("[markdown] skip stable math subtree", {
+          debugLine("[markdown] skip stable math subtree", {
             key: local.cacheKey ?? "",
             tag: fromEl.tagName,
             text: local.text.length,
@@ -1145,7 +1190,7 @@ export function Markdown(
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (!live || !container.isConnected) {
-        console.debug("[markdown] skip stale label sync", {
+        debugLine("[markdown] skip stale label sync", {
           key: info.key,
           text: info.text,
         })

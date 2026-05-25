@@ -164,7 +164,20 @@ export namespace Question {
           tool: input.tool,
         }
         pending.set(id, { info, deferred })
+        const publishStart = performance.now()
+        log.info("tool-freeze question publish start", {
+          sessionID: input.sessionID,
+          requestID: id,
+          questions: input.questions.length,
+          toolMessageID: input.tool?.messageID,
+          toolCallID: input.tool?.callID,
+        })
         Bus.publish(Event.Asked, info)
+        log.info("tool-freeze question publish end", {
+          sessionID: input.sessionID,
+          requestID: id,
+          took: Math.round(performance.now() - publishStart),
+        })
 
         return yield* Effect.ensuring(
           Deferred.await(deferred),
@@ -175,6 +188,7 @@ export namespace Question {
       })
 
       const reply = Effect.fn("Question.reply")(function* (input: { requestID: QuestionID; answers: Answer[] }) {
+        const start = performance.now()
         const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(input.requestID)
         if (!existing) {
@@ -183,12 +197,32 @@ export namespace Question {
         }
         pending.delete(input.requestID)
         log.info("replied", { requestID: input.requestID, answers: input.answers })
+        log.info("tool-freeze question reply publish start", {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          answers: input.answers.length,
+        })
         Bus.publish(Event.Replied, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
           answers: input.answers,
         })
+        log.info("tool-freeze question reply publish end", {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          took: Math.round(performance.now() - start),
+        })
+        log.info("tool-freeze question deferred succeed start", {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          took: Math.round(performance.now() - start),
+        })
         yield* Deferred.succeed(existing.deferred, input.answers)
+        log.info("tool-freeze question deferred succeed end", {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          took: Math.round(performance.now() - start),
+        })
       })
 
       const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {

@@ -37,6 +37,18 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
   })
 
+  createEffect(
+    on(
+      () => questionRequest(),
+      (request) => {
+        console.debug(
+          `[tool-freeze] composer question-request t=${performance.now().toFixed(1)} route=${params.id ?? "none"} request=${request?.id ?? "none"} session=${request?.sessionID ?? "none"} questions=${request?.questions.length ?? 0}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
       return !permission.autoResponds(item, sdk.directory)
@@ -48,6 +60,18 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     if (!id) return false
     return !!permissionRequest() || !!questionRequest()
   })
+
+  createEffect(
+    on(
+      () => [blocked(), permissionRequest()?.id, questionRequest()?.id] as const,
+      ([next, permissionID, questionID]) => {
+        console.debug(
+          `[tool-freeze] composer blocked t=${performance.now().toFixed(1)} route=${params.id ?? "none"} blocked=${next ? 1 : 0} permission=${permissionID ?? "none"} question=${questionID ?? "none"}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
 
   const [test, setTest] = createStore({
     on: false,
@@ -119,6 +143,18 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     return busy() || blocked()
   })
 
+  createEffect(
+    on(
+      () => [busy(), blocked(), live()] as const,
+      ([nextBusy, nextBlocked, nextLive]) => {
+        console.debug(
+          `[tool-freeze] composer live t=${performance.now().toFixed(1)} route=${params.id ?? "none"} busy=${nextBusy ? 1 : 0} blocked=${nextBlocked ? 1 : 0} live=${nextLive ? 1 : 0}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,
     dock: todos().length > 0 && live(),
@@ -183,6 +219,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     on(
       () => [todos().length, done(), live()] as const,
       ([count, complete, active]) => {
+        const effectStart = performance.now()
         if (raf) cancelAnimationFrame(raf)
         raf = undefined
 
@@ -192,10 +229,17 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
           live: active,
         })
 
+        console.debug(
+          `[tool-freeze] composer todo-state t=${effectStart.toFixed(1)} route=${params.id ?? "none"} count=${count} done=${complete ? 1 : 0} live=${active ? 1 : 0} next=${next} dock=${store.dock ? 1 : 0} closing=${store.closing ? 1 : 0}`,
+        )
+
         if (next === "hide") {
           if (timer) window.clearTimeout(timer)
           timer = undefined
           setStore({ dock: false, closing: false, opening: false })
+          console.debug(
+            `[tool-freeze] composer todo-state-end t=${performance.now().toFixed(1)} took=${(performance.now() - effectStart).toFixed(1)} route=${params.id ?? "none"} next=${next}`,
+          )
           return
         }
 
@@ -203,6 +247,9 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
           if (timer) window.clearTimeout(timer)
           timer = undefined
           clear()
+          console.debug(
+            `[tool-freeze] composer todo-state-end t=${performance.now().toFixed(1)} took=${(performance.now() - effectStart).toFixed(1)} route=${params.id ?? "none"} next=${next}`,
+          )
           return
         }
 
@@ -217,14 +264,23 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
               setStore("opening", false)
               raf = undefined
             })
+            console.debug(
+              `[tool-freeze] composer todo-state-end t=${performance.now().toFixed(1)} took=${(performance.now() - effectStart).toFixed(1)} route=${params.id ?? "none"} next=${next} hidden=1`,
+            )
             return
           }
           setStore("opening", false)
+          console.debug(
+            `[tool-freeze] composer todo-state-end t=${performance.now().toFixed(1)} took=${(performance.now() - effectStart).toFixed(1)} route=${params.id ?? "none"} next=${next} hidden=0`,
+          )
           return
         }
 
         setStore({ dock: true, opening: false, closing: true })
         if (!timer) scheduleClose()
+        console.debug(
+          `[tool-freeze] composer todo-state-end t=${performance.now().toFixed(1)} took=${(performance.now() - effectStart).toFixed(1)} route=${params.id ?? "none"} next=${next}`,
+        )
       },
     ),
   )

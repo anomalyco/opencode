@@ -39,6 +39,7 @@
   --toast-action: var(--text-invert-weak);
   --toast-action-strong: var(--text-invert-strong);
   --toast-progress: rgb(255 255 255 / 0.2);
+  --toast-progress-track: rgb(255 255 255 / 0.12);
 
   position: relative;
   display: flex;
@@ -64,6 +65,7 @@
     --toast-bg: rgb(12 12 14 / 0.34);
     --toast-border: rgb(255 255 255 / 0.1);
     --toast-progress: rgb(255 255 255 / 0.22);
+    --toast-progress-track: rgb(255 255 255 / 0.12);
   }
 
   &[data-variant="success"] {
@@ -77,6 +79,7 @@
     );
     --toast-icon: var(--icon-success-base);
     --toast-progress: var(--icon-success-base);
+    --toast-progress-track: color-mix(in oklch, var(--icon-success-base) 24%, transparent);
   }
 
   &[data-variant="error"] {
@@ -90,6 +93,10 @@
     );
     --toast-icon: light-dark(var(--icon-on-warning-base), var(--icon-warning-base));
     --toast-progress: light-dark(var(--icon-on-warning-base), var(--icon-warning-base));
+    --toast-progress-track: light-dark(
+      color-mix(in oklch, var(--icon-on-warning-base) 24%, transparent),
+      color-mix(in oklch, var(--icon-warning-base) 26%, transparent)
+    );
   }
 
   [data-slot="toast-inner"] {
@@ -255,21 +262,44 @@
   }
 
   [data-slot="toast-progress-track"] {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background-color: rgb(255 255 255 / 0.08);
-    border-radius: 0 0 var(--toast-radius) var(--toast-radius);
-    overflow: hidden;
+    --toast-countdown-size: 16px;
+    --toast-countdown-ring: 2px;
+
+    flex-shrink: 0;
+    position: relative;
+    width: var(--toast-countdown-size);
+    height: var(--toast-countdown-size);
+    margin-top: 4px;
+    border-radius: 999px;
+    background: var(--toast-progress-track);
+    mask: radial-gradient(
+      farthest-side,
+      transparent calc(100% - var(--toast-countdown-ring)),
+      #000 calc(100% - var(--toast-countdown-ring))
+    );
+    -webkit-mask: radial-gradient(
+      farthest-side,
+      transparent calc(100% - var(--toast-countdown-ring)),
+      #000 calc(100% - var(--toast-countdown-ring))
+    );
+
+    &::before {
+      content: none;
+    }
   }
 
   [data-slot="toast-progress-fill"] {
-    height: 100%;
-    width: var(--kb-toast-progress-fill-width);
-    background-color: var(--toast-progress);
-    transition: width 250ms linear;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: conic-gradient(
+      from -90deg,
+      var(--toast-progress) var(--kb-toast-progress-fill-width, 100%),
+      transparent 0
+    );
+    mask: inherit;
+    -webkit-mask: inherit;
+    pointer-events: none;
   }
 }
 

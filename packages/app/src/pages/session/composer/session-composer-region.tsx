@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
@@ -113,6 +113,31 @@ export function SessionComposerRegion(props: {
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, store.height))
 
+  createEffect(
+    on(
+      () => props.state.questionRequest(),
+      (request) => {
+        console.debug(
+          `[tool-freeze] composer-region question t=${performance.now().toFixed(1)} route=${route.params.id ?? "none"} request=${request?.id ?? "none"} session=${request?.sessionID ?? "none"} questions=${request?.questions.length ?? 0} ready=${store.ready ? 1 : 0} dock=${props.state.dock() ? 1 : 0}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [open(), dock(), value(), store.height] as const,
+      ([nextOpen, nextDock, nextValue, nextHeight]) => {
+        if (!props.state.questionRequest() && !props.state.permissionRequest()) return
+        console.debug(
+          `[tool-freeze] composer-region dock t=${performance.now().toFixed(1)} route=${route.params.id ?? "none"} open=${nextOpen ? 1 : 0} dock=${nextDock ? 1 : 0} progress=${nextValue.toFixed(3)} height=${Math.round(nextHeight)} question=${props.state.questionRequest()?.id ?? "none"} permission=${props.state.permissionRequest()?.id ?? "none"}`,
+        )
+      },
+      { defer: true },
+    ),
+  )
+
   createEffect(() => {
     const el = store.body
     if (!el) return
@@ -120,8 +145,15 @@ export function SessionComposerRegion(props: {
     const update = () => {
       if (raf !== undefined) cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
+        const start = performance.now()
         raf = undefined
-        setStore("height", el.getBoundingClientRect().height)
+        const height = el.getBoundingClientRect().height
+        setStore("height", height)
+        if (props.state.questionRequest() || props.state.permissionRequest()) {
+          console.debug(
+            `[tool-freeze] composer-region resize t=${performance.now().toFixed(1)} took=${(performance.now() - start).toFixed(1)} route=${route.params.id ?? "none"} height=${Math.round(height)} question=${props.state.questionRequest()?.id ?? "none"} permission=${props.state.permissionRequest()?.id ?? "none"}`,
+          )
+        }
       })
     }
     update()
@@ -148,7 +180,13 @@ export function SessionComposerRegion(props: {
       >
         <Show when={props.state.questionRequest()} keyed>
           {(request) => (
-            <div>
+            <div
+              ref={(el) => {
+                console.debug(
+                  `[tool-freeze] composer-region question-dom t=${performance.now().toFixed(1)} route=${route.params.id ?? "none"} request=${request.id} session=${request.sessionID} questions=${request.questions.length} height=${Math.round(el.getBoundingClientRect().height)}`,
+                )
+              }}
+            >
               <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
             </div>
           )}

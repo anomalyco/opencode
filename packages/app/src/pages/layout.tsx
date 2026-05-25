@@ -96,7 +96,7 @@ import {
   extraAgentConfig,
   extraAgentDir,
   extraAgentProject,
-  isExtraAgentDirectory,
+  domainFromDirectory,
   mainDomain,
 } from "./layout/extra-agents"
 import {
@@ -218,6 +218,23 @@ export default function Layout(props: ParentProps) {
     q: "",
   })
   const [switching, setSwitching] = createSignal<string | undefined>()
+
+  createEffect(
+    on(
+      () => [pageReady(), routeDir(), server.domain] as const,
+      async ([ready, dir, domain]) => {
+        if (!ready || !dir) return
+        const routeDomain = domainFromDirectory(dir)
+        if (routeDomain === domain) return
+
+        const key = server.lastFor(routeDomain)
+        if (!key) return
+        server.setActive(key)
+        await waitServer(key)
+      },
+      { defer: true },
+    ),
+  )
   let findInput: HTMLInputElement | undefined
 
   const closeFindbar = () => {
