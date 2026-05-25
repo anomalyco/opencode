@@ -47,7 +47,7 @@ const BaseParameters = Schema.Struct(BaseParameterFields)
 export const Parameters = Schema.Struct({
   ...BaseParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({
-    description: "Run the agent in the background and deliver a notification when it completes",
+    description: "Run the agent in the background. You will be notified when it completes.",
   }),
 })
 
