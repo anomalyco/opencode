@@ -143,7 +143,7 @@ export function SectionTEE() {
             第三者からは参照できない。
           </p>
 
-          <div className="mt-6 flex flex-1 flex-col gap-4 md:grid md:grid-cols-[1.8fr_1fr] md:gap-8">
+          <div className="mt-6 flex flex-1 flex-col gap-4 md:grid md:grid-cols-[1fr_1fr] md:gap-8 lg:grid-cols-[1.8fr_1fr]">
             {/* === 図 === */}
             <div className="relative flex min-h-0 flex-[3] items-center justify-center">
               <svg
@@ -407,7 +407,7 @@ export function SectionTEE() {
             </div>
 
             {/* === ステップリスト === */}
-            <ol className="hidden space-y-3 self-center md:block">
+            <ol className="hidden self-center md:block md:space-y-2 lg:space-y-3">
               <Step progress={a0} index={0} step={STEPS[0]} />
               <Step progress={a1} index={1} step={STEPS[1]} />
               <Step progress={a2} index={2} step={STEPS[2]} />
@@ -464,7 +464,7 @@ function Step({
   return (
     <motion.li
       style={{ opacity, x, borderColor }}
-      className="rounded-md border bg-sc-bg-soft/60 p-4 backdrop-blur-sm"
+      className="rounded-md border bg-sc-bg-soft/60 p-3 lg:p-4 backdrop-blur-sm"
     >
       <div className="mb-1 flex items-center gap-2">
         <motion.span
