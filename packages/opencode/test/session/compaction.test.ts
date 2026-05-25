@@ -614,6 +614,15 @@ describe("session.overflow.autoCompactStalled", () => {
   test("returns true when current somehow exceeds previous", () => {
     expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 240_000 })).toBe(true)
   })
+
+  test("counts repeated zero-token compactions as stalled", () => {
+    // The provider-error compaction path (ContextOverflowError caught in
+    // SessionProcessor.halt) skips step-finish, so handle.message.tokens
+    // stays at the zero-initialized value. Two such triggers in a row give
+    // us no progress signal at all — without this guard the percentage
+    // check would keep returning false (0 > 0 * 0.95 = false) forever.
+    expect(autoCompactStalled({ previousTokens: 0, currentTokens: 0 })).toBe(true)
+  })
 })
 
 describe("session.compaction.create", () => {

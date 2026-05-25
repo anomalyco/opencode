@@ -47,5 +47,9 @@ export function autoCompactStalled(input: {
   threshold?: number
 }) {
   if (input.previousTokens === undefined) return false
+  // Provider-error compactions don't populate tokens (no step-finish runs),
+  // so we see 0 → 0. With no progress signal, treat as stalled — otherwise
+  // the percentage check below would keep returning false forever.
+  if (input.previousTokens === 0 && input.currentTokens === 0) return true
   return input.currentTokens > input.previousTokens * (input.threshold ?? 0.95)
 }
