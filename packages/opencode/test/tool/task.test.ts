@@ -126,6 +126,44 @@ function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithPa
   }
 }
 
+type PartDraft = MessageV2.Part extends infer Part
+  ? Part extends MessageV2.Part
+    ? Omit<Part, "id" | "messageID" | "sessionID">
+    : never
+  : never
+
+function replyWithParts(
+  input: SessionPrompt.PromptInput,
+  parts: PartDraft[],
+  info?: Partial<MessageV2.Assistant>,
+): MessageV2.WithParts {
+  const id = MessageID.ascending()
+  return {
+    info: {
+      id,
+      role: "assistant",
+      parentID: input.messageID ?? MessageID.ascending(),
+      sessionID: input.sessionID,
+      mode: input.agent ?? "general",
+      agent: input.agent ?? "general",
+      cost: 0,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: input.model?.modelID ?? ref.modelID,
+      providerID: input.model?.providerID ?? ref.providerID,
+      time: { created: Date.now() },
+      finish: "stop",
+      ...info,
+    },
+    parts: parts.map((part) => ({
+      ...part,
+      id: PartID.ascending(),
+      messageID: id,
+      sessionID: input.sessionID,
+    })) as MessageV2.Part[],
+  }
+}
+
 describe("tool.task", () => {
   it.instance(
     "description sorts subagents by name and is stable across calls",
@@ -239,6 +277,93 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.output).toContain(`task_id: ${child.id}`)
       expect(seen?.sessionID).toBe(child.id)
+    }),
+  )
+
+  it.instance("execute returns child text output when present", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ text: "done" }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("<task_result>\ndone\n</task_result>")
+    }),
+  )
+
+  it.instance("execute returns diagnostic output when child finishes without a text part", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.succeed(
+            replyWithParts(
+              input,
+              [
+                {
+                  type: "step-start",
+                },
+                {
+                  type: "reasoning",
+                  text: "thinking",
+                  time: { start: Date.now() },
+                },
+                {
+                  type: "step-finish",
+                  reason: "stop",
+                  cost: 0,
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                },
+              ],
+              { finish: "stop" },
+            ),
+          ),
+        loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "done")),
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("Subagent completed without a text response.")
+      expect(result.output).toContain("finish: stop")
+      expect(result.output).toContain("error: none")
+      expect(result.output).toContain("parts: step-start, reasoning, step-finish")
     }),
   )
 

@@ -100,6 +100,30 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+function taskResultError(error: MessageV2.Assistant["error"]) {
+  if (!error) return "none"
+  return JSON.stringify(error) ?? String(error)
+}
+
+function taskResultText(result: MessageV2.WithParts) {
+  const textPart = result.parts.findLast((item) => item.type === "text")
+  if (textPart) return textPart.text
+
+  const partTypes = result.parts.map((item) => item.type).join(", ") || "none"
+  if (result.info.role !== "assistant") {
+    return ["Subagent completed without an assistant response.", `role: ${result.info.role}`, `parts: ${partTypes}`].join(
+      "\n",
+    )
+  }
+
+  return [
+    "Subagent completed without a text response.",
+    `finish: ${result.info.finish ?? "unknown"}`,
+    `error: ${taskResultError(result.info.error)}`,
+    `parts: ${partTypes}`,
+  ].join("\n")
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -208,7 +232,7 @@ export const TaskTool = Tool.define(
           },
           parts,
         })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        return taskResultText(result)
       })
 
       const resumeWhenIdle: (input: { userID: MessageID; state: "completed" | "error" }) => Effect.Effect<void> =
