@@ -6,9 +6,7 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/un
 import {
   InvalidCursorError,
   InvalidRequestError,
-  ServiceUnavailableError,
   SessionNotFoundError,
-  UnknownError,
 } from "../../errors"
 import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
@@ -62,7 +60,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
-      error: [SessionNotFoundError, ServiceUnavailableError],
+      error: [SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.compact",
@@ -76,7 +74,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
-      error: [SessionNotFoundError, ServiceUnavailableError],
+      error: [SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.wait",
@@ -90,7 +88,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: Schema.Array(SessionMessage.Message),
-      error: [SessionNotFoundError, UnknownError],
+      error: [SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.context",

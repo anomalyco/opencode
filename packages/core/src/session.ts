@@ -36,7 +36,7 @@ const ListInputBase = {
   workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
   limit: Schema.Int.pipe(Schema.optional),
-  order: Schema.Literal("asc").pipe(Schema.optional),
+  order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
   cursor: ListCursor.pipe(Schema.optional),
 }
 
