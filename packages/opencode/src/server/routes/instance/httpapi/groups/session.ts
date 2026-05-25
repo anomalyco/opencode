@@ -74,6 +74,7 @@ export const PermissionResponsePayload = Schema.Struct({
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
+  singleStatus: `${root}/:sessionID/status`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -123,6 +124,18 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.status",
             summary: "Get session status",
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+          }),
+        ),
+        HttpApiEndpoint.get("singleStatus", SessionPaths.singleStatus, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(SessionStatus.Info, "Get single session status"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.singleStatus",
+            summary: "Get single session status",
+            description: "Retrieve the current status of a specific session.",
           }),
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {
