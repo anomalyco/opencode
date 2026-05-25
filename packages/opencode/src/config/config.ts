@@ -420,9 +420,12 @@ export const layer = Layer.effect(
             : { text, type: "virtual", ...options, env },
         ),
       )
+      let parsedOk = false
       const data = yield* Effect.sync(() => {
         const parsed = ConfigParse.jsonc(expanded, source)
-        return ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+        const result = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+        parsedOk = true
+        return result
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
@@ -440,7 +443,7 @@ export const layer = Layer.effect(
           }),
         ),
       )
-      if (!data.$schema) {
+      if (parsedOk && !data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
         const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
         yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
