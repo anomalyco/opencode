@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
+import * as Sink from "effect/Sink"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
@@ -14,20 +15,46 @@ import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const shellLayer = Layer.mergeAll(
-  CrossSpawnSpawner.defaultLayer,
-  AppFileSystem.defaultLayer,
-  Plugin.defaultLayer,
-  Truncate.defaultLayer,
-  Config.defaultLayer,
-  Agent.defaultLayer,
-  RuntimeFlags.defaultLayer,
+const makeShellLayer = (spawner: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner, never, never>) =>
+  Layer.mergeAll(
+    spawner,
+    AppFileSystem.defaultLayer,
+    Plugin.defaultLayer,
+    Truncate.defaultLayer,
+    Config.defaultLayer,
+    Agent.defaultLayer,
+    RuntimeFlags.defaultLayer,
+  )
+
+const shellLayer = makeShellLayer(CrossSpawnSpawner.defaultLayer)
+const encoder = new TextEncoder()
+const delayedOutputLayer = Layer.succeed(
+  ChildProcessSpawner.ChildProcessSpawner,
+  ChildProcessSpawner.make(() =>
+    Effect.succeed(
+      ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(0),
+        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+        isRunning: Effect.succeed(false),
+        kill: () => Effect.void,
+        stdin: Sink.drain,
+        stdout: Stream.empty,
+        stderr: Stream.empty,
+        all: Stream.fromEffect(Effect.sleep("50 millis").pipe(Effect.as(encoder.encode("delayed output\n")))),
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void),
+      }),
+    ),
+  ),
 )
+const delayedOutputIt = testEffect(makeShellLayer(delayedOutputLayer))
 const it = testEffect(shellLayer)
 type ShellTestServices =
   | (typeof shellLayer extends Layer.Layer<infer ROut, infer _E, infer _RIn> ? ROut : never)
@@ -206,6 +233,28 @@ describe("tool.shell", () => {
           )
           expect(result.metadata.exit).toBe(0)
           expect(result.output).toContain("fallback")
+        }),
+      )
+    }),
+  )
+
+  delayedOutputIt.live("waits for shell output after process exit", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const bash = yield* initBash()
+          const result = yield* bash.execute(
+            {
+              command: "echo delayed",
+              description: "Echo delayed output",
+            },
+            ctx,
+          )
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain("delayed output")
+          expect(result.metadata.output).toContain("delayed output")
         }),
       )
     }),
