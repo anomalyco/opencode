@@ -522,6 +522,20 @@ export const layer: Layer.Layer<
     const storage = yield* Storage.Service
     const flags = yield* RuntimeFlags.Service
 
+    const locationForSession = Effect.fnUntraced(function* (sessionID: SessionID) {
+      const row = yield* db
+        .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return
+      return {
+        directory: AbsolutePath.make(row.directory),
+        workspaceID: row.workspaceID ?? undefined,
+      }
+    })
+
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
@@ -615,18 +629,18 @@ export const layer: Layer.Layer<
 
     const updateMessage = <T extends SessionLegacy.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        const session = yield* get(msg.sessionID)
+        const location = yield* locationForSession(msg.sessionID)
         yield* events.publish(
           SessionLegacy.Event.MessageUpdated,
           { sessionID: msg.sessionID, info: msg },
-          { location: eventLocation(session) },
+          { location },
         )
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
     const updatePart = <T extends SessionLegacy.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        const session = yield* get(part.sessionID)
+        const location = yield* locationForSession(part.sessionID)
         yield* events.publish(
           SessionLegacy.Event.PartUpdated,
           {
@@ -634,7 +648,7 @@ export const layer: Layer.Layer<
             part: structuredClone(part),
             time: Date.now(),
           },
-          { location: eventLocation(session) },
+          { location },
         )
         return part
       }).pipe(Effect.withSpan("Session.updatePart"))
@@ -828,14 +842,14 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       messageID: MessageID
     }) {
-      const session = yield* get(input.sessionID)
+      const location = yield* locationForSession(input.sessionID)
       yield* events.publish(
         SessionLegacy.Event.MessageRemoved,
         {
           sessionID: input.sessionID,
           messageID: input.messageID,
         },
-        { location: eventLocation(session) },
+        { location },
       )
       return input.messageID
     })
@@ -845,7 +859,7 @@ export const layer: Layer.Layer<
       messageID: MessageID
       partID: PartID
     }) {
-      const session = yield* get(input.sessionID)
+      const location = yield* locationForSession(input.sessionID)
       yield* events.publish(
         SessionLegacy.Event.PartRemoved,
         {
@@ -853,7 +867,7 @@ export const layer: Layer.Layer<
           messageID: input.messageID,
           partID: input.partID,
         },
-        { location: eventLocation(session) },
+        { location },
       )
       return input.partID
     })
