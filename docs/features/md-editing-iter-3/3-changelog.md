@@ -14,15 +14,30 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | 2 | `52978936d` | docs: 1-spec 矫正白领基线(GitHub MD CSS + iA Writer) |
 | 3 | `e44d40c80` | docs: 2-plan A/A/A/A/A 锁版 |
 | 4 | `f7b8c8bf8` | feat: markdownHighlightStyle + markdownSyntaxHighlight + 4 单测 **[R4 override-blacklist]** |
-| 5 | (本笔) | docs: 3-changelog + INDEX done + 改动日志.md |
+| 5 | `9e92cda44` | docs: 3-changelog + INDEX done + 改动日志.md |
+| 6 | (本笔) | refactor: 色彩矫正 — `var(--primary)` 未定义 bug 修 + Option A 现代办公文档配色(`var(--text-interactive-base)` 链接 + list marker 回归 monochrome)|
 
 ## 行数 / 文件
 
-净 +163 行 / 4 文件(代码 + 测试):
-- `packages/app/src/utils/markdown-editor-extensions.ts` +48 / -1
+净 +160 行 / 4 文件(代码 + 测试,含色彩矫正 ②):
+- `packages/app/src/utils/markdown-editor-extensions.ts` +45 / -1
 - `packages/app/src/utils/markdown-editor-extensions.test.ts` +57 / 0
 - `packages/app/package.json` +1 / 0(`@lezer/highlight: 1.2.3` direct dep)
 - `bun.lock` +1 / 0
+
+## 色彩矫正 ②(本笔,Option A)
+
+第 5 commit 后 user 实测反馈"用色不太美观",诊断发现:
+1. **`var(--primary)` 在 `packages/ui/src/styles/theme.css` 根本未定义**(只有 `--button-primary-base`),原 spec 的"蓝色 list marker / 蓝色 url / 蓝色 link" **从来没显示** — 全 fallback 到默认文字色
+2. URL 还残留 `text-decoration: underline`,产生"老式 web 蓝色下划线"视觉违和
+
+**Option A 矫正方案**(行业 3 选 1):**GitHub Primer / Notion / Linear / Slack 现代办公文档共识** — monochrome 主体 + **单一蓝色 accent 仅给链接**
+
+- `url` / `link` 色:`var(--primary)` → **`var(--text-interactive-base)`**(`#034cff` light / `#9dbefe` dark)— 跟 `packages/ui/src/components/markdown.css:48` **预览侧链接色完全统一**,user 切预览模式 0 跳变
+- url 去 `textDecoration: "underline"`(现代办公文档惯例:色彩足够,无需下划线)
+- list marker spec 直接**删除**(`{ tag: t.list, color: ... }` 整行去掉)→ marker 回归 monochrome,跟正文同色
+- spec 条数 15 → 14;H3 单测 expect 同步改 14
+- inline code chip 背景维持 10% bg(user 没反馈这点)
 
 ## 设计基线
 
@@ -57,9 +72,9 @@ import { tags as t } from "@lezer/highlight"
 | `emphasis` | — | — | — | italic | 普世 |
 | `monospace` | — | — | — | var(--mono) 字体 + 10% bg + 3px radius + 0/4px padding | Notion 同款 chip |
 | `quote` | — | — | var(--text-weak) | italic | Word / Notion 同款 |
-| `url` | — | — | var(--primary) | underline | 普世 |
-| `link` | — | — | var(--primary) | — | Notion / 飞书文档 |
-| `list` | — | — | var(--primary) | — | Notion / 飞书文档 — marker 跳出 |
+| `url` | — | — | var(--text-interactive-base) | — | GitHub Primer / Notion(色彩矫正 ②)|
+| `link` | — | — | var(--text-interactive-base) | — | GitHub Primer / Notion(色彩矫正 ②)|
+| ~~`list`~~ | — | — | ~~删~~ | — | ~~原 var(--primary) 未生效;色彩矫正 ② 取消~~ |
 | `processingInstruction` | — | — | var(--text-weak) | opacity 0.7 | iA Writer |
 | `contentSeparator` | — | — | var(--text-weak) | opacity 0.6 | iA Writer |
 

@@ -36,10 +36,11 @@ export const markdownHighlightStyle = HighlightStyle.define([
     padding: "0 4px",
   },
   { tag: t.quote, color: "var(--text-weak)", fontStyle: "italic" },
-  // 链接 / 列表 marker 染色(Notion / 飞书文档同款,结构跳出来)
-  { tag: t.url, color: "var(--primary)", textDecoration: "underline" },
-  { tag: t.link, color: "var(--primary)" },
-  { tag: t.list, color: "var(--primary)" },
+  // 链接:GitHub Primer / Notion / Linear / Slack 现代办公文档共识 — 唯一的 accent 蓝色
+  // 跟 packages/ui/src/components/markdown.css:48 预览侧链接色统一(切预览不跳变)
+  { tag: t.url, color: "var(--text-interactive-base)" },
+  { tag: t.link, color: "var(--text-interactive-base)" },
+  // list marker 不再染色 — 回归 monochrome,跟正文同色(Notion / GitHub Primer 同款)
   // 语法标记符温和弱化(# ** * ` 等)— iA Writer 同款 opacity 0.7
   { tag: t.processingInstruction, color: "var(--text-weak)", opacity: "0.7" },
   { tag: t.contentSeparator, color: "var(--text-weak)", opacity: "0.6" },

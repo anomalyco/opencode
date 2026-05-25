@@ -314,15 +314,16 @@ describe("markdownHighlightStyle (iter-3)", () => {
     expect(typeof markdownSyntaxHighlight === "object" || typeof markdownSyntaxHighlight === "function").toBe(true)
   })
 
-  test("H3: 包含全部 15 条 tag rule(spec 列表全)", () => {
+  test("H3: 包含全部 14 条 tag rule(spec 列表全)", () => {
     // HighlightStyle 实例有内部 specs 数组(CM 6 实现)。访问走非公开 API:
     //   (style as any).specs?.length
-    // 15 条 rule:6 heading + strong / emphasis / monospace / quote / url / link / list /
+    // 14 条 rule:6 heading + strong / emphasis / monospace / quote / url / link /
     //            processingInstruction / contentSeparator
+    //(list marker 不染色,故 Option A 色彩改版后 spec 条数 15 → 14)
     const specs = (markdownHighlightStyle as unknown as { specs?: unknown[] }).specs
     if (Array.isArray(specs)) {
       // CM 6 当前版本暴露 specs 数组,精确断言
-      expect(specs.length).toBe(15)
+      expect(specs.length).toBe(14)
     } else {
       // 未暴露 → 退化存在性检查,review 期由代码 + spec doc 把关
       expect(markdownHighlightStyle).toBeTruthy()
