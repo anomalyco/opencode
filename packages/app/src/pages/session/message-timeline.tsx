@@ -71,8 +71,8 @@ const MEASURE_WARN_MS = 24
 const HEIGHT_SHIFT_WARN = 120
 const SPACER_SHIFT_WARN = 400
 
-const heightCacheKey = (sessionId: string, msgId: string, stage: string) =>
-  `opencode.h.${sessionId}.${msgId}.${stage}`
+const heightCacheKey = (sessionId: string, msgId: string, stage: string, signature: string) =>
+  `opencode.h2.${signature}.${sessionId}.${msgId}.${stage}`
 
 const rankByStage = {
   lite: 0,
@@ -115,9 +115,9 @@ const deleteStageCache = (sessionId: string, msgId: string) => {
 
 const maxStage = (a: MarkdownStage, b: MarkdownStage) => (rankByStage[a] >= rankByStage[b] ? a : b)
 
-const readHeightCache = (sessionId: string, msgId: string, stage: string): number | undefined => {
+const readHeightCache = (sessionId: string, msgId: string, stage: string, signature: string): number | undefined => {
   try {
-    const v = sessionStorage.getItem(heightCacheKey(sessionId, msgId, stage))
+    const v = sessionStorage.getItem(heightCacheKey(sessionId, msgId, stage, signature))
     if (v === null) return undefined
     const n = Number(v)
     return Number.isFinite(n) && n > 0 ? n : undefined
@@ -126,9 +126,9 @@ const readHeightCache = (sessionId: string, msgId: string, stage: string): numbe
   }
 }
 
-const writeHeightCache = (sessionId: string, msgId: string, stage: string, height: number) => {
+const writeHeightCache = (sessionId: string, msgId: string, stage: string, signature: string, height: number) => {
   try {
-    sessionStorage.setItem(heightCacheKey(sessionId, msgId, stage), String(height))
+    sessionStorage.setItem(heightCacheKey(sessionId, msgId, stage, signature), String(height))
   } catch {
     // QuotaExceededError — silently drop
   }
@@ -375,6 +375,18 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
   })
+  const pref = createMemo(() => settings.general.shellToolPartsExpanded())
+  const shell = createMemo(() => (platform.platform === "desktop" ? false : pref()))
+  const heightSignature = createMemo(() =>
+    [
+      `reasoning:${settings.general.showReasoningSummaries() ? 1 : 0}`,
+      `hooks:${settings.general.showCustomHookParts() ? 1 : 0}`,
+      `shell:${shell() ? 1 : 0}`,
+      `edit:${settings.general.editToolPartsExpanded() ? 1 : 0}`,
+      `width:${settings.appearance.contentWidth()}`,
+      `font:${settings.appearance.fontSize()}`,
+    ].join("|"),
+  )
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
@@ -435,7 +447,7 @@ export function MessageTimeline(props: {
     if (props.hasScrollGesture()) {
       const now = Date.now()
       if (now - skipped > 300) {
-        console.debug("[timeline] follow held", { src })
+        console.debug(`[timeline] follow held src=${src}`)
         skipped = now
       }
       return
@@ -448,13 +460,14 @@ export function MessageTimeline(props: {
     const runtime = turnHeights.get(id)
     const sid = sessionID()
     const stage = stageOf(id)
+    const signature = heightSignature()
     let cached: number | undefined
     if (sid) {
-      cached = readHeightCache(sid, id, stage)
+      cached = readHeightCache(sid, id, stage, signature)
       if (cached === undefined && stage === "full") {
-        cached = readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
+        cached = readHeightCache(sid, id, "structure", signature) ?? readHeightCache(sid, id, "lite", signature)
       } else if (cached === undefined && stage === "structure") {
-        cached = readHeightCache(sid, id, "lite")
+        cached = readHeightCache(sid, id, "lite", signature)
       }
     }
     if (runtime !== undefined && cached !== undefined) return Math.max(runtime, cached)
@@ -569,8 +582,6 @@ export function MessageTimeline(props: {
   })
   const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
-  const pref = createMemo(() => settings.general.shellToolPartsExpanded())
-  const shell = createMemo(() => (platform.platform === "desktop" ? false : pref()))
   const [prefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const openApps = createMemo(() => apps(os(platform)))
 
@@ -578,6 +589,24 @@ export function MessageTimeline(props: {
     on(shell, (open) => {
       console.debug(`[session:shell] platform=${platform.platform} pref=${pref()} defaultOpen=${open}`)
     }),
+  )
+
+  createEffect(
+    on(
+      heightSignature,
+      (next, prev) => {
+        if (prev === undefined || next === prev) return
+        turnHeights.clear()
+        windowAdjustVersion += 1
+        contentRef?.querySelectorAll<HTMLElement>("[data-message-id]").forEach((node) => {
+          node.style.minHeight = ""
+        })
+        setRevision((value) => value + 1)
+        scheduleWindow()
+        schedulePin("height-signature")
+      },
+      { defer: true },
+    ),
   )
   // Windowing is only disabled while the active reply is still growing. Static
   // sessions may stay pinned to the bottom and still use history windowing;
@@ -1067,11 +1096,9 @@ export function MessageTimeline(props: {
         root.scrollTop = root.scrollHeight
         const after = snap(root)
         seq += 1
-        console.debug("[timeline] streaming window bottom follow", {
-          before: before.gap,
-          after: after.gap,
-          pinned,
-        })
+        console.debug(
+          `[timeline] streaming window bottom follow before=${before.gap} after=${after.gap} pinned=${pinned}`,
+        )
         props.onScheduleScrollState(root)
       })
       return
@@ -1642,14 +1669,14 @@ export function MessageTimeline(props: {
   const shareMutation = useMutation(() => ({
     mutationFn: (id: string) => globalSDK.client.session.share({ sessionID: id, directory: sdk.directory }),
     onError: (err) => {
-      console.error("Failed to share session", err)
+      console.error(`Failed to share session: ${err instanceof Error ? err.message : String(err)}`)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
     mutationFn: (id: string) => globalSDK.client.session.unshare({ sessionID: id, directory: sdk.directory }),
     onError: (err) => {
-      console.error("Failed to unshare session", err)
+      console.error(`Failed to unshare session: ${err instanceof Error ? err.message : String(err)}`)
     },
   }))
 
@@ -2378,7 +2405,7 @@ export function MessageTimeline(props: {
       if (rootRef && rootRef.style.minHeight) rootRef.style.minHeight = ""
       const sid = sessionID()
       const bucket = stageOf(item.messageID)
-      if (sid) writeHeightCache(sid, item.messageID, bucket, next)
+      if (sid) writeHeightCache(sid, item.messageID, bucket, heightSignature(), next)
       setRevision((value) => value + 1)
       const delta = prev === undefined ? 0 : Math.round(next - prev)
       seq += 1

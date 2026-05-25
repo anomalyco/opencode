@@ -73,6 +73,18 @@ export function BasicTool(props: BasicToolProps) {
 
   createEffect(
     on(
+      () => props.defaultOpen,
+      (value) => {
+        if (value === undefined) return
+        setState("open", value)
+        setState("ready", value)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
       open,
       (value) => {
         if (!props.defer) return
