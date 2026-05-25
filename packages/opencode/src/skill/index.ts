@@ -15,6 +15,7 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
+import SIMPLIFY_SKILL_BODY from "./prompt/simplify.md" with { type: "text" }
 import { isRecord } from "@/util/record"
 
 const log = Log.create({ service: "skill" })
@@ -32,6 +33,10 @@ const SKILL_PATTERN = "**/SKILL.md"
 const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
 const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+
+const SIMPLIFY_SKILL_NAME = "simplify"
+const SIMPLIFY_SKILL_DESCRIPTION =
+  "Review changed code for reuse, quality, and efficiency, then fix any issues found."
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -276,6 +281,12 @@ export const layer = Layer.effect(
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+        }
+        s.skills[SIMPLIFY_SKILL_NAME] = {
+          name: SIMPLIFY_SKILL_NAME,
+          description: SIMPLIFY_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: SIMPLIFY_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s
