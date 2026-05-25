@@ -147,8 +147,8 @@ export function CTA() {
           transition={{ duration: 0.7, delay: 0.4 }}
           className="mt-3 max-w-xl text-xs leading-relaxed text-sc-text-dim"
         >
-          Acompanyセキュアコードは Confidential AI Suite の第 2 弾製品です。
-          第 1 弾製品の{" "}
+          Acompanyセキュアコードは Confidential AI Suite の一角を担う製品です。
+          社内向けチャット製品の{" "}
           <a
             href="https://service.acompany.tech/cas/secure-chat/"
             target="_blank"

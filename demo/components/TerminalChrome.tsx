@@ -1,7 +1,7 @@
 // TerminalChrome.tsx
 //
 // 本体 TUI のスクリーンショット (github/assets/top-secure-code.png) を踏襲した
-// macOS 風タイトルバー + プロンプト枠。デモ用ターミナルのガワとして再利用する。
+// macOS 風タイトルバー + プロンプト枠。LP 内のターミナルガワとして再利用する。
 
 import type { ReactNode } from "react"
 

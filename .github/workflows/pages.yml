@@ -23,8 +23,8 @@ jobs:
     defaults:
       run:
         working-directory: demo
-    env:
-      NEXT_PUBLIC_BASE_PATH: /securecode/demo
+    # カスタムドメイン securecode.acompany.tech を Pages に紐付けて root
+    # 配信する。basePath は空 (= "/") のままビルドする。
     steps:
       - uses: actions/checkout@v4
 
@@ -35,17 +35,20 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build (static export)
+      - name: Build (static export, root path)
         run: bun run build
 
-      # basePath /securecode/demo に対応させるため、out/ を _site/demo/ に
-      # ネストしてから upload する。Pages の repo root (/securecode/) に
-      # 配信されるアーティファクトの中で、HTML が /demo/ サブディレクトリに
-      # 来るようにすることで、build 時のリンクと配信パスを一致させる。
-      - name: Stage artifact under /demo subdirectory
+      # out/ をそのまま Pages の DocumentRoot として置く。
+      # カスタムドメインを使うため CNAME ファイルを root に置いて
+      # Pages に行き先を教える。`.nojekyll` で Jekyll 処理を抑止する
+      # (out/_next/ などのアンダースコア始まりディレクトリが除外
+      # されないようにする)。
+      - name: Stage artifact for Pages
         run: |
-          mkdir -p _site/demo
-          cp -a out/. _site/demo/
+          set -euo pipefail
+          mkdir -p _site
+          cp -a out/. _site/
+          echo "securecode.acompany.tech" > _site/CNAME
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5

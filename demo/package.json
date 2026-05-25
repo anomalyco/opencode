@@ -2,7 +2,7 @@
   "name": "@securecode/demo",
   "private": true,
   "version": "0.0.1",
-  "description": "Acompany Secure Code のチュートリアル兼デモサイト（スクロールテリング）",
+  "description": "Acompanyセキュアコード の公開 LP（スクロールテリング）",
   "scripts": {
     "dev": "next dev --port 4321",
     "build": "next build",

@@ -7,8 +7,9 @@ export function Footer() {
             Acompanyセキュアコード
           </div>
           <p className="mt-2 max-w-md text-xs leading-relaxed text-sc-text-dim">
-            Confidential AI Suite の第 2 弾製品として、機密ソースコードを
-            漏洩させずに AI コーディング支援を実現します。第 1 弾製品は{" "}
+            ソースコードを暗号化したまま AI 推論を実行できる、機密プロジェクト向けの
+            コーディング支援。Acompany の Confidential AI Suite の一角として、社内向け
+            チャット製品の{" "}
             <a
               href="https://service.acompany.tech/cas/secure-chat/"
               target="_blank"
@@ -17,7 +18,7 @@ export function Footer() {
             >
               Acompanyセキュアチャット
             </a>
-            。
+            と並んで提供しています。
           </p>
         </div>
         <nav className="grid grid-cols-2 gap-x-12 gap-y-2 font-mono text-xs text-sc-text-mid">
@@ -33,11 +34,9 @@ export function Footer() {
       <div className="border-t border-sc-border/60">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-6 text-[11px] text-sc-text-dim md:flex-row md:items-center md:justify-between">
           <p className="font-mono">
-            ※ このページは Acompanyセキュアコード を紹介するための{" "}
-            <span className="text-sc-ember">架空のデモ</span> であり、
-            表示しているレスポンス・指標値・図版はすべてモックです。
+            ※ 記載の一部機能は開発中であり、提供時期および仕様は変更となる可能性があります。
           </p>
-          <p className="font-mono">© Acompany Co., Ltd. demo build</p>
+          <p className="font-mono">© Acompany Co., Ltd.</p>
         </div>
       </div>
     </footer>

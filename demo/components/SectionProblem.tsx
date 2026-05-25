@@ -12,7 +12,7 @@ const RISKS = [
   {
     tag: "PROVIDER",
     title: "学習に使われない保証は契約だけ",
-    body: "デフォルトの API では入力が学習に使われるリスクがあり、Opt-out しても運用ログとしての保管は残る。結局のところ「モデル提供者を信頼する」契約で縛っているに過ぎない。",
+    body: "デフォルトの API では入力が学習に使われるリスクがあり、オプトアウトしても運用ログとしての保管は残る。結局のところ「モデル提供者を信頼する」契約で縛っているに過ぎない。",
   },
   {
     tag: "AGENT",
@@ -75,9 +75,11 @@ export function SectionProblem() {
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8, delay: 0.4 }}
-        className="mt-20 border-t border-sc-border pt-10 text-center font-mono text-xs tracking-widest text-sc-text-dim"
+        className="mt-20 border-t border-sc-border pt-10 text-center"
       >
-        Acompanyセキュアコードは、この壁を 3 つのレイヤで壊す。
+        <p className="font-mono text-sm tracking-widest text-sc-text md:text-base">
+          Acompanyセキュアコードは、この壁を<span className="text-sc-ember">3つのレイヤ</span>で壊す。
+        </p>
       </motion.div>
 
       <MicroCta label="課題への解決策を相談する" />

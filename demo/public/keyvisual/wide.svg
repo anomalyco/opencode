@@ -64,7 +64,7 @@
       <text x="1432" y="462.8" font-family="JetBrains Mono, sans-serif" font-size="14.3" font-weight="500" fill="#716c6b" text-anchor="middle">AMD SEV-SNP  ·  NVIDIA CC</text>
 
       <rect x="1315" y="494" width="234" height="91" rx="7.800000000000001" fill="#252121" stroke="#4b4646" stroke-width="2"/>
-      <text x="1432" y="530.4" font-family="JetBrains Mono, sans-serif" font-size="16.900000000000002" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3.6-35B-A3B-fp8</text>
+      <text x="1432" y="530.4" font-family="JetBrains Mono, sans-serif" font-size="16.900000000000002" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3.6</text>
       <text x="1432" y="559" font-family="JetBrains Mono, sans-serif" font-size="13" font-weight="500" fill="#716c6b" text-anchor="middle">decrypt → infer → encrypt</text>
 
       

@@ -13,12 +13,12 @@ const STEPS = [
   {
     id: "attest",
     title: "01. リモートアテステーション",
-    body: "接続先の TEE が発行する署名済みレポートを検証し、改ざんされた実行環境を拒否する。正当性を確認できてから鍵を渡す。",
+    body: "接続先サーバーが本当に TEE 上で動いており、想定通りのコードを実行していることを CPU 製造元の署名付きレポートで検証する。想定外のコードや設定が動いている環境には接続しない。",
   },
   {
     id: "send",
     title: "02. 暗号化して送信",
-    body: "プロンプトとソースコードを TEE の公開鍵で暗号化して送出し、TEE 内で復号する。平文はネットワークにも我々のサーバにも残らない。",
+    body: "プロンプトとソースコードを HTTPS で暗号化した状態で TEE 内に送信し、TEE 内で復号する。平文は TEE の外に一切露出しない。",
   },
   {
     id: "infer",
@@ -28,7 +28,7 @@ const STEPS = [
   {
     id: "return",
     title: "04. 暗号化して返信",
-    body: "戻り値も同じ秘匿経路で暗号化し、開発者の手元で復号。平文は最後まで TEE の外に出ない。",
+    body: "戻り値も同様に HTTPS で暗号化した状態で返し、ユーザの環境で復号。平文は最後まで TEE の外に出ない。",
   },
 ] as const
 
@@ -94,12 +94,22 @@ export function SectionTEE() {
   // バッジ 04 は出現したら消さずに残す
   const retBadgeOpacity = useTransform(a3, [0, 0.12], [0, 1], { clamp: true })
 
+  // Mobile: step card slide transitions (右からスライドイン、左へスライドアウト)
+  const mob0Op = useTransform(scrollYProgress, [0.00, 0.10, 0.22, 0.32], [0, 1, 1, 0], { clamp: true })
+  const mob0X = useTransform(scrollYProgress, [0.00, 0.10, 0.22, 0.32], [20, 0, 0, -20], { clamp: true })
+  const mob1Op = useTransform(scrollYProgress, [0.26, 0.36, 0.48, 0.58], [0, 1, 1, 0], { clamp: true })
+  const mob1X = useTransform(scrollYProgress, [0.26, 0.36, 0.48, 0.58], [20, 0, 0, -20], { clamp: true })
+  const mob2Op = useTransform(scrollYProgress, [0.52, 0.62, 0.70, 0.78], [0, 1, 1, 0], { clamp: true })
+  const mob2X = useTransform(scrollYProgress, [0.52, 0.62, 0.70, 0.78], [20, 0, 0, -20], { clamp: true })
+  const mob3Op = useTransform(scrollYProgress, [0.74, 0.84, 1.00, 1.00], [0, 1, 1, 1], { clamp: true })
+  const mob3X = useTransform(scrollYProgress, [0.74, 0.84], [20, 0], { clamp: true })
+
   return (
     <>
     <section
       id="tee"
       ref={ref}
-      className="relative w-full md:h-[420vh]"
+      className="relative w-full h-[420vh]"
     >
       {/*
        * Desktop (>= md): sticky + h-dvh で scrollytelling。
@@ -128,7 +138,7 @@ export function SectionTEE() {
             だから、誰も中を覗けない。
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
-            TEE (Trusted Execution Environment) は CPU 内に物理的に隔離された
+            Trusted Execution Environment (TEE) は CPU 内に物理的に隔離された
             実行領域。推論中の平文がメモリ上に展開されても、インフラ事業者を含む
             第三者からは参照できない。
           </p>

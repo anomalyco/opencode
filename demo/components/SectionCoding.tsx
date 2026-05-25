@@ -87,7 +87,7 @@ export function SectionCoding() {
             title="securecode · /private/tmp/billing"
             status={
               <span>
-                <span className="text-sc-mint">●</span> Qwen3.6-35B-A3B-fp8
+                <span className="text-sc-mint">●</span> Qwen3.6
               </span>
             }
           >
@@ -145,7 +145,7 @@ export function SectionCoding() {
           </motion.div>
         </div>
 
-        <MicroCta label="実機デモを依頼する" />
+        <MicroCta label="実機を試したい旨を相談する" />
       </div>
     </section>
   )
@@ -223,10 +223,9 @@ function FlowLine({
 }
 
 const MODELS = [
-  { name: "Qwen3.6-35B-A3B-fp8", note: "high", active: true },
+  { name: "Qwen3.6", note: "high", active: true },
   { name: "GPT-OSS-120B", note: "fast", active: false },
   { name: "GPT-OSS-20B", note: "lite", active: false },
-  { name: "Qwen3.5-27B", note: "ja-friendly", active: false },
 ] as const
 
 function ModelPicker() {
