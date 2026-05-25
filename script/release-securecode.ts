@@ -149,7 +149,7 @@ function sum(buf: Uint8Array) {
 
 function note(name: string, win: boolean) {
   const cmd = win ? "securecode.exe" : "./securecode"
-  const installer = win ? "see setup\\install.ps1 (or copy setup/* manually)" : "bash setup/install.sh"
+  const installer = win ? "see setup\\install.ps1 or setup\\install.bat (or copy setup/* manually)" : "bash setup/install.sh"
   return [
     "Acompany SecureCode CLI",
     "",
