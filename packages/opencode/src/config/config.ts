@@ -72,6 +72,7 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
+// Must stay in sync with Info schema keys below
 const infoKeys = new Set([
   "$schema", "shell", "logLevel", "server", "command", "skills",
   "reference", "watcher", "snapshot", "plugin", "share", "autoshare",
@@ -448,7 +449,7 @@ export const layer = Layer.effect(
         parsedOk = true
         return result
       }).pipe(
-        Effect.catchCause((cause) =>
+        Effect.catchCause(() =>
           Effect.sync(() => {
             log.error("invalid config: config file could not be parsed", { path: source })
             return {} as Info
