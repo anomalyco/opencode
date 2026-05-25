@@ -31,15 +31,15 @@ DeskFox 的设计**不强行**通过 GUI 收集这些信息 —— 因为这种"
 ## 三、imbot.md 文件在哪里
 
 ```
-~/.opencode/feishu-workspace/.opencode/agent/imbot.md
+~/.opencode/imbot-workspace/.opencode/agent/imbot.md
 ```
 
-绝对路径:`$HOME/.opencode/feishu-workspace/.opencode/agent/imbot.md`
+绝对路径:`$HOME/.opencode/imbot-workspace/.opencode/agent/imbot.md`
 
-- macOS / Linux:`/Users/<你>/.opencode/feishu-workspace/.opencode/agent/imbot.md`
-- Windows:`C:\Users\<你>\.opencode\feishu-workspace\.opencode\agent\imbot.md`
+- macOS / Linux:`/Users/<你>/.opencode/imbot-workspace/.opencode/agent/imbot.md`
+- Windows:`C:\Users\<你>\.opencode\imbot-workspace\.opencode\agent\imbot.md`
 
-> 💡 **为什么是这个路径**:`~/.opencode/feishu-workspace` 是飞书桥接固定的 home base(所有 IM 共享 cwd 不变);`.opencode/agent/<name>.md` 是 opencode 原生支持的**项目级 agent 定义**位置,**会覆盖全局 imbot.md**。
+> 💡 **为什么是这个路径**:`~/.opencode/imbot-workspace` 是飞书桥接固定的 home base(所有 IM 共享 cwd 不变);`.opencode/agent/<name>.md` 是 opencode 原生支持的**项目级 agent 定义**位置,**会覆盖全局 imbot.md**。
 
 ## 四、怎么定制
 
@@ -49,12 +49,12 @@ DeskFox 的设计**不强行**通过 GUI 收集这些信息 —— 因为这种"
 
 ```bash
 # macOS / Linux
-mkdir -p ~/.opencode/feishu-workspace/.opencode/agent
-nano ~/.opencode/feishu-workspace/.opencode/agent/imbot.md  # 或用任何编辑器
+mkdir -p ~/.opencode/imbot-workspace/.opencode/agent
+nano ~/.opencode/imbot-workspace/.opencode/agent/imbot.md  # 或用任何编辑器
 
 # Windows PowerShell
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.opencode\feishu-workspace\.opencode\agent"
-notepad "$env:USERPROFILE\.opencode\feishu-workspace\.opencode\agent\imbot.md"
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.opencode\imbot-workspace\.opencode\agent"
+notepad "$env:USERPROFILE\.opencode\imbot-workspace\.opencode\agent\imbot.md"
 ```
 
 ### 4.2 文件格式
@@ -80,7 +80,7 @@ description: 我的个人飞书桥接助手
 你是我的飞书桥接助手。
 
 ## 我的工作环境
-我用 macOS / Windows,工作目录默认是 `~/.opencode/feishu-workspace`。
+我用 macOS / Windows,工作目录默认是 `~/.opencode/imbot-workspace`。
 所有文件操作默认在这里。
 
 ## 我的偏好
@@ -156,7 +156,7 @@ opencode session 里你可以从消息上下文判断当前是哪个 IM。
 
 ```
 ~/.config/opencode/agent/imbot.md      ← 全局,DeskFox setup hook 注入(权限收紧基线)
-~/.opencode/feishu-workspace/.opencode/agent/imbot.md  ← 项目级,你自己定制(本指南教的)
+~/.opencode/imbot-workspace/.opencode/agent/imbot.md  ← 项目级,你自己定制(本指南教的)
 ```
 
 opencode 加载 agent 时的**优先级**:**项目级 > 全局级**(merged,项目级覆盖同名字段)。
@@ -223,7 +223,7 @@ permission:
 
 ### Q6:可不可以用相对路径让 imbot 跨 workspace?
 
-不行。**session.cwd 永远是 home base(~/.opencode/feishu-workspace)**。跨目录访问必须用绝对路径(`~/projects/foo/file.md` 或 `/Users/me/projects/foo/file.md`)。
+不行。**session.cwd 永远是 home base(~/.opencode/imbot-workspace)**。跨目录访问必须用绝对路径(`~/projects/foo/file.md` 或 `/Users/me/projects/foo/file.md`)。
 
 ### Q7:我想完全换一个 agent,不用 imbot 怎么办
 

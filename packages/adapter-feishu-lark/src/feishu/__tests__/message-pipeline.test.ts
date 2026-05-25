@@ -971,7 +971,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "attach-pipeline-test-"))
-    workspaceRoot = join(tmpDir, "feishu-workspace")
+    workspaceRoot = join(tmpDir, "imbot-workspace")
     // 用 mkdir 创建 workspace 根 + 写文件 fixture
     writeFileSync(join(tmpDir, "non-fixture.txt"), "outside")
     // 使用 fs.mkdirSync 显式建 workspace 子目录

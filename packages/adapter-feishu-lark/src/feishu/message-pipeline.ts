@@ -58,7 +58,7 @@ export type OpencodeSDKClient = ReturnType<typeof createOpencodeClient>
  * 目录下,跟 user 主窗口的项目隔离。GUI sidebar 不会显示(因为 archive),
  * 也不污染 user 实际项目环境。
  */
-const FEISHU_WORKSPACE = join(homedir(), ".opencode", "feishu-workspace")
+const IMBOT_WORKSPACE = join(homedir(), ".opencode", "imbot-workspace")
 
 const FEISHU_OPEN_API_DOMAIN: Record<"feishu" | "lark", string> = {
   feishu: "https://open.feishu.cn",
@@ -98,7 +98,7 @@ const ATTACH_MARKER_PROMPT = [
   "系统会自动上传到飞书并 strip 掉这个 marker(用户看不到 marker,只看到文件)。",
   "",
   "约束:",
-  "- 路径必须是绝对路径,且在 `~/.opencode/feishu-workspace/` 子树内(写文件请用这个目录)",
+  "- 路径必须是绝对路径,且在 `~/.opencode/imbot-workspace/` 子树内(写文件请用这个目录)",
   "- 图片(jpg/png/gif/webp/bmp/tiff/ico)≤ 10MB",
   "- 文件(pdf/doc/xls/ppt/mp4/opus)≤ 30MB,其它扩展名(docx/xlsx/txt/md/zip 等)走 stream 兜底",
   "- 一次回复可嵌多个 marker,系统按出现顺序处理",
@@ -188,7 +188,7 @@ export interface PipelineOptions {
    */
   larkClient?: Client
   /**
-   * 可选 ATTACH 路径白名单根 — 默认 ~/.opencode/feishu-workspace(FEISHU_WORKSPACE)。
+   * 可选 ATTACH 路径白名单根 — 默认 ~/.opencode/imbot-workspace(IMBOT_WORKSPACE)。
    * 单测用 temp 目录覆盖,避免污染真实 workspace。
    * [feat: feishu-bridge-light]
    */
@@ -224,7 +224,7 @@ export class MessagePipeline {
     this.permissionController = new PermissionCardController({
       opencodeClient: opts.opencodeClient,
       larkClient: this.larkClient,
-      workspaceDir: FEISHU_WORKSPACE,
+      workspaceDir: IMBOT_WORKSPACE,
     })
     this.confirmController = new ConfirmCardController({
       larkClient: this.larkClient,
@@ -463,7 +463,7 @@ export class MessagePipeline {
     if (!sessionID) {
       try {
         const res = await this.opts.opencodeClient.session.create({
-          query: { directory: FEISHU_WORKSPACE },
+          query: { directory: IMBOT_WORKSPACE },
           body: {
             title: `Feishu ${event.chatType}/${event.chatId.slice(-8)}`,
           },
@@ -530,7 +530,7 @@ export class MessagePipeline {
   /**
    * [feat: feishu-bridge-light] 解析 reply 里的 [ATTACH:path] marker、上传文件、strip marker。
    *
-   * 安全约束:路径必须在 ~/.opencode/feishu-workspace/ 子树内(classifyAttachment 判)。
+   * 安全约束:路径必须在 ~/.opencode/imbot-workspace/ 子树内(classifyAttachment 判)。
    * 单个 ATTACH 失败不影响其它;失败原因追加到最终文本 warnings 段尾,user 可见。
    *
    * 返回最终要发到飞书的文本(可能为空 — 全是附件无文字时)。
@@ -640,7 +640,7 @@ export class MessagePipeline {
     void this.opts.opencodeClient.session
       .promptAsync({
         path: { id: sessionID },
-        query: { directory: FEISHU_WORKSPACE },
+        query: { directory: IMBOT_WORKSPACE },
         body: {
           agent,
           system: this.getSystemPrompt(),
@@ -663,7 +663,7 @@ export class MessagePipeline {
     // 直接拉 messages 取 last assistant text(role 准确,不会 echo user prompt)
     const msgsRes = await this.opts.opencodeClient.session.messages({
       path: { id: sessionID },
-      query: { directory: FEISHU_WORKSPACE },
+      query: { directory: IMBOT_WORKSPACE },
     })
     const wrap = msgsRes as {
       data?: Array<{
@@ -731,7 +731,7 @@ export class MessagePipeline {
   async debugFetchMessages(sessionID: string): Promise<unknown> {
     const r = await this.opts.opencodeClient.session.messages({
       path: { id: sessionID },
-      query: { directory: FEISHU_WORKSPACE },
+      query: { directory: IMBOT_WORKSPACE },
     })
     const wrap = r as {
       data?: unknown
@@ -766,7 +766,7 @@ export class MessagePipeline {
     await (rawClient as { patch: (req: unknown) => Promise<unknown> }).patch({
       url: "/session/{id}",
       path: { id: sessionID },
-      query: { directory: FEISHU_WORKSPACE },
+      query: { directory: IMBOT_WORKSPACE },
       body: {
         time: { archived: Date.now() },
       },

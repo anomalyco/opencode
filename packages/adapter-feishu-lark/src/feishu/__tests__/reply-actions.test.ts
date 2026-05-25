@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import {
   classifyAttachment,
-  FEISHU_WORKSPACE_ROOT,
+  IMBOT_WORKSPACE_ROOT,
   GROUP_NAME_MAX_LEN,
   isBotMentioned,
   isGroupCreationIntent,
@@ -187,10 +187,10 @@ describe("classifyAttachment", () => {
     expect(classifyAttachment(ROOT, ROOT)).toEqual({ kind: "file", fileType: "stream" })
   })
 
-  test("默认 workspaceRoot = ~/.opencode/feishu-workspace", () => {
-    const inWs = join(FEISHU_WORKSPACE_ROOT, "test.png")
+  test("默认 workspaceRoot = ~/.opencode/imbot-workspace", () => {
+    const inWs = join(IMBOT_WORKSPACE_ROOT, "test.png")
     expect(classifyAttachment(inWs).kind).toBe("image")
-    expect(FEISHU_WORKSPACE_ROOT).toBe(join(homedir(), ".opencode", "feishu-workspace"))
+    expect(IMBOT_WORKSPACE_ROOT).toBe(join(homedir(), ".opencode", "imbot-workspace"))
   })
 })
 
