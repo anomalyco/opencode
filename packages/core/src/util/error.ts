@@ -65,5 +65,6 @@ export abstract class NamedError extends Error {
 
   public static readonly Unknown = NamedError.create("UnknownError", {
     message: Schema.String,
+    ref: Schema.optional(Schema.String),
   })
 }

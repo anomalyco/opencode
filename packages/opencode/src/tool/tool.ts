@@ -13,6 +13,24 @@ interface Metadata {
 // TODO: remove this hack
 export type DynamicDescription = (agent: Agent.Info) => Effect.Effect<string>
 
+/**
+ * Raised when the LLM calls a tool with arguments that fail the parameter
+ * schema. This is the canonical "rewrite the input" tool error: the typed
+ * error class makes it matchable upstream, and its `message` getter produces
+ * the model-facing prose that the AI SDK feeds back as the tool result.
+ */
+export class InvalidArgumentsError extends Schema.TaggedErrorClass<InvalidArgumentsError>()(
+  "ToolInvalidArgumentsError",
+  {
+    tool: Schema.String,
+    detail: Schema.String,
+  },
+) {
+  override get message() {
+    return `The ${this.tool} tool was called with invalid arguments: ${this.detail}.\nPlease rewrite the input so it satisfies the expected schema.`
+  }
+}
+
 export type Context<M extends Metadata = Metadata> = {
   sessionID: SessionID
   messageID: MessageID
@@ -99,13 +117,12 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
         }
         return Effect.gen(function* () {
           const decoded = yield* decode(args).pipe(
-            Effect.mapError((error) =>
-              toolInfo.formatValidationError
-                ? new Error(toolInfo.formatValidationError(error), { cause: error })
-                : new Error(
-                    `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-                    { cause: error },
-                  ),
+            Effect.mapError(
+              (error) =>
+                new InvalidArgumentsError({
+                  tool: id,
+                  detail: toolInfo.formatValidationError ? toolInfo.formatValidationError(error) : String(error),
+                }),
             ),
           )
           const result = yield* execute(decoded as Schema.Schema.Type<Parameters>, ctx)

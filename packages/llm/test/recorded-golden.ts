@@ -1,8 +1,8 @@
 import type { HttpRecorder } from "@opencode-ai/http-recorder"
-import { describe, type TestOptions } from "bun:test"
+import { describe } from "bun:test"
 import { Effect } from "effect"
-import type { ModelRef } from "../src"
-import { goldenScenarioTags, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
+import type { Model } from "../src"
+import { goldenScenarioTags, goldenScenarioTitle, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
 import { recordedTests } from "./recorded-test"
 import { kebab } from "./recorded-utils"
 
@@ -17,12 +17,12 @@ type ScenarioInput =
       readonly tags?: ReadonlyArray<string>
       readonly maxTokens?: number
       readonly temperature?: number | false
-      readonly timeout?: number | TestOptions
+      readonly timeout?: number
     }
 
 type TargetInput = {
   readonly name: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly transport?: Transport
@@ -35,22 +35,16 @@ type TargetInput = {
 
 const scenarioInput = (input: ScenarioInput) => (typeof input === "string" ? { id: input } : input)
 
-const scenarioTitle = (id: GoldenScenarioID) => {
-  if (id === "text") return "streams text"
-  if (id === "tool-call") return "streams tool call"
-  return "drives a tool loop"
-}
-
 const defaultPrefix = (target: TargetInput) => {
   if (target.prefix) return target.prefix
   const transport = target.transport === "websocket" ? "-websocket" : ""
-  return `${target.model.provider}-${target.protocol ?? target.model.route}${transport}`
+  return `${target.model.provider}-${target.protocol ?? target.model.route.id}${transport}`
 }
 
 const metadata = (target: TargetInput) => ({
   provider: target.model.provider,
   protocol: target.protocol,
-  route: target.model.route,
+  route: target.model.route.id,
   transport: target.transport ?? "http",
   model: target.model.id,
   ...target.metadata,
@@ -75,7 +69,7 @@ const runTarget = (target: TargetInput) => {
   describe(`${target.name} recorded`, () => {
     target.scenarios.forEach((raw) => {
       const input = scenarioInput(raw)
-      const name = input.name ?? scenarioTitle(input.id)
+      const name = input.name ?? goldenScenarioTitle(input.id)
       recorded.effect.with(
         name,
         {

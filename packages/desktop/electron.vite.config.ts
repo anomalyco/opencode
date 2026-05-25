@@ -3,13 +3,14 @@ import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import * as fs from "node:fs/promises"
 
+const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
   return "dev"
 })()
-
-const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
@@ -82,9 +83,6 @@ export default defineConfig({
     plugins: [appPlugin, sentry],
     publicDir: "../../../app/public",
     root: "src/renderer",
-    define: {
-      "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
-    },
     build: {
       sourcemap: true,
       rollupOptions: {
