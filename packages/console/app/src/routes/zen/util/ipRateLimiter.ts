@@ -89,16 +89,13 @@ function createUpstashRateLimiter(
   state: RateLimiterState,
   databaseLimiter: RateLimiter,
 ): RateLimiter {
-  const lifetimeInterval = ""
-  const lifetimeKey = buildRateLimitKey("ip", ip, lifetimeInterval)
+  const lifetimeKey = buildRateLimitKey("ip", ip)
   const dailyKey = buildRateLimitKey("ip", ip, dailyInterval)
 
   return {
     check: async () => {
       try {
-        const keys = isDefaultModel
-          ? [lifetimeKey, dailyKey]
-          : [dailyKey]
+        const keys = isDefaultModel ? [lifetimeKey, dailyKey] : [dailyKey]
         const counts = await redis.mget<(string | number | null)[]>(keys)
         const lifetimeCount = isDefaultModel ? Number(counts[0] ?? 0) : 0
         const dailyCount = Number(counts[isDefaultModel ? 1 : 0] ?? 0)

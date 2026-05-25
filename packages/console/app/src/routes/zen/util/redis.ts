@@ -7,6 +7,6 @@ export const redis = new Redis({
   enableTelemetry: false,
 })
 
-export function buildRateLimitKey(kind: string, identifier: string, interval: string) {
-  return `zen:${Resource.App.stage}:ratelimit:${kind}:${identifier}:${interval || "lifetime"}`
+export function buildRateLimitKey(kind: string, identifier: string, interval?: string) {
+  return `${Resource.App.stage}:ratelimit:${kind}:${identifier}${interval ? `:${interval}` : ""}`
 }
