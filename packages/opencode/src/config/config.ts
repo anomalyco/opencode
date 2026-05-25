@@ -431,7 +431,7 @@ export const layer = Layer.effect(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
             log.error("invalid config: config file could not be parsed", { path: source, cause: Cause.pretty(cause) })
-            return Schema.decodeSync(Info)({})
+            return {} as Info
           }),
         ),
       )
@@ -440,7 +440,7 @@ export const layer = Layer.effect(
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path)).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
-            log.error("plugin resolution failed", { path: source, cause })
+            log.error("plugin resolution failed", { path: source, cause: Cause.pretty(cause) })
           }),
         ),
       )

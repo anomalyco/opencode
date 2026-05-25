@@ -585,10 +585,11 @@ it.instance("handles invalid schema gracefully without crashing", () =>
     const test = yield* TestInstance
     yield* writeConfigEffect(test.directory, {
       $schema: "https://opencode.ai/config.json",
+      model: "test/model",
       invalid_field: "should cause error",
     })
     const config = yield* Config.use.get()
-    expect(config.username).toBeDefined()
+    expect(config.model).toBe("test/model")
     expect("invalid_field" in config).toBe(false)
   }),
 )
