@@ -31,7 +31,7 @@ const BACKGROUND_DESCRIPTION = [
   ].join(" "),
 ].join("\n")
 
-const BaseParameters = Schema.Struct({
+const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
@@ -40,17 +40,12 @@ const BaseParameters = Schema.Struct({
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
-})
+}
+
+const BaseParameters = Schema.Struct(BaseParameterFields)
 
 export const Parameters = Schema.Struct({
-  description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
-  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
-  subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
-  task_id: Schema.optional(Schema.String).annotate({
-    description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-  }),
-  command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  ...BaseParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({
     description: "Run the agent in the background and deliver a notification when it completes",
   }),
@@ -139,9 +134,8 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
-      const taskID = params.task_id
-      const session = taskID
-        ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      const session = params.task_id
+        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
       const parentAgent = parent.agent
@@ -187,7 +181,6 @@ export const TaskTool = Tool.define(
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
-      const runCancel = yield* EffectBridge.make()
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
@@ -266,6 +259,7 @@ export const TaskTool = Tool.define(
         }
       }
 
+      const runCancel = yield* EffectBridge.make()
       const cancel = ops.cancel(nextSession.id)
 
       function onAbort() {
