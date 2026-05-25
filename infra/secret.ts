@@ -11,4 +11,3 @@ export const SECRET = {
   UpstashRedisRestUrl: new sst.Secret("UpstashRedisRestUrl"),
   UpstashRedisRestToken: new sst.Secret("UpstashRedisRestToken"),
 }
-
