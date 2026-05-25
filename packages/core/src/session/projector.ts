@@ -174,7 +174,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
-    const database = yield* Database.Service
+    const { db } = yield* Database.Service
     yield* events.project(SessionEvent.AgentSwitched, (event) =>
       Effect.gen(function* () {
         const message = Schema.encodeSync(SessionMessage.AgentSwitched)(
@@ -187,13 +187,13 @@ export const layer = Layer.effectDiscard(
           }),
         )
         const data = { metadata: message.metadata, agent: message.agent, time: message.time }
-        yield* database.db
+        yield* db
           .update(SessionTable)
           .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* database.db
+        yield* db
           .insert(SessionMessageTable)
           .values([
             {
@@ -220,13 +220,13 @@ export const layer = Layer.effectDiscard(
           }),
         )
         const data = { metadata: message.metadata, model: message.model, time: message.time }
-        yield* database.db
+        yield* db
           .update(SessionTable)
           .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* database.db
+        yield* db
           .insert(SessionMessageTable)
           .values([
             {
@@ -241,25 +241,25 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* events.project(SessionEvent.Prompted, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Synthetic, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Shell.Started, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Shell.Ended, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Step.Started, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Step.Ended, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Step.Failed, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Text.Started, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Text.Ended, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Tool.Called, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Tool.Success, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Tool.Failed, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Reasoning.Started, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Retried, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Compaction.Started, (event) => run(database.db, event))
-    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(database.db, event))
+    yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
+    yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Retried, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))
   }),
 )
 

@@ -9,12 +9,24 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of({ directory: AbsolutePath.make("project"), workspaceID: "workspace" }),
 )
-const it = testEffect(EventV2.layer.pipe(Layer.provideMerge(locationLayer)))
-const itWithoutLocation = testEffect(EventV2.layer)
+const it = testEffect(EventV2.defaultLayer.pipe(Layer.provideMerge(locationLayer)))
+const itWithoutLocation = testEffect(EventV2.defaultLayer)
 
 const Message = EventV2.define({
   type: "test.message",
   schema: {
+    text: Schema.String,
+  },
+})
+
+const SyncMessage = EventV2.define({
+  type: "test.sync",
+  sync: {
+    version: 1,
+    aggregate: "id",
+  },
+  schema: {
+    id: Schema.String,
     text: Schema.String,
   },
 })
@@ -28,8 +40,12 @@ const GlobalMessage = EventV2.define({
 
 const VersionedMessage = EventV2.define({
   type: "test.versioned",
-  version: 2,
+  sync: {
+    version: 2,
+    aggregate: "id",
+  },
   schema: {
+    id: Schema.String,
     text: Schema.String,
   },
 })
@@ -64,7 +80,7 @@ describe("EventV2", () => {
   it.effect("publishes definition version", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
-      const event = yield* events.publish(VersionedMessage, { text: "hello" })
+      const event = yield* events.publish(VersionedMessage, { id: "one", text: "hello" })
 
       expect(event.type).toBe("test.versioned")
       expect(event.version).toBe(2)
@@ -74,6 +90,23 @@ describe("EventV2", () => {
   it.effect("stores definitions in the exported registry", () =>
     Effect.sync(() => {
       expect(EventV2.registry.get(Message.type)).toBe(Message)
+    }),
+  )
+
+  it.effect("keeps the latest sync definition in the registry", () =>
+    Effect.sync(() => {
+      const latest = EventV2.define({
+        type: "test.out-of-order",
+        sync: { version: 2, aggregate: "id" },
+        schema: { id: Schema.String },
+      })
+      EventV2.define({
+        type: "test.out-of-order",
+        sync: { version: 1, aggregate: "id" },
+        schema: { id: Schema.String },
+      })
+
+      expect(EventV2.registry.get("test.out-of-order")).toBe(latest)
     }),
   )
 
@@ -94,16 +127,17 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<EventV2.Payload>()
-      yield* events.project(Message, (event) =>
+      yield* events.project(SyncMessage, (event) =>
         Effect.sync(() => {
           received.push(event)
         }),
       )
 
-      const event = yield* events.publish(Message, { text: "hello" })
-      yield* events.publish(Message, { text: "after unsubscribe" })
+      const event = yield* events.publish(SyncMessage, { id: "one", text: "hello" })
+      yield* events.publish(SyncMessage, { id: "one", text: "after unsubscribe" })
 
-      expect(received).toEqual([event, expect.objectContaining({ data: { text: "after unsubscribe" } })])
+      expect(received[0]).toEqual(event)
+      expect(received[1]?.data).toEqual({ id: "one", text: "after unsubscribe" })
     }),
   )
 
@@ -116,17 +150,17 @@ describe("EventV2", () => {
         Stream.runForEach(() => Effect.sync(() => received.push("stream"))),
         Effect.forkScoped,
       )
-      yield* events.project(Message, (event) =>
+      yield* events.project(SyncMessage, (event) =>
         Effect.sync(() => {
           received.push(event.type)
         }),
       )
 
       yield* Effect.yieldNow
-      yield* events.publish(Message, { text: "hello" })
+      yield* events.publish(SyncMessage, { id: "one", text: "hello" })
       yield* Fiber.join(fiber)
 
-      expect(received).toEqual([Message.type, "stream"])
+      expect(received).toEqual([SyncMessage.type, "stream"])
     }),
   )
 })

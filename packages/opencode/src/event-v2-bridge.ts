@@ -16,8 +16,8 @@ import { Context, Effect, Layer, Option, Stream } from "effect"
 export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {
   const result = {
     type: definition.type,
-    version: definition.version,
-    aggregate: definition.aggregate,
+    version: definition.sync?.version,
+    aggregate: definition.sync?.aggregate,
     schema: definition.data,
     properties: definition.data,
   }

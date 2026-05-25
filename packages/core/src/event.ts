@@ -1,6 +1,9 @@
 export * as EventV2 from "./event"
 
 import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { eq } from "drizzle-orm"
+import { Database } from "./database/database"
+import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
@@ -13,8 +16,10 @@ export type ID = typeof ID.Type
 
 export type Definition<Type extends string = string, DataSchema extends Schema.Top = Schema.Top> = {
   readonly type: Type
-  readonly version?: number
-  readonly aggregate?: string
+  readonly sync?: {
+    readonly version: number
+    readonly aggregate: string
+  }
   readonly data: DataSchema
 }
 
@@ -32,12 +37,26 @@ export type Payload<D extends Definition = Definition> = {
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
 
+export class InvalidSyncEventError extends Schema.TaggedErrorClass<InvalidSyncEventError>()(
+  "EventV2.InvalidSyncEvent",
+  {
+    type: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export function versionedType(type: string, version: number) {
+  return `${type}.${version}`
+}
+
 export const registry = new Map<string, Definition>()
 
 export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
   readonly type: Type
-  readonly version?: number
-  readonly aggregate?: string
+  readonly sync?: {
+    readonly version: number
+    readonly aggregate: string
+  }
   readonly schema: Fields
 }): Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>> {
   const Data = Schema.Struct(input.schema)
@@ -52,11 +71,13 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
 
   const definition = Object.assign(Payload, {
     type: input.type,
-    ...(input.version === undefined ? {} : { version: input.version }),
-    ...(input.aggregate === undefined ? {} : { aggregate: input.aggregate }),
+    ...(input.sync === undefined ? {} : { sync: input.sync }),
     data: Data,
   })
-  registry.set(input.type, definition)
+  const existing = registry.get(input.type)
+  if (input.sync === undefined || existing?.sync === undefined || input.sync.version >= existing.sync.version) {
+    registry.set(input.type, definition)
+  }
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
 }
@@ -76,7 +97,6 @@ export interface Interface {
     data: Data<D>,
     options?: PublishOptions,
   ) => Effect.Effect<Payload<D>>
-  readonly publishEvent: <D extends Definition>(event: Payload<D>) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
@@ -90,6 +110,7 @@ export const layer = Layer.effect(
     const all = yield* PubSub.unbounded<Payload>()
     const typed = new Map<string, PubSub.PubSub<Payload>>()
     const projectors = new Map<string, AnyProjector[]>()
+    const { db } = yield* Database.Service
 
     const getOrCreate = (definition: Definition) =>
       Effect.gen(function* () {
@@ -107,15 +128,71 @@ export const layer = Layer.effect(
       }),
     )
 
-    function publishEvent<D extends Definition>(event: Payload<D>) {
+    function runProjectors<D extends Definition>(event: Payload<D>) {
       return Effect.gen(function* () {
-        for (const projector of projectors.get(event.type) ?? []) {
-          yield* projector(event as Payload)
+        const definition = registry.get(event.type)
+        const sync = definition?.sync
+        if (sync) {
+          if (event.version !== sync.version) {
+            yield* Effect.die(
+              new InvalidSyncEventError({
+                type: event.type,
+                message: `Expected event version ${sync.version}, got ${event.version}`,
+              }),
+            )
+          }
+          const aggregateID = (event.data as Record<string, unknown>)[sync.aggregate]
+          if (typeof aggregateID !== "string") {
+            yield* Effect.die(
+              new InvalidSyncEventError({
+                type: event.type,
+                message: `Expected string aggregate field ${sync.aggregate}`,
+              }),
+            )
+          } else {
+            const list = projectors.get(event.type) ?? []
+            yield* db
+              .transaction(
+                () =>
+                  Effect.gen(function* () {
+                    for (const projector of list) {
+                      yield* projector(event as Payload)
+                    }
+                    const row = yield* db
+                      .select({ seq: EventSequenceTable.seq })
+                      .from(EventSequenceTable)
+                      .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+                      .get()
+                      .pipe(Effect.orDie)
+                    const seq = row?.seq != null ? row.seq + 1 : 0
+                    yield* db
+                      .insert(EventSequenceTable)
+                      .values([{ aggregate_id: aggregateID, seq }])
+                      .onConflictDoUpdate({
+                        target: EventSequenceTable.aggregate_id,
+                        set: { seq },
+                      })
+                      .run()
+                      .pipe(Effect.orDie)
+                    yield* db
+                      .insert(EventTable)
+                      .values([
+                        {
+                          id: event.id,
+                          aggregate_id: aggregateID,
+                          seq,
+                          type: versionedType(definition.type, sync.version),
+                          data: event.data as Record<string, unknown>,
+                        },
+                      ])
+                      .run()
+                      .pipe(Effect.orDie)
+                  }),
+                { behavior: "immediate" },
+              )
+              .pipe(Effect.orDie)
+          }
         }
-        const pubsub = typed.get(event.type)
-        if (pubsub) yield* PubSub.publish(pubsub, event as Payload)
-        yield* PubSub.publish(all, event as Payload)
-        return event
       })
     }
 
@@ -126,11 +203,15 @@ export const layer = Layer.effect(
           id: options?.id ?? ID.create(),
           ...(options?.metadata ? { metadata: options.metadata } : {}),
           type: definition.type,
-          ...(definition.version === undefined ? {} : { version: definition.version }),
+          ...(definition.sync === undefined ? {} : { version: definition.sync.version }),
           ...(location ? { location } : {}),
           data,
         } as Payload<D>
-        return yield* publishEvent(event)
+        yield* runProjectors(event)
+        const pubsub = typed.get(event.type)
+        if (pubsub) yield* PubSub.publish(pubsub, event as Payload)
+        yield* PubSub.publish(all, event as Payload)
+        return event
       })
     }
 
@@ -148,8 +229,8 @@ export const layer = Layer.effect(
         projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, publishEvent, subscribe, all: streamAll, project })
+    return Service.of({ publish, subscribe, all: streamAll, project })
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))

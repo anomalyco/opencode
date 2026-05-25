@@ -24,8 +24,10 @@ const Base = {
 }
 
 const options = {
-  aggregate: "sessionID",
-  version: 1,
+  sync: {
+    aggregate: "sessionID",
+    version: 1,
+  },
 } as const
 
 export const UnknownError = Schema.Struct({
