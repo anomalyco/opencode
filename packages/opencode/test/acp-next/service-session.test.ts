@@ -282,6 +282,55 @@ describe("ACP next service sessions", () => {
     expect(providersCalls).toBe(2)
   })
 
+  it("registers same-name MCP servers again for different sessions or configs", async () => {
+    const adds: unknown[] = []
+    let nextSession = 0
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        get: () => Promise.resolve({ data: {} }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: () => {
+          nextSession++
+          return Promise.resolve({ data: { id: `ses_${nextSession}` } })
+        },
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: (input: unknown) => {
+          adds.push(input)
+          return Promise.resolve({ data: {} })
+        },
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+
+    await Effect.runPromise(
+      service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "tools", command: "node", args: ["one.js"], env: [] }],
+      }),
+    )
+    await Effect.runPromise(
+      service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "tools", command: "node", args: ["two.js"], env: [] }],
+      }),
+    )
+
+    expect(adds).toHaveLength(2)
+    expect(JSON.stringify(adds[0])).toContain("one.js")
+    expect(JSON.stringify(adds[1])).toContain("two.js")
+  })
+
   it("uses the configured model as the new session default", async () => {
     const sdk = {
       config: {
