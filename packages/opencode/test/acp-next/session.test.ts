@@ -63,7 +63,7 @@ describe("acp-next session state", () => {
     Effect.gen(function* () {
       const missing = yield* ACPNextSession.Service.use((session) => session.tryGet("ses_missing"))
       const missingPart = yield* ACPNextSession.Service.use((session) =>
-        session.tryGetPartMetadata({ sessionId: "ses_missing", partId: "part_1" }),
+        session.tryGetPartMetadata({ sessionId: "ses_missing", messageId: "msg_1", partId: "part_1" }),
       )
 
       expect(missing).toBeUndefined()
@@ -133,7 +133,7 @@ describe("acp-next session state", () => {
         }),
       )
       const routed = yield* ACPNextSession.Service.use((session) =>
-        session.getPartMetadata({ sessionId: "ses_parts", partId: "part_1" }),
+        session.getPartMetadata({ sessionId: "ses_parts", messageId: "msg_1", partId: "part_1" }),
       )
 
       expect(metadata).toEqual({
@@ -143,6 +143,38 @@ describe("acp-next session state", () => {
         metadata: { output: "first chunk" },
       })
       expect(routed).toEqual(metadata)
+    }),
+  )
+
+  sessionTest.effect("keeps repeated part ids distinct across messages", () =>
+    Effect.gen(function* () {
+      yield* ACPNextSession.Service.use((session) => session.create({ id: "ses_duplicate_parts", cwd: "/workspace" }))
+      yield* ACPNextSession.Service.use((session) =>
+        session.recordPartMetadata({
+          sessionId: "ses_duplicate_parts",
+          messageId: "msg_1",
+          partId: "part_1",
+          metadata: { output: "from first message" },
+        }),
+      )
+      yield* ACPNextSession.Service.use((session) =>
+        session.recordPartMetadata({
+          sessionId: "ses_duplicate_parts",
+          messageId: "msg_2",
+          partId: "part_1",
+          metadata: { output: "from second message" },
+        }),
+      )
+
+      const first = yield* ACPNextSession.Service.use((session) =>
+        session.getPartMetadata({ sessionId: "ses_duplicate_parts", messageId: "msg_1", partId: "part_1" }),
+      )
+      const second = yield* ACPNextSession.Service.use((session) =>
+        session.getPartMetadata({ sessionId: "ses_duplicate_parts", messageId: "msg_2", partId: "part_1" }),
+      )
+
+      expect(first?.metadata).toEqual({ output: "from first message" })
+      expect(second?.metadata).toEqual({ output: "from second message" })
     }),
   )
 
@@ -156,10 +188,10 @@ describe("acp-next session state", () => {
       const removed = yield* ACPNextSession.Service.use((session) => session.remove("ses_remove"))
       const missing = yield* ACPNextSession.Service.use((session) => session.tryGet("ses_remove"))
       const missingPart = yield* ACPNextSession.Service.use((session) =>
-        session.tryGetPartMetadata({ sessionId: "ses_remove", partId: "part_1" }),
+        session.tryGetPartMetadata({ sessionId: "ses_remove", messageId: "msg_1", partId: "part_1" }),
       )
 
-      expect(removed?.knownParts.get("part_1")).toMatchObject({ messageId: "msg_1" })
+      expect(removed?.knownParts.size).toBe(1)
       expect(missing).toBeUndefined()
       expect(missingPart).toBeUndefined()
     }),

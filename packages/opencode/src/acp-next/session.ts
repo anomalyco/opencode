@@ -44,6 +44,12 @@ export type RecordPartMetadataInput = {
   metadata?: unknown
 }
 
+export type PartMetadataLookupInput = {
+  sessionId: string
+  messageId: string
+  partId: string
+}
+
 export type Interface = {
   readonly create: (input: StoreInput) => Effect.Effect<Info>
   readonly load: (input: StoreInput) => Effect.Effect<Info>
@@ -68,14 +74,10 @@ export type Interface = {
   readonly recordPartMetadata: (
     input: RecordPartMetadataInput,
   ) => Effect.Effect<KnownMessagePartMetadata, ACPNextError.SessionNotFoundError>
-  readonly getPartMetadata: (input: {
-    sessionId: string
-    partId: string
-  }) => Effect.Effect<KnownMessagePartMetadata | undefined, ACPNextError.SessionNotFoundError>
-  readonly tryGetPartMetadata: (input: {
-    sessionId: string
-    partId: string
-  }) => Effect.Effect<KnownMessagePartMetadata | undefined>
+  readonly getPartMetadata: (
+    input: PartMetadataLookupInput,
+  ) => Effect.Effect<KnownMessagePartMetadata | undefined, ACPNextError.SessionNotFoundError>
+  readonly tryGetPartMetadata: (input: PartMetadataLookupInput) => Effect.Effect<KnownMessagePartMetadata | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACPNext/Session") {}
@@ -151,7 +153,7 @@ export const layer = Layer.effect(
         }
         return update(input.sessionId, (session) => ({
           ...session,
-          knownParts: new Map(session.knownParts).set(input.partId, metadata),
+          knownParts: new Map(session.knownParts).set(partMetadataKey(input), metadata),
         })).pipe(Effect.as(metadata))
       },
     )
@@ -176,10 +178,10 @@ export const layer = Layer.effect(
       }),
       recordPartMetadata,
       getPartMetadata: Effect.fn("ACPNext.Session.getPartMetadata")(function* (input) {
-        return (yield* get(input.sessionId)).knownParts.get(input.partId)
+        return (yield* get(input.sessionId)).knownParts.get(partMetadataKey(input))
       }),
       tryGetPartMetadata: Effect.fn("ACPNext.Session.tryGetPartMetadata")(function* (input) {
-        return (yield* tryGet(input.sessionId))?.knownParts.get(input.partId)
+        return (yield* tryGet(input.sessionId))?.knownParts.get(partMetadataKey(input))
       }),
     })
   }),
@@ -207,6 +209,10 @@ function snapshot(session: Info): Info {
     createdAt: new Date(session.createdAt),
     knownParts: new Map(session.knownParts),
   }
+}
+
+function partMetadataKey(input: { messageId: string; partId: string }) {
+  return `${input.messageId}:${input.partId}`
 }
 
 export * as ACPNextSession from "./session"
