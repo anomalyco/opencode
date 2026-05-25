@@ -182,7 +182,7 @@
       <text x="856" y="1858.4" font-family="JetBrains Mono, sans-serif" font-size="15.399999999999999" font-weight="500" fill="#716c6b" text-anchor="middle">AMD SEV-SNP  ·  NVIDIA CC</text>
 
       <rect x="730" y="1892" width="251.99999999999997" height="98" rx="8.399999999999999" fill="#252121" stroke="#4b4646" stroke-width="2"/>
-      <text x="856" y="1931.2" font-family="JetBrains Mono, sans-serif" font-size="18.2" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3.6-35B-A3B-fp8</text>
+      <text x="856" y="1931.2" font-family="JetBrains Mono, sans-serif" font-size="18.2" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3.6</text>
       <text x="856" y="1962" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#716c6b" text-anchor="middle">decrypt → infer → encrypt</text>
 
       
