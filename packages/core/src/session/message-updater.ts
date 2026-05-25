@@ -235,10 +235,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       if (currentAssistant) {
         yield* adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
-            draft.content.push({
-              type: "text",
-              text: "",
-            })
+            draft.content.push(new SessionMessage.AssistantText({ type: "text", text: "" }) as DraftText)
           }),
         )
       }
@@ -276,18 +273,15 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       if (currentAssistant) {
         yield* adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
-            draft.content.push({
-              type: "tool",
-              id: event.data.callID,
-              name: event.data.name,
-              time: {
-                created: event.data.timestamp,
-              },
-              state: {
-                status: "pending",
-                input: "",
-              },
-            })
+            draft.content.push(
+              new SessionMessage.AssistantTool({
+                type: "tool",
+                id: event.data.callID,
+                name: event.data.name,
+                time: { created: event.data.timestamp },
+                state: { status: "pending", input: "" },
+              }) as DraftTool,
+            )
           }),
         )
       }
@@ -397,11 +391,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       if (currentAssistant) {
         yield* adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
-            draft.content.push({
-              type: "reasoning",
-              id: event.data.reasoningID,
-              text: "",
-            })
+            draft.content.push(
+              new SessionMessage.AssistantReasoning({
+                type: "reasoning",
+                id: event.data.reasoningID,
+                text: "",
+              }) as DraftReasoning,
+            )
           }),
         )
       }

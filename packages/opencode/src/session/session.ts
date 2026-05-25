@@ -8,8 +8,9 @@ import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Database } from "@opencode-ai/core/database/database"
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 
-import { Database } from "@/storage/db"
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
 import { and } from "drizzle-orm"
@@ -43,6 +44,7 @@ import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "session" })
+const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
@@ -505,16 +507,15 @@ export const use = serviceUse(Service)
 
 export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
 
-const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-  Effect.sync(() => Database.use(fn))
-
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service
+  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service | Database.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const database = yield* Database.Service
     const background = yield* BackgroundJob.Service
     const bus = yield* Bus.Service
     const storage = yield* Storage.Service
@@ -570,7 +571,7 @@ export const layer: Layer.Layer<
     })
 
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
-      const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
       return fromRow(row)
     })
@@ -583,13 +584,12 @@ export const layer: Layer.Layer<
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-      const rows = yield* db((d) =>
-        d
-          .select()
-          .from(SessionTable)
-          .where(and(eq(SessionTable.parent_id, parentID)))
-          .all(),
-      )
+      const rows = yield* db
+        .select()
+        .from(SessionTable)
+        .where(and(eq(SessionTable.parent_id, parentID)))
+        .all()
+        .pipe(Effect.orDie)
       return rows.map(fromRow)
     })
 
@@ -633,19 +633,18 @@ export const layer: Layer.Layer<
       }).pipe(Effect.withSpan("Session.updatePart"))
 
     const getPart: Interface["getPart"] = Effect.fn("Session.getPart")(function* (input) {
-      const row = Database.use((db) =>
-        db
-          .select()
-          .from(PartTable)
-          .where(
-            and(
-              eq(PartTable.session_id, input.sessionID),
-              eq(PartTable.message_id, input.messageID),
-              eq(PartTable.id, input.partID),
-            ),
-          )
-          .get(),
-      )
+      const row = yield* db
+        .select()
+        .from(PartTable)
+        .where(
+          and(
+            eq(PartTable.session_id, input.sessionID),
+            eq(PartTable.message_id, input.messageID),
+            eq(PartTable.id, input.partID),
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
       if (!row) return
       return {
         ...row.data,
@@ -767,14 +766,18 @@ export const layer: Layer.Layer<
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {
       if (input.limit) {
-        return (yield* MessageV2.page({ sessionID: input.sessionID, limit: input.limit })).items
+        return (yield* MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).pipe(
+          Effect.provideService(Database.Service, database),
+        )).items
       }
 
       const size = 50
       const result = [] as SessionLegacy.WithParts[]
       let before: string | undefined
       while (true) {
-        const page = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before })
+        const page = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before }).pipe(
+          Effect.provideService(Database.Service, database),
+        )
         if (page.items.length === 0) break
         for (let i = page.items.length - 1; i >= 0; i--) {
           const item = page.items[i]
@@ -825,7 +828,9 @@ export const layer: Layer.Layer<
       const size = 50
       let before: string | undefined
       while (true) {
-        const page = yield* MessageV2.page({ sessionID, limit: size, before })
+        const page = yield* MessageV2.page({ sessionID, limit: size, before }).pipe(
+          Effect.provideService(Database.Service, database),
+        )
         if (page.items.length === 0) break
         for (let i = page.items.length - 1; i >= 0; i--) {
           const item = page.items[i]
@@ -869,6 +874,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 
@@ -927,14 +933,15 @@ function* listByProject(
 
   const limit = input.limit ?? 100
 
-  const rows = Database.use((db) =>
+  const rows = runtime.runSync(({ db }) =>
     db
       .select()
       .from(SessionTable)
       .where(and(...conditions))
       .orderBy(desc(SessionTable.time_updated))
       .limit(limit)
-      .all(),
+      .all()
+      .pipe(Effect.orDie),
   )
   for (const row of rows) {
     yield fromRow(row)
@@ -973,7 +980,7 @@ export function* listGlobal(input?: {
 
   const limit = input?.limit ?? 100
 
-  const rows = Database.use((db) => {
+  const rows = runtime.runSync(({ db }) => {
     const query =
       conditions.length > 0
         ? db
@@ -981,19 +988,20 @@ export function* listGlobal(input?: {
             .from(SessionTable)
             .where(and(...conditions))
         : db.select().from(SessionTable)
-    return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+    return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all().pipe(Effect.orDie)
   })
 
   const ids = [...new Set(rows.map((row) => row.project_id))]
   const projects = new Map<string, ProjectInfo>()
 
   if (ids.length > 0) {
-    const items = Database.use((db) =>
+    const items = runtime.runSync(({ db }) =>
       db
         .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
         .from(ProjectTable)
         .where(inArray(ProjectTable.id, ids))
-        .all(),
+        .all()
+        .pipe(Effect.orDie),
     )
     for (const item of items) {
       projects.set(item.id, {

@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { Database } from "@opencode-ai/core/database/database"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
@@ -23,6 +24,7 @@ const it = testEffect(
       Layer.provide(Bus.layer),
       Layer.provide(Storage.defaultLayer),
       Layer.provide(SyncEvent.defaultLayer),
+      Layer.provide(Database.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(BackgroundJob.defaultLayer),
     ),

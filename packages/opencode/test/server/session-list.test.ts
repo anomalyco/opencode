@@ -1,11 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { mkdir } from "fs/promises"
 import path from "path"
-import { Database } from "@/storage/db"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
@@ -17,12 +17,16 @@ import { BackgroundJob } from "@/background/job"
 
 void Log.init({ print: false })
 const it = testEffect(
-  SessionNs.layer.pipe(
-    Layer.provide(Bus.layer),
-    Layer.provide(Storage.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
-    Layer.provide(BackgroundJob.defaultLayer),
+  Layer.mergeAll(
+    Database.defaultLayer,
+    SessionNs.layer.pipe(
+      Layer.provide(Bus.layer),
+      Layer.provide(Storage.defaultLayer),
+      Layer.provide(SyncEvent.defaultLayer),
+      Layer.provide(Database.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
+      Layer.provide(BackgroundJob.defaultLayer),
+    ),
   ),
 )
 
@@ -148,16 +152,9 @@ describe("session.list", () => {
           provideInstance(path.join(test.directory, "packages", "app")),
         )
 
-        yield* Effect.sync(() =>
-          Database.use((db) =>
-            db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, current.id)).run(),
-          ),
-        )
-        yield* Effect.sync(() =>
-          Database.use((db) =>
-            db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sibling.id)).run(),
-          ),
-        )
+        const { db } = yield* Database.Service
+        yield* db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, current.id)).run().pipe(Effect.orDie)
+        yield* db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sibling.id)).run().pipe(Effect.orDie)
 
         const pathIDs = (yield* SessionNs.Service.use((session) =>
           session.list({

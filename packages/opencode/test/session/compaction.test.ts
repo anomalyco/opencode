@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { Database } from "@opencode-ai/core/database/database"
 import { APICallError } from "ai"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -235,17 +236,19 @@ const deps = Layer.mergeAll(
   SyncEvent.defaultLayer,
   RuntimeFlags.layer({ experimentalEventSystem: true }),
   EventV2Bridge.defaultLayer,
+  Database.defaultLayer,
 )
 
 const env = Layer.mergeAll(
   SessionNs.defaultLayer,
+  Database.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
   SessionCompaction.layer.pipe(Layer.provide(SessionNs.defaultLayer), Layer.provideMerge(deps)),
 )
 
 const it = testEffect(env)
 
-const compactionEnv = Layer.mergeAll(SessionNs.defaultLayer, CrossSpawnSpawner.defaultLayer)
+const compactionEnv = Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer, CrossSpawnSpawner.defaultLayer)
 const itCompaction = testEffect(compactionEnv)
 
 type CompactionProcessOptions = {
@@ -1065,7 +1068,7 @@ describe("session.compaction.process", () => {
         expect(captured).toContain("zzzz")
         expect(captured).not.toContain("keep tail")
 
-        const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
+        const filtered = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
         expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
         expect(filtered[1]?.info.role).toBe("assistant")
         expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
@@ -1406,7 +1409,7 @@ describe("session.compaction.process", () => {
         yield* createUserMessage(session.id, "latest turn")
         yield* createCompactionMarker(session.id)
 
-        msgs = MessageV2.filterCompacted(MessageV2.stream(session.id))
+        msgs = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
         parent = msgs.at(-1)?.info.id
         expect(parent).toBeTruthy()
         yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
@@ -1442,12 +1445,12 @@ describe("session.compaction.process", () => {
       const u4 = yield* createUserMessage(session.id, "four")
       yield* createCompactionMarker(session.id)
 
-      msgs = MessageV2.filterCompacted(MessageV2.stream(session.id))
+      msgs = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
       parent = msgs.at(-1)?.info.id
       expect(parent).toBeTruthy()
       yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
 
-      const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
+      const filtered = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
       const ids = filtered.map((msg) => msg.info.id)
 
       expect(ids).not.toContain(u1.id)
