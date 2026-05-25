@@ -1,5 +1,5 @@
 import { GlobalBus } from "@/bus/global"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"

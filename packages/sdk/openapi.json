@@ -2288,6 +2288,15 @@
               "enum": ["git", "branch"]
             },
             "required": true
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -2988,11 +2997,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3067,11 +3076,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3146,11 +3155,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3241,11 +3250,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3312,6 +3321,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "McpServerNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
+                }
+              }
+            }
           }
         },
         "description": "Connect an MCP server.",
@@ -3371,6 +3390,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "McpServerNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3610,11 +3639,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "ProjectNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/ProjectNotFoundError"
                 }
               }
             }
@@ -3944,11 +3973,11 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "PtyNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4017,6 +4046,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4114,11 +4153,11 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "PtyNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4199,21 +4238,21 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "PtyForbiddenError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/effect_HttpApiError_Forbidden"
+                  "$ref": "#/components/schemas/PtyForbiddenError"
                 }
               }
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "PtyNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4348,11 +4387,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "QuestionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/QuestionNotFoundError"
                 }
               }
             }
@@ -4449,11 +4488,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "QuestionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/QuestionNotFoundError"
                 }
               }
             }
@@ -4588,11 +4627,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "PermissionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PermissionNotFoundError"
                 }
               }
             }
@@ -7462,11 +7501,18 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "NotFoundError | PermissionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/NotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PermissionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -10286,6 +10332,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
                 }
               }
             }
@@ -13756,6 +13812,11 @@
           "scope": {
             "type": "string"
           },
+          "callbackPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
           "redirectUri": {
             "type": "string"
           }
@@ -15370,34 +15431,103 @@
         "required": ["error"],
         "additionalProperties": false
       },
-      "NotFoundError": {
-        "type": "object",
-        "required": ["name", "data"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["NotFoundError"]
-          },
-          "data": {
-            "type": "object",
-            "required": ["message"],
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "effect_HttpApiError_Forbidden": {
+      "McpServerNotFoundError": {
         "type": "object",
         "properties": {
           "_tag": {
             "type": "string",
-            "enum": ["Forbidden"]
+            "enum": ["McpServerNotFoundError"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
           }
         },
-        "required": ["_tag"],
+        "required": ["_tag", "name", "message"],
+        "additionalProperties": false
+      },
+      "ProjectNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProjectNotFoundError"]
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "projectID", "message"],
+        "additionalProperties": false
+      },
+      "PtyNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PtyNotFoundError"]
+          },
+          "ptyID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "ptyID", "message"],
+        "additionalProperties": false
+      },
+      "PtyForbiddenError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PtyForbiddenError"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "QuestionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["QuestionNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
+        "additionalProperties": false
+      },
+      "PermissionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PermissionNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
         "additionalProperties": false
       },
       "ProviderAuthMethod": {
@@ -15562,6 +15692,25 @@
         },
         "required": ["name", "data"],
         "additionalProperties": false
+      },
+      "NotFoundError": {
+        "type": "object",
+        "required": ["name", "data"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["NotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
       },
       "TextPartInput": {
         "type": "object",
@@ -16083,6 +16232,17 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "effect_HttpApiError_Forbidden": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["Forbidden"]
+          }
+        },
+        "required": ["_tag"],
         "additionalProperties": false
       },
       "SyncEventMessageUpdated": {

@@ -4,7 +4,7 @@ import { Config } from "../../src/config/config"
 import { Plugin } from "../../src/plugin"
 import { Pty } from "../../src/pty"
 import type { PtyID } from "../../src/pty/schema"
-import { Effect, Layer, Queue } from "effect"
+import { Cause, Effect, Exit, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
 
 type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
@@ -66,6 +66,54 @@ const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) 
 }
 
 describe("pty", () => {
+  it.instance(
+    "returns typed not found errors for missing sessions",
+    () =>
+      Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        const id = "pty_missing" as PtyID
+        let closed = false
+        const socket = {
+          readyState: 1,
+          send: () => {},
+          close: () => {
+            closed = true
+          },
+        }
+
+        const get = yield* pty.get(id).pipe(Effect.exit)
+        expect(Exit.isFailure(get)).toBe(true)
+        if (Exit.isFailure(get)) expect(Cause.squash(get.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+
+        const update = yield* pty.update(id, { title: "missing" }).pipe(Effect.exit)
+        expect(Exit.isFailure(update)).toBe(true)
+        if (Exit.isFailure(update))
+          expect(Cause.squash(update.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+
+        const remove = yield* pty.remove(id).pipe(Effect.exit)
+        expect(Exit.isFailure(remove)).toBe(true)
+        if (Exit.isFailure(remove))
+          expect(Cause.squash(remove.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+
+        const resize = yield* pty.resize(id, 80, 24).pipe(Effect.exit)
+        expect(Exit.isFailure(resize)).toBe(true)
+        if (Exit.isFailure(resize))
+          expect(Cause.squash(resize.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+
+        const write = yield* pty.write(id, "input").pipe(Effect.exit)
+        expect(Exit.isFailure(write)).toBe(true)
+        if (Exit.isFailure(write))
+          expect(Cause.squash(write.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+
+        const connect = yield* pty.connect(id, socket).pipe(Effect.exit)
+        expect(Exit.isFailure(connect)).toBe(true)
+        if (Exit.isFailure(connect))
+          expect(Cause.squash(connect.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+        expect(closed).toBe(true)
+      }),
+    { git: true },
+  )
+
   ptyTest(
     "publishes created, exited, deleted in order for a short-lived process",
     () =>
@@ -93,7 +141,7 @@ describe("pty", () => {
         expect(yield* waitForEvents(events, info.id, 1)).toEqual(["created"])
         yield* pty.write(info.id, "exit\n")
         expect(yield* waitForEvents(events, info.id, 2)).toEqual(["exited", "deleted"])
-        yield* pty.remove(info.id)
+        yield* pty.remove(info.id).pipe(Effect.ignore)
       }),
     { git: true },
   )

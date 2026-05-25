@@ -591,7 +591,7 @@ describe("session.llm-native.request", () => {
         ]),
         storedSession.user("Summarize it."),
       ],
-      providerOptions: { openai: { store: false, includeEncryptedReasoning: true } },
+      providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
       expectedBody: {
         input: [
           openAIResponses.user("What changed?"),
@@ -604,6 +604,45 @@ describe("session.llm-native.request", () => {
         ],
         include: ["reasoning.encrypted_content"],
         store: false,
+      },
+    }),
+  )
+
+  it.effect("preserves empty encrypted OpenAI reasoning items before tool output", () =>
+    expectOpenAIResponsesRequest({
+      history: [
+        storedSession.assistant([
+          storedSession.openaiReasoning("", {
+            storedAs: "providerMetadata",
+            itemId: "rs_1",
+            encryptedContent: "encrypted-state",
+          }),
+        ]),
+      ],
+      providerOptions: { openai: { store: false, include: ["reasoning.encrypted_content"] } },
+      expectedBody: {
+        input: [{ type: "reasoning", id: "rs_1", summary: [], encrypted_content: "encrypted-state" }],
+        include: ["reasoning.encrypted_content"],
+        store: false,
+      },
+    }),
+  )
+
+  it.effect("references stored OpenAI reasoning items by id", () =>
+    expectOpenAIResponsesRequest({
+      history: [
+        storedSession.assistant([
+          storedSession.openaiReasoning("Checked the previous diff.", {
+            storedAs: "providerMetadata",
+            itemId: "rs_1",
+            encryptedContent: null,
+          }),
+        ]),
+      ],
+      providerOptions: { openai: { store: true } },
+      expectedBody: {
+        input: [{ type: "item_reference", id: "rs_1" }],
+        store: true,
       },
     }),
   )

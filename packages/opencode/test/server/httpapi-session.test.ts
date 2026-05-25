@@ -821,19 +821,24 @@ describe("session HttpApi", () => {
           }),
         ).toMatchObject({ id: session.id })
 
-        expect(
-          yield* requestJson<boolean>(
-            pathFor(SessionPaths.permissions, {
-              sessionID: session.id,
-              permissionID: String(PermissionID.ascending()),
-            }),
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ response: "once" }),
-            },
-          ),
-        ).toBe(true)
+        const permissionID = String(PermissionID.ascending())
+        const permission = yield* request(
+          pathFor(SessionPaths.permissions, {
+            sessionID: session.id,
+            permissionID,
+          }),
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ response: "once" }),
+          },
+        )
+        expect(permission.status).toBe(404)
+        expect(yield* responseJson(permission)).toEqual({
+          _tag: "PermissionNotFoundError",
+          requestID: permissionID,
+          message: `Permission request not found: ${permissionID}`,
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

@@ -24,6 +24,19 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
+type AnthropicToolResult = Extract<
+  AnthropicMessages.AnthropicMessagesBody["messages"][number]["content"][number],
+  { readonly type: "tool_result" }
+>
+
+const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): AnthropicToolResult => {
+  const result = body.messages
+    .flatMap((message) => (message.role === "user" ? message.content : []))
+    .find((block): block is AnthropicToolResult => block.type === "tool_result")
+  expect(result).toBeDefined()
+  return result!
+}
+
 describe("Anthropic Messages route", () => {
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
@@ -68,6 +81,87 @@ describe("Anthropic Messages route", () => {
         stream: true,
         max_tokens: 4096,
       })
+    }),
+  )
+
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `tool_result.content`.
+  it.effect("lowers image tool-result content as structured image blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(expectToolResult(prepared.body).content).toEqual([
+        { type: "text", text: "Image read successfully" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as a structured image block", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/jpeg", data: "/9j/AA==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(expectToolResult(prepared.body).content).toEqual([
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages")
+      expect(error.message).toContain("audio/mpeg")
     }),
   )
 
@@ -243,7 +337,29 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Overloaded" }])
+      // Prefix the error type so consumers can distinguish overloads, rate
+      // limits, and quota errors without parsing the message string.
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error: Overloaded" }])
+    }),
+  )
+
+  it.effect("falls back to error type when no message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when error payload is absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "Anthropic Messages stream error" }])
     }),
   )
 
