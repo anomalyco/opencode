@@ -60,7 +60,7 @@ function PermissionGate() {
       <div>
         <StatusBadge kind="shipped" />
         <span className="ml-3 font-mono text-[10px] tracking-[0.2em] text-sc-ember">
-          PLUGIN · permission-policy
+          POLICY · 権限ゲート
         </span>
         <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
           危険な操作は、
@@ -152,7 +152,7 @@ deny_all_others = true`}
       <div>
         <StatusBadge kind="planned" />
         <span className="ml-3 font-mono text-[10px] tracking-[0.2em] text-sc-ember">
-          GUARDRAIL · fs / net
+          GUARDRAIL · ファイル / ネットワーク
         </span>
         <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
           編集可能パスと
@@ -192,7 +192,7 @@ function CentralMcpManagement() {
       <div>
         <StatusBadge kind="planned" />
         <span className="ml-3 font-mono text-[10px] tracking-[0.2em] text-sc-ember">
-          GOVERNANCE · admin
+          GOVERNANCE · 管理者統制
         </span>
         <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
           連携 MCP・接続 URL は

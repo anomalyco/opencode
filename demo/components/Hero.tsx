@@ -40,7 +40,7 @@ export function Hero() {
           className="mb-8 flex w-full flex-col items-center gap-6"
         >
           <span className="text-stamp">
-            CONFIDENTIAL AI SUITE / 第2弾製品
+            CONFIDENTIAL AI SUITE
           </span>
           <div className="w-full max-w-3xl px-4 select-none">
             <Wordmark />
@@ -59,9 +59,9 @@ export function Hero() {
             AI コーディング支援を実現する。
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-sc-text-mid md:text-base">
-            Trusted Execution Environment と専用ハーネスにより、
+            Trusted Execution Environment (TEE) と専用ハーネスにより、
             <br className="hidden md:inline" />
-            生成 AI の利用に強い制限がかかる組織でも、機密コードを守ったまま開発を加速できます。
+            生成 AI の利用に強い制限がかかる組織でも、機密コードを守ったまま開発を加速する。
           </p>
         </motion.div>
 
@@ -105,7 +105,7 @@ export function Hero() {
               </div>
             </div>
             <div className="flex items-center justify-between border-t border-sc-border bg-sc-bg-elev/60 px-4 py-1.5 font-mono text-[10px] text-sc-text-dim">
-              <span>/private/tmp/demo-billing</span>
+              <span>~/project/billing</span>
               <span>
                 <span className="mr-3">◯ 3 MCP</span>
                 <span>/status</span>
