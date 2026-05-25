@@ -283,6 +283,12 @@ export const TuiThreadCommand = cmd({
         unguard?.()
       } catch {}
     }
+    // On Windows, process.exit() can send CTRL_CLOSE_EVENT to the console
+    // which kills the parent terminal process. Use exitCode instead.
+    if (process.platform === "win32") {
+      process.exitCode = 0
+      return
+    }
     process.exit(0)
   },
 })

@@ -134,6 +134,15 @@ try {
   }
   process.exitCode = 1
 } finally {
+  // On Windows, process.exit() can send CTRL_CLOSE_EVENT to the console
+  // which kills the parent terminal process (pwsh/cmd). This is a known
+  // regression since opentui 0.1.103.
+  // Set exitCode and let the process drain naturally. MCP subprocesses
+  // are cleaned up by Effect finalizers before this point.
+  if (process.platform === "win32") {
+    process.exitCode ||= 0
+    return
+  }
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
