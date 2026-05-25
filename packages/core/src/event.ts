@@ -29,7 +29,8 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
 }
 
-export type Sync = (event: Payload) => Effect.Effect<void>
+export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
+type AnyProjector = (event: Payload) => Effect.Effect<void>
 
 export const registry = new Map<string, Definition>()
 
@@ -69,8 +70,6 @@ export interface PublishOptions {
   readonly metadata?: Record<string, unknown>
 }
 
-export type Unsubscribe = Effect.Effect<void>
-
 export interface Interface {
   readonly publish: <D extends Definition>(
     definition: D,
@@ -80,7 +79,7 @@ export interface Interface {
   readonly publishEvent: <D extends Definition>(event: Payload<D>) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
-  readonly sync: (handler: Sync) => Effect.Effect<Unsubscribe>
+  readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
@@ -90,7 +89,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const all = yield* PubSub.unbounded<Payload>()
     const typed = new Map<string, PubSub.PubSub<Payload>>()
-    const syncHandlers = new Array<Sync>()
+    const projectors = new Map<string, AnyProjector[]>()
 
     const getOrCreate = (definition: Definition) =>
       Effect.gen(function* () {
@@ -110,8 +109,8 @@ export const layer = Layer.effect(
 
     function publishEvent<D extends Definition>(event: Payload<D>) {
       return Effect.gen(function* () {
-        for (const sync of syncHandlers) {
-          yield* sync(event as Payload)
+        for (const projector of projectors.get(event.type) ?? []) {
+          yield* projector(event as Payload)
         }
         const pubsub = typed.get(event.type)
         if (pubsub) yield* PubSub.publish(pubsub, event as Payload)
@@ -141,16 +140,15 @@ export const layer = Layer.effect(
       )
 
     const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(all)
-    const sync = (handler: Sync): Effect.Effect<Unsubscribe> =>
+
+    const project = <D extends Definition>(definition: D, projector: Projector<D>): Effect.Effect<void> =>
       Effect.sync(() => {
-        syncHandlers.push(handler)
-        return Effect.sync(() => {
-          const index = syncHandlers.indexOf(handler)
-          if (index >= 0) syncHandlers.splice(index, 1)
-        })
+        const list = projectors.get(definition.type) ?? []
+        list.push((event) => projector(event as Payload<D>))
+        projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, publishEvent, subscribe, all: streamAll, sync })
+    return Service.of({ publish, publishEvent, subscribe, all: streamAll, project })
   }),
 )
 

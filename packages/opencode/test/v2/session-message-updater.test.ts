@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Effect } from "effect"
 import * as DateTime from "effect/DateTime"
 import { SessionID } from "../../src/session/schema"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -11,7 +12,7 @@ test("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.step.started",
     data: {
@@ -25,9 +26,9 @@ test("step snapshots carry over to assistant messages", () => {
       },
       snapshot: "before",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.step.ended",
     data: {
@@ -43,7 +44,7 @@ test("step snapshots carry over to assistant messages", () => {
       },
       snapshot: "after",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
@@ -55,7 +56,7 @@ test("text ended populates assistant text content", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.step.started",
     data: {
@@ -68,18 +69,18 @@ test("text ended populates assistant text content", () => {
         variant: ModelV2.VariantID.make("default"),
       },
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.text.started",
     data: {
       sessionID,
       timestamp: DateTime.makeUnsafe(2),
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.text.ended",
     data: {
@@ -87,7 +88,7 @@ test("text ended populates assistant text content", () => {
       timestamp: DateTime.makeUnsafe(3),
       text: "hello assistant",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
@@ -99,7 +100,7 @@ test("tool completion stores completed timestamp", () => {
   const sessionID = SessionID.make("session")
   const callID = "call"
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.step.started",
     data: {
@@ -112,9 +113,9 @@ test("tool completion stores completed timestamp", () => {
         variant: ModelV2.VariantID.make("default"),
       },
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.tool.input.started",
     data: {
@@ -123,9 +124,9 @@ test("tool completion stores completed timestamp", () => {
       callID,
       name: "bash",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.tool.called",
     data: {
@@ -136,9 +137,9 @@ test("tool completion stores completed timestamp", () => {
       input: { command: "pwd" },
       provider: { executed: true, metadata: { source: "provider" } },
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.tool.success",
     data: {
@@ -149,7 +150,7 @@ test("tool completion stores completed timestamp", () => {
       content: [{ type: "text", text: "/tmp" }],
       provider: { executed: true, metadata: { status: "done" } },
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
@@ -164,7 +165,7 @@ test("compaction events reduce to compaction message", () => {
   const sessionID = SessionID.make("session")
   const id = EventV2.ID.create()
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id,
     type: "session.next.compaction.started",
     data: {
@@ -172,9 +173,9 @@ test("compaction events reduce to compaction message", () => {
       timestamp: DateTime.makeUnsafe(1),
       reason: "auto",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.compaction.delta",
     data: {
@@ -182,9 +183,9 @@ test("compaction events reduce to compaction message", () => {
       timestamp: DateTime.makeUnsafe(2),
       text: "hello ",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.compaction.delta",
     data: {
@@ -192,9 +193,9 @@ test("compaction events reduce to compaction message", () => {
       timestamp: DateTime.makeUnsafe(3),
       text: "summary",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
-  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+  Effect.runSync(SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     id: EventV2.ID.create(),
     type: "session.next.compaction.ended",
     data: {
@@ -203,7 +204,7 @@ test("compaction events reduce to compaction message", () => {
       text: "final summary",
       include: "recent context",
     },
-  } satisfies SessionEvent.Event)
+  } satisfies SessionEvent.Event))
 
   expect(state.messages).toHaveLength(1)
   expect(state.messages[0]).toMatchObject({

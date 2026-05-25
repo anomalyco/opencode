@@ -90,25 +90,24 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("runs sync handlers inline", () =>
+  it.effect("runs projectors inline", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<EventV2.Payload>()
-      const unsubscribe = yield* events.sync((event) =>
+      yield* events.project(Message, (event) =>
         Effect.sync(() => {
           received.push(event)
         }),
       )
 
       const event = yield* events.publish(Message, { text: "hello" })
-      yield* unsubscribe
       yield* events.publish(Message, { text: "after unsubscribe" })
 
-      expect(received).toEqual([event])
+      expect(received).toEqual([event, expect.objectContaining({ data: { text: "after unsubscribe" } })])
     }),
   )
 
-  it.effect("runs sync handlers before publishing to streams", () =>
+  it.effect("runs projectors before publishing to streams", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<string>()
@@ -117,7 +116,7 @@ describe("EventV2", () => {
         Stream.runForEach(() => Effect.sync(() => received.push("stream"))),
         Effect.forkScoped,
       )
-      yield* events.sync((event) =>
+      yield* events.project(Message, (event) =>
         Effect.sync(() => {
           received.push(event.type)
         }),

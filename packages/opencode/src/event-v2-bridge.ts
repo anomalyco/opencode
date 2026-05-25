@@ -7,10 +7,11 @@ import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { SyncEvent } from "@/sync"
 import { EventV2 } from "@opencode-ai/core/event"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session/event"
-import { Context, Effect, Layer, Option } from "effect"
+import { Context, Effect, Layer, Option, Stream } from "effect"
 
 export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {
   const result = {
@@ -30,7 +31,6 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const bus = yield* ProjectBus.Service
-    const sync = yield* SyncEvent.Service
 
     const publishGlobal = (event: EventV2.Payload) =>
       Effect.sync(() => {
@@ -60,28 +60,23 @@ export const layer = Layer.effect(
       })
     }
 
-    const unsubscribe = yield* events.sync((event) => {
-      const definition = EventV2.registry.get(event.type)
-      if (!definition) return Effect.void
-      const aggregateID = definition.aggregate
-        ? (event.data as Record<string, unknown>)[definition.aggregate]
-        : undefined
-
-      if (definition.version !== undefined && typeof aggregateID === "string") {
-        return provideEventLocation(event, sync.run(toSyncDefinition(definition), event.data))
-      }
-
-      return provideEventLocation(
-        event,
-        bus.publish({ type: definition.type, properties: definition.data }, event.data, { id: event.id }),
-      )
-    })
-    yield* Effect.addFinalizer(() => unsubscribe)
+    yield* events.all().pipe(
+      Stream.runForEach((event) => {
+        const definition = EventV2.registry.get(event.type)
+        if (!definition) return Effect.void
+        return provideEventLocation(
+          event,
+          bus.publish({ type: definition.type, properties: definition.data }, event.data, { id: event.id }),
+        )
+      }),
+      Effect.forkScoped,
+    )
     return Service.of(events)
   }),
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provideMerge(SessionProjector.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(ProjectBus.defaultLayer),
