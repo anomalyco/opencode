@@ -202,6 +202,28 @@ describe("Vcs diff", () => {
     }),
   )
 
+  it.live("info() lists git worktrees from the primary worktree", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const wt = yield* tmpdirScoped()
+      yield* git(tmp, ["branch", "-M", "main"])
+      yield* write(path.join(tmp, "file.txt"), "hello\n")
+      yield* git(tmp, ["add", "."])
+      yield* git(tmp, ["commit", "--no-gpg-sign", "-m", "init"])
+
+      const dir = path.join(wt, "feature")
+      yield* git(tmp, ["worktree", "add", "-b", "feature/worktree", dir, "HEAD"])
+
+      const info = yield* Effect.gen(function* () {
+        const vcs = yield* init()
+        return yield* vcs.info()
+      }).pipe(provideInstance(tmp))
+
+      expect(info.worktrees).toContainEqual(expect.objectContaining({ path: tmp, branch: "main" }))
+      expect(info.worktrees).toContainEqual(expect.objectContaining({ path: dir, branch: "feature/worktree" }))
+    }),
+  )
+
   it.instance(
     "diff('git') returns uncommitted changes",
     () =>

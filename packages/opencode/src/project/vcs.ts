@@ -1,9 +1,8 @@
-import { Effect, Layer, ServiceMap, Scope } from "effect"
-import path from "path"
+import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
+import { formatPatch, structuredPatch } from "diff"
 import { Bus } from "@/bus"
-import z from "zod"
-import { Log } from "@/util/log"
-import { Instance } from "./instance"
+import { BusEvent } from "@/bus/bus-event"
+import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
@@ -16,41 +15,10 @@ type DiffOptions = {
   readonly context?: number
 }
 
-export namespace Vcs {
-  const text = (input: Uint8Array | undefined) => {
-    if (!input?.length) return ""
-    return new TextDecoder().decode(input).trim()
-  }
+const emptyPatch = (file: string) => formatPatch(structuredPatch(file, file, "", "", "", "", { context: 0 }))
 
-  export const Event = {
-    BranchUpdated: BusEvent.define(
-      "vcs.branch.updated",
-      z.object({
-        branch: z.string().optional(),
-      }),
-    ),
-  }
-
-  const Worktree = z.object({
-    path: z.string(),
-    branch: z.string().optional(),
-    head: z.string().optional(),
-    bare: z.boolean().optional(),
-    detached: z.boolean().optional(),
-    locked: z.string().optional(),
-    prunable: z.string().optional(),
-  })
-
-  export const Info = z
-    .object({
-      branch: z.string(),
-      branches: z.array(z.string()).default([]),
-      worktrees: z.array(Worktree).default([]),
-    })
-    .meta({
-      ref: "VcsInfo",
-    })
-  export type Info = z.infer<typeof Info>
+const nums = (list: Git.Stat[]) =>
+  new Map(list.map((item) => [item.file, { additions: item.additions, deletions: item.deletions }] as const))
 
 const merge = (...lists: Git.Item[][]) => {
   const out = new Map<string, Git.Item>()
@@ -60,84 +28,7 @@ const merge = (...lists: Git.Item[][]) => {
   return [...out.values()]
 }
 
-  async function branchList() {
-    const result = await git(["branch", "--format=%(refname:short)"], {
-      cwd: Instance.worktree,
-    })
-    if (result.exitCode !== 0) return []
-    return text(result.stdout)
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .toSorted()
-  }
-
-  async function worktreeList() {
-    const result = await git(["worktree", "list", "--porcelain"], {
-      cwd: Instance.worktree,
-    })
-    if (result.exitCode !== 0) return []
-
-    const rows = text(result.stdout).split("\n")
-    const out: Info["worktrees"] = []
-    let item: Info["worktrees"][number] | undefined
-
-    const push = () => {
-      if (!item?.path) return
-      out.push(item)
-      item = undefined
-    }
-
-    for (const row of rows) {
-      if (!row.trim()) {
-        push()
-        continue
-      }
-
-      const [key, ...rest] = row.split(" ")
-      const value = rest.join(" ").trim()
-
-      if (key === "worktree") {
-        push()
-        item = { path: value }
-        continue
-      }
-
-      if (!item) continue
-      if (key === "branch") item.branch = value.replace(/^refs\/heads\//, "")
-      if (key === "HEAD") item.head = value
-      if (key === "bare") item.bare = true
-      if (key === "detached") item.detached = true
-      if (key === "locked") item.locked = value || "true"
-      if (key === "prunable") item.prunable = value || "true"
-    }
-
-    push()
-    return out
-  }
-
-  async function snapshot(): Promise<Info> {
-    const branch = await currentBranch()
-    const [branches, worktrees] = await Promise.all([branchList(), worktreeList()])
-    return {
-      branch: branch ?? "",
-      branches,
-      worktrees,
-    }
-  }
-
-  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
-      const git = yield* Git.Service
-      const scope = yield* Scope.Scope
-      const state = yield* InstanceState.make<State>(
-        Effect.fn("Vcs.state")((ctx) =>
-          Effect.gen(function* () {
-            if (ctx.project.vcs !== "git") {
-              return { current: undefined, root: undefined }
-            }
+const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
 
 const parseQuotedPath = (value: string) => {
   let out = ""
@@ -149,93 +40,12 @@ const parseQuotedPath = (value: string) => {
       continue
     }
 
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                Bus.subscribe(
-                  FileWatcher.Event.Updated,
-                  Instance.bind(async (evt) => {
-                    if (!evt.properties.file.endsWith("HEAD")) return
-                    const next = await get()
-                    if (next === value.current) return
-                    log.info("branch changed", { from: value.current, to: next })
-                    value.current = next
-                    Bus.publish(Event.BranchUpdated, { branch: next })
-                  }),
-                ),
-              ),
-              (unsubscribe) => Effect.sync(unsubscribe),
-            )
-
-            return value
-          }),
-        ),
-      )
-
-      return Service.of({
-        init: Effect.fn("Vcs.init")(function* () {
-          yield* InstanceState.get(state).pipe(Effect.forkIn(scope))
-        }),
-        branch: Effect.fn("Vcs.branch")(function* () {
-          return yield* InstanceState.use(state, (x) => x.current)
-        }),
-        defaultBranch: Effect.fn("Vcs.defaultBranch")(function* () {
-          return yield* InstanceState.use(state, (x) => x.root?.name)
-        }),
-        info: Effect.fn("Vcs.info")(function* () {
-          const value = yield* InstanceState.get(state)
-          if (Instance.project.vcs !== "git") {
-            return {
-              branch: undefined,
-              default_branch: undefined,
-              branches: [],
-              worktrees: [],
-            }
-          }
-
-          const [branches, worktrees] = yield* Effect.all(
-            [branchList(git, Instance.worktree), worktreeList(git, Instance.worktree)],
-            { concurrency: 2 },
-          )
-
-          return {
-            branch: value.current,
-            default_branch: value.root?.name,
-            branches,
-            worktrees,
-          }
-        }),
-        diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
-          const value = yield* InstanceState.get(state)
-          if (Instance.project.vcs !== "git") return []
-          if (mode === "git") {
-            return yield* track(
-              fs,
-              git,
-              Instance.directory,
-              (yield* git.hasHead(Instance.directory)) ? "HEAD" : undefined,
-            )
-          }
-
-          if (!value.root) return []
-          if (value.current && value.current === value.root.name) return []
-          const ref = yield* git.mergeBase(Instance.directory, value.root.ref)
-          if (!ref) return []
-          return yield* compare(fs, git, Instance.directory, ref)
-        }),
-      })
-    }),
-  )
-
-  export async function init() {
-    return state()
-  }
-
-  export async function branch() {
-    return await state().then((s) => s.branch())
-  }
-
-  export async function info() {
-    return await state().then((s) => s.info())
+    const next = value[++idx]
+    if (next === "t") out += "\t"
+    else if (next === "n") out += "\n"
+    else if (next === "r") out += "\r"
+    else if (next === '"' || next === "\\") out += next
+    else out += next ?? ""
   }
 }
 
@@ -437,9 +247,22 @@ export const Event = {
   ),
 }
 
+export const WorktreeInfo = Schema.Struct({
+  path: Schema.String,
+  branch: Schema.optional(Schema.String),
+  head: Schema.optional(Schema.String),
+  bare: Schema.optional(Schema.Boolean),
+  detached: Schema.optional(Schema.Boolean),
+  locked: Schema.optional(Schema.String),
+  prunable: Schema.optional(Schema.String),
+}).annotate({ identifier: "VcsWorktreeInfo" })
+export type WorktreeInfo = Schema.Schema.Type<typeof WorktreeInfo>
+
 export const Info = Schema.Struct({
   branch: Schema.optional(Schema.String),
   default_branch: Schema.optional(Schema.String),
+  branches: Schema.optional(Schema.Array(Schema.String)),
+  worktrees: Schema.optional(Schema.Array(WorktreeInfo)),
 }).annotate({ identifier: "VcsInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -480,6 +303,7 @@ export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()(
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
+  readonly info: () => Effect.Effect<Info>
   readonly branch: () => Effect.Effect<string | undefined>
   readonly defaultBranch: () => Effect.Effect<string | undefined>
   readonly status: () => Effect.Effect<FileStatus[]>
@@ -493,6 +317,54 @@ interface State {
   root: Git.Base | undefined
 }
 
+function parseWorktreeList(text: string) {
+  type MutableWorktreeInfo = {
+    path: string
+    branch?: string
+    head?: string
+    bare?: boolean
+    detached?: boolean
+    locked?: string
+    prunable?: string
+  }
+  const out: WorktreeInfo[] = []
+  let item: MutableWorktreeInfo | undefined
+
+  const push = () => {
+    if (!item?.path) return
+    out.push(item)
+    item = undefined
+  }
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line) {
+      push()
+      continue
+    }
+
+    const [key, ...rest] = line.split(" ")
+    const value = rest.join(" ").trim()
+
+    if (key === "worktree") {
+      push()
+      item = { path: value }
+      continue
+    }
+
+    if (!item) continue
+    if (key === "branch") item.branch = value.replace(/^refs\/heads\//, "")
+    else if (key === "HEAD") item.head = value
+    else if (key === "bare") item.bare = true
+    else if (key === "detached") item.detached = true
+    else if (key === "locked") item.locked = value || "true"
+    else if (key === "prunable") item.prunable = value || "true"
+  }
+
+  push()
+  return out
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
 export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Layer.effect(
@@ -501,6 +373,26 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
     const git = yield* Git.Service
     const bus = yield* Bus.Service
     const scope = yield* Scope.Scope
+
+    const branchList = Effect.fnUntraced(function* (cwd: string) {
+      const result = yield* git.run(["branch", "--format=%(refname:short)"], { cwd })
+      if (result.exitCode !== 0) return []
+      return result
+        .text()
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .toSorted()
+    })
+
+    const worktreeList = Effect.fnUntraced(function* (cwd: string) {
+      const result = yield* git.run(["worktree", "list", "--porcelain"], { cwd })
+      if (result.exitCode !== 0) {
+        log.warn("failed to list worktrees", { message: result.stderr.toString("utf8") || result.text() })
+        return []
+      }
+      return parseWorktreeList(result.text())
+    })
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Vcs.state")(function* (ctx) {
@@ -539,6 +431,29 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
     return Service.of({
       init: Effect.fn("Vcs.init")(function* () {
         yield* InstanceState.get(state).pipe(Effect.forkIn(scope))
+      }),
+      info: Effect.fn("Vcs.info")(function* () {
+        const value = yield* InstanceState.get(state)
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") {
+          return {
+            branch: undefined,
+            default_branch: undefined,
+            branches: [],
+            worktrees: [],
+          }
+        }
+
+        const [branches, worktrees] = yield* Effect.all([branchList(ctx.worktree), worktreeList(ctx.worktree)], {
+          concurrency: 2,
+        })
+
+        return {
+          branch: value.current,
+          default_branch: value.root?.name,
+          branches,
+          worktrees,
+        }
       }),
       branch: Effect.fn("Vcs.branch")(function* () {
         return yield* InstanceState.use(state, (x) => x.current)

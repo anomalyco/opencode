@@ -38,10 +38,7 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     })
 
     const getVcs = Effect.fn("InstanceHttpApi.vcs")(function* () {
-      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
-        concurrency: "unbounded",
-      })
-      return { branch, default_branch }
+      return yield* vcs.info()
     })
 
     const getVcsStatus = Effect.fn("InstanceHttpApi.vcsStatus")(function* () {
