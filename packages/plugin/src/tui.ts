@@ -361,6 +361,7 @@ export type TuiTheme = {
   readonly selected: string
   has: (name: string) => boolean
   set: (name: string) => boolean
+  preview: (name: string) => boolean
   install: (jsonPath: string) => Promise<void>
   mode: () => "dark" | "light"
   readonly ready: boolean

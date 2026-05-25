@@ -478,6 +478,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         kv.set("theme", theme)
         return true
       },
+      preview(theme: string) {
+        if (!hasTheme(theme)) return false
+        setStore("active", theme)
+        return true
+      },
       get ready() {
         return store.ready
       },

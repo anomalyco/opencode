@@ -17,7 +17,7 @@ export function DialogThemeList() {
   const initial = theme.selected
 
   onCleanup(() => {
-    if (!confirmed) theme.set(initial)
+    if (!confirmed) theme.preview(initial)
   })
 
   return (
@@ -26,7 +26,7 @@ export function DialogThemeList() {
       options={options}
       current={initial}
       onMove={(opt) => {
-        theme.set(opt.value)
+        theme.preview(opt.value)
       }}
       onSelect={(opt) => {
         theme.set(opt.value)
@@ -38,12 +38,12 @@ export function DialogThemeList() {
       }}
       onFilter={(query) => {
         if (query.length === 0) {
-          theme.set(initial)
+          theme.preview(initial)
           return
         }
 
         const first = ref.filtered[0]
-        if (first) theme.set(first.value)
+        if (first) theme.preview(first.value)
       }}
     />
   )

@@ -109,6 +109,7 @@ type Opts = {
     selected?: string
     has?: HostPluginApi["theme"]["has"]
     set?: HostPluginApi["theme"]["set"]
+    preview?: HostPluginApi["theme"]["preview"]
     install?: HostPluginApi["theme"]["install"]
     mode?: HostPluginApi["theme"]["mode"]
     ready?: boolean
@@ -144,6 +145,13 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   let selected = opts.theme?.selected ?? "opencode"
   const set =
     opts.theme?.set ??
+    ((name: string) => {
+      if (!has(name)) return false
+      selected = name
+      return true
+    })
+  const preview =
+    opts.theme?.preview ??
     ((name: string) => {
       if (!has(name)) return false
       selected = name
@@ -338,6 +346,9 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
       set(name) {
         return set(name)
+      },
+      preview(name) {
+        return preview(name)
       },
       async install(file) {
         if (opts.theme?.install) return opts.theme.install(file)
