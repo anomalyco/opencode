@@ -1,6 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
-import { Database as CoreDatabase } from "@opencode-ai/core/database/database"
+import { Database } from "@opencode-ai/core/database/database"
+import { eq } from "drizzle-orm"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
@@ -46,7 +48,6 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
@@ -54,9 +55,7 @@ import { RepositoryCache } from "../../src/reference/repository-cache"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
-import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
@@ -184,9 +183,8 @@ function makePrompt(input?: { processor?: "blocking" }) {
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
-    SyncEvent.defaultLayer,
+    Database.defaultLayer,
     EventV2Bridge.defaultLayer,
-        CoreDatabase.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -512,9 +510,8 @@ noLLMServer.instance(
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
         Effect.provide(SessionV2.defaultLayer),
       )
-      const row = Database.use((db) =>
-        db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
-      )
+      const { db } = yield* Database.Service
+      const row = yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.session_id, chat.id)).get().pipe(Effect.orDie)
       expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
       expect(typeof row?.data.time.created).toBe("number")
       expect(messages).toEqual(

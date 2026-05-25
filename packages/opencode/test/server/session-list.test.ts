@@ -1,7 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
@@ -13,9 +12,9 @@ import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
 import { Bus } from "@/bus"
 import { Storage } from "@/storage/storage"
-import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 void Log.init({ print: false })
 const it = testEffect(
@@ -24,9 +23,8 @@ const it = testEffect(
     SessionNs.layer.pipe(
       Layer.provide(Bus.layer),
       Layer.provide(Storage.defaultLayer),
-      Layer.provide(SyncEvent.defaultLayer),
       Layer.provide(Database.defaultLayer),
-      Layer.provide(EventV2.defaultLayer),
+      Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(SessionProjector.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(BackgroundJob.defaultLayer),

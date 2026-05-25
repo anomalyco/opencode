@@ -10,7 +10,7 @@ import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
-import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionV2 } from "@opencode-ai/core/session"
 
 import { NotFoundError } from "@/storage/storage"
@@ -510,7 +510,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | Bus.Service | Storage.Service | RuntimeFlags.Service | Database.Service | EventV2.Service
+  BackgroundJob.Service | Bus.Service | Storage.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -518,7 +518,7 @@ export const layer: Layer.Layer<
     const database = yield* Database.Service
     const background = yield* BackgroundJob.Service
     const bus = yield* Bus.Service
-    const events = yield* EventV2.Service
+    const events = yield* EventV2Bridge.Service
     const storage = yield* Storage.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -935,7 +935,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
   Layer.provide(Database.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(SessionV2.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )

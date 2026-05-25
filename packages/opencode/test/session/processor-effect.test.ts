@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
@@ -28,9 +29,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
-import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
@@ -185,9 +184,8 @@ const deps = Layer.mergeAll(
   LLM.defaultLayer,
   Provider.defaultLayer,
   status,
-  SyncEvent.defaultLayer,
-  EventV2Bridge.defaultLayer,
   Database.defaultLayer,
+  EventV2Bridge.defaultLayer,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(
   TestLLMServer.layer,

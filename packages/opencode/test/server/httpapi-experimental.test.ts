@@ -6,7 +6,9 @@ import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { Session } from "@/session/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
+import { AccountV2 } from "@opencode-ai/core/account"
+import { AccountTable } from "@opencode-ai/core/account/sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
@@ -15,7 +17,7 @@ import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer))
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer))
 const testWorktreeMutations = process.platform === "win32" ? it.instance.skip : it.instance
 
 function app() {
@@ -62,34 +64,34 @@ function waitReady(input: { directory?: string; name?: string }) {
 
 function insertAccount() {
   return Effect.acquireRelease(
-    Effect.sync(() => {
-      Database.Client()
-        .$client.prepare(
-          "INSERT INTO account (id, email, url, access_token, refresh_token, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          "account-test",
-          "test@example.com",
-          "https://console.example.com",
-          "access",
-          "refresh",
-          Date.now(),
-          Date.now(),
-        )
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(AccountTable)
+        .values({
+          id: AccountV2.ID.make("account-test"),
+          email: "test@example.com",
+          url: "https://console.example.com",
+          access_token: AccountV2.AccessToken.make("access"),
+          refresh_token: AccountV2.RefreshToken.make("refresh"),
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
       return "account-test"
     }),
     (id) =>
-      Effect.sync(() => {
-        Database.Client().$client.prepare("DELETE FROM account WHERE id = ?").run(id)
-      }),
+      Database.Service.use(({ db }) =>
+        db.delete(AccountTable).where(eq(AccountTable.id, AccountV2.ID.make(id))).run().pipe(Effect.orDie),
+      ),
   )
 }
 
 function setSessionUpdated(session: Session.Info, updated: number) {
-  return Effect.sync(() => {
-    Database.use((db) =>
-      db.update(SessionTable).set({ time_updated: updated }).where(eq(SessionTable.id, session.id)).run(),
-    )
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.update(SessionTable).set({ time_updated: updated }).where(eq(SessionTable.id, session.id)).run().pipe(Effect.orDie)
   })
 }
 

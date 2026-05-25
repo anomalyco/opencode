@@ -19,7 +19,7 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -43,7 +43,9 @@ const instanceStoreLayer = InstanceStore.defaultLayer.pipe(
     Layer.succeed(InstanceBootstrapService.Service, InstanceBootstrapService.Service.of({ run: Effect.void })),
   ),
 )
-const it = testEffect(Layer.mergeAll(instanceStoreLayer, Project.defaultLayer, Session.defaultLayer, workspaceLayer))
+const it = testEffect(
+  Layer.mergeAll(instanceStoreLayer, Project.defaultLayer, Session.defaultLayer, workspaceLayer, Database.defaultLayer),
+)
 
 function app() {
   return Server.Default().app
@@ -107,7 +109,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
   )
 
 const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
     const message = new SessionMessage.Assistant({
       id: SessionMessage.ID.create(),
       type: "assistant",
@@ -120,76 +122,72 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
       time: { created: DateTime.makeUnsafe(time) },
       content: [],
     })
-    Database.use((db) =>
-      db
-        .insert(SessionMessageTable)
-        .values([
-          {
-            id: message.id,
-            session_id: sessionID,
-            type: message.type,
-            time_created: time,
-            data: {
-              time: { created: time },
-              agent: message.agent,
-              model: message.model,
-              content: message.content,
-            } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
-          },
-        ])
-        .run(),
-    )
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(SessionMessageTable)
+      .values([
+        {
+          id: message.id,
+          session_id: sessionID,
+          type: message.type,
+          time_created: time,
+          data: {
+            time: { created: time },
+            agent: message.agent,
+            model: message.model,
+            content: message.content,
+          } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+        },
+      ])
+      .run()
+      .pipe(Effect.orDie)
   })
 
 const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
-  Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .insert(SessionMessageTable)
-        .values([
-          {
-            id: SessionMessage.ID.create(),
-            session_id: sessionID,
-            type: "assistant",
-            time_created: time,
-            data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
-          },
-        ])
-        .run(),
-    ),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(SessionMessageTable)
+      .values([
+        {
+          id: SessionMessage.ID.create(),
+          session_id: sessionID,
+          type: "assistant",
+          time_created: time,
+          data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+        },
+      ])
+      .run()
+      .pipe(Effect.orDie)
+  })
 
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
-  Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .update(SessionTable)
-        .set({
-          summary_additions: 1,
-          summary_deletions: 0,
-          summary_files: 1,
-          summary_diffs: [{ additions: 1, deletions: 0 }],
-        })
-        .where(eq(SessionTable.id, sessionID))
-        .run(),
-    ),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db
+      .update(SessionTable)
+      .set({
+        summary_additions: 1,
+        summary_deletions: 0,
+        summary_files: 1,
+        summary_diffs: [{ additions: 1, deletions: 0 }],
+      })
+      .where(eq(SessionTable.id, sessionID))
+      .run()
+      .pipe(Effect.orDie)
+  })
 
 const getWorkspaceID = (sessionID: SessionIDType) =>
-  Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .select({ workspaceID: SessionTable.workspace_id })
-        .from(SessionTable)
-        .where(eq(SessionTable.id, sessionID))
-        .get(),
-    ),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return yield* db.select({ workspaceID: SessionTable.workspace_id }).from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+  })
 
 const clearSessionPath = (sessionID: SessionIDType) =>
-  Effect.sync(() =>
-    Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sessionID)).run()),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+  })
 
 function request(path: string, init?: RequestInit) {
   return Effect.promise(async () => app().request(path, init))

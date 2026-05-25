@@ -2,7 +2,7 @@ import { Global } from "@opencode-ai/core/global"
 import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import type { ProjectV2 } from "@opencode-ai/core/project"
@@ -149,7 +149,7 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | AppProcess.Service | Git.Service | Project.Service | InstanceStore.Service
+  AppFileSystem.Service | Path.Path | AppProcess.Service | Git.Service | Project.Service | InstanceStore.Service | Database.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -157,6 +157,7 @@ export const layer: Layer.Layer<
     const fs = yield* AppFileSystem.Service
     const pathSvc = yield* Path.Path
     const appProcess = yield* AppProcess.Service
+    const { db } = yield* Database.Service
     const gitSvc = yield* Git.Service
     const project = yield* Project.Service
     const store = yield* InstanceStore.Service
@@ -478,9 +479,7 @@ export const layer: Layer.Layer<
       directory: string,
       input: { projectID: ProjectV2.ID; extra?: string },
     ) {
-      const row = yield* Effect.sync(() =>
-        Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get()),
-      )
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get().pipe(Effect.orDie)
       const project = row ? Project.fromRow(row) : undefined
       const startup = project?.commands?.start?.trim() ?? ""
       const ok = yield* runStartScript(directory, startup, "project")
@@ -611,6 +610,7 @@ export const appLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(Project.defaultLayer),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
 )

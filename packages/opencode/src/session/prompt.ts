@@ -1652,7 +1652,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
-        EventV2Bridge.defaultLayer,
         Agent.defaultLayer,
         Database.defaultLayer,
         SystemPrompt.defaultLayer,
@@ -1661,6 +1660,7 @@ export const defaultLayer = Layer.suspend(() =>
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
+        EventV2Bridge.defaultLayer,
       ),
     ),
   ),

@@ -3,7 +3,6 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
-import { Sqlite } from "./sqlite"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
@@ -15,7 +14,6 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 export interface Interface {
   db: DatabaseShape
-  drizzle: Sqlite.DrizzleClient
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
@@ -23,7 +21,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const drizzle = yield* Sqlite.Drizzle
     const db = yield* makeDatabase
 
     yield* db.run("PRAGMA journal_mode = WAL")
@@ -35,7 +32,7 @@ export const layer = Layer.effect(
     yield* Effect.log("Applying database migrations")
     yield* DatabaseMigration.apply(db)
 
-    return { db, drizzle }
+    return { db }
   }).pipe(Effect.orDie),
 )
 

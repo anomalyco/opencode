@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
-import * as Database from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 
 import { Server } from "../../src/server/server"
 import { Session } from "@/session/session"
@@ -14,7 +14,7 @@ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
-const it = testEffect(Session.defaultLayer)
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer))
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -44,22 +44,20 @@ const seedCorruptStepFinishPart = Effect.gen(function* () {
   })
   // Schema.Finite still rejects NaN at encode: exact mirror of the corrupt row
   // that broke the user's session in the OMO/Windows bug.
-  yield* Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .update(PartTable)
-        .set({
-          data: {
-            type: "step-finish",
-            reason: "stop",
-            cost: 0,
-            tokens: { input: 0, output: NaN, reasoning: 0, cache: { read: 0, write: 0 } },
-          } as never, // drizzle's .set() can't narrow the discriminated union
-        })
-        .where(eq(PartTable.id, partID))
-        .run(),
-    ),
-  )
+  const { db } = yield* Database.Service
+  yield* db
+    .update(PartTable)
+    .set({
+      data: {
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: { input: 0, output: NaN, reasoning: 0, cache: { read: 0, write: 0 } },
+      } as never, // drizzle's .set() can't narrow the discriminated union
+    })
+    .where(eq(PartTable.id, partID))
+    .run()
+    .pipe(Effect.orDie)
   return info.id
 })
 

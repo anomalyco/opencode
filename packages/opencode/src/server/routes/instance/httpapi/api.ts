@@ -1,7 +1,6 @@
 import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
 import { BusEvent } from "@/bus/bus-event"
-import { SyncEvent } from "@/sync"
 import { ConfigApi } from "./groups/config"
 import { ControlApi } from "./groups/control"
 import { EventApi } from "./groups/event"
@@ -23,9 +22,8 @@ import { V2Api } from "./groups/v2"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
-// SSE event schemas built from the BusEvent/SyncEvent registries.
+// SSE event schemas built from the BusEvent and EventV2 registries.
 const EventSchema = Schema.Union(BusEvent.effectPayloads()).annotate({ identifier: "Event" })
-const SyncEventSchemas = SyncEvent.effectPayloads()
 
 export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)
@@ -56,7 +54,7 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(EventApi)
   .addHttpApi(InstanceHttpApi)
   .addHttpApi(PtyConnectApi)
-  .annotate(HttpApi.AdditionalSchemas, [EventSchema, ...SyncEventSchemas])
+  .annotate(HttpApi.AdditionalSchemas, [EventSchema])
 
 export type RootHttpApiType = typeof RootHttpApi
 export type InstanceHttpApiType = typeof InstanceHttpApi

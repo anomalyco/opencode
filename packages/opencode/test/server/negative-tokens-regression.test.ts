@@ -6,21 +6,21 @@
 // strict `NonNegativeInt` schema then made every load of the message list
 // fail to encode, killing Desktop boot for every user with such a row.
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
 
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID } from "../../src/session/schema"
-import * as Database from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { PartTable } from "@opencode-ai/core/session/sql"
 import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
-const it = testEffect(Session.defaultLayer)
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer))
 
 function seedNegativeTokenSession() {
   return Effect.gen(function* () {
@@ -47,20 +47,20 @@ function seedNegativeTokenSession() {
 
     // Bypass the schema with a direct SQL update to install the
     // negative `output` value we want to test loading.
-    Database.use((db) =>
-      db
-        .update(PartTable)
-        .set({
-          data: {
-            type: "step-finish",
-            reason: "stop",
-            cost: 0,
-            tokens: { input: 0, output: -42, reasoning: 0, cache: { read: 0, write: 0 } },
-          } as never,
-        })
-        .where(eq(PartTable.id, partID))
-        .run(),
-    )
+    const { db } = yield* Database.Service
+    yield* db
+      .update(PartTable)
+      .set({
+        data: {
+          type: "step-finish",
+          reason: "stop",
+          cost: 0,
+          tokens: { input: 0, output: -42, reasoning: 0, cache: { read: 0, write: 0 } },
+        } as never,
+      })
+      .where(eq(PartTable.id, partID))
+      .run()
+      .pipe(Effect.orDie)
 
     return info.id
   })

@@ -25,7 +25,6 @@ Production imports from `packages/opencode/src/storage/db.ts` are concentrated i
 - `packages/opencode/src/cli/cmd/import.ts`
 - `packages/opencode/src/cli/cmd/stats.ts`
 - `packages/opencode/src/control-plane/workspace.ts`
-- `packages/opencode/src/data-migration.ts`
 - `packages/opencode/src/index.ts`
 - `packages/opencode/src/node.ts`
 - `packages/opencode/src/permission/index.ts`
@@ -46,6 +45,8 @@ Production imports from `packages/opencode/src/storage/db.ts` are concentrated i
 There are 65 direct API/type references in those files. The references fall into the groups below.
 
 ## Group 1: Database Runtime And Startup
+
+Status: Completed. Startup, the public node export, and database CLI tooling no longer import the legacy opencode database wrapper; `packages/opencode/src/storage/db.ts` has been deleted.
 
 Files:
 
@@ -74,6 +75,8 @@ Target shape:
 - Keep `cli/cmd/db.ts` as an admin/raw SQLite tool, but make it ask the replacement database path provider instead of importing `@/storage/db`.
 
 ## Group 2: Sync Event Transaction Boundary
+
+Status: Completed. `SyncEvent` and the opencode projector boundary were removed; session/message event projection now lives in core EventV2/projector infrastructure.
 
 Files:
 
@@ -105,6 +108,8 @@ Suggested first step:
 - Create a narrow internal module for sync projection execution, then migrate `SyncEvent.project(...)` and projector type signatures to that module. Keep the implementation backed by the new database adapter until all projector users are moved.
 
 ## Group 3: Domain Repositories Already Behind Services
+
+Status: Completed. These services no longer import the legacy opencode database wrapper.
 
 Files:
 
@@ -138,6 +143,8 @@ Suggested order:
 - Leave `project/project.ts` for last in this group because it mixes project resolution, VCS, global bus emission, migration, and legacy top-level helpers.
 
 ## Group 4: Session And Message Read Models
+
+Status: Completed. Session/message reads and projector writes have moved off the legacy opencode database wrapper.
 
 Files:
 
@@ -176,6 +183,8 @@ Suggested order:
 
 ## Group 5: Legacy CLI And One-Off Admin Reads
 
+Status: Completed. Remaining one-off CLI/admin reads and writes now use core database services or domain services instead of the legacy opencode database wrapper.
+
 Files:
 
 - `packages/opencode/src/cli/cmd/import.ts`
@@ -206,46 +215,21 @@ Target shape:
 - For HTTP sync reads, move the event log query behind the sync event module.
 - For permission and worktree reads, call the permission/project services if available; otherwise add narrow repository methods.
 
-## Group 6: Data Migrations
-
-Files:
-
-- `packages/opencode/src/data-migration.ts`
-
-Current usage:
-
-- Checks `DataMigrationTable` with `Database.use`.
-- Runs resumable data migrations with `Database.use` and `Database.transaction`.
-- Writes completion rows with `Database.use`.
-
-Why this group is separate:
-
-- Data migrations are database-native by definition and may reasonably stay close to SQL.
-- They should not depend on the legacy opencode wrapper, but they do need a stable transaction API and migration completion store.
-
-Target shape:
-
-- Run data migrations through the same Effect database service used by startup/migrations.
-- Keep SQL-heavy migration logic local to `data-migration.ts`, but remove callback-style legacy access.
-- Ensure migrations still run in a scoped/background fiber and remain resumable.
-
 ## Recommended Migration Sequence
 
-1. Replace the legacy runtime seam from Group 1 with an Effect-native database module that exposes path, client/query access, transaction, and after-commit behavior.
-2. Port Group 2 sync event transaction semantics to the new module before touching projector bodies.
-3. Migrate Group 3 repositories that already hide database access behind service interfaces.
-4. Migrate Group 4 session/message reads, then projector write helpers once the new projector transaction type exists.
-5. Migrate Group 6 data migrations onto the new database service.
-6. Clean up Group 5 one-off reads and CLI/admin commands.
-7. Remove drizzle helper re-exports from `@/storage/db` imports by importing operators directly from `drizzle-orm` during each file migration.
-8. Delete `packages/opencode/src/storage/db.ts` once `rg "@/storage/db|./storage/db|Database\." packages/opencode/src` no longer finds legacy usages.
+All migration groups are complete or superseded. `packages/opencode/src/storage/db.ts` has been deleted.
+
+## Superseded: Data Migrations
+
+Status: Superseded. No opencode data-migration group remains.
+
+The previous opencode `data-migration.ts` service only backfilled session usage from message rows. That work is now covered by core database migration `packages/core/src/database/migration/20260510033149_session_usage.ts`, so there is no separate opencode data-migration group.
 
 ## Invariants To Preserve
 
 - Nested reads inside a transaction must use the active transaction, not the root client.
 - `SyncEvent.run` sequence allocation must keep immediate transaction behavior.
 - Post-commit publish effects must not run before the transaction commits.
-- Data migrations must remain resumable and record completion only after successful migration work.
 - Existing schema ownership remains in `packages/core/src/**/*.sql.ts`; do not move table definitions back into `packages/opencode`.
 
 ## Verification Commands

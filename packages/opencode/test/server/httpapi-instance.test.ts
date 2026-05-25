@@ -17,7 +17,7 @@ import { resetDatabase } from "../fixture/db"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-// Flip the experimental workspaces flag so SyncEvent.run actually writes to
+// Flip the experimental workspaces flag so EventV2.run actually writes to
 // EventSequenceTable (the source of truth the fence middleware reads). Reset
 // the database around the test so per-instance state does not leak between
 // runs. resetDatabase() already calls disposeAllInstances(), so we don't

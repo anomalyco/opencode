@@ -49,7 +49,6 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Skill } from "@/skill"
 import { Snapshot } from "@/snapshot"
-import { SyncEvent } from "@/sync"
 import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
@@ -192,12 +191,12 @@ export function createRoutes(
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
+      Database.defaultLayer,
       Account.defaultLayer,
       Agent.defaultLayer,
       Auth.defaultLayer,
       Command.defaultLayer,
       Config.defaultLayer,
-      Database.defaultLayer,
       File.defaultLayer,
       FileWatcher.defaultLayer,
       Format.defaultLayer,
@@ -225,7 +224,6 @@ export function createRoutes(
       SessionSummary.defaultLayer,
       ShareNext.defaultLayer,
       Snapshot.defaultLayer,
-      SyncEvent.defaultLayer,
       EventV2Bridge.defaultLayer,
       Skill.defaultLayer,
       Todo.defaultLayer,
@@ -233,7 +231,7 @@ export function createRoutes(
       Vcs.defaultLayer,
       Workspace.defaultLayer,
       Worktree.appLayer,
-      Bus.layer,
+      Bus.defaultLayer,
       AppFileSystem.defaultLayer,
       FetchHttpClient.layer,
       HttpServer.layerServices,

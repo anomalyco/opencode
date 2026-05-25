@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { APICallError } from "ai"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -29,9 +30,7 @@ import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
-import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { LLMEvent, Usage } from "@opencode-ai/llm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -234,22 +233,22 @@ const deps = Layer.mergeAll(
   Plugin.defaultLayer,
   Bus.layer,
   Config.defaultLayer,
-  SyncEvent.defaultLayer,
   RuntimeFlags.layer({ experimentalEventSystem: true }),
-  EventV2Bridge.defaultLayer,
   Database.defaultLayer,
+  EventV2Bridge.defaultLayer,
 )
 
 const env = Layer.mergeAll(
   SessionNs.defaultLayer,
   Database.defaultLayer,
+  EventV2Bridge.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
   SessionCompaction.layer.pipe(Layer.provide(SessionNs.defaultLayer), Layer.provideMerge(deps)),
 )
 
 const it = testEffect(env)
 
-const compactionEnv = Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer, CrossSpawnSpawner.defaultLayer)
+const compactionEnv = Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer, EventV2Bridge.defaultLayer, CrossSpawnSpawner.defaultLayer)
 const itCompaction = testEffect(compactionEnv)
 
 type CompactionProcessOptions = {
@@ -286,7 +285,6 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(status),
     Layer.provide(bus),
     Layer.provide(options?.config ?? Config.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provide(EventV2Bridge.defaultLayer),
   )

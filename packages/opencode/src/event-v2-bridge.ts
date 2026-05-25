@@ -1,5 +1,5 @@
 // Temporary V2 bridge: core events are the publish path, but the rest of
-// opencode and the HTTP event stream still expect legacy bus/sync payloads.
+// opencode and the HTTP event stream still expect legacy bus payloads.
 // This layer goes away once consumers subscribe to core EventV2 directly.
 import { Bus as ProjectBus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
@@ -31,8 +31,8 @@ export const layer = Layer.effect(
         })
       })
 
-    const provideEventLocation = <E, R>(event: EventV2.Payload, effect: Effect.Effect<void, E, R>) => {
-      return Effect.gen(function* () {
+    const provideEventLocation = <E, R>(event: EventV2.Payload, effect: Effect.Effect<void, E, R>) =>
+      Effect.gen(function* () {
         const ctx = yield* InstanceRef
         if (ctx) return yield* effect
         const store = Option.getOrUndefined(yield* Effect.serviceOption(InstanceStore.Service))
@@ -45,7 +45,6 @@ export const layer = Layer.effect(
           }),
         )
       })
-    }
 
     yield* events.all().pipe(
       Stream.runForEach((event) => {
@@ -58,6 +57,7 @@ export const layer = Layer.effect(
       }),
       Effect.forkScoped,
     )
+
     return Service.of(events)
   }),
 )

@@ -19,6 +19,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "../../src/project/project"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
@@ -26,7 +27,6 @@ import {
   workspaceRouterMiddleware,
 } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
-import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
 import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -50,6 +50,7 @@ const it = testEffect(
     testStateLayer,
     NodeHttpServer.layerTest,
     NodeServices.layer,
+    Database.defaultLayer,
     Project.defaultLayer,
     workspaceLayer,
     Socket.layerWebSocketConstructorGlobal,
@@ -160,10 +161,11 @@ const insertRemoteWorkspaceWithoutSync = (input: {
   type: string
   url: string
 }) =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
     const id = WorkspaceV2.ID.ascending()
     registerAdapter(input.projectID, input.type, remoteAdapter(path.join(input.dir, `.${input.type}`), input.url))
-    Database.use((db) => db.insert(WorkspaceTable).values({ id, type: input.type, project_id: input.projectID }).run())
+    const { db } = yield* Database.Service
+    yield* db.insert(WorkspaceTable).values({ id, type: input.type, project_id: input.projectID }).run().pipe(Effect.orDie)
     return id
   })
 

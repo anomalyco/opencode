@@ -642,7 +642,7 @@ describe("HttpApi SDK", () => {
     ),
   )
 
-  // Regression: SyncEvent must publish on the same ProjectBus the /event handler
+  // Regression: EventV2 must publish on the same ProjectBus the /event handler
   // subscribes to, AND the /event stream must forward handler ALS/context into the
   // body-pump fiber. Drives the full SDK → /event → Session.updatePart → sync.run →
   // bus.publish → SDK subscriber path. Goes red if either the publisher uses a

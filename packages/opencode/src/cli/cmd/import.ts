@@ -3,7 +3,7 @@ import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { CliError, effectCmd } from "../effect-cmd"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
@@ -99,6 +99,7 @@ export const ImportCommand = effectCmd({
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
   const share = yield* ShareNext.Service
   const fs = yield* AppFileSystem.Service
+  const { db } = yield* Database.Service
 
   let exportData: ExportData | undefined
 
@@ -176,48 +177,45 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),
   }) as Session.Info
   const row = Session.toRow(info)
-  Database.use((db) =>
-    db
-      .insert(SessionTable)
-      .values(row)
-      .onConflictDoUpdate({
-        target: SessionTable.id,
-        set: { project_id: row.project_id, directory: row.directory, path: row.path },
-      })
-      .run(),
-  )
+  yield* db
+    .insert(SessionTable)
+    .values(row)
+    .onConflictDoUpdate({
+      target: SessionTable.id,
+      set: { project_id: row.project_id, directory: row.directory, path: row.path },
+    })
+    .run()
+    .pipe(Effect.orDie)
 
   for (const msg of exportData.messages) {
     const msgInfo = decodeMessageInfo(msg.info) as SessionLegacy.Info
     const { id, sessionID: _, ...msgData } = msgInfo
-    Database.use((db) =>
-      db
-        .insert(MessageTable)
-        .values({
-          id,
-          session_id: row.id,
-          time_created: msgInfo.time?.created ?? Date.now(),
-          data: msgData as never,
-        })
-        .onConflictDoNothing()
-        .run(),
-    )
+    yield* db
+      .insert(MessageTable)
+      .values({
+        id,
+        session_id: row.id,
+        time_created: msgInfo.time?.created ?? Date.now(),
+        data: msgData as never,
+      })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
 
     for (const part of msg.parts) {
       const partInfo = decodePart(part) as SessionLegacy.Part
       const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
-      Database.use((db) =>
-        db
-          .insert(PartTable)
-          .values({
-            id: partId,
-            message_id: messageID,
-            session_id: row.id,
-            data: partData,
-          })
-          .onConflictDoNothing()
-          .run(),
-      )
+      yield* db
+        .insert(PartTable)
+        .values({
+          id: partId,
+          message_id: messageID,
+          session_id: row.id,
+          data: partData,
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
     }
   }
 

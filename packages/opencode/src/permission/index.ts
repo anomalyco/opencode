@@ -5,7 +5,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@opencode-ai/core/session/sql"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import * as Log from "@opencode-ai/core/util/log"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
@@ -145,11 +145,10 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const { db } = yield* Database.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
-        const row = Database.use((db) =>
-          db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
-        )
+        const row = yield* db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get().pipe(Effect.orDie)
         const state = {
           pending: new Map<PermissionID, PendingEntry>(),
           approved: [...(row?.data ?? [])],
@@ -307,6 +306,6 @@ export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
   return PermissionV2.disabled(tools, ruleset)
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(Bus.layer))
 
 export * as Permission from "."

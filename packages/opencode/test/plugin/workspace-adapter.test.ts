@@ -21,12 +21,12 @@ import { Vcs } from "../../src/project/vcs"
 import { InstanceState } from "../../src/effect/instance-state"
 import { Session } from "../../src/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { SyncEvent } from "../../src/sync"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
@@ -46,12 +46,12 @@ const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBoot
 const workspaceLayer = Workspace.layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Session.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(SessionPrompt.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(Vcs.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrapLayer))),
   Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),

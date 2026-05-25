@@ -9,7 +9,8 @@ import { Project } from "@/project/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
-import { SyncEvent } from "@/sync"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
@@ -174,7 +175,7 @@ export const layer = Layer.effect(
     const session = yield* Session.Service
     const prompt = yield* SessionPrompt.Service
     const http = yield* HttpClient.HttpClient
-    const sync = yield* SyncEvent.Service
+    const events = yield* EventV2Bridge.Service
     const vcs = yield* Vcs.Service
     const flags = yield* RuntimeFlags.Service
     const fs = yield* AppFileSystem.Service
@@ -372,20 +373,20 @@ export const layer = Layer.effect(
         })
       }
 
-      const events = (yield* response.json) as HistoryEvent[]
+      const history = (yield* response.json) as HistoryEvent[]
 
       log.info("workspace history synced", {
         workspaceID: space.id,
-        events: events.length,
+        events: history.length,
       })
 
       yield* Effect.forEach(
-        events,
+        history,
         (event) =>
-          sync
+          events
             .replay(
               {
-                id: event.id,
+                id: EventV2.ID.make(event.id),
                 aggregateID: event.aggregate_id,
                 seq: event.seq,
                 type: event.type,
@@ -432,11 +433,11 @@ export const layer = Layer.effect(
           yield* parseSSE(stream, (evt) =>
             Effect.gen(function* () {
               if (!evt || typeof evt !== "object" || !("payload" in evt)) return
-              const payload = evt.payload as { type?: string; syncEvent?: SyncEvent.SerializedEvent }
+              const payload = evt.payload as { type?: string; syncEvent?: EventV2.SerializedEvent }
               if (payload.type === "server.heartbeat") return
 
               if (payload.type === "sync" && payload.syncEvent) {
-                const failed = yield* sync.replay(payload.syncEvent).pipe(
+                const failed = yield* events.replay(payload.syncEvent, { publish: true }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
                     Effect.sync(() => {
@@ -634,7 +635,7 @@ export const layer = Layer.effect(
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored
-            yield* sync.claim(input.sessionID, input.workspaceID ?? previous.projectID)
+            yield* events.claim(input.sessionID, input.workspaceID ?? previous.projectID)
           }
         }
 
@@ -1002,12 +1003,12 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Session.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(SessionPrompt.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(Vcs.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )

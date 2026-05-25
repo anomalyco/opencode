@@ -1,7 +1,10 @@
-import { Database } from "bun:sqlite"
 import os from "node:os"
 import path from "node:path"
-import { Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { sql } from "drizzle-orm"
+import { Sqlite } from "@opencode-ai/core/database/sqlite"
+import { layer as sqliteLayer } from "@opencode-ai/core/database/sqlite.bun"
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
 import type { EditorSelection } from "./editor"
 
@@ -88,12 +91,10 @@ export async function resolveZedSelection(dbPath: string, cwd = process.cwd()): 
 }
 
 function queryZedActiveEditor(dbPath: string, cwd: string) {
-  let db: Database | undefined
   try {
-    db = new Database(dbPath, { readonly: true })
-    const raw = db
-      .query(
-        `select
+    const raw = zedDatabase(dbPath).runSync((db) =>
+      Effect.succeed(
+        db.all<ZedEditorRow>(sql.raw(`select
           i.kind as item_kind,
           e.item_id as editor_id,
           i.workspace_id as workspace_id,
@@ -105,9 +106,9 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
         join workspaces w on w.workspace_id = i.workspace_id
         left join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
         where i.active = 1 and p.active = 1
-        order by w.timestamp desc`,
-      )
-      .all()
+        order by w.timestamp desc`)),
+      ),
+    )
 
     const rows = raw.flatMap((row) => {
       const parsed = decodeZedEditorRow(row)
@@ -126,24 +127,22 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
     return { type: "row" as const, row }
   } catch {
     return { type: "unavailable" as const }
-  } finally {
-    db?.close()
   }
 }
 
 function queryZedEditorSelections(dbPath: string, row: ZedActiveEditorRow) {
-  let db: Database | undefined
   try {
-    db = new Database(dbPath, { readonly: true })
-    const raw = db
-      .query(
-        `select
+    const raw = zedDatabase(dbPath).runSync((db) =>
+      Effect.succeed(
+        db.all<Schema.Schema.Type<typeof ZedSelectionRowSchema>>(
+          sql`select
           start as selection_start,
           end as selection_end
         from editor_selections
-        where editor_id = $editorID and workspace_id = $workspaceID`,
-      )
-      .all({ $editorID: row.editor_id, $workspaceID: row.workspace_id })
+        where editor_id = ${row.editor_id} and workspace_id = ${row.workspace_id}`,
+        ),
+      ),
+    )
 
     const selections = raw.flatMap((selection) => {
       const parsed = decodeZedSelectionRow(selection)
@@ -154,31 +153,31 @@ function queryZedEditorSelections(dbPath: string, row: ZedActiveEditorRow) {
     return { type: "selections" as const, selections }
   } catch {
     return { type: "unavailable" as const }
-  } finally {
-    db?.close()
   }
 }
 
 function queryZedEditorContents(dbPath: string, row: ZedActiveEditorRow) {
-  let db: Database | undefined
   try {
-    db = new Database(dbPath, { readonly: true })
     const parsed = decodeZedEditorContents(
-      db
-        .query(
-          `select contents
+      zedDatabase(dbPath).runSync((db) =>
+        Effect.succeed(
+          db.get(
+            sql`select contents
         from editors
-        where item_id = $editorID and workspace_id = $workspaceID`,
-        )
-        .get({ $editorID: row.editor_id, $workspaceID: row.workspace_id }),
+        where item_id = ${row.editor_id} and workspace_id = ${row.workspace_id}`,
+          ),
+        ),
+      ),
     )
     if (Option.isNone(parsed)) return { type: "unavailable" as const }
     return { type: "contents" as const, contents: parsed.value.contents }
   } catch {
     return { type: "unavailable" as const }
-  } finally {
-    db?.close()
   }
+}
+
+function zedDatabase(dbPath: string) {
+  return makeRuntime(Sqlite.Drizzle, sqliteLayer({ filename: dbPath, readonly: true, create: false }))
 }
 
 function isZedActiveEditorRow(row: ZedEditorRow): row is ZedActiveEditorRow {
