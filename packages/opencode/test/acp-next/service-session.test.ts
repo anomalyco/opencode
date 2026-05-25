@@ -152,6 +152,34 @@ describe("ACP next service sessions", () => {
     expect(result.configOptions?.find((option) => option.id === "mode")?.currentValue).toBe("plan")
   })
 
+  it("restores model variant and mode from the latest user message", async () => {
+    const { service } = makeService([
+      {
+        info: {
+          role: "user",
+          model: { providerID: "test", modelID: "test-model", variant: "default" },
+          agent: "build",
+        },
+        parts: [],
+      },
+      {
+        info: {
+          role: "user",
+          model: { providerID: "test", modelID: "test-model", variant: "high" },
+          agent: "plan",
+        },
+        parts: [],
+      },
+    ])
+    const result = await Effect.runPromise(
+      service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+
+    expect(result.configOptions?.find((option) => option.id === "effort")?.currentValue).toBe("high")
+    expect(result.configOptions?.find((option) => option.id === "mode")?.currentValue).toBe("plan")
+  })
+
+
   it("maps provider auth failures to auth-required request errors", async () => {
     const service = ACPNextService.make({
       sdk: {

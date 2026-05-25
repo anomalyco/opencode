@@ -391,24 +391,27 @@ function mcpConfig(server: McpServer) {
 }
 
 function restoreFromMessages(messages: readonly MessageInfo[]) {
-  return messages.reduce<Partial<Pick<SessionState, "model" | "variant" | "modeId">>>((state, message) => {
-    if (state.model) return state
-    if (message.role === "user" && message.model?.providerID && message.model.modelID) {
-      return {
-        model: { providerID: message.model.providerID as ProviderID, modelID: message.model.modelID as ModelID },
-        variant: message.model.variant,
-        modeId: message.agent,
-      }
+  const user = messages.findLast(
+    (message) => message.role === "user" && message.model?.providerID && message.model.modelID,
+  )
+  if (user?.model?.providerID && user.model.modelID) {
+    return {
+      model: { providerID: user.model.providerID as ProviderID, modelID: user.model.modelID as ModelID },
+      variant: user.model.variant,
+      modeId: user.agent,
     }
-    if (message.providerID && message.modelID) {
-      return {
-        model: { providerID: message.providerID as ProviderID, modelID: message.modelID as ModelID },
-        variant: message.variant,
-        modeId: message.mode ?? message.agent,
-      }
+  }
+
+  const assistant = messages.findLast((message) => message.providerID && message.modelID)
+  if (assistant?.providerID && assistant.modelID) {
+    return {
+      model: { providerID: assistant.providerID as ProviderID, modelID: assistant.modelID as ModelID },
+      variant: assistant.variant,
+      modeId: assistant.mode ?? assistant.agent,
     }
-    return state
-  }, {})
+  }
+
+  return {}
 }
 
 function isSdkResponse<T>(value: T | SdkResponse<T>): value is SdkResponse<T> {
