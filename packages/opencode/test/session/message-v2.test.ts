@@ -1254,6 +1254,75 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("sanitizes malformed pending tool names to avoid Bedrock ValidationException", async () => {
+    // Repro for #28989: a malformed tool name (one that fails Bedrock's
+    // /^[a-zA-Z0-9_-]+$/) lands in the DB via tool-input-start before the
+    // repair callback fires. On every subsequent turn the malformed name
+    // is re-serialized as `tool-${part.tool}`, Bedrock rejects the request
+    // with a non-retryable ValidationException, and the session dies.
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const malformed = "functions.bash<|tool_call|>"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-bad",
+            tool: malformed,
+            state: {
+              status: "pending",
+              input: { cmd: "ls" },
+              raw: "",
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    // The malformed name must NOT appear as a `tool-${name}` part type
+    // (that's the shape that gets sent to providers as toolUse.name).
+    const serialized = JSON.stringify(result)
+    expect(serialized.includes(`tool-${malformed}`)).toBe(false)
+    // No assistant content block should declare itself as a tool-use referencing
+    // the malformed name.
+    const assistantMsg = result.find((m) => m.role === "assistant")
+    expect(assistantMsg?.content).not.toContainEqual(expect.objectContaining({ toolName: malformed }))
+
+    // The assistant turn should contain a text hint instead of a dangling
+    // tool_use referencing the malformed name.
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: `[Previous tool call interrupted: unknown tool name "${malformed}"]`,
+          },
+        ],
+      },
+    ])
+  })
+
   test("substitutes space for empty text between signed reasoning blocks", async () => {
     // Reproduces the bug pattern: [reasoning(sig), text(""), reasoning(sig), text(full)]
     const assistantID = "m-assistant"

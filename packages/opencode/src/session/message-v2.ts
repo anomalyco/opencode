@@ -634,6 +634,15 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  // Providers (notably Bedrock) reject tool names that don't match /^[a-zA-Z0-9_-]+$/
+  // with a non-retryable ValidationException, which kills the session. A malformed
+  // name can land in the DB because tool-input-start writes the raw stream value
+  // before the repair callback runs (see processor.ts ensureToolCall + llm.ts
+  // experimental_repairToolCall). Sanitize on the way out so the bad name never
+  // reaches the provider and existing poisoned sessions self-heal.
+  const VALID_TOOL_NAME_RE = /^[a-zA-Z0-9_-]+$/
+  const isValidToolName = (name: string) => typeof name === "string" && VALID_TOOL_NAME_RE.test(name)
+  const safeToolName = (name: string) => (isValidToolName(name) ? name : "invalid")
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -786,7 +795,8 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             type: "step-start",
           })
         if (part.type === "tool") {
-          toolNames.add(part.tool)
+          const safeName = safeToolName(part.tool)
+          toolNames.add(safeName)
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
@@ -811,7 +821,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 : outputText
 
             assistantMessage.parts.push({
-              type: ("tool-" + part.tool) as `tool-${string}`,
+              type: ("tool-" + safeName) as `tool-${string}`,
               state: "output-available",
               toolCallId: part.callID,
               input: part.state.input,
@@ -824,7 +834,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined
             if (typeof output === "string") {
               assistantMessage.parts.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
+                type: ("tool-" + safeName) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
@@ -834,7 +844,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               })
             } else {
               assistantMessage.parts.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
+                type: ("tool-" + safeName) as `tool-${string}`,
                 state: "output-error",
                 toolCallId: part.callID,
                 input: part.state.input,
@@ -846,16 +856,29 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           }
           // Handle pending/running tool calls to prevent dangling tool_use blocks
           // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
-          if (part.state.status === "pending" || part.state.status === "running")
-            assistantMessage.parts.push({
-              type: ("tool-" + part.tool) as `tool-${string}`,
-              state: "output-error",
-              toolCallId: part.callID,
-              input: part.state.input,
-              errorText: "[Tool execution was interrupted]",
-              ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
-            })
+          if (part.state.status === "pending" || part.state.status === "running") {
+            if (isValidToolName(part.tool)) {
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: "[Tool execution was interrupted]",
+                ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              })
+            } else {
+              // Malformed tool name (e.g. landed in DB before the repair callback ran).
+              // We can't emit a tool_use/tool_result pair: Bedrock rejects the name with
+              // a ValidationException that kills the session permanently. Emit a text
+              // hint instead so the model still sees that something was interrupted.
+              const truncated = String(part.tool ?? "").slice(0, 64).replace(/[^\x20-\x7e]/g, "?")
+              assistantMessage.parts.push({
+                type: "text",
+                text: `[Previous tool call interrupted: unknown tool name "${truncated}"]`,
+              })
+            }
+          }
         }
         if (part.type === "reasoning") {
           if (differentModel) {
