@@ -1,29 +1,22 @@
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js"
 import { arrayBufferFromMediaValue } from "../../pierre/media"
 
-// FORK-BEGIN: textLayer 选区边界机制(endOfContent + .selecting class)
-// pdfjs-dist 5.6.205 不导出 TextLayerBuilder,raw TextLayer class 不带这层处理。
-// 不修就会 ① 选两行变选一页(浏览器沿 DOM order 扩展,跨整页 spans) ② 选区中间字"没底色"
-// (DOM 顺序 ≠ 视觉顺序,部分 span 在 range 外)。
-// 配套 CSS 在 pdfjs-dist/web/pdf_viewer.css `.textLayer .endOfContent` + `.textLayer.selecting`。
-// 详 docs/features/office-选中加聊天/3-changelog.md § R4 override 论证。
-// [override-blacklist] [feat: office-选中加聊天] 2026-05-25
-let pdfTextSelectionMouseupHandlerInstalled = false
-function ensurePdfTextSelectionMouseupHandler() {
-  if (pdfTextSelectionMouseupHandlerInstalled) return
-  if (typeof document === "undefined") return
-  pdfTextSelectionMouseupHandlerInstalled = true
-  document.addEventListener("mouseup", () => {
-    document.querySelectorAll(".textLayer.selecting").forEach((el) => el.classList.remove("selecting"))
-  })
-}
-// FORK-END
-
 type Status = "loading" | "rendering" | "ready" | "error"
 
+// FORK-BEGIN: 加载 pdfjs-dist/web/pdf_viewer.mjs 拿 TextLayerBuilder
+// raw TextLayer(pdfjs-dist build/pdf.mjs)只渲染 spans,不带选区边界机制 →
+// 选两行变选一页 + 选区中间字没底色 + pptx 选不到。
+// TextLayerBuilder(pdfjs-dist web/pdf_viewer.mjs)装的是完整 pdf.js 官方 viewer 逻辑:
+// 注册全局 selectionchange listener,动态把 endOfContent div 插入到 selection anchor 节点旁,
+// 作 DOM-order 屏障防止 selection 跨越视觉边界。
+// 配套 CSS 已在 pdfjs-dist/web/pdf_viewer.css 内置(`.textLayer .endOfContent` / `.textLayer.selecting`)。
+// 详 docs/features/office-选中加聊天/3-changelog.md § R4 override 第 2 笔论证。
+// [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+type PdfViewerLib = typeof import("pdfjs-dist/web/pdf_viewer.mjs")
 let pdfjsLoader:
   | Promise<{
       lib: typeof import("pdfjs-dist")
+      viewer: PdfViewerLib
     }>
   | undefined
 
@@ -34,11 +27,13 @@ async function loadPdfjs() {
       const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default
       lib.GlobalWorkerOptions.workerSrc = workerUrl
       await import("pdfjs-dist/web/pdf_viewer.css")
-      return { lib }
+      const viewer = await import("pdfjs-dist/web/pdf_viewer.mjs")
+      return { lib, viewer }
     })()
   }
   return pdfjsLoader
 }
+// FORK-END
 
 type PageState = {
   index: number
@@ -74,6 +69,9 @@ export function PdfViewer(props: {
   let activeDoc: { destroy: () => Promise<unknown> } | undefined
   let observer: IntersectionObserver | undefined
   const pageStates = new Map<HTMLDivElement, PageState>()
+  // FORK: TextLayerBuilder 注册全局 selectionchange listener,通过 abortSignal 在 PDF 切换/unmount 时清理
+  // [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+  let textLayerAbortController: AbortController | undefined
 
   const [status, setStatus] = createSignal<Status>("loading")
   const [totalPages, setTotalPages] = createSignal(0)
@@ -85,6 +83,11 @@ export function PdfViewer(props: {
       observer = undefined
     }
     pageStates.clear()
+    // FORK: abort TextLayerBuilder 全局 listener [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+    if (textLayerAbortController) {
+      textLayerAbortController.abort()
+      textLayerAbortController = undefined
+    }
     if (activeDoc) {
       try {
         await activeDoc.destroy()
@@ -98,7 +101,11 @@ export function PdfViewer(props: {
     void cleanup()
   })
 
-  const renderPage = async (state: PageState, pdfjs: typeof import("pdfjs-dist")) => {
+  const renderPage = async (
+    state: PageState,
+    pdfjs: typeof import("pdfjs-dist"),
+    viewer: PdfViewerLib,
+  ) => {
     if (state.rendered || state.rendering || cancelled) return
     state.rendering = true
     try {
@@ -132,39 +139,44 @@ export function PdfViewer(props: {
       state.wrap.replaceChildren()
       state.wrap.appendChild(canvas)
 
+      // FORK-BEGIN: TextLayerBuilder — 替代 raw TextLayer,带完整选区边界(endOfContent 动态重定位 +
+      // 全局 selectionchange listener 防止选区跨视觉边界扩展)。修 ① 选两行变选一页 ② 选区中间字没底色
+      // ③ pptx 选不到。详 docs/features/office-选中加聊天/3-changelog.md § R4 override 第 2 笔论证。
+      // [override-blacklist] [feat: office-选中加聊天] 2026-05-25
       try {
-        const textContent = await page.getTextContent()
-        if (cancelled) return
-        const textLayerDiv = document.createElement("div")
-        textLayerDiv.className = "textLayer"
-        textLayerDiv.style.position = "absolute"
-        textLayerDiv.style.inset = "0"
-
-        const TextLayerCtor = (pdfjs as any).TextLayer
-        if (TextLayerCtor) {
-          const textLayer = new TextLayerCtor({
-            textContentSource: textContent,
-            container: textLayerDiv,
-            viewport,
+        const TextLayerBuilderCtor = (viewer as any).TextLayerBuilder
+        if (TextLayerBuilderCtor) {
+          const builder = new TextLayerBuilderCtor({
+            pdfPage: page,
+            abortSignal: textLayerAbortController?.signal,
+            onAppend: (div: HTMLDivElement) => {
+              if (!cancelled) state.wrap.appendChild(div)
+            },
           })
-          await textLayer.render()
-          // FORK-BEGIN: 选区边界 — 加 .endOfContent 哨兵 + .selecting class 切换
-          // 详模块顶部 ensurePdfTextSelectionMouseupHandler 注释。
-          // [override-blacklist] [feat: office-选中加聊天] 2026-05-25
-          const endOfContent = document.createElement("div")
-          endOfContent.className = "endOfContent"
-          textLayerDiv.appendChild(endOfContent)
-          textLayerDiv.addEventListener("mousedown", (e) => {
-            if ((e as MouseEvent).button !== 0) return
-            textLayerDiv.classList.add("selecting")
-          })
-          ensurePdfTextSelectionMouseupHandler()
-          // FORK-END
+          await builder.render({ viewport })
+        } else {
+          // pdfjs-dist 升级移除 TextLayerBuilder 时降级回 raw TextLayer(选区会越界,但不崩)
+          const textContent = await page.getTextContent()
+          if (cancelled) return
+          const textLayerDiv = document.createElement("div")
+          textLayerDiv.className = "textLayer"
+          textLayerDiv.style.position = "absolute"
+          textLayerDiv.style.inset = "0"
+          const TextLayerCtor = (pdfjs as any).TextLayer
+          if (TextLayerCtor) {
+            const textLayer = new TextLayerCtor({
+              textContentSource: textContent,
+              container: textLayerDiv,
+              viewport,
+            })
+            await textLayer.render()
+          }
+          state.wrap.appendChild(textLayerDiv)
         }
-        state.wrap.appendChild(textLayerDiv)
       } catch {
-        // text layer not critical
+        // text layer not critical — 任一步失败都仅丢失选区能力,canvas 视觉不受影响
       }
+      // FORK-END
 
       state.rendered = true
     } catch {
@@ -199,8 +211,11 @@ export function PdfViewer(props: {
         }
 
         try {
-          const { lib: pdfjs } = await loadPdfjs()
+          const { lib: pdfjs, viewer } = await loadPdfjs()
           if (cancelled) return
+          // FORK: 新 file load 准备好 fresh abortController 给 TextLayerBuilder cleanup 用
+          // [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+          textLayerAbortController = new AbortController()
 
           // pdfjs transfers (detaches) the input buffer; always pass a fresh
           // copy so cached buffers (LRU in app layer) stay reusable across
@@ -266,7 +281,7 @@ export function PdfViewer(props: {
                 if (!entry.isIntersecting) continue
                 const state = pageStates.get(entry.target as HTMLDivElement)
                 if (!state || state.rendered || state.rendering) continue
-                void renderPage(state, pdfjs)
+                void renderPage(state, pdfjs, viewer)
               }
             },
             {

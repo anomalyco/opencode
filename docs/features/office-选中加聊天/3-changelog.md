@@ -165,11 +165,32 @@ backlog 项:
 
 **user 二次确认**:2026-05-25 user 在 office-选中加聊天 第 2 轮 QA 后看完三个方案(A/B/C)+ 我推荐 + wrapper 不可行性,回复"A" → 点头 commit。
 
-### override commit
+### R4 override commit 链(两笔)
 
-- `<待填>` fix(office-选中加聊天): pdf.tsx 加 endOfContent + .selecting class 修选区越界 `[override-blacklist]` `[feat: office-选中加聊天]` `[bug-repro: 选两行变选一页 + 字跳过没底色 + pptx 选不到]`
+**第 1 笔(失败方案 — 仅加 endOfContent + .selecting,缺动态重定位 → 无效)**
+
+- `899c0254b` fix: pdf.tsx 加 endOfContent + .selecting class(**第 3 轮 QA 验证未生效**)
+- 失败原因:pdf.js 官方 viewer 的真实机制是注册全局 `selectionchange` listener,**动态把 endOfContent 插入到 selection anchor 节点旁**作 DOM-order 屏障(详 pdfjs-dist 5.6.205 `web/pdf_viewer.mjs:6320` selectionchange handler)。我只加了静态 endOfContent 没装这个动态重定位 → 选区仍越界。
+- **教训**:R4 override 前应直接读高层 source(TextLayerBuilder)而非凭直觉拼 CSS 机制。本应先验过再写。
+
+**第 2 笔(正解 — 改用 TextLayerBuilder)**
+
+- `<待填>` fix: 改用 `TextLayerBuilder`(`pdfjs-dist/web/pdf_viewer.mjs`)替代 raw TextLayer + 删除第 1 笔的 endOfContent 手写 hack
+- 修法:
+  - loadPdfjs() 同时 import `pdfjs-dist/web/pdf_viewer.mjs` 拿 TextLayerBuilder
+  - renderPage 用 TextLayerBuilder 而非 raw TextLayer,Builder 自带完整 endOfContent 动态重定位 + 全局 selectionchange listener + .selecting class 切换 + abortSignal 生命周期管理
+  - 加 `textLayerAbortController`(per file load 一个),在 cleanup / 新 file load 时 abort → TextLayerBuilder 自动清理 listener
+  - 兼容性 fallback:`(viewer as any).TextLayerBuilder` 检查,pdfjs 升级移除时降级回 raw TextLayer
+- 净改动:~30 行,全包 FORK 标记
+- **配额消耗**:此次 R4 第 2 笔。当季 2/2 配额满,后续这季 packages/ui/ 锁死
 
 (commit hash 落地后回填)
+
+### 教训沉淀
+
+- R4 override 改前先**读高层 source**(TextLayerBuilder 源码),不要凭直觉拼下层 API
+- 类似"找上层 wrapper class"先 grep `class.*Builder` / `class.*Wrapper` 在所有子 entry(不只 build/pdf.mjs,也包含 web/、legacy/)
+- 复杂浏览器交互(选区、拖拽、focus)的"动态行为"通常需要 selectionchange / pointer 事件协同,不只是 CSS class 切换
 
 ---
 
