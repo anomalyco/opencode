@@ -166,6 +166,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.post("worktreeCreate", ExperimentalPaths.worktree, {
+          disableCodecs: true,
           query: WorkspaceRoutingQuery,
           payload: [HttpApiSchema.NoContent, Worktree.CreateInput],
           success: described(Worktree.Info, "Worktree created"),
