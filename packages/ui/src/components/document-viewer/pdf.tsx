@@ -251,6 +251,11 @@ export function PdfViewer(props: {
             wrap.style.position = "relative"
             wrap.style.width = `${viewport.width}px`
             wrap.style.height = `${viewport.height}px`
+            // FORK: 必须设 --total-scale-factor,否则 textLayer span font-size 用 fallback 值,
+            // 视觉宽度比 canvas 文字窄 → 选区底色覆盖不到行末("都可审计、可" 等漏字)。
+            // pdf.js 官方 PDFPageView 在 setScale 时设这个 var,我们手搓 renderPage 必须手动同步。
+            // [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+            wrap.style.setProperty("--total-scale-factor", String(scale))
             wrap.style.margin = "0 auto 12px"
             wrap.style.boxShadow = "0 1px 4px rgba(0,0,0,0.08)"
             wrap.style.background = "#fff"
