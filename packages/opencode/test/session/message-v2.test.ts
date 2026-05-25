@@ -1566,4 +1566,20 @@ describe("session.message-v2.fromError", () => {
 
     expect(result.name).toBe("MessageAbortedError")
   })
+
+  test("classifies SSE read timeouts as retryable APIError", () => {
+    const result = MessageV2.fromError(new Error("SSE read timed out"), { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toBe("SSE read timed out")
+  })
+
+  test("classifies operation timeouts as retryable APIError", () => {
+    const result = MessageV2.fromError(new DOMException("The operation timed out.", "TimeoutError"), { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toBe("The operation timed out.")
+  })
 })

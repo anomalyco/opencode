@@ -1117,6 +1117,17 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case e instanceof Error && isTimeoutError(e):
+      return new APIError(
+        {
+          message: e.message || "The operation timed out.",
+          isRetryable: true,
+          metadata: {
+            name: e.name,
+          },
+        },
+        { cause: e },
+      ).toObject()
     case APICallError.isInstance(e):
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,
@@ -1172,6 +1183,16 @@ export function fromError(
       } catch {}
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
   }
+}
+
+function isTimeoutError(e: Error) {
+  const message = errorMessage(e).toLowerCase()
+  return (
+    e.name === "TimeoutError" ||
+    message === "sse read timed out" ||
+    message.includes("operation timed out") ||
+    message.includes("request timed out")
+  )
 }
 
 export * as MessageV2 from "./message-v2"
