@@ -3,6 +3,7 @@ import { Server } from "../../server/server"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { runCollabMigrations } from "../../collab/migrate"
 
 export const ServeCommand = effectCmd({
   command: "serve",
@@ -44,6 +45,15 @@ export const ServeCommand = effectCmd({
     } else if (!hasPassword && !isCollabMode) {
       console.log("Warning: no auth configured; server is unsecured (NODE_ENV != production).")
     }
+    // Run collab DB migrations eagerly in collab mode so the auth
+    // middleware's `cookieAuthorizesRequest` lookup never races a /collab/*
+    // request to create the `collab_auth_session` table.  Without this, any
+    // request bearing a `collab_sid` cookie between server start and the
+    // first /collab/* call crashes with "no such table: collab_auth_session"
+    // (the table is created inside the collab router's `ensureMigrated`
+    // hook, which only runs when a /collab/* request lands).
+    if (isCollabMode) runCollabMigrations()
+
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
