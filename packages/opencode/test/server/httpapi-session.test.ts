@@ -582,6 +582,12 @@ describe("session HttpApi", () => {
         })
         expect(createdEmpty.id).toBeTruthy()
 
+        const createdWithoutContentType = yield* requestJson<Session.Info>(SessionPaths.create, {
+          method: "POST",
+          headers: { "x-opencode-directory": test.directory },
+        })
+        expect(createdWithoutContentType.id).toBeTruthy()
+
         const created = yield* requestJson<Session.Info>(SessionPaths.create, {
           method: "POST",
           headers,
@@ -601,6 +607,15 @@ describe("session HttpApi", () => {
           headers,
         })
         expect(forked.id).not.toBe(created.id)
+
+        const forkedWithoutContentType = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.fork, { sessionID: created.id }),
+          {
+            method: "POST",
+            headers: { "x-opencode-directory": test.directory },
+          },
+        )
+        expect(forkedWithoutContentType.id).not.toBe(created.id)
 
         expect(
           yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: created.id }), {

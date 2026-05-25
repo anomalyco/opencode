@@ -15,7 +15,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Cause, Effect, Option, Schema, Scope } from "effect"
+import { Cause, Effect, Option, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
@@ -36,12 +36,6 @@ import {
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
-
-const tryParseJson = (text: string) =>
-  Effect.try({
-    try: () => JSON.parse(text) as unknown,
-    catch: () => new HttpApiError.BadRequest({}),
-  })
 
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
@@ -149,27 +143,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       )
     })
 
-    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
-      return yield* shareSvc.create(ctx.payload)
-    })
-
-    const createRaw = Effect.fn("SessionHttpApi.createRaw")(function* (ctx: {
-      request: HttpServerRequest.HttpServerRequest
+    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: {
+      payload: typeof Session.CreateInput.Type | void
     }) {
-      const body = yield* Effect.orDie(ctx.request.text)
-      if (body.trim().length === 0) return yield* create({})
-
-      const json = yield* tryParseJson(body)
-      const decoded = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
-        Effect.mapError(() => new HttpApiError.BadRequest({})),
-      )
-      const payload = decoded
+      const payload = ctx.payload
         ? {
-            ...decoded,
-            permission: decoded.permission ? [...decoded.permission] : undefined,
+            ...ctx.payload,
+            permission: ctx.payload.permission ? [...ctx.payload.permission] : undefined,
           }
-        : decoded
-      return yield* create({ payload })
+        : undefined
+      return yield* shareSvc.create(payload)
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -199,25 +182,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
       params: { sessionID: SessionID }
-      payload?: typeof ForkPayload.Type
+      payload: typeof ForkPayload.Type | void
     }) {
       return yield* SessionError.mapStorageNotFound(
         session.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload?.messageID }),
       )
-    })
-
-    const forkRaw = Effect.fn("SessionHttpApi.forkRaw")(function* (ctx: {
-      params: { sessionID: SessionID }
-      request: HttpServerRequest.HttpServerRequest
-    }) {
-      const body = yield* Effect.orDie(ctx.request.text)
-      if (body.trim().length === 0) return yield* fork({ params: ctx.params })
-
-      const json = yield* tryParseJson(body)
-      const payload = yield* Schema.decodeUnknownEffect(ForkPayload)(json).pipe(
-        Effect.mapError(() => new HttpApiError.BadRequest({})),
-      )
-      return yield* fork({ params: ctx.params, payload })
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -412,10 +381,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)
-      .handleRaw("create", createRaw)
+      .handle("create", create)
       .handle("remove", remove)
       .handle("update", update)
-      .handleRaw("fork", forkRaw)
+      .handle("fork", fork)
       .handle("abort", abort)
       .handle("init", init)
       .handle("share", share)
