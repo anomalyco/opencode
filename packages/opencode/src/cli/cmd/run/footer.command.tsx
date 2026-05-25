@@ -6,7 +6,7 @@ import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import { formatBindings } from "./keymap.shared"
 import type { RunFooterTheme } from "./theme"
-import type { FooterKeybinds, RunCommand, RunInput, RunProvider } from "./types"
+import type { FooterKeybinds, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
 
 type PanelEntry = RunFooterMenuItem & {
   category: string
@@ -15,6 +15,7 @@ type PanelEntry = RunFooterMenuItem & {
 
 type CommandEntry =
   | (PanelEntry & { action: "model" })
+  | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
   | (PanelEntry & { action: "variant.list" })
   | (PanelEntry & { action: "slash"; name: string })
@@ -32,11 +33,19 @@ type VariantEntry = PanelEntry & {
   current: boolean
 }
 
+type SubagentEntry = PanelEntry & {
+  sessionID: string
+  current: boolean
+}
+
 type MenuState = ReturnType<typeof createFooterMenuState>
 
 const PANEL_PAD = 2
 const PANEL_LIST_ROWS = 10
-export const RUN_COMMAND_PANEL_ROWS = PANEL_LIST_ROWS + 6
+const PANEL_FRAME_ROWS = 6
+export const RUN_COMMAND_PANEL_ROWS = PANEL_LIST_ROWS + PANEL_FRAME_ROWS
+const SUBAGENT_LIST_ROWS = 12
+export const RUN_SUBAGENT_PANEL_ROWS = SUBAGENT_LIST_ROWS + PANEL_FRAME_ROWS
 const PANEL_PAGE = PANEL_LIST_ROWS - 1
 const PANEL_BORDER = {
   topLeft: "",
@@ -87,6 +96,18 @@ function categoryRank(category: string) {
   }
 
   return 2
+}
+
+function subagentStatusLabel(status: FooterSubagentTab["status"]) {
+  if (status === "completed") {
+    return "done"
+  }
+
+  if (status === "error") {
+    return "error"
+  }
+
+  return "running"
 }
 
 function handleKey(input: {
@@ -273,10 +294,12 @@ function PanelShell(props: {
 export function RunCommandMenuBody(props: {
   theme: Accessor<RunFooterTheme>
   commands: Accessor<RunCommand[] | undefined>
+  subagents: Accessor<FooterSubagentTab[]>
   variants: Accessor<string[]>
   keybinds: FooterKeybinds
   onClose: () => void
   onModel: () => void
+  onSubagent: () => void
   onVariant: () => void
   onVariantCycle: () => void
   onCommand: (name: string) => void
@@ -293,6 +316,20 @@ export function RunCommandMenuBody(props: {
         category: "Suggested",
         display: "Switch model",
       },
+      ...(props.subagents().length > 0
+        ? [
+            {
+              action: "subagent" as const,
+              category: "Suggested",
+              display: "View subagents",
+              footer: `${props.subagents().length} active`,
+              keywords: props
+                .subagents()
+                .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
+                .join(" "),
+            },
+          ]
+        : []),
       {
         action: "variant.cycle",
         category: "Suggested",
@@ -343,6 +380,11 @@ export function RunCommandMenuBody(props: {
   const pick = (item: CommandEntry) => {
     if (item.action === "model") {
       props.onModel()
+      return
+    }
+
+    if (item.action === "subagent") {
+      props.onSubagent()
       return
     }
 
@@ -418,6 +460,101 @@ export function RunCommandMenuBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+      />
+    </PanelShell>
+  )
+}
+
+export function RunSubagentSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  tabs: Accessor<FooterSubagentTab[]>
+  current: Accessor<string | undefined>
+  onClose: () => void
+  onSelect: (sessionID: string) => void
+  onRows?: (rows: number) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const entries = createMemo<SubagentEntry[]>(() =>
+    props.tabs().map((item) => {
+      const title = item.description || item.title || item.label
+      return {
+        category: "",
+        display: title,
+        description: title === item.label ? undefined : item.label,
+        footer: subagentStatusLabel(item.status),
+        keywords: `${item.label} ${item.description} ${item.title ?? ""} ${item.status}`,
+        sessionID: item.sessionID,
+        current: props.current() === item.sessionID,
+      }
+    }),
+  )
+  const items = createMemo<SubagentEntry[]>(() => match(query(), entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: SUBAGENT_LIST_ROWS })
+  const select = () => {
+    const item = items()[menu.selected()]
+    if (!item) {
+      return
+    }
+
+    props.onSelect(item.sessionID)
+  }
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  createEffect(() => {
+    if (query().trim()) {
+      return
+    }
+
+    const index = items().findIndex((item) => item.current)
+    if (index !== -1) {
+      menu.reveal(index)
+    }
+  })
+
+  createEffect(() => {
+    props.onRows?.(menu.rows() + PANEL_FRAME_ROWS)
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  })
+
+  return (
+    <PanelShell
+      id="run-direct-footer-subagent-panel"
+      title="Select subagent"
+      query={query()}
+      count={items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={(input) => {
+        field = input
+      }}
+      onQuery={setQuery}
+    >
+      <RunFooterMenu
+        id="run-direct-footer-subagent-list"
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={menu.rows}
+        limit={SUBAGENT_LIST_ROWS}
+        empty="No active subagents"
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
       />
     </PanelShell>
   )

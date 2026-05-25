@@ -15,7 +15,7 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
-import { useQueryOptions } from "@/context/global-sync"
+import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 
 const pollMs = 10_000

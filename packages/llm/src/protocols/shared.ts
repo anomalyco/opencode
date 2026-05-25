@@ -11,6 +11,7 @@ import {
   type MediaPart,
   type ToolResultPart,
 } from "../schema"
+export { isRecord } from "../utils/record"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -18,13 +19,6 @@ export const encodeJson = Schema.encodeSync(Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
-
-/**
- * Plain-record narrowing. Excludes arrays so routes checking nested JSON
- * Schema fragments don't accidentally treat a tuple as a key/value bag.
- */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
@@ -86,7 +80,7 @@ export const subtractTokens = (total: number | undefined, subtrahend: number | u
  */
 export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
   if (values.every((value) => value === undefined)) return undefined
-  return values.reduce<number>((acc, value) => acc + (value ?? 0), 0)
+  return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
@@ -128,10 +122,21 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
 export const mediaBytes = (part: MediaPart) =>
   typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
 
+export const mediaBase64 = (part: MediaPart) => {
+  if (typeof part.data !== "string" || !part.data.startsWith("data:")) return mediaBytes(part)
+  return part.data.slice(part.data.indexOf(",") + 1)
+}
+
+export const mediaDataUrl = (part: MediaPart) =>
+  typeof part.data === "string" && part.data.startsWith("data:")
+    ? part.data
+    : `data:${part.mediaType};base64,${mediaBytes(part)}`
+
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
+  if (part.result.type === "content") return encodeJson(part.result.value)
   return encodeJson(part.result.value)
 }
 

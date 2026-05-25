@@ -277,7 +277,6 @@ export function createTuiApi(input: Input): TuiPluginApi {
         return (
           <Prompt
             sessionID={props.sessionID}
-            workspaceID={props.workspaceID}
             visible={props.visible}
             disabled={props.disabled}
             onSubmit={props.onSubmit}
