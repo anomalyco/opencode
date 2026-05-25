@@ -103,7 +103,18 @@ export const FeishuAccountSchema = z.object({
   groups: z.record(z.string(), FeishuGroupConfigSchema).default(() => ({})),
   /** 副用户绑定码池(运行时 in-memory,不写盘 — 这里 schema 仅占位) */
   // secondaryBindingCodes 不进 schema(运行时状态)
-  /** opencode agent 名(默认 "imbot" — DeskFox setup hook 注入的安全 agent,同 build 能力但 unattended 危险工具默认 ask)*/
+  /**
+   * opencode agent 名(默认 "imbot" — DeskFox setup hook 注入的安全 agent,
+   * 同 build 能力但 unattended 危险工具默认 ask)。
+   *
+   * **GUI 故意不暴露此字段** — 普通用户走默认 imbot,自然受安全防线约束。
+   * **研发能力的 user 可通过编辑 ~/.opencode/feishu-config.json 改此字段 opt-out**
+   * 走自定义 agent(开源软件"默认安全 + 显式 opt-out"范式,跟 Linux root / Docker
+   * `--privileged` 同款)。schema 故意保留 z.string() 不锁 z.literal("imbot") —
+   * 不阻挠合法 power user 自定义需求。
+   *
+   * 详 OPENCODE-PLAN 仓 `架构决策/im桥接-imbot单一架构.md` §1.1。
+   */
   agent: z.string().default("imbot"),
   /**
    * per-account 模型选择(可选)。
