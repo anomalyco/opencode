@@ -2,7 +2,7 @@ export * as SessionV2 from "./session"
 export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context } from "effect"
-import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -14,6 +14,7 @@ import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
+import { AbsolutePath, RelativePath } from "./schema"
 
 // get project -> project.locations
 //
@@ -24,32 +25,42 @@ import { SessionSchema } from "./session/schema"
 //   - by subpath
 // - by workspace (home is special)
 
-type Cursor = {
-  id: SessionSchema.ID
-  time: number
-  direction: "previous" | "next"
+export const ListCursor = Schema.Struct({
+  id: SessionSchema.ID,
+  time: Schema.Finite,
+  direction: Schema.Literals(["previous", "next"]),
+})
+export type ListCursor = typeof ListCursor.Type
+
+const ListInputBase = {
+  workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
+  search: Schema.String.pipe(Schema.optional),
+  limit: Schema.Int.pipe(Schema.optional),
+  order: Schema.Literal("asc").pipe(Schema.optional),
+  cursor: ListCursor.pipe(Schema.optional),
 }
 
-type ListInput = {
-  workspaceID?: WorkspaceV2.ID
-  projectID?: ProjectV2.ID
-  path?: string
-  roots?: boolean
-  start?: number
-  search?: string
-  cursor?: Cursor
-  limit?: number
-  order?: "asc" | "desc"
-  directory?: string
-}
+export const ListInput = Schema.Union([
+  Schema.Struct({
+    ...ListInputBase,
+  }),
+  Schema.Struct({
+    ...ListInputBase,
+    directory: AbsolutePath,
+  }),
+  Schema.Struct({
+    ...ListInputBase,
+    project: ProjectV2.ID,
+    subpath: RelativePath.pipe(Schema.optional),
+  }),
+])
+export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
   id?: SessionSchema.ID
   agent?: string
   model?: ModelV2.Ref
-  location?: Location.Ref
-  parentID?: SessionSchema.ID
-  workspaceID?: WorkspaceV2.ID
+  location: Location.Ref
 }
 
 type MoveInput = {
@@ -94,16 +105,8 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly subagent: (input: {
-    id?: EventV2.ID
-    parentID: SessionSchema.ID
-    prompt: Prompt
-    agent: string
-    model?: ModelV2.Ref
-    resume?: boolean
-  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
+  }) => Effect.Effect<SessionMessage.Message[], NotFoundError>
+  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly prompt: (input: {
@@ -112,7 +115,7 @@ export interface Interface {
     prompt: Prompt
     delivery?: SessionSchema.Delivery
     resume?: boolean
-  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -127,8 +130,8 @@ export interface Interface {
     delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
-  readonly compact: (input: CompactInput | SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError>
+  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
@@ -200,19 +203,21 @@ export const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
-        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
-        if (input.path)
-          conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
+        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
-        if (input.projectID) conditions.push(eq(SessionTable.project_id, input.projectID))
-        if (input.roots) conditions.push(isNull(SessionTable.parent_id))
-        if (input.start) conditions.push(gte(sortColumn, input.start))
+        if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.cursor) {
           conditions.push(
             order === "asc"
-              ? or(gt(sortColumn, input.cursor.time), and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)))!
-              : or(lt(sortColumn, input.cursor.time), and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)))!,
+              ? or(
+                  gt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
+                )!
+              : or(
+                  lt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
+                )!,
           )
         }
         const query = db
@@ -223,7 +228,9 @@ export const layer = Layer.effect(
             order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+          Effect.orDie,
+        )
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
@@ -235,11 +242,17 @@ export const layer = Layer.effect(
           ? order === "asc"
             ? or(
                 gt(SessionMessageTable.time_created, input.cursor.time),
-                and(eq(SessionMessageTable.time_created, input.cursor.time), gt(SessionMessageTable.id, input.cursor.id)),
+                and(
+                  eq(SessionMessageTable.time_created, input.cursor.time),
+                  gt(SessionMessageTable.id, input.cursor.id),
+                ),
               )
             : or(
                 lt(SessionMessageTable.time_created, input.cursor.time),
-                and(eq(SessionMessageTable.time_created, input.cursor.time), lt(SessionMessageTable.id, input.cursor.id)),
+                and(
+                  eq(SessionMessageTable.time_created, input.cursor.time),
+                  lt(SessionMessageTable.id, input.cursor.id),
+                ),
               )
           : undefined
         const where = boundary
@@ -253,7 +266,9 @@ export const layer = Layer.effect(
             order === "asc" ? asc(SessionMessageTable.time_created) : desc(SessionMessageTable.time_created),
             order === "asc" ? asc(SessionMessageTable.id) : desc(SessionMessageTable.id),
           )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+          Effect.orDie,
+        )
         return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, (row) => decode(row))
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
@@ -275,7 +290,10 @@ export const layer = Layer.effect(
               compaction
                 ? or(
                     gt(SessionMessageTable.time_created, compaction.time_created),
-                    and(eq(SessionMessageTable.time_created, compaction.time_created), gte(SessionMessageTable.id, compaction.id)),
+                    and(
+                      eq(SessionMessageTable.time_created, compaction.time_created),
+                      gte(SessionMessageTable.id, compaction.id),
+                    ),
                   )
                 : undefined,
             ),
