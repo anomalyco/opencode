@@ -126,14 +126,14 @@ export const SessionApi = HttpApi.make("session")
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
           }),
         ),
-        HttpApiEndpoint.get("singleStatus", SessionPaths.singleStatus, {
+        HttpApiEndpoint.get("getStatus", SessionPaths.singleStatus, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           success: described(SessionStatus.Info, "Get single session status"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "session.singleStatus",
+            identifier: "session.getStatus",
             summary: "Get single session status",
             description: "Retrieve the current status of a specific session.",
           }),

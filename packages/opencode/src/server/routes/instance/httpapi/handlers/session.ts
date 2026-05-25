@@ -79,7 +79,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* SessionError.mapStorageNotFound(session.get(sessionID))
     })
 
-    const singleStatus = Effect.fn("SessionHttpApi.singleStatus")(function* (ctx: { params: { sessionID: SessionID } }) {
+    const getStatus = Effect.fn("SessionHttpApi.getStatus")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* statusSvc.get(ctx.params.sessionID)
     })
@@ -411,7 +411,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     return handlers
       .handle("list", list)
       .handle("status", status)
-      .handle("singleStatus", singleStatus)
+      .handle("getStatus", getStatus)
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
