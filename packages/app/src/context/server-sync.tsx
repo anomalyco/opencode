@@ -29,7 +29,8 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { createRefCountMap } from "@/utils/refcount"
 
 type GlobalStore = {
   ready: boolean
@@ -72,7 +73,7 @@ function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: Path
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-function createServerSyncContext() {
+export function createServerSyncContext() {
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
@@ -425,9 +426,6 @@ function createServerSyncContext() {
     },
   }))
 
-  const dirSyncContexts = new Map<string, ReturnType<typeof createDirSyncContext>>()
-  const dirSyncContextRefCounts = new Map<string, number>()
-
   return {
     data: globalStore,
     set,
@@ -446,41 +444,20 @@ function createServerSyncContext() {
     todo: {
       set: setSessionTodo,
     },
-    createDirSyncContext: (directory: string) => {
-      onCleanup(() => {
-        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) - 1)
-        if (dirSyncContextRefCounts.get(directory) === 0) {
-          dirSyncContexts.delete(directory)
-          dirSyncContextRefCounts.delete(directory)
-        }
-      })
-
-      const cached = dirSyncContexts.get(directory)
-      if (cached) {
-        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) + 1)
-        return cached
-      }
-      const ctx = createDirSyncContext(serverSDK.createClient({ directory, throwOnError: true }), directory)
-      dirSyncContexts.set(directory, ctx)
-      dirSyncContextRefCounts.set(directory, 1)
-
-      return ctx
-    },
   }
 }
 
-const ServerSyncContext = createContext<ReturnType<typeof createServerSyncContext>>()
+export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
+  name: "ServerSync",
+  init: () => {
+    const sync = createServerSyncContext()
 
-export function ServerSyncProvider(props: ParentProps) {
-  const value = createServerSyncContext()
-  return <ServerSyncContext.Provider value={value}>{props.children}</ServerSyncContext.Provider>
-}
-
-export function useServerSync() {
-  const context = useContext(ServerSyncContext)
-  if (!context) throw new Error("useServerSync must be used within ServerSyncProvider")
-  return context
-}
+    return {
+      ...sync,
+      createDirSyncContext: createRefCountMap((dir) => createDirSyncContext(dir, sync)),
+    }
+  },
+})
 
 export function useQueryOptions() {
   return useServerSync().queryOptions

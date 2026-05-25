@@ -6,6 +6,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   init: (props: { directory: string }) => {
     const serverSDK = useServerSDK()
 
-    return serverSDK.createDirSyncContext(props.directory)
+    return serverSDK.createDirSdkContext(props.directory)
   },
 })
