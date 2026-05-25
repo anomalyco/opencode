@@ -43,15 +43,17 @@ export function has(text: string) {
 }
 
 export function expand(text: string, get: (name: string) => Item | undefined): string {
+  const seen = new Set<string>()
   const bodies: string[] = []
   for (const match of text.matchAll(REGEX)) {
     const name = match[1]
-    if (!name) continue
+    if (!name || seen.has(name)) continue
     const start = match.index ?? 0
     const end = start + match[0].length
     if (!gap(text, start, end)) continue
     const item = get(name)
     if (!item) continue
+    seen.add(name)
     bodies.push(body(item))
   }
   if (bodies.length === 0) return text
