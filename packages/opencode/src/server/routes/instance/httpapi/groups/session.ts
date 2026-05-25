@@ -74,7 +74,7 @@ export const PermissionResponsePayload = Schema.Struct({
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
-  singleStatus: `${root}/:sessionID/status`,
+  getStatus: `${root}/:sessionID/status`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -126,7 +126,7 @@ export const SessionApi = HttpApi.make("session")
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
           }),
         ),
-        HttpApiEndpoint.get("getStatus", SessionPaths.singleStatus, {
+        HttpApiEndpoint.get("getStatus", SessionPaths.getStatus, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           success: described(SessionStatus.Info, "Get single session status"),
