@@ -20,6 +20,7 @@ export type PromptInfo = {
             end: number
             value: string
           }
+          kind?: "paste" | "skill"
         }
       })
   )[]

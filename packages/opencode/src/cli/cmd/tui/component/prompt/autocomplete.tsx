@@ -56,7 +56,7 @@ function extractLineRange(input: string) {
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
-  visible: false | "@" | "/"
+  visible: false | "@" | "/" | "$"
 }
 
 export type AutocompleteOption = {
@@ -80,6 +80,8 @@ export function Autocomplete(props: {
   ref: (ref: AutocompleteRef) => void
   fileStyleId: number
   agentStyleId: number
+  skillStyleId: number
+  skills: () => Array<{ name: string; description?: string; content: string }> | undefined
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
@@ -339,7 +341,7 @@ export function Autocomplete(props: {
   )
 
   const referenceSearch = createMemo(() => {
-    if (!store.visible || store.visible === "/") return
+    if (store.visible !== "@") return
     const { lineRange, baseQuery } = extractLineRange(search())
     const slash = baseQuery.indexOf("/")
     if (slash === -1) return
@@ -381,7 +383,7 @@ export function Autocomplete(props: {
   const [files] = createResource(
     () => search(),
     async (query) => {
-      if (!store.visible || store.visible === "/") return []
+      if (store.visible !== "@") return []
       if (referenceSearch()) return []
 
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
@@ -470,7 +472,7 @@ export function Autocomplete(props: {
   )
 
   const mcpResources = createMemo(() => {
-    if (!store.visible || store.visible === "/") return []
+    if (store.visible !== "@") return []
 
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
@@ -527,6 +529,66 @@ export function Autocomplete(props: {
       )
   })
 
+  function insertSkill(name: string) {
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const charAfterCursor = displayCharAt(props.value, currentCursorOffset)
+    const needsSpace = charAfterCursor !== " "
+    const append = "$" + name + (needsSpace ? " " : "")
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText(append)
+
+    const virtualText = "$" + name
+    const extmarkStart = store.index
+    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: props.skillStyleId,
+      typeId: props.promptPartTypeId(),
+    })
+
+    props.setPrompt((draft) => {
+      const partIndex = draft.parts.length
+      draft.parts.push({
+        type: "text",
+        text: virtualText,
+        source: {
+          text: {
+            start: extmarkStart,
+            end: extmarkEnd,
+            value: virtualText,
+          },
+          kind: "skill",
+        },
+      })
+      props.setExtmark(partIndex, extmarkId)
+    })
+  }
+
+  const skillList = createMemo(() =>
+    (props.skills() ?? [])
+      .toSorted((a, b) => a.name.localeCompare(b.name))
+      .map(
+        (skill): AutocompleteOption => ({
+          display: skill.name + "\t",
+          description: skill.description,
+          onSelect: () => {
+            insertSkill(skill.name)
+          },
+        }),
+      ),
+  )
+
   const referenceAliases = createMemo(() =>
     references().map(
       (reference): AutocompleteOption => ({
@@ -578,6 +640,7 @@ export function Autocomplete(props: {
     const referenceSearchValue = referenceSearch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
+    const skillsValue = skillList()
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] =
@@ -585,7 +648,9 @@ export function Autocomplete(props: {
         ? referenceSearchValue
           ? referenceFilesValue || []
           : [...referenceAliasesValue, ...agentsValue, ...(filesValue || []), ...mcpResources()]
-        : [...commandsValue]
+        : store.visible === "$"
+          ? skillsValue
+          : [...commandsValue]
 
     const searchValue = search()
 
@@ -734,7 +799,7 @@ export function Autocomplete(props: {
     ]),
   }))
 
-  function show(mode: "@" | "/") {
+  function show(mode: "@" | "/" | "$") {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
@@ -793,12 +858,13 @@ export function Autocomplete(props: {
           return
         }
 
-        // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
-        const idx = mentionTriggerIndex(value, offset)
-        if (idx !== undefined) {
-          show("@")
-          setStore("index", idx)
-        }
+        // Check for "@" and "$" triggers - find nearest before cursor with no whitespace between
+        const mentionIdx = mentionTriggerIndex(value, offset, "@")
+        const skillIdx = mentionTriggerIndex(value, offset, "$")
+        const idx = Math.max(mentionIdx ?? -1, skillIdx ?? -1)
+        if (idx === -1) return
+        show(skillIdx !== undefined && skillIdx === idx ? "$" : "@")
+        setStore("index", idx)
       },
     })
   })
