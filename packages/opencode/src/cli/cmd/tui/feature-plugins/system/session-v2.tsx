@@ -5,9 +5,9 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
-import { reasoningTitle, useThinkingMode } from "@tui/context/thinking"
+import { reasoningSummary, useThinkingMode } from "@tui/context/thinking"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
+import { RGBA, TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -398,7 +398,7 @@ function AssistantReasoning(props: {
   // v2 reasoning parts have no per-part `time.end` (see SessionMessageAssistantReasoning
   // in the v2 SDK); we settle on parent-message completion instead.
   const isDone = createMemo(() => props.completedAt() !== undefined)
-  const title = createMemo(() => reasoningTitle(content()))
+  const summary = createMemo(() => reasoningSummary(content()))
 
   const toggle = () => {
     if (!inMinimal()) return
@@ -407,41 +407,50 @@ function AssistantReasoning(props: {
 
   return (
     <Show when={content()}>
-      <Switch>
-        <Match when={!inMinimal() || expanded()}>
-          <box paddingLeft={3} marginTop={1} flexDirection="column" flexShrink={0} onMouseUp={toggle}>
+      <box paddingLeft={3} marginTop={1} flexDirection="column" flexShrink={0}>
+        <box onMouseUp={toggle}>
+          <ReasoningHeader
+            toggleable={inMinimal()}
+            open={!inMinimal() || expanded()}
+            done={isDone()}
+            title={summary().title}
+          />
+        </box>
+        <Show when={(!inMinimal() || expanded()) && summary().body}>
+          <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={props.subtleSyntax}
-              content={(inMinimal() ? "- " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
+              content={summary().body}
               conceal={true}
               fg={theme.textMuted}
             />
           </box>
-        </Match>
-        <Match when={isDone()}>
-          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <CollapsedReasoningText title={title()} />
-          </box>
-        </Match>
-        <Match when={true}>
-          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
-          </box>
-        </Match>
-      </Switch>
+        </Show>
+      </box>
     </Show>
   )
 }
 
-function CollapsedReasoningText(props: { title: string | null }) {
+function ReasoningHeader(props: { toggleable: boolean; open: boolean; done: boolean; title: string | null }) {
   const { theme } = useTheme()
+  const fg = () =>
+    props.open
+      ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
+      : theme.warning
 
   return (
-    <text fg={theme.warning} wrapMode="none">
-      <span style={{ fg: theme.warning, italic: true }}>{props.title ? "+ Thought: " + props.title : "+ Thought"}</span>
+    <text fg={fg()} wrapMode="none">
+      <Show when={props.toggleable}>
+        <span>{props.open ? "- " : "+ "}</span>
+      </Show>
+      <span>{props.done ? "Thought" : "Thinking"}</span>
+      <Show when={props.title}>
+        <span>: </span>
+        <span>{props.title}</span>
+      </Show>
     </text>
   )
 }

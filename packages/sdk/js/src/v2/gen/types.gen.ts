@@ -1700,15 +1700,21 @@ export type McpServerNotFoundError = {
   message: string
 }
 
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
-  }
+export type ProjectNotFoundError = {
+  _tag: "ProjectNotFoundError"
+  projectID: string
+  message: string
 }
 
-export type EffectHttpApiErrorForbidden = {
-  _tag: "Forbidden"
+export type PtyNotFoundError = {
+  _tag: "PtyNotFoundError"
+  ptyID: string
+  message: string
+}
+
+export type PtyForbiddenError = {
+  _tag: "PtyForbiddenError"
+  message: string
 }
 
 export type QuestionNotFoundError = {
@@ -1774,6 +1780,13 @@ export type ProviderAuthError1 = {
     field?: string
     message?: string
     kind?: string
+  }
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
   }
 }
 
@@ -1948,6 +1961,10 @@ export type WorkspaceWarpError = {
   data: {
     message: string
   }
+}
+
+export type EffectHttpApiErrorForbidden = {
+  _tag: "Forbidden"
 }
 
 export type SyncEventMessageUpdated = {
@@ -4820,6 +4837,7 @@ export type VcsDiffData = {
     directory?: string
     workspace?: string
     mode: "git" | "branch"
+    context?: number
   }
   url: "/vcs/diff"
 }
@@ -5436,9 +5454,9 @@ export type ProjectUpdateErrors = {
    */
   400: EffectHttpApiErrorBadRequest | InvalidRequestError
   /**
-   * Not found
+   * ProjectNotFoundError
    */
-  404: NotFoundError
+  404: ProjectNotFoundError
 }
 
 export type ProjectUpdateError = ProjectUpdateErrors[keyof ProjectUpdateErrors]
@@ -5566,9 +5584,9 @@ export type PtyRemoveErrors = {
    */
   400: BadRequestError
   /**
-   * NotFoundError
+   * PtyNotFoundError
    */
-  404: NotFoundError
+  404: PtyNotFoundError
 }
 
 export type PtyRemoveError = PtyRemoveErrors[keyof PtyRemoveErrors]
@@ -5600,9 +5618,9 @@ export type PtyGetErrors = {
    */
   400: BadRequestError
   /**
-   * NotFoundError
+   * PtyNotFoundError
    */
-  404: NotFoundError
+  404: PtyNotFoundError
 }
 
 export type PtyGetError = PtyGetErrors[keyof PtyGetErrors]
@@ -5639,6 +5657,10 @@ export type PtyUpdateErrors = {
    * BadRequest | InvalidRequestError
    */
   400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * PtyNotFoundError
+   */
+  404: PtyNotFoundError
 }
 
 export type PtyUpdateError = PtyUpdateErrors[keyof PtyUpdateErrors]
@@ -5670,13 +5692,13 @@ export type PtyConnectTokenErrors = {
    */
   400: BadRequestError
   /**
-   * Forbidden
+   * PtyForbiddenError
    */
-  403: EffectHttpApiErrorForbidden
+  403: PtyForbiddenError
   /**
-   * NotFoundError
+   * PtyNotFoundError
    */
-  404: NotFoundError
+  404: PtyNotFoundError
 }
 
 export type PtyConnectTokenError = PtyConnectTokenErrors[keyof PtyConnectTokenErrors]
@@ -8148,6 +8170,10 @@ export type ExperimentalWorkspaceWarpErrors = {
    * WorkspaceWarpError | VcsApplyError | InvalidRequestError
    */
   400: WorkspaceWarpError | VcsApplyError | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
 }
 
 export type ExperimentalWorkspaceWarpError = ExperimentalWorkspaceWarpErrors[keyof ExperimentalWorkspaceWarpErrors]
