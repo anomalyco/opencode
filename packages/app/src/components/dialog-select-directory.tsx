@@ -25,6 +25,12 @@ type BrowseRow =
   | { type: "up"; key: string; name: string; path: string | null }
   | { type: "directory"; key: string; name: string; path: string }
 
+export function findDirectoryCompletionRow(rows: BrowseRow[], highlightedIndex: number) {
+  const highlighted = rows[highlightedIndex]
+  if (highlighted?.type === "directory") return highlighted
+  return rows.find((row) => row.type === "directory")
+}
+
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
   return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
@@ -262,6 +268,13 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     browseToEntry(row)
   }
 
+  function completeDirectoryFromRows() {
+    const row = findDirectoryCompletionRow(rows(), highlightedIndex())
+    if (!row) return false
+    browseToEntry(row)
+    return true
+  }
+
   async function resolve(absolute: string) {
     if (!absolute || selecting()) return
     setSelecting(true)
@@ -285,6 +298,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Tab" && !event.shiftKey) {
+      if (completeDirectoryFromRows()) event.preventDefault()
+      return
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault()
       setHighlightedIndex((index) => Math.min(rows().length - 1, index + 1))
