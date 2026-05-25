@@ -73,22 +73,12 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
-// Must stay in sync with Info schema keys below
-const infoKeys = new Set([
-  "$schema", "shell", "logLevel", "server", "command", "skills",
-  "reference", "watcher", "snapshot", "plugin", "share", "autoshare",
-  "autoupdate", "disabled_providers", "enabled_providers", "model",
-  "small_model", "default_agent", "username", "mode", "agent",
-  "provider", "mcp", "formatter", "lsp", "instructions",
-  "layout", "permission", "tools", "attachment", "enterprise",
-  "tool_output", "compaction", "experimental",
-])
-
 function stripUnknownKeys(data: unknown): unknown {
   if (typeof data !== "object" || data === null || Array.isArray(data)) return data
+  const known = new Set(Info.ast.propertySignatures.map((p) => String(p.name)))
   const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(data)) {
-    if (infoKeys.has(key)) result[key] = value
+    if (known.has(key)) result[key] = value
     else log.warn("config key is not recognized and will be ignored", { key })
   }
   return result
