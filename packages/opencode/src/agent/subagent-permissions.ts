@@ -23,8 +23,17 @@ export function deriveSubagentSessionPermission(input: {
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
   const parentAgentDenies =
     input.parentAgent?.permission.filter((rule) => rule.action === "deny" && rule.permission === "edit") ?? []
+
+  // If the subagent explicitly allows edit-class tools (e.g., write: allow,
+  // edit: allow), don't inherit the parent's edit denies. The subagent's
+  // explicit config represents user intent and overrides inherited restrictions.
+  const subagentHasExplicitEditAllow = input.subagent.permission.some(
+    (rule) => rule.permission === "edit" && rule.action === "allow",
+  )
+  const effectiveDenies = subagentHasExplicitEditAllow ? [] : parentAgentDenies
+
   return [
-    ...parentAgentDenies,
+    ...effectiveDenies,
     ...input.parentSessionPermission.filter(
       (rule) => rule.permission === "external_directory" || rule.action === "deny",
     ),

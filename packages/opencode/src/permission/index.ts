@@ -285,15 +285,18 @@ function expand(pattern: string): string {
   return pattern
 }
 
+const EDIT_CONFIG_KEYS = ["write", "apply_patch"]
+
 export function fromConfig(permission: ConfigPermission.Info) {
   const ruleset: Rule[] = []
   for (const [key, value] of Object.entries(permission)) {
+    const permissionKey = EDIT_CONFIG_KEYS.includes(key) ? "edit" : key
     if (typeof value === "string") {
-      ruleset.push({ permission: key, action: value, pattern: "*" })
+      ruleset.push({ permission: permissionKey, action: value, pattern: "*" })
       continue
     }
     ruleset.push(
-      ...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action })),
+      ...Object.entries(value).map(([pattern, action]) => ({ permission: permissionKey, pattern: expand(pattern), action })),
     )
   }
   return ruleset
