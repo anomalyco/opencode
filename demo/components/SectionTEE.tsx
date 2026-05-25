@@ -109,7 +109,7 @@ export function SectionTEE() {
     <section
       id="tee"
       ref={ref}
-      className="relative w-full h-[420vh]"
+      className="relative w-full md:h-[420vh]"
     >
       {/*
        * Desktop (>= md): sticky + h-dvh で scrollytelling。
