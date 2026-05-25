@@ -11,7 +11,7 @@ import { useServer } from "./server"
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
-export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
+export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
   init: () => {
     const language = useLanguage()
@@ -31,7 +31,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     })()
 
     const currentServer = server.current
-    if (!currentServer) throw new Error(language.t("error.globalSDK.noServerAvailable"))
+    if (!currentServer) throw new Error(language.t("error.serverSDK.noServerAvailable"))
 
     const eventSdk = createSdkForServer({
       signal: abort.signal,
@@ -245,7 +245,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       },
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
         const s = server.current
-        if (!s) throw new Error(language.t("error.globalSDK.serverNotAvailable"))
+        if (!s) throw new Error(language.t("error.serverSDK.serverNotAvailable"))
         return createSdkForServer({
           server: s.http,
           fetch: platform.fetch,
@@ -281,16 +281,16 @@ type SDKEventMap = {
 }
 
 function createDirSdkContext(directory: string) {
-  const globalSDK = useGlobalSDK()
+  const serverSDK = useServerSDK()
 
-  const client = globalSDK.createClient({
+  const client = serverSDK.createClient({
     directory,
     throwOnError: true,
   })
 
   const emitter = createGlobalEmitter<SDKEventMap>()
 
-  const unsub = globalSDK.event.on(directory, (event) => {
+  const unsub = serverSDK.event.on(directory, (event) => {
     emitter.emit(event.type, event)
   })
   onCleanup(unsub)
@@ -300,10 +300,10 @@ function createDirSdkContext(directory: string) {
     client,
     event: emitter,
     get url() {
-      return globalSDK.url
+      return serverSDK.url
     },
-    createClient(opts: Parameters<typeof globalSDK.createClient>[0]) {
-      return globalSDK.createClient(opts)
+    createClient(opts: Parameters<typeof serverSDK.createClient>[0]) {
+      return serverSDK.createClient(opts)
     },
   }
 }

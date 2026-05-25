@@ -16,7 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -221,7 +221,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={USE_V2_TITLEBAR}>
           {(_) => {
-            const globalSync = useGlobalSync()
+            const serverSync = useServerSync()
             const navigate = useNavigate()
             const homeMatch = useMatch(() => "/")
 
@@ -391,7 +391,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const base = mapArray(
                 () => tabsStore,
                 (tab) => {
-                  const sync = globalSync.createDirSyncContext(tab.dir)
+                  const sync = serverSync.createDirSyncContext(tab.dir)
                   const session = sync.session.get(tab.sessionId)
                   return session ? { ...tab, info: session } : null
                 },
