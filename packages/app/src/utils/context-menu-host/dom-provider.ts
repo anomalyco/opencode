@@ -99,14 +99,13 @@ export class DomSelectionProvider implements SelectionProvider {
     if (!Number.isFinite(bboxTop) || !Number.isFinite(bboxBottom)) return null
 
     // 找 pdf-viewer 子树内所有 textLayer spans,过滤中心 y 在 bbox 内
-    // 注:**不过滤 whitespace-only spans** — pdf.js textLayer 用 " " span 表词间空格,
-    // 过滤掉就造成红色 overlay 间"天窗"(user 2026-05-25 实测漏 22 个空格 spans 截图反馈)
+    // 注:**不过滤 whitespace-only spans** — pdf.js textLayer 用 " " span 表词间空格
     const allSpans = pdfViewer.querySelectorAll<HTMLSpanElement>(".textLayer span")
     type Hit = { el: HTMLSpanElement; rect: DOMRect; cy: number }
     const hits: Hit[] = []
     allSpans.forEach((el) => {
       const t = el.textContent
-      if (!t) return // 空 textContent(只 br/嵌套元素)跳过
+      if (!t) return
       const rect = el.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) return
       const cy = rect.top + rect.height / 2
@@ -115,24 +114,81 @@ export class DomSelectionProvider implements SelectionProvider {
     })
     if (hits.length === 0) return null
 
-    // 按视觉位置排序 — top 优先(误差 5px 内视作同行),然后 left 升序
+    // 按视觉位置排序 — top 优先(5px 内同行),然后 left 升序
     hits.sort((a, b) => {
       if (Math.abs(a.rect.top - b.rect.top) > 5) return a.rect.top - b.rect.top
       return a.rect.left - b.rect.left
     })
 
-    // 拼文本 — 同行 spans 之间无分隔(whitespace spans 自带 " "),跨行加 \n
-    let text = ""
-    let prevTop: number | null = null
+    // 分行 — 5px y 容差聚类
+    type Line = { spans: Hit[]; top: number; bottom: number }
+    const lines: Line[] = []
     for (const h of hits) {
-      if (prevTop !== null && Math.abs(h.rect.top - prevTop) > 5) {
-        text += "\n"
+      const last = lines[lines.length - 1]
+      if (last && Math.abs(h.cy - last.spans[0].cy) <= 5) {
+        last.spans.push(h)
+        if (h.rect.top < last.top) last.top = h.rect.top
+        if (h.rect.bottom > last.bottom) last.bottom = h.rect.bottom
+      } else {
+        lines.push({ spans: [h], top: h.rect.top, bottom: h.rect.bottom })
       }
-      text += h.el.textContent || ""
-      prevTop = h.rect.top
     }
 
-    const rects = hits.map((h) => h.rect)
+    // 拿 native 选区的真实 x 边界,裁顶/底行(防止包含 user 没选到的 x 范围)
+    const sortedNative = [...nativeRects].sort((a, b) => a.top - b.top || a.left - b.left)
+    const firstNative = sortedNative[0]
+    const lastNative = sortedNative[sortedNative.length - 1]
+    const selStartX = firstNative.left
+    const selEndX = lastNative.right
+    const selStartCy = firstNative.top + firstNative.height / 2
+    const selEndCy = lastNative.top + lastNative.height / 2
+
+    // **关键修法**:每行合并成一个 rect 从 minLeft → maxRight 消除字间/词间所有 gaps
+    // (user 2026-05-25 反馈每个字独立 rect 间有 1-2px 字间距和 word spacing 显白,
+    //  需要 union 成行级 rect 才能彻底消除"天窗")
+    const rects: DOMRect[] = []
+    let text = ""
+    let lineCount = 0
+    for (let i = 0; i < lines.length; i++) {
+      let lineSpans = lines[i].spans
+      const lineCy = lineSpans[0].cy
+
+      // 顶行裁:只保留 right > selStartX 的 spans
+      if (i === 0 && Math.abs(lineCy - selStartCy) <= 5) {
+        lineSpans = lineSpans.filter((h) => h.rect.right > selStartX)
+      }
+      // 底行裁:只保留 left < selEndX 的 spans
+      if (i === lines.length - 1 && Math.abs(lineCy - selEndCy) <= 5) {
+        lineSpans = lineSpans.filter((h) => h.rect.left < selEndX)
+      }
+      if (lineSpans.length === 0) continue
+
+      let minLeft = Infinity
+      let maxRight = -Infinity
+      let lineText = ""
+      for (const h of lineSpans) {
+        if (h.rect.left < minLeft) minLeft = h.rect.left
+        if (h.rect.right > maxRight) maxRight = h.rect.right
+        lineText += h.el.textContent || ""
+      }
+      // 顶行裁后 minLeft 可能在 selStartX 之前(span 横跨 selStartX),夹到 selStartX
+      if (i === 0 && Math.abs(lineCy - selStartCy) <= 5 && minLeft < selStartX) {
+        minLeft = selStartX
+      }
+      // 底行同理
+      if (i === lines.length - 1 && Math.abs(lineCy - selEndCy) <= 5 && maxRight > selEndX) {
+        maxRight = selEndX
+      }
+      const width = maxRight - minLeft
+      const height = lines[i].bottom - lines[i].top
+      if (width <= 0 || height <= 0) continue
+      rects.push(new DOMRect(minLeft, lines[i].top, width, height))
+      if (lineCount > 0) text += "\n"
+      text += lineText
+      lineCount++
+    }
+
+    if (rects.length === 0) return null
     return { text, rects }
   }
 

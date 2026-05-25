@@ -274,14 +274,15 @@ async function main() {
     }
   }
 
+  // Production dom-provider 现在按行合并 — overlay rects 数 ≈ 行数(每行一个连续 rect 消除字间/词间天窗)
+  // 估计行数:bbox y 范围 / 每行高度(~30px 含 line-height)
+  const estLines = Math.max(1, Math.ceil((targets.dragDy + 30) / 30))
   if (overlay.count === 0) {
-    console.log(`  ❌ 拖拽中无 overlay rects 渲染 — 视觉 overlay 未实时显示,user 拖拽中仍看不到完整选区`)
-  } else if (providerVisual && Math.abs(overlay.count - providerVisual.rectsCount) <= 2) {
-    console.log(`  ✅ Overlay rects ${overlay.count} ≈ Provider 视觉 spans ${providerVisual.rectsCount} — 拖拽中视觉 overlay 完整`)
-  } else if (providerVisual) {
-    console.log(`  ⚠ Overlay rects ${overlay.count} vs Provider 视觉 spans ${providerVisual.rectsCount}(差 ${Math.abs(overlay.count - providerVisual.rectsCount)})— 实时 overlay 与 Provider 算法有偏差`)
+    console.log(`  ❌ 拖拽中无 overlay rects 渲染`)
+  } else if (overlay.count >= estLines * 0.6 && overlay.count <= estLines * 1.5) {
+    console.log(`  ✅ Overlay rects ${overlay.count} ≈ 估计行数 ${estLines}(每行 1 个合并 rect,消除字间天窗)`)
   } else {
-    console.log(`  ✓ Overlay rects ${overlay.count} 已渲染`)
+    console.log(`  ⚠ Overlay rects ${overlay.count} vs 估计行数 ${estLines} — 偏离但 rects 已渲染`)
   }
 
   cdp.close()
