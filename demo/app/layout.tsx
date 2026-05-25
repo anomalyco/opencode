@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import "./globals.css"
 
-const SITE_URL = "https://acompany-develop.github.io/securecode/demo/"
+const SITE_URL = "https://securecode.acompany.tech/"
 const SITE_TITLE = "Acompanyセキュアコード — 機密ソースコードを守る AI コーディング"
 const SITE_DESCRIPTION =
   "機密ソースコードを社外に出さずに AI コーディング支援を導入できる、Acompany の Confidential AI Suite 第 2 弾製品。Trusted Execution Environment (TEE) と運用ハーネスで、組織の機密を守ったまま生成 AI を活用できる。"
