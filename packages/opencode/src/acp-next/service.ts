@@ -64,6 +64,7 @@ export function make(input: { sdk: OpencodeClient; connection?: Pick<AgentSideCo
     return {
       protocolVersion: 1,
       agentCapabilities: {
+        loadSession: true,
         mcpCapabilities: {
           http: true,
           sse: true,

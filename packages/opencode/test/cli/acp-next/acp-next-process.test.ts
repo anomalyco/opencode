@@ -29,6 +29,7 @@ describe("opencode acp-next (subprocess)", () => {
         expect(initialized.agentCapabilities?.promptCapabilities?.image).toBe(true)
         expect(initialized.agentCapabilities?.mcpCapabilities?.http).toBe(true)
         expect(initialized.agentCapabilities?.mcpCapabilities?.sse).toBe(true)
+        expect(initialized.agentCapabilities?.loadSession).toBe(true)
         expect(initialized.agentCapabilities?.sessionCapabilities).toBeUndefined()
         expect(initialized.agentInfo?.name).toBe("OpenCode")
         expect(initialized.authMethods?.[0]?.id).toBe("opencode-login")
