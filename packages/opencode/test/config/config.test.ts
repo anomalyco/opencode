@@ -589,6 +589,7 @@ it.instance("handles invalid schema gracefully without crashing", () =>
     })
     const config = yield* Config.use.get()
     expect(config.username).toBeDefined()
+    expect("invalid_field" in config).toBe(false)
   }),
 )
 
@@ -609,8 +610,7 @@ it.instance("handles invalid JSONC syntax gracefully without crashing", () =>
       `{
         // comment
         "model": "test/model",
-        "username": "testuser",
-      }`,
+        "username": "testuser",`,
     )
     const config = yield* Config.use.get()
     expect(config.username).toBeDefined()
