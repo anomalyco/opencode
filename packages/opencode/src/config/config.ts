@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause"
 import * as Log from "@opencode-ai/core/util/log"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
@@ -429,7 +430,7 @@ export const layer = Layer.effect(
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.sync(() => {
-            log.error("invalid config: config file could not be parsed", { path: source })
+            log.error("invalid config: config file could not be parsed", { path: source, cause: Cause.pretty(cause) })
             return Schema.decodeSync(Info)({})
           }),
         ),
