@@ -112,12 +112,12 @@ export function SectionTEE() {
       className="relative w-full h-[420vh]"
     >
       {/*
-       * Desktop (>= md): sticky + h-[100dvh] で scrollytelling として、
+       * Desktop (>= md): sticky + h-dvh で scrollytelling。
        *   外側 h-[420vh] の 4 倍スクロール範囲で a0..a3 を進行させる。
-       * Mobile (< md):  h-[420vh] + sticky で desktop と同じ scrollytelling。
-        *   図とステップカードが sticky viewport 内で同期アニメーション。
-        */}
-      <div className="flex w-full flex-col sticky top-0 h-[100dvh] min-h-[640px] overflow-hidden">
+       * Mobile (< md): sticky なし・静的レイアウト。
+       *   図は非表示にして 4 ステップを縦に並列表示する。
+       */}
+      <div className="flex w-full flex-col md:sticky md:top-0 md:h-dvh md:min-h-160 md:overflow-hidden">
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_70%_30%,rgba(3,76,255,0.12)_0%,transparent_55%)]"
@@ -145,7 +145,7 @@ export function SectionTEE() {
 
           <div className="mt-6 flex flex-1 flex-col gap-4 md:grid md:grid-cols-[1fr_1fr] md:gap-8 lg:grid-cols-[1.8fr_1fr]">
             {/* === 図 === */}
-            <div className="relative flex min-h-0 flex-[3] items-center justify-center">
+            <div className="relative hidden min-h-0 flex-6 items-center justify-center md:flex">
               <svg
                 viewBox="0 0 520 420"
                 className="h-full w-full max-h-[62vh]"
@@ -407,27 +407,19 @@ export function SectionTEE() {
             </div>
 
             {/* === ステップリスト === */}
-            <ol className="hidden self-center md:block md:space-y-2 lg:space-y-3">
+            <ol className="hidden self-center md:block md:space-y-1 lg:space-y-3">
               <Step progress={a0} index={0} step={STEPS[0]} />
               <Step progress={a1} index={1} step={STEPS[1]} />
               <Step progress={a2} index={2} step={STEPS[2]} />
               <Step progress={a3} index={3} step={STEPS[3]} />
             </ol>
 
-            {/* モバイル: スライドイン/アウト */}
-            <div className="relative min-h-0 flex-[2] md:hidden">
-              <motion.div style={{ opacity: mob0Op, x: mob0X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={0} step={STEPS[0]} />
-              </motion.div>
-              <motion.div style={{ opacity: mob1Op, x: mob1X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={1} step={STEPS[1]} />
-              </motion.div>
-              <motion.div style={{ opacity: mob2Op, x: mob2X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={2} step={STEPS[2]} />
-              </motion.div>
-              <motion.div style={{ opacity: mob3Op, x: mob3X }} className="absolute inset-0 flex items-center">
-                <MobileStepCard index={3} step={STEPS[3]} />
-              </motion.div>
+            {/* モバイル: 静的 4 ステップ一覧 */}
+            <div className="flex flex-col gap-3 md:hidden">
+              <MobileStepCard index={0} step={STEPS[0]} />
+              <MobileStepCard index={1} step={STEPS[1]} />
+              <MobileStepCard index={2} step={STEPS[2]} />
+              <MobileStepCard index={3} step={STEPS[3]} />
             </div>
           </div>
         </div>
@@ -464,7 +456,7 @@ function Step({
   return (
     <motion.li
       style={{ opacity, x, borderColor }}
-      className="rounded-md border bg-sc-bg-soft/60 p-3 lg:p-4 backdrop-blur-sm"
+      className="rounded-md border bg-sc-bg-soft/60 py-2.5 px-3 lg:p-4 backdrop-blur-sm"
     >
       <div className="mb-1 flex items-center gap-2">
         <motion.span
@@ -475,8 +467,8 @@ function Step({
           STEP {String(index + 1).padStart(2, "0")}
         </span>
       </div>
-      <h3 className="text-base font-medium text-sc-text">{step.title}</h3>
-      <p className="mt-1 text-xs leading-relaxed text-sc-text-mid">
+      <h3 className="text-sm font-medium text-sc-text lg:text-base">{step.title}</h3>
+      <p className="mt-1 text-[11px] leading-relaxed text-sc-text-mid lg:text-xs">
         {step.body}
       </p>
     </motion.li>
