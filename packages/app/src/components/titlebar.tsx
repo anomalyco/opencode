@@ -371,22 +371,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return true
             }
 
-            makeEventListener(
-              document,
-              "keydown",
-              (event) => {
-                if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-                if (event.key.toLowerCase() !== "w") return
-                if (!(closeCurrentSessionTab() || closeNewSessionTab())) return
+            const openNewTab = () => navigate(newSessionHref())
 
-                event.preventDefault()
-                event.stopPropagation()
-              },
-              { capture: true },
-            )
+            const closeActiveTab = () => closeCurrentSessionTab() || closeNewSessionTab()
 
             command.register(() => {
               const commands = [
+                {
+                  id: "tab.new",
+                  category: "tab",
+                  title: language.t("command.session.new"),
+                  keybind: "mod+t",
+                  hidden: true,
+                  onSelect: openNewTab,
+                },
+                {
+                  id: "tab.close",
+                  category: "tab",
+                  title: language.t("command.tab.close"),
+                  keybind: "mod+w",
+                  hidden: true,
+                  onSelect: closeActiveTab,
+                },
                 {
                   id: `tab.prev`,
                   category: "tab",
@@ -744,10 +750,19 @@ function TabNavItem(props: {
 }) {
   const match = useMatch(() => props.href)
   const isActive = () => !!match()
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
   return (
     <div
       class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
     >
       <a
         href={props.href}
@@ -771,7 +786,7 @@ function TabNavItem(props: {
           size="small"
           variant="ghost-muted"
           class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100 z-10"
-          onClick={props.onClose}
+          onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
         />
       </div>
@@ -795,8 +810,19 @@ function ProjectTabAvatar(props: { project?: LocalProject; directory: string; se
 }
 
 function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
   return (
-    <div class="group relative flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
+    <div
+      class="group relative flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
+    >
       <a
         href={props.href}
         aria-current="page"
@@ -815,11 +841,7 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
             event.preventDefault()
             event.stopPropagation()
           }}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            props.onClose()
-          }}
+          onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
           aria-label="Close tab"
         />
