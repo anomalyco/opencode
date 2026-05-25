@@ -26,14 +26,6 @@ declare module "sst" {
     "AuthApi": import("@cloudflare/workers-types").Service
     "AuthStorage": import("@cloudflare/workers-types").KVNamespace
     "Bucket": import("@cloudflare/workers-types").R2Bucket
-    "CLOUDFLARE_API_TOKEN": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "CLOUDFLARE_DEFAULT_ACCOUNT_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "Console": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
@@ -99,6 +91,37 @@ declare module "sst" {
       "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
+    "InferenceEvent": {
+      "catalog": string
+      "database": string
+      "region": string
+      "table": string
+      "tableBucket": string
+      "type": "sst.sst.Linkable"
+      "workgroup": string
+    }
+    "LakeIngest": {
+      "secret": string
+      "type": "sst.sst.Linkable"
+      "url": string
+    }
+    "LakeIngestConfig": {
+      "secret": string
+      "streamName": string
+      "type": "sst.sst.Linkable"
+    }
+    "LakeIngestSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
+      "value": string
+    }
+    "LakeIngestService": {
+      "service": string
+      "type": "sst.aws.Service"
+      "url": string
+    }
+    "LakeVpc": {
+      "type": "sst.aws.Vpc"
+    }
     "LogProcessor": import("@cloudflare/workers-types").Service
     "R2AccessKey": {
       "type": "sst.sst.Secret"
@@ -133,6 +156,23 @@ declare module "sst" {
       "value": string
     }
     "Stat": import("@cloudflare/workers-types").Service
+    "StatsDatabase": {
+      "database": string
+      "host": string
+      "password": string
+      "port": number
+      "type": "sst.sst.Linkable"
+      "url": string
+      "username": string
+    }
+    "StatsSyncConfig": {
+      "dataset": string
+      "type": "sst.sst.Linkable"
+    }
+    "StatsSyncService": {
+      "service": string
+      "type": "sst.aws.Service"
+    }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
