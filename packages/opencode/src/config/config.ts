@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause"
 import * as Log from "@opencode-ai/core/util/log"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
@@ -78,7 +79,9 @@ const infoKeys = new Set([
   "reference", "watcher", "snapshot", "plugin", "share", "autoshare",
   "autoupdate", "disabled_providers", "enabled_providers", "model",
   "small_model", "default_agent", "username", "mode", "agent",
-  "instructions", "account_token", "url", "headers",
+  "provider", "mcp", "formatter", "lsp", "instructions",
+  "layout", "permission", "tools", "attachment", "enterprise",
+  "tool_output", "compaction", "experimental",
 ])
 
 function stripUnknownKeys(data: unknown): unknown {
@@ -138,8 +141,8 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(
   for (let i = 0; i < config.plugin.length; i++) {
     try {
       config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], filepath)
-    } catch {
-      log.error("plugin resolution failed", { spec: config.plugin[i], path: filepath })
+    } catch (e) {
+      log.error("plugin resolution failed", { spec: config.plugin[i], path: filepath, error: String(e) })
     }
   }
   return config
@@ -449,9 +452,13 @@ export const layer = Layer.effect(
         parsedOk = true
         return result
       }).pipe(
-        Effect.catchCause(() =>
+        Effect.catchCause((cause) =>
           Effect.sync(() => {
-            log.error("invalid config: config file could not be parsed", { path: source })
+            const errors = cause.reasons
+              .filter(Cause.isDieReason)
+              .map((r) => (r.defect instanceof Error ? r.defect.name : "UnknownError"))
+              .join(", ")
+            log.error("invalid config: config file could not be parsed", { path: source, error: errors })
             return {} as Info
           }),
         ),
