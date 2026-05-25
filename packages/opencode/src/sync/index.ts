@@ -379,11 +379,10 @@ export function effectPayloads() {
       .entries()
       .map(([type, def]) =>
         EffectSchema.Struct({
-          type: EffectSchema.Literal("sync"),
-          name: EffectSchema.Literal(type),
+          type: EffectSchema.String,
           id: EffectSchema.String,
           seq: EffectSchema.Finite,
-          aggregateID: EffectSchema.Literal(def.aggregate),
+          aggregateID: EffectSchema.String,
           data: def.schema,
         }).annotate({ identifier: `SyncEvent.${type}` }),
       )
@@ -396,11 +395,10 @@ export function effectPayloads() {
       )
       .map((definition) =>
         EffectSchema.Struct({
-          type: EffectSchema.Literal("sync"),
-          name: EffectSchema.Literal(versionedType(definition.type, definition.version!)),
+          type: EffectSchema.String,
           id: EffectSchema.String,
           seq: EffectSchema.Finite,
-          aggregateID: EffectSchema.Literal(definition.aggregate!),
+          aggregateID: EffectSchema.String,
           data: definition.data,
         }).annotate({ identifier: `SyncEvent.${definition.type}` }),
       )
