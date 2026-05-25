@@ -317,10 +317,10 @@ describe("markdownHighlightStyle (iter-3)", () => {
   test("H3: 包含全部 14 条 tag rule(spec 列表全)", () => {
     // HighlightStyle 实例有内部 specs 数组(CM 6 实现)。访问走非公开 API:
     //   (style as any).specs?.length
-    // 14 条 rule:6 heading + strong / emphasis / strikethrough / quote /
-    //            url / link / processingInstruction / contentSeparator
-    //(矫正 ② 删 list marker 染色 15→14;矫正 ③ 删 monospace chip 14→13;
-    // 矫正 ④ 加 strikethrough 13→14)
+    // 14 条 rule:6 heading1-6(各带 textDecoration:none 反 default underline)+
+    //            strong / emphasis / strikethrough / quote / url / link /
+    //            processingInstruction / contentSeparator
+    //(矫正 ⑤ 试 t.heading 父 tag override 不生效,改为各 heading1-6 内联 textDecoration:none)
     const specs = (markdownHighlightStyle as unknown as { specs?: unknown[] }).specs
     if (Array.isArray(specs)) {
       // CM 6 当前版本暴露 specs 数组,精确断言

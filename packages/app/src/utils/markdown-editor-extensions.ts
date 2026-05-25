@@ -18,13 +18,15 @@ import { invoke } from "@tauri-apps/api/core"
 // ============================================================
 
 export const markdownHighlightStyle = HighlightStyle.define([
+  // 每个 heading 显式 textDecoration:"none" 取消 default style 的 t.heading underline
+  // (矫正 ⑤ 副作用,2026-05-25):default style 给 tags.heading 父 tag 加了 underline
   // heading 比例对齐 GitHub MD CSS / Notion
-  { tag: t.heading1, fontSize: "2em",     fontWeight: "700", color: "var(--text-strong)" },
-  { tag: t.heading2, fontSize: "1.5em",   fontWeight: "700", color: "var(--text-strong)" },
-  { tag: t.heading3, fontSize: "1.25em",  fontWeight: "600", color: "var(--text-strong)" },
-  { tag: t.heading4, fontSize: "1em",     fontWeight: "600", color: "var(--text-strong)" },
-  { tag: t.heading5, fontSize: "0.9em",   fontWeight: "600", color: "var(--text-strong)" },
-  { tag: t.heading6, fontSize: "0.85em",  fontWeight: "600", color: "var(--text-weak)" },
+  { tag: t.heading1, fontSize: "2em",    fontWeight: "700", color: "var(--text-strong)", textDecoration: "none" },
+  { tag: t.heading2, fontSize: "1.5em",  fontWeight: "700", color: "var(--text-strong)", textDecoration: "none" },
+  { tag: t.heading3, fontSize: "1.25em", fontWeight: "600", color: "var(--text-strong)", textDecoration: "none" },
+  { tag: t.heading4, fontSize: "1em",    fontWeight: "600", color: "var(--text-strong)", textDecoration: "none" },
+  { tag: t.heading5, fontSize: "0.9em",  fontWeight: "600", color: "var(--text-strong)", textDecoration: "none" },
+  { tag: t.heading6, fontSize: "0.85em", fontWeight: "600", color: "var(--text-weak)",   textDecoration: "none" },
   // 行内样式
   { tag: t.strong, fontWeight: "700" },
   { tag: t.emphasis, fontStyle: "italic" },
@@ -38,8 +40,9 @@ export const markdownHighlightStyle = HighlightStyle.define([
   { tag: t.quote, color: "var(--text-weak)", fontStyle: "italic" },
   // 链接:GitHub Primer / Notion / Linear / Slack 现代办公文档共识 — 唯一的 accent 蓝色
   // 跟 packages/ui/src/components/markdown.css:48 预览侧链接色统一(切预览不跳变)
-  { tag: t.url, color: "var(--text-interactive-base)" },
-  { tag: t.link, color: "var(--text-interactive-base)" },
+  // textDecoration:none 反 default style 给 t.url 加的 underline(矫正 ⑤ 二轮 follow-up)
+  { tag: t.url, color: "var(--text-interactive-base)", textDecoration: "none" },
+  { tag: t.link, color: "var(--text-interactive-base)", textDecoration: "none" },
   // list marker 不再染色 — 回归 monochrome,跟正文同色(Notion / GitHub Primer 同款)
   // 语法标记符温和弱化(# ** * ` 等)— iA Writer 同款 opacity 0.7
   { tag: t.processingInstruction, color: "var(--text-weak)", opacity: "0.7" },
@@ -49,19 +52,15 @@ export const markdownHighlightStyle = HighlightStyle.define([
 /**
  * markdown-only syntax highlight extension。
  *
- * **不**用 Prec.high 包装(色彩矫正 ④,2026-05-25):
- *   `code-mirror-view.tsx` 的 default 用 `fallback:true`,该选项语义是
- *   "仅当没有其他 highlighter 时才用" — 一旦 Prec.high 让 markdown style 成为
- *   primary highlighter,default 整个 bail out,fenced code block 里 JS/TS/SQL
- *   等语言的 keyword/string/number 等 tag 拿不到 default 着色 → 代码块单色。
- *
- *   去掉 Prec.high 后,我们的 style 跟 default 平级共存,CM 按 tag 逐个 resolve:
- *   - markdown tag(heading1-6 / strong / emphasis / quote / url / link / 等)
- *     → 我们 style 匹配,赢
- *   - 代码块内部语言 tag(keyword / string / number / 等)→ 我们没规则,
- *     fallback default 着色 → 代码块正常高亮
+ * 用 `Prec.high` 包装(矫正 ⑤ 二轮,2026-05-25):
+ *   - 矫正 ⑤ 一轮去掉 Prec.high + 去掉 default 的 fallback:true → 代码块高亮回来了
+ *     但 default 的 `tags.heading: underline` 规则跟我们 `text-decoration:none`
+ *     在 CSS cascade 同 specificity 时,default 的 class 注入位置在我们之后 → 它赢
+ *   - 矫正 ⑤ 二轮加回 Prec.high → CM 让我们 style 的 CSS 后注入,heading underline:none 赢
+ *   - 关键:`code-mirror-view.tsx:33` 已去掉 default 的 fallback:true(矫正 ⑤ 一轮),
+ *     所以 Prec.high 在这里不会让 default bail out — default 仍正常工作处理 keyword/string/等
  */
-export const markdownSyntaxHighlight = syntaxHighlighting(markdownHighlightStyle)
+export const markdownSyntaxHighlight = Prec.high(syntaxHighlighting(markdownHighlightStyle))
 
 // ============================================================
 // CodeMirror 内置 UI 短语翻译(@codemirror/search 走 phrase 取词)

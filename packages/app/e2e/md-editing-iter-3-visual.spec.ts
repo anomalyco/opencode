@@ -190,23 +190,47 @@ test("[md-editing-iter-3] 编辑器视觉:heading 梯度 / 代码块高亮 / 链
     expect(hasStrike).toBe(true)
   }
 
-  // === 断言 5:JS 代码块 keyword(`function` `return` 等)default 高亮恢复 ===
-  // 找含 "function fibonacci" 的 line(### 5.3 JavaScript 示例)
-  const jsLine = page.locator('.cm-line:has-text("function fibonacci")').first()
-  if ((await jsLine.count()) > 0) {
-    const tokenColors = await jsLine.evaluate((el) => {
-      const spans = el.querySelectorAll("span")
-      const colors = new Set<string>()
-      for (const s of Array.from(spans)) {
+  // === 断言 5:JS 代码块 default 高亮真生效 — 严格判断(矫正 ⑤ 后)===
+  // CodeMirror 6 viewport 优化:必须先滚到代码块附近,line 才进 DOM
+  // 滚到约 2500px(JS 代码块在 line 149 附近,每行约 19.5px → 2900px)
+  await page.evaluate(() => {
+    const sv = document.querySelector(".scroll-view__viewport") as HTMLElement | null
+    if (sv) sv.scrollTop = 3000
+  })
+  await page.waitForTimeout(800) // 等 CM viewport re-render
+
+  const jsTokenInfo = await page.locator(".cm-content").first().evaluate((root) => {
+    const lines = Array.from(root.querySelectorAll(".cm-line"))
+    // 找文本含 function / fibonacci / interface 等 — 多种探测
+    const targets = lines.filter((l) => {
+      const t = (l as HTMLElement).textContent ?? ""
+      return /function|fibonacci|interface\s+\w|useState|SELECT\s+\w/.test(t)
+    })
+    const colors = new Set<string>()
+    const samples: string[] = []
+    for (const line of targets.slice(0, 5)) {
+      samples.push((line as HTMLElement).textContent?.slice(0, 60) ?? "")
+      for (const s of Array.from(line.querySelectorAll("span"))) {
         const c = window.getComputedStyle(s).color
         if (c) colors.add(c)
       }
-      return Array.from(colors)
-    })
-    console.log(`[iter-3 spec] JS code block line colors:`, tokenColors)
-    // default 高亮恢复后,JS line 应该至少有 2 种 color(关键字色 + 普通文本色)
-    expect(tokenColors.length).toBeGreaterThanOrEqual(2)
-  }
+    }
+    return { sampleLines: samples, colors: Array.from(colors), matchedCount: targets.length }
+  })
+  console.log(`[iter-3 spec] JS matched lines (${jsTokenInfo.matchedCount}):`, jsTokenInfo.sampleLines)
+  console.log(`[iter-3 spec] JS keyword line colors:`, jsTokenInfo.colors)
+  const jsTokenColors = jsTokenInfo.colors
+  // 排除 text-base #6f6f6f / text-weak #8f8f8f 灰色调,看是否真有"keyword 色"
+  // 灰色判定:R≈G≈B(差距 ≤ 10)
+  const nonGrayColors = jsTokenColors.filter((c) => {
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c)
+    if (!m) return false
+    const r = parseInt(m[1], 10), g = parseInt(m[2], 10), b = parseInt(m[3], 10)
+    return Math.abs(r - g) > 15 || Math.abs(g - b) > 15 || Math.abs(r - b) > 15
+  })
+  console.log(`[iter-3 spec] JS non-gray (真彩色) tokens:`, nonGrayColors)
+  // 矫正 ⑤ 后 default highlight 应该让 keyword 等带真彩色(非灰)
+  expect(nonGrayColors.length).toBeGreaterThanOrEqual(1)
 
   // === 断言 6:标记符 # ** opacity 弱化 ===
   // 找含 `# 1. 标题层级` 的 line,看 # 部分 opacity
