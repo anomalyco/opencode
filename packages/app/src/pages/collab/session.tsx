@@ -15,6 +15,7 @@
 import {
   createSignal,
   createResource,
+  createEffect,
   onMount,
   onCleanup,
   For,
@@ -820,45 +821,31 @@ function CollabSessionInner(props: { me: Me }) {
           fallback={<EmptyReposPanel />}
         >
 
+        {/* Wait for BOTH the workspace path AND a native session id before
+            mounting the iframe.  Earlier versions rendered the iframe as
+            soon as the workspace path was known — but that fired before
+            initSessionWorkspace's git clone + branch checkout completed,
+            so opencode inside the iframe cached an empty / main-branch
+            view in its InstanceStore.  Even when the URL later updated
+            with a sid via the collab:native_session_linked SSE event,
+            the cached store stuck and the user saw main branch + no
+            greeting until they did a full page reload.
+
+            Now: render a placeholder while initSessionWorkspace runs and
+            preWarmNativeSession creates the native session.  The placeholder
+            flips to a "taking too long" variant after 30 s with a refresh
+            link, so a stuck preWarm doesn't trap the user.  Once both
+            inputs are ready the iframe mounts ONCE with the final URL —
+            collab branch + seed prompt visible from the first frame. */}
         <Show
-          when={collab.nativeSessionDirectory()}
-          fallback={
-            <div class="flex-1 flex flex-col items-center justify-center text-center bg-zinc-950">
-              <div class="w-16 h-16 rounded-full bg-zinc-800/60 flex items-center justify-center mb-5">
-                <svg class="w-8 h-8 text-zinc-600 animate-pulse" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-                </svg>
-              </div>
-              <p class="text-sm font-medium text-zinc-400">Loading workspace…</p>
-            </div>
-          }
+          when={collab.nativeSessionDirectory() && collab.session()?.sessionId}
+          fallback={<PreparingWorkspacePanel />}
         >
           {(_) => {
             const dir = collab.nativeSessionDirectory()!
-            const sid = collab.session()?.sessionId
-            const cid = collab.session()?.id ?? ""
-            // Render the iframe immediately so the user can type their first
-            // prompt right away — we don't wait for a native opencode session
-            // to be pre-warmed.
-            //
-            // Two URL shapes:
-            //   - With sid: /<dir>/session/<sid>?embed=collab&cs=<cid>
-            //     (existing session — shows the conversation timeline)
-            //   - Without sid: /<dir>?embed=collab&cs=<cid>
-            //     (no native session yet — opencode shows its "new session"
-            //     view; the editor + model/agent picker are usable).
-            //
-            // The first time the user submits a prompt the embed override
-            // posts it through the collab queue, which creates the native
-            // session and broadcasts collab:native_session_linked.  The
-            // sessionUrl below then re-evaluates with sid set and the iframe
-            // reloads pointed at the new session (with the user's prompt
-            // already in its timeline + the LLM streaming a response).
-            const sessionUrl = sid
-              ? `/${base64Encode(dir)}/session/${sid}?embed=collab&cs=${encodeURIComponent(cid)}`
-              : // Hit /session directly (no id) — the bare /{dir} would redirect
-                // via <Navigate href="session"> and could drop our query params.
-                `/${base64Encode(dir)}/session?embed=collab&cs=${encodeURIComponent(cid)}`
+            const sid = collab.session()!.sessionId!
+            const cid = collab.session()!.id
+            const sessionUrl = `/${base64Encode(dir)}/session/${sid}?embed=collab&cs=${encodeURIComponent(cid)}`
             return (
               <iframe
                 src={sessionUrl}
@@ -880,6 +867,81 @@ function CollabSessionInner(props: { me: Me }) {
       {/* Invite dialog */}
       <Show when={showInvite()}>
         <InviteDialog onClose={() => setShowInvite(false)} />
+      </Show>
+    </div>
+  )
+}
+
+// ── Preparing-workspace placeholder ───────────────────────────────────────────
+//
+// Rendered while the server clones repos + checks out the collab branch +
+// pre-warms the native opencode session.  See the comment above the iframe
+// `<Show>` in CollabSessionInner for the reasoning.
+//
+// Two phases:
+//   1. First 30 seconds — friendly "Preparing your collab session…" copy.
+//   2. After 30 seconds — assumes preWarm has stalled; shows a "Setup is
+//      taking longer than expected" message with a refresh link.  A reload
+//      re-triggers the SPA's data fetch + SSE handshake and the iframe
+//      remounts cleanly against whatever state the server has reached.
+
+const PREPARING_TIMEOUT_MS = 30_000
+
+function PreparingWorkspacePanel() {
+  const [stalled, setStalled] = createSignal(false)
+
+  // Solid effect so the timer participates in component lifecycle —
+  // navigating away mid-wait cleans up automatically.
+  createEffect(() => {
+    const handle = setTimeout(() => setStalled(true), PREPARING_TIMEOUT_MS)
+    onCleanup(() => clearTimeout(handle))
+  })
+
+  return (
+    <div class="flex-1 flex flex-col items-center justify-center text-center bg-zinc-950 px-6">
+      <div class="w-16 h-16 rounded-full bg-zinc-800/60 flex items-center justify-center mb-5">
+        <svg
+          class="w-8 h-8 text-zinc-500 animate-spin"
+          fill="none"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+      </div>
+      <Show
+        when={!stalled()}
+        fallback={
+          <>
+            <p class="text-sm font-medium text-zinc-300 mb-1">
+              Setup is taking longer than expected
+            </p>
+            <p class="text-xs text-zinc-500 mb-4 max-w-sm">
+              The server is still cloning your repositories or starting the
+              editor.  If this persists, refresh to retry.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              class="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+            >
+              Refresh
+            </button>
+          </>
+        }
+      >
+        <p class="text-sm font-medium text-zinc-300 mb-1">
+          Preparing your collab session
+        </p>
+        <p class="text-xs text-zinc-500 max-w-sm">
+          Cloning repositories and warming up the editor.  This usually
+          takes 5–15 seconds.
+        </p>
       </Show>
     </div>
   )
