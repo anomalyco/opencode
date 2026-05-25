@@ -46,3 +46,6 @@ packages/branding/installer/*.lnk
 
 # FORK: Claude Code 会话状态目录(每台机器本地,不入仓) 2026-05-04
 .claude/
+
+# FORK: Installer /LOG=<file> 写出的临时排查日志(每次 ship 产生新名字)2026-05-25
+.install-*.log

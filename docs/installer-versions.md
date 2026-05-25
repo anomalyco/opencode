@@ -18,6 +18,47 @@
 
 
 
+## [Windows] 2026.5.25.1 — 2026-05-25
+
+**主题**:首个生产级飞书桥接 + 文件编辑器增强(自 2026-05-15 prod `2026.5.15.1` 以来 175 commits,跟 Mac prod 2026.5.25.1 同源)
+
+**新功能**:
+- 🔗 **飞书桥接(全新)**:绑飞书 bot 账号后,直接在飞书 IM 跟 AI 对话
+  - 私聊 / 群聊全支持(群聊默认 @ 才响应,可在 GUI 改"允许免@")
+  - `/new` 清当前对话切话题
+  - `/group <群名>` 显式创建群(替代易误触的自然语言建群)
+  - `[ATTACH:/path]` 文件回传(图片 ≤10MB / 文件 ≤30MB)
+  - 多账号支持 + 多群独立 session
+- 📝 **文件查看器**:
+  - 编辑态 1s 自动落盘 + 切 tab/关窗口前 flush 兜底(REQ-001 dirty tab)
+  - 100MB+ 大文件预览防护 4 层(office 200MB / 媒体 ∞ / 用本机软件兜底)
+  - 选区右键"加入聊天" + 焦点自动跟回输入框
+- 🔍 **文件树**:
+  - 多选 Shift/Ctrl 拖到聊天接通
+  - AI 创建新文件后自动浮现(不用 F5)
+
+**修复**:
+- 聊天拖拽接收浮层卡死
+- 飞书 ATTACH 上传 100% 失败(Bun + axios + Node form-data + Buffer 互操作 bug,iter 4 绕开整条 SDK 链才修)
+- 中文文件名飞书展示乱码(`%E6%8A%A5%E5%91%8A.md`)
+
+**治理**:
+- 三档发布渠道规范化(Tier 1 prod / Tier 2 dev / Tier 3 本地)+ ship 脚本统一
+- e2e 测试基础设施(Phase 1 mock mode)+ pre-push gate
+- 主分支重命名 `dev` → `main`(2026-05-21,跟 installer channel `dev` 命名空间解耦)
+
+**安装**:
+- Windows:`.exe` 装到 `C:\Program Files\DeskFox\`(默认);沿用旧版安装路径自动检测(若之前装在 `D:\...` 等自定义路径会原地升级)
+- 不签名 → 双击安装包 SmartScreen 弹"未识别"→ 点"更多信息"→"仍要运行"
+- 配套 plugin:`feishu-bridge`(打包在 installer 内,装到 `<install>/plugin/feishu-bridge/`)
+
+**已知遗留**(配套 backlog):
+- 设置面板飞书桥接 OAuth `error sending request` — 触发原因:user `opencode.jsonc` 编码损坏导致 plugin entry 静默不注入(实测命中)。即将做的 [REQ-028 jsonc 编码自检](../docs/features/../OPENCODE-PLAN/需求池/opencode-jsonc-编码损坏自检.md) + [REQ-029 plugin port 前端刷新](../docs/features/../OPENCODE-PLAN/需求池/飞书plugin端口前端刷新.md) 会从根上解决
+
+**回退**:之前 prod 是 `2026.5.15.1`(2026-05-15),如有问题可回装那个 .exe。
+
+---
+
 ## [macOS] 2026.5.25.1 — 2026-05-25
 
 **主题**:首个生产级飞书桥接 + 文件编辑器增强(自 2026-05-12 prod `2026.5.12.1` 以来 148 commits)

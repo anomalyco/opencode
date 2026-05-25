@@ -9,7 +9,7 @@
 ;   AppId 三档独立 GUID → 控制面板"应用与功能"识别成 3 个独立 app,可同机共存
 
 #ifndef AppVersion
-  #define AppVersion "2026.5.21.1-dev"
+  #define AppVersion "2026.5.25.1"
 #endif
 
 #ifndef AppEnv
