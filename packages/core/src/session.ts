@@ -12,6 +12,7 @@ import type { Prompt } from "./session/prompt"
 import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
+import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, RelativePath } from "./schema"
@@ -253,4 +254,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.orDie)
+export const defaultLayer = layer.pipe(
+  Layer.provide(SessionProjector.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.orDie,
+)

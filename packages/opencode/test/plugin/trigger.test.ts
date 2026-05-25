@@ -11,12 +11,13 @@ import { Config } from "../../src/config/config"
 import { Env } from "../../src/env"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Plugin } from "../../src/plugin/index"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
@@ -74,8 +75,8 @@ const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransfo
     systemHook,
     {
       model: {
-        providerID: ProviderID.anthropic,
-        modelID: ModelID.make("claude-sonnet-4-6"),
+        providerID: ProviderV2.ID.anthropic,
+        modelID: ProviderV2.ModelID.make("claude-sonnet-4-6"),
       },
     },
     out,

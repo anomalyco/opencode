@@ -7,13 +7,14 @@ import { Effect, Layer, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
-import { ProviderID } from "../../src/provider/schema"
+
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
-const providerID = ProviderID.make("test")
+const providerID = ProviderV2.ID.make("test")
 const retryProvider = "test"
 const it = testEffect(Layer.mergeAll(SessionStatus.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
@@ -390,7 +391,7 @@ describe("session.message-v2.fromError", () => {
       responseBody: '{"error":"boom"}',
       isRetryable: false,
     })
-    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") })
+    const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("openai") })
     if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
   })
@@ -409,7 +410,7 @@ describe("session.message-v2.fromError", () => {
           },
         }),
       },
-      { providerID: ProviderID.make("openai") },
+      { providerID: ProviderV2.ID.make("openai") },
     )
 
     expect(SessionLegacy.APIError.isInstance(result)).toBe(true)

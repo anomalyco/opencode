@@ -25,7 +25,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
-import { ModelID, ProviderID } from "./schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -653,8 +653,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             for (const m of result.models) {
               if (!input.models[m.id]) {
                 models[m.id] = {
-                  id: ModelID.make(m.id),
-                  providerID: ProviderID.make("gitlab"),
+                  id: ProviderV2.ModelID.make(m.id),
+                  providerID: ProviderV2.ID.make("gitlab"),
                   name: `Agent Platform (${m.name})`,
                   family: "",
                   api: {
@@ -918,8 +918,8 @@ const ProviderLimit = Schema.Struct({
 })
 
 export const Model = Schema.Struct({
-  id: ModelID,
-  providerID: ProviderID,
+  id: ProviderV2.ModelID,
+  providerID: ProviderV2.ID,
   api: ProviderApiInfo,
   name: Schema.String,
   family: optionalOmitUndefined(Schema.String),
@@ -935,7 +935,7 @@ export const Model = Schema.Struct({
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
 export const Info = Schema.Struct({
-  id: ProviderID,
+  id: ProviderV2.ID,
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
@@ -975,8 +975,8 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
 }
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
-  providerID: ProviderID,
-  modelID: ModelID,
+  providerID: ProviderV2.ID,
+  modelID: ProviderV2.ModelID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
   cause: Schema.optional(Schema.Defect),
 }) {
@@ -986,7 +986,7 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
 }
 
 export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderInitError", {
-  providerID: ProviderID,
+  providerID: ProviderV2.ID,
   cause: Schema.optional(Schema.Defect),
 }) {
   static isInstance(input: unknown): input is InitError {
@@ -1001,7 +1001,7 @@ export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>(
 }
 
 export class NoModelsError extends Schema.TaggedErrorClass<NoModelsError>()("ProviderNoModelsError", {
-  providerID: ProviderID,
+  providerID: ProviderV2.ID,
 }) {
   static isInstance(input: unknown): input is NoModelsError {
     return input instanceof NoModelsError
@@ -1012,22 +1012,22 @@ export type DefaultModelError = ModelNotFoundError | NoProvidersError | NoModels
 export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModelsError
 
 export interface Interface {
-  readonly list: () => Effect.Effect<Record<ProviderID, Info>>
-  readonly getProvider: (providerID: ProviderID) => Effect.Effect<Info>
-  readonly getModel: (providerID: ProviderID, modelID: ModelID) => Effect.Effect<Model, ModelNotFoundError>
+  readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
+  readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
+  readonly getModel: (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
-    providerID: ProviderID,
+    providerID: ProviderV2.ID,
     query: string[],
-  ) => Effect.Effect<{ providerID: ProviderID; modelID: string } | undefined>
-  readonly getSmallModel: (providerID: ProviderID) => Effect.Effect<Model | undefined>
-  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }, DefaultModelError>
+  ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
+  readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
+  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }, DefaultModelError>
 }
 
 interface State {
   models: Map<string, LanguageModelV3>
-  providers: Record<ProviderID, Info>
-  catalog: Record<ProviderID, Info>
+  providers: Record<ProviderV2.ID, Info>
+  catalog: Record<ProviderV2.ID, Info>
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
@@ -1072,8 +1072,8 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
-    id: ModelID.make(model.id),
-    providerID: ProviderID.make(provider.id),
+    id: ProviderV2.ModelID.make(model.id),
+    providerID: ProviderV2.ID.make(provider.id),
     name: model.name,
     family: model.family,
     api: {
@@ -1130,7 +1130,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
       const base = fromModelsDevModel(provider, model)
       models[id] = {
         ...base,
-        id: ModelID.make(id),
+        id: ProviderV2.ModelID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
         options: opts.provider?.body
@@ -1146,7 +1146,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     }
   }
   return {
-    id: ProviderID.make(provider.id),
+    id: ProviderV2.ID.make(provider.id),
     source: "custom",
     name: provider.name,
     env: [...(provider.env ?? [])],
@@ -1165,7 +1165,7 @@ function suggestionModelIDs(provider: Info | undefined, enableExperimentalModels
   })
 }
 
-function modelSuggestions(provider: Info | undefined, modelID: ModelID, enableExperimentalModels: boolean) {
+function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelID, enableExperimentalModels: boolean) {
   const available = suggestionModelIDs(provider, enableExperimentalModels)
   const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
   if (fuzzy.length) return fuzzy
@@ -1207,7 +1207,7 @@ export const layer = Layer.effect(
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const database = mapValues(catalog, toPublicInfo)
 
-        const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
+        const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()
         const modelLoaders: {
           [providerID: string]: CustomModelLoader
@@ -1228,7 +1228,7 @@ export const layer = Layer.effect(
 
         log.info("init")
 
-        function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
+        function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
           const existing = providers[providerID]
           if (existing) {
             // @ts-expect-error
@@ -1249,7 +1249,7 @@ export const layer = Layer.effect(
         const disabled = new Set(cfg.disabled_providers ?? [])
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
-        function isProviderAllowed(providerID: ProviderID): boolean {
+        function isProviderAllowed(providerID: ProviderV2.ID): boolean {
           if (enabled && !enabled.has(providerID)) return false
           if (disabled.has(providerID)) return false
           return true
@@ -1260,7 +1260,7 @@ export const layer = Layer.effect(
           const models = p?.models
           if (!p || !models) continue
 
-          const providerID = ProviderID.make(p.id)
+          const providerID = ProviderV2.ID.make(p.id)
           if (disabled.has(providerID)) continue
 
           const provider = database[providerID]
@@ -1274,7 +1274,7 @@ export const layer = Layer.effect(
                 id,
                 {
                   ...model,
-                  id: ModelID.make(id),
+                  id: ProviderV2.ModelID.make(id),
                   providerID,
                 },
               ]),
@@ -1286,7 +1286,7 @@ export const layer = Layer.effect(
         for (const [providerID, provider] of configProviders) {
           const existing = database[providerID]
           const parsed: Info = {
-            id: ProviderID.make(providerID),
+            id: ProviderV2.ID.make(providerID),
             name: provider.name ?? existing?.name ?? providerID,
             env: provider.env ?? existing?.env ?? [],
             options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
@@ -1309,7 +1309,7 @@ export const layer = Layer.effect(
               return existingModel?.name ?? modelID
             })
             const parsedModel: Model = {
-              id: ModelID.make(modelID),
+              id: ProviderV2.ModelID.make(modelID),
               api: {
                 id: apiID,
                 npm: apiNpm,
@@ -1317,7 +1317,7 @@ export const layer = Layer.effect(
               },
               status: model.status ?? existingModel?.status ?? "active",
               name,
-              providerID: ProviderID.make(providerID),
+              providerID: ProviderV2.ID.make(providerID),
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
                 reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
@@ -1379,7 +1379,7 @@ export const layer = Layer.effect(
         // load env
         const envs = yield* env.all()
         for (const [id, provider] of Object.entries(database)) {
-          const providerID = ProviderID.make(id)
+          const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
           if (!apiKey) continue
@@ -1392,7 +1392,7 @@ export const layer = Layer.effect(
         // load apikeys
         const auths = yield* auth.all().pipe(Effect.orDie)
         for (const [id, provider] of Object.entries(auths)) {
-          const providerID = ProviderID.make(id)
+          const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           if (provider.type === "api") {
             mergeProvider(providerID, {
@@ -1405,7 +1405,7 @@ export const layer = Layer.effect(
         // plugin auth loader - database now has entries for config providers
         for (const plugin of plugins) {
           if (!plugin.auth) continue
-          const providerID = ProviderID.make(plugin.auth.provider)
+          const providerID = ProviderV2.ID.make(plugin.auth.provider)
           if (disabled.has(providerID)) continue
 
           const stored = yield* auth.get(providerID).pipe(Effect.orDie)
@@ -1424,7 +1424,7 @@ export const layer = Layer.effect(
         }
 
         for (const [id, fn] of Object.entries(custom(dep))) {
-          const providerID = ProviderID.make(id)
+          const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {
@@ -1444,7 +1444,7 @@ export const layer = Layer.effect(
 
         // load config - re-apply with updated data
         for (const [id, provider] of configProviders) {
-          const providerID = ProviderID.make(id)
+          const providerID = ProviderV2.ID.make(id)
           const partial: Partial<Info> = { source: "config" }
           if (provider.env) partial.env = provider.env
           if (provider.name) partial.name = provider.name
@@ -1452,7 +1452,7 @@ export const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderID.make("gitlab")
+        const gitlab = ProviderV2.ID.make("gitlab")
         if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
           yield* Effect.promise(async () => {
             try {
@@ -1469,7 +1469,7 @@ export const layer = Layer.effect(
         }
 
         for (const [id, provider] of Object.entries(providers)) {
-          const providerID = ProviderID.make(id)
+          const providerID = ProviderV2.ID.make(id)
           if (!isProviderAllowed(providerID)) {
             delete providers[providerID]
             continue
@@ -1483,10 +1483,10 @@ export const layer = Layer.effect(
               // These chat aliases are invalid for the special handling in the
               // built-in providers below, but custom providers may support them.
               (modelID === "gpt-5-chat-latest" &&
-                (providerID === ProviderID.openai ||
-                  providerID === ProviderID.githubCopilot ||
-                  providerID === ProviderID.openrouter)) ||
-              (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+                (providerID === ProviderV2.ID.openai ||
+                  providerID === ProviderV2.ID.githubCopilot ||
+                  providerID === ProviderV2.ID.openrouter)) ||
+              (providerID === ProviderV2.ID.openrouter && modelID === "openai/gpt-5-chat")
             )
               delete provider.models[modelID]
             if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) delete provider.models[modelID]
@@ -1687,11 +1687,11 @@ export const layer = Layer.effect(
       }
     }
 
-    const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
+    const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderV2.ID) =>
       InstanceState.use(state, (s) => s.providers[providerID]),
     )
 
-    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
+    const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID) {
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
       if (!provider) {
@@ -1741,7 +1741,7 @@ export const layer = Layer.effect(
       )
     })
 
-    const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
+    const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderV2.ID, query: string[]) {
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
       if (!provider) return undefined
@@ -1753,7 +1753,7 @@ export const layer = Layer.effect(
       return undefined
     })
 
-    const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderID) {
+    const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderV2.ID) {
       const cfg = yield* config.get()
 
       if (cfg.small_model) {
@@ -1783,7 +1783,7 @@ export const layer = Layer.effect(
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
-        if (providerID === ProviderID.amazonBedrock) {
+        if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
           const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
@@ -1817,16 +1817,16 @@ export const layer = Layer.effect(
 
       const s = yield* InstanceState.get(state)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
-        Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
+        Effect.map((x): { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
           return x.recent.flatMap((item) => {
             if (!isRecord(item)) return []
             if (typeof item.providerID !== "string") return []
             if (typeof item.modelID !== "string") return []
-            return [{ providerID: ProviderID.make(item.providerID), modelID: ModelID.make(item.modelID) }]
+            return [{ providerID: ProviderV2.ID.make(item.providerID), modelID: ProviderV2.ModelID.make(item.modelID) }]
           })
         }),
-        Effect.catch(() => Effect.succeed([] as { providerID: ProviderID; modelID: ModelID }[])),
+        Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }[])),
       )
       for (const entry of recent) {
         const provider = s.providers[entry.providerID]
@@ -1874,8 +1874,8 @@ export function sort<T extends { id: string }>(models: T[]) {
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
-    providerID: ProviderID.make(providerID),
-    modelID: ModelID.make(rest.join("/")),
+    providerID: ProviderV2.ID.make(providerID),
+    modelID: ProviderV2.ModelID.make(rest.join("/")),
   }
 }
 

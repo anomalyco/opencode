@@ -4,14 +4,15 @@ import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const sessionID = SessionID.make("session")
-const providerID = ProviderID.make("test")
+const providerID = ProviderV2.ID.make("test")
 const model: Provider.Model = {
-  id: ModelID.make("test-model"),
+  id: ProviderV2.ModelID.make("test-model"),
   providerID,
   api: {
     id: "test-model",
@@ -66,7 +67,7 @@ function userInfo(id: string): SessionLegacy.User {
     role: "user",
     time: { created: 0 },
     agent: "user",
-    model: { providerID, modelID: ModelID.make("test") },
+    model: { providerID, modelID: ProviderV2.ModelID.make("test") },
     tools: {},
     mode: "",
   } as unknown as SessionLegacy.User
@@ -412,8 +413,8 @@ describe("session.message-v2.toModelMessage", () => {
   test("preserves jpeg tool-result media for anthropic models", async () => {
     const anthropicModel: Provider.Model = {
       ...model,
-      id: ModelID.make("anthropic/claude-opus-4-7"),
-      providerID: ProviderID.make("anthropic"),
+      id: ProviderV2.ModelID.make("anthropic/claude-opus-4-7"),
+      providerID: ProviderV2.ID.make("anthropic"),
       api: {
         id: "claude-opus-4-7-20250805",
         url: "https://api.anthropic.com",
@@ -495,8 +496,8 @@ describe("session.message-v2.toModelMessage", () => {
   test("moves bedrock pdf tool-result media into a separate user message", async () => {
     const bedrockModel: Provider.Model = {
       ...model,
-      id: ModelID.make("amazon-bedrock/anthropic.claude-sonnet-4-6"),
-      providerID: ProviderID.make("amazon-bedrock"),
+      id: ProviderV2.ModelID.make("amazon-bedrock/anthropic.claude-sonnet-4-6"),
+      providerID: ProviderV2.ID.make("amazon-bedrock"),
       api: {
         id: "anthropic.claude-sonnet-4-6",
         url: "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -1041,8 +1042,8 @@ describe("session.message-v2.toModelMessage", () => {
     const assistantID = "m-assistant"
     const openrouterModel: Provider.Model = {
       ...model,
-      id: ModelID.make("deepseek/deepseek-v4-pro"),
-      providerID: ProviderID.make("openrouter"),
+      id: ProviderV2.ModelID.make("deepseek/deepseek-v4-pro"),
+      providerID: ProviderV2.ID.make("openrouter"),
       api: {
         id: "deepseek/deepseek-v4-pro",
         url: "https://openrouter.ai/api/v1",

@@ -5,10 +5,11 @@ import { Effect, Layer, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { NotFoundError } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
 
@@ -97,8 +98,8 @@ const addAssistant = Effect.fn("Test.addAssistant")(function* (
     role: "assistant",
     time: { created: Date.now() },
     parentID,
-    modelID: ModelID.make("test"),
-    providerID: ProviderID.make("test"),
+    modelID: ProviderV2.ModelID.make("test"),
+    providerID: ProviderV2.ID.make("test"),
     mode: "",
     agent: "default",
     path: { cwd: "/", root: "/" },

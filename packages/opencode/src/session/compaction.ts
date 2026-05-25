@@ -12,7 +12,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { Effect, Layer, Context, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
 import { InstanceState } from "@/effect/instance-state"
@@ -21,6 +21,7 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -200,7 +201,7 @@ export interface Interface {
   readonly create: (input: {
     sessionID: SessionID
     agent: string
-    model: { providerID: ProviderID; modelID: ModelID }
+    model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }
     auto: boolean
     overflow?: boolean
   }) => Effect.Effect<void>
@@ -585,7 +586,7 @@ export const layer = Layer.effect(
     const create = Effect.fn("SessionCompaction.create")(function* (input: {
       sessionID: SessionID
       agent: string
-      model: { providerID: ProviderID; modelID: ModelID }
+      model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }
       auto: boolean
       overflow?: boolean
     }) {

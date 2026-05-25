@@ -6,7 +6,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -15,6 +15,7 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
 
@@ -75,8 +76,8 @@ function loaded(filepath: string): SessionLegacy.WithParts[] {
         time: { created: 0 },
         agent: "build",
         model: {
-          providerID: ProviderID.make("anthropic"),
-          modelID: ModelID.make("claude-sonnet-4-20250514"),
+          providerID: ProviderV2.ID.make("anthropic"),
+          modelID: ProviderV2.ModelID.make("claude-sonnet-4-20250514"),
         },
       },
       parts: [

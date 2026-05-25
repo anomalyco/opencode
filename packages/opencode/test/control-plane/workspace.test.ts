@@ -341,10 +341,6 @@ function sessionSequenceOwner(sessionID: SessionID) {
   )?.ownerID
 }
 
-function sessionUpdatedType() {
-  return SyncEvent.versionedType(SessionNs.Event.Updated.type, SessionNs.Event.Updated.version)
-}
-
 describe("workspace schemas and exports", () => {
   test("keeps the historical event type names", () => {
     expect(Workspace.Event.Ready.type).toBe("workspace.ready")
@@ -984,7 +980,7 @@ describe("workspace CRUD", () => {
                 id: `evt_${unique("warp-source-history")}`,
                 aggregate_id: historySessionID!,
                 seq: historyNextSeq,
-                type: sessionUpdatedType(),
+                type: "session.updated.1",
                 data: { sessionID: historySessionID!, info: { title: "from source history" } },
               },
             ])
@@ -1035,12 +1031,12 @@ describe("workspace CRUD", () => {
                 {
                   aggregateID: session.id,
                   seq: 0,
-                  type: SyncEvent.versionedType(SessionNs.Event.Created.type, SessionNs.Event.Created.version),
+                  type: "session.created.1",
                 },
                 {
                   aggregateID: session.id,
                   seq: historyNextSeq,
-                  type: sessionUpdatedType(),
+                  type: "session.updated.1",
                 },
               ],
             })
@@ -1348,7 +1344,7 @@ describe("workspace sync state", () => {
                   id: `evt_${unique("history")}`,
                   aggregate_id: historySessionID!,
                   seq: historyNextSeq,
-                  type: sessionUpdatedType(),
+                  type: "session.updated.1",
                   data: { sessionID: historySessionID!, info: { title: "from history" } },
                 },
               ]),
@@ -1494,7 +1490,7 @@ describe("workspace sync state", () => {
                         id: `evt_${unique("sse")}`,
                         aggregateID: sseSessionID!,
                         seq: sseNextSeq,
-                        type: sessionUpdatedType(),
+                        type: "session.updated.1",
                         data: { sessionID: sseSessionID!, info: { title: "from sse" } },
                       },
                     },

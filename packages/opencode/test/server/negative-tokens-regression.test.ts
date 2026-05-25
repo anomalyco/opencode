@@ -8,7 +8,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { eq } from "drizzle-orm"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
@@ -18,6 +18,7 @@ import { PartTable } from "@opencode-ai/core/session/sql"
 import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const it = testEffect(Session.defaultLayer)
 
@@ -30,7 +31,7 @@ function seedNegativeTokenSession() {
       role: "user",
       sessionID: info.id,
       agent: "build",
-      model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
       time: { created: Date.now() },
     })
     const partID = PartID.ascending()

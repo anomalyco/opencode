@@ -21,7 +21,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
@@ -33,6 +33,7 @@ import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LLMEvent, Usage } from "@opencode-ai/llm"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
 
@@ -46,8 +47,8 @@ const summary = Layer.succeed(
 )
 
 const ref = {
-  providerID: ProviderID.make("test"),
-  modelID: ModelID.make("test-model"),
+  providerID: ProviderV2.ID.make("test"),
+  modelID: ProviderV2.ModelID.make("test-model"),
 }
 
 const usage = (input: ConstructorParameters<typeof Usage>[0]) => new Usage(input)

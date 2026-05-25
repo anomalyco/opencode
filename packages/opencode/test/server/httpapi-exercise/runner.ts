@@ -3,13 +3,14 @@ import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Cause, Duration, Effect } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
-import { ModelID, ProviderID } from "../../../src/provider/schema"
+
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
 import { call, callAuthProbe } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
 import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
@@ -148,8 +149,8 @@ function withContext<A, E>(
                 time: { created: Date.now() },
                 agent: "build",
                 model: {
-                  providerID: ProviderID.opencode,
-                  modelID: ModelID.make("test"),
+                  providerID: ProviderV2.ID.opencode,
+                  modelID: ProviderV2.ModelID.make("test"),
                 },
               }
               const part: SessionLegacy.TextPart = {

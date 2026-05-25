@@ -41,7 +41,7 @@ import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { ACPRuntime } from "./runtime"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "../provider/schema"
+
 import { MessageV2 } from "@/session/message-v2"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
@@ -51,6 +51,7 @@ import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, T
 import { applyPatch } from "diff"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ShellID } from "@/tool/shell/id"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -62,8 +63,8 @@ const log = Log.create({ service: "acp-agent" })
 
 async function getContextLimit(
   sdk: OpencodeClient,
-  providerID: ProviderID,
-  modelID: ModelID,
+  providerID: ProviderV2.ID,
+  modelID: ProviderV2.ModelID,
   directory: string,
 ): Promise<number | null> {
   const providers = await sdk.config
@@ -104,7 +105,7 @@ async function sendUsageUpdate(
 
   const msg = lastAssistant.info
   if (!msg.providerID || !msg.modelID) return
-  const size = await getContextLimit(sdk, ProviderID.make(msg.providerID), ModelID.make(msg.modelID), directory)
+  const size = await getContextLimit(sdk, ProviderV2.ID.make(msg.providerID), ProviderV2.ModelID.make(msg.modelID), directory)
 
   if (!size) {
     // Cannot calculate usage without known context size
@@ -579,7 +580,7 @@ export class Agent implements ACPAgent {
       }
     } catch (e) {
       const error = MessageV2.fromError(e, {
-        providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
+        providerID: ProviderV2.ID.make(this.config.defaultModel?.providerID ?? "unknown"),
       })
       if (LoadAPIKeyError.isInstance(error)) {
         throw RequestError.authRequired()
@@ -619,7 +620,7 @@ export class Agent implements ACPAgent {
       return result
     } catch (e) {
       const error = MessageV2.fromError(e, {
-        providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
+        providerID: ProviderV2.ID.make(this.config.defaultModel?.providerID ?? "unknown"),
       })
       if (LoadAPIKeyError.isInstance(error)) {
         throw RequestError.authRequired()
@@ -664,7 +665,7 @@ export class Agent implements ACPAgent {
       return response
     } catch (e) {
       const error = MessageV2.fromError(e, {
-        providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
+        providerID: ProviderV2.ID.make(this.config.defaultModel?.providerID ?? "unknown"),
       })
       if (LoadAPIKeyError.isInstance(error)) {
         throw RequestError.authRequired()
@@ -718,7 +719,7 @@ export class Agent implements ACPAgent {
       return mode
     } catch (e) {
       const error = MessageV2.fromError(e, {
-        providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
+        providerID: ProviderV2.ID.make(this.config.defaultModel?.providerID ?? "unknown"),
       })
       if (LoadAPIKeyError.isInstance(error)) {
         throw RequestError.authRequired()
@@ -752,7 +753,7 @@ export class Agent implements ACPAgent {
       return result
     } catch (e) {
       const error = MessageV2.fromError(e, {
-        providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
+        providerID: ProviderV2.ID.make(this.config.defaultModel?.providerID ?? "unknown"),
       })
       if (LoadAPIKeyError.isInstance(error)) {
         throw RequestError.authRequired()
@@ -1531,8 +1532,8 @@ export class Agent implements ACPAgent {
     if (lastUser?.role !== "user") return
 
     this.sessionManager.setModel(sessionId, {
-      providerID: ProviderID.make(lastUser.model.providerID),
-      modelID: ModelID.make(lastUser.model.modelID),
+      providerID: ProviderV2.ID.make(lastUser.model.providerID),
+      modelID: ProviderV2.ModelID.make(lastUser.model.modelID),
     })
     this.sessionManager.setVariant(sessionId, lastUser.model.variant)
     if (lastUser.agent) {
@@ -1658,7 +1659,7 @@ function imageContents(attachments: Array<{ mime: string; url: string }>): ToolC
   })
 }
 
-async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderID; modelID: ModelID }> {
+async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }> {
   const sdk = config.sdk
   const configured = config.defaultModel
   if (configured) return configured
@@ -1700,8 +1701,8 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
     const [best] = Provider.sort(Object.values(opencodeProvider.models))
     if (best) {
       return {
-        providerID: ProviderID.make(best.providerID),
-        modelID: ModelID.make(best.id),
+        providerID: ProviderV2.ID.make(best.providerID),
+        modelID: ProviderV2.ModelID.make(best.id),
       }
     }
   }
@@ -1710,8 +1711,8 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
   const [best] = Provider.sort(models)
   if (best) {
     return {
-      providerID: ProviderID.make(best.providerID),
-      modelID: ModelID.make(best.id),
+      providerID: ProviderV2.ID.make(best.providerID),
+      modelID: ProviderV2.ModelID.make(best.id),
     }
   }
 
@@ -1723,7 +1724,7 @@ async function lastUsedModel(
   sdk: OpencodeClient,
   directory: string,
   providers: Array<{ id: string; models: Record<string, unknown> }>,
-): Promise<{ providerID: ProviderID; modelID: ModelID } | undefined> {
+): Promise<{ providerID: ProviderV2.ID; modelID: ProviderV2.ModelID } | undefined> {
   const session = await sdk.session
     .list({ directory, roots: true, limit: 1 }, { throwOnError: true })
     .then((x) => x.data?.[0])
@@ -1745,8 +1746,8 @@ async function lastUsedModel(
   const provider = providers.find((entry) => entry.id === lastUser.model.providerID)
   if (!provider?.models[lastUser.model.modelID]) return
   return {
-    providerID: ProviderID.make(lastUser.model.providerID),
-    modelID: ModelID.make(lastUser.model.modelID),
+    providerID: ProviderV2.ID.make(lastUser.model.providerID),
+    modelID: ProviderV2.ModelID.make(lastUser.model.modelID),
   }
 }
 
@@ -1810,7 +1811,7 @@ function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
 
 function modelVariantsFromProviders(
   providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-  model: { providerID: ProviderID; modelID: ModelID },
+  model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID },
 ): string[] {
   const provider = providers.find((entry) => entry.id === model.providerID)
   if (!provider) return []
@@ -1844,7 +1845,7 @@ function buildAvailableModels(
 }
 
 function formatModelIdWithVariant(
-  model: { providerID: ProviderID; modelID: ModelID },
+  model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID },
   variant: string | undefined,
   availableVariants: string[],
   includeVariant: boolean,
@@ -1861,7 +1862,7 @@ function formatModelIdWithVariant(
 }
 
 function buildVariantMeta(input: {
-  model: { providerID: ProviderID; modelID: ModelID }
+  model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }
   variant?: string
   availableVariants: string[]
 }) {
@@ -1877,7 +1878,7 @@ function buildVariantMeta(input: {
 function parseModelSelection(
   modelId: string,
   providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-): { model: { providerID: ProviderID; modelID: ModelID }; variant?: string } {
+): { model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }; variant?: string } {
   const parsed = Provider.parseModel(modelId)
   const provider = providers.find((p) => p.id === parsed.providerID)
   if (!provider) {
@@ -1897,7 +1898,7 @@ function parseModelSelection(
     const baseModelInfo = provider.models[baseModelId]
     if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
       return {
-        model: { providerID: parsed.providerID, modelID: ModelID.make(baseModelId) },
+        model: { providerID: parsed.providerID, modelID: ProviderV2.ModelID.make(baseModelId) },
         variant: candidateVariant,
       }
     }

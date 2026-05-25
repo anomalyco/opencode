@@ -10,6 +10,8 @@ import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
+import { EventV2 } from "@opencode-ai/core/event"
+import { SessionV2 } from "@opencode-ai/core/session"
 
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
@@ -21,7 +23,6 @@ import { like } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -34,14 +35,14 @@ import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
-import { ModelID, ProviderID } from "@/provider/schema"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const log = Log.create({ service: "session" })
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
@@ -85,8 +86,8 @@ export function fromRow(row: SessionRow): Info {
     agent: row.agent ?? undefined,
     model: row.model
       ? {
-          id: ModelID.make(row.model.id),
-          providerID: ProviderID.make(row.model.providerID),
+          id: ProviderV2.ModelID.make(row.model.id),
+          providerID: ProviderV2.ID.make(row.model.providerID),
           variant: row.model.variant,
         }
       : undefined,
@@ -111,6 +112,13 @@ export function fromRow(row: SessionRow): Info {
       compacting: row.time_compacting ?? undefined,
       archived: row.time_archived ?? undefined,
     },
+  }
+}
+
+function eventLocation(info: Pick<Info, "directory" | "workspaceID">) {
+  return {
+    directory: AbsolutePath.make(info.directory),
+    workspaceID: info.workspaceID,
   }
 }
 
@@ -203,8 +211,8 @@ const Revert = Schema.Struct({
 })
 
 const Model = Schema.Struct({
-  id: ModelID,
-  providerID: ProviderID,
+  id: ProviderV2.ModelID,
+  providerID: ProviderV2.ID,
   variant: optionalOmitUndefined(Schema.String),
 })
 
@@ -334,25 +342,9 @@ const UpdatedEventSchema = Schema.Struct({
 })
 
 export const Event = {
-  Created: SyncEvent.define({
-    type: "session.created",
-    version: 1,
-    aggregate: "sessionID",
-    schema: CreatedEventSchema,
-  }),
-  Updated: SyncEvent.define({
-    type: "session.updated",
-    version: 1,
-    aggregate: "sessionID",
-    schema: UpdatedEventSchema,
-    busSchema: CreatedEventSchema,
-  }),
-  Deleted: SyncEvent.define({
-    type: "session.deleted",
-    version: 1,
-    aggregate: "sessionID",
-    schema: CreatedEventSchema,
-  }),
+  Created: BusEvent.define("session.created", SessionLegacy.Event.Created.data),
+  Updated: BusEvent.define("session.updated", SessionLegacy.Event.Updated.data),
+  Deleted: BusEvent.define("session.deleted", SessionLegacy.Event.Deleted.data),
   Diff: BusEvent.define(
     "session.diff",
     Schema.Struct({
@@ -474,6 +466,8 @@ export interface Interface {
   }) => Effect.Effect<void>
   readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
+  readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
+  readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionLegacy.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
@@ -505,12 +499,18 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 export const use = serviceUse(Service)
 
-export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
+export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" | "permission"> & {
+  time?: Partial<Info["time"]>
+  share?: Partial<NonNullable<Info["share"]>> | null
+  summary?: Info["summary"] | null
+  revert?: Info["revert"] | null
+  permission?: Info["permission"] | null
+}
 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service | Database.Service
+  BackgroundJob.Service | Bus.Service | Storage.Service | RuntimeFlags.Service | Database.Service | EventV2.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -518,8 +518,8 @@ export const layer: Layer.Layer<
     const database = yield* Database.Service
     const background = yield* BackgroundJob.Service
     const bus = yield* Bus.Service
+    const events = yield* EventV2.Service
     const storage = yield* Storage.Service
-    const sync = yield* SyncEvent.Service
     const flags = yield* RuntimeFlags.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
@@ -556,15 +556,12 @@ export const layer: Layer.Layer<
       }
       log.info("created", result)
 
-      yield* sync.run(Event.Created, { sessionID: result.id, info: result })
+      yield* events.publish(SessionLegacy.Event.Created, { sessionID: result.id, info: result }, { location: eventLocation(result) })
 
       if (!flags.experimentalWorkspaces) {
         // This only exist for backwards compatibility. We should not be
         // manually publishing this event; it is a sync event now
-        yield* bus.publish(Event.Updated, {
-          sessionID: result.id,
-          info: result,
-        })
+        yield* bus.publish(Event.Updated, { sessionID: result.id, info: result })
       }
 
       return result
@@ -609,8 +606,8 @@ export const layer: Layer.Layer<
           yield* remove(child.id)
         }
 
-        yield* sync.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
-        yield* sync.remove(sessionID)
+        yield* events.publish(SessionLegacy.Event.Deleted, { sessionID, info: session }, { location: eventLocation(session) })
+        yield* events.remove(sessionID)
       } catch (e) {
         log.error(e)
       }
@@ -618,17 +615,27 @@ export const layer: Layer.Layer<
 
     const updateMessage = <T extends SessionLegacy.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* sync.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg })
+        const session = yield* get(msg.sessionID)
+        yield* events.publish(
+          SessionLegacy.Event.MessageUpdated,
+          { sessionID: msg.sessionID, info: msg },
+          { location: eventLocation(session) },
+        )
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
     const updatePart = <T extends SessionLegacy.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* sync.run(MessageV2.Event.PartUpdated, {
-          sessionID: part.sessionID,
-          part: structuredClone(part),
-          time: Date.now(),
-        })
+        const session = yield* get(part.sessionID)
+        yield* events.publish(
+          SessionLegacy.Event.PartUpdated,
+          {
+            sessionID: part.sessionID,
+            part: structuredClone(part),
+            time: Date.now(),
+          },
+          { location: eventLocation(session) },
+        )
         return part
       }).pipe(Effect.withSpan("Session.updatePart"))
 
@@ -718,25 +725,40 @@ export const layer: Layer.Layer<
       return session
     })
 
-    const patch = (sessionID: SessionID, info: Patch) => sync.run(Event.Updated, { sessionID, info })
+    const patch = (sessionID: SessionID, info: Patch) =>
+      Effect.gen(function* () {
+        const current = yield* get(sessionID)
+        const next = {
+          ...current,
+          ...info,
+          time: info.time ? { ...current.time, ...info.time } : current.time,
+          share: info.share === null ? undefined : info.share ? { ...current.share, ...info.share } : current.share,
+          summary: info.summary === null ? undefined : (info.summary ?? current.summary),
+          revert: info.revert === null ? undefined : (info.revert ?? current.revert),
+          permission: info.permission === null ? undefined : (info.permission ?? current.permission),
+        } as Info
+        yield* events.publish(SessionLegacy.Event.Updated, { sessionID, info: next }, { location: eventLocation(next) })
+      })
 
     const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
-      yield* patch(sessionID, { time: { updated: Date.now() } })
+      yield* patch(sessionID, { time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
     const setTitle = Effect.fn("Session.setTitle")(function* (input: { sessionID: SessionID; title: string }) {
-      yield* patch(input.sessionID, { title: input.title })
+      yield* patch(input.sessionID, { title: input.title }).pipe(Effect.orDie)
     })
 
     const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
-      yield* patch(input.sessionID, { time: { archived: input.time } })
+      yield* patch(input.sessionID, { time: { archived: input.time } }).pipe(Effect.orDie)
     })
 
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
       sessionID: SessionID
       permission: Permission.Ruleset
     }) {
-      yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } })
+      yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } }).pipe(
+        Effect.orDie,
+      )
     })
 
     const setRevert = Effect.fn("Session.setRevert")(function* (input: {
@@ -744,18 +766,31 @@ export const layer: Layer.Layer<
       revert: Info["revert"]
       summary: Info["summary"]
     }) {
-      yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert })
+      yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert }).pipe(
+        Effect.orDie,
+      )
     })
 
     const clearRevert = Effect.fn("Session.clearRevert")(function* (sessionID: SessionID) {
-      yield* patch(sessionID, { time: { updated: Date.now() }, revert: null })
+      yield* patch(sessionID, { time: { updated: Date.now() }, revert: null }).pipe(Effect.orDie)
     })
 
     const setSummary = Effect.fn("Session.setSummary")(function* (input: {
       sessionID: SessionID
       summary: Info["summary"]
     }) {
-      yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
+      yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary }).pipe(Effect.orDie)
+    })
+
+    const setShare = Effect.fn("Session.setShare")(function* (input: { sessionID: SessionID; share: Info["share"] }) {
+      yield* patch(input.sessionID, { share: input.share ?? null, time: { updated: Date.now() } }).pipe(Effect.orDie)
+    })
+
+    const setWorkspace = Effect.fn("Session.setWorkspace")(function* (input: {
+      sessionID: SessionID
+      workspaceID: Info["workspaceID"]
+    }) {
+      yield* patch(input.sessionID, { workspaceID: input.workspaceID, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
@@ -793,10 +828,15 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* sync.run(MessageV2.Event.Removed, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-      })
+      const session = yield* get(input.sessionID)
+      yield* events.publish(
+        SessionLegacy.Event.MessageRemoved,
+        {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+        },
+        { location: eventLocation(session) },
+      )
       return input.messageID
     })
 
@@ -805,11 +845,16 @@ export const layer: Layer.Layer<
       messageID: MessageID
       partID: PartID
     }) {
-      yield* sync.run(MessageV2.Event.PartRemoved, {
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        partID: input.partID,
-      })
+      const session = yield* get(input.sessionID)
+      yield* events.publish(
+        SessionLegacy.Event.PartRemoved,
+        {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          partID: input.partID,
+        },
+        { location: eventLocation(session) },
+      )
       return input.partID
     })
 
@@ -854,6 +899,8 @@ export const layer: Layer.Layer<
       setRevert,
       clearRevert,
       setSummary,
+      setShare,
+      setWorkspace,
       diff,
       messages,
       children,
@@ -873,8 +920,9 @@ export const defaultLayer = layer.pipe(
   Layer.provide(BackgroundJob.defaultLayer),
   Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(SessionV2.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 

@@ -279,7 +279,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 id: event.data.callID,
                 name: event.data.name,
                 time: { created: event.data.timestamp },
-                state: { status: "pending", input: "" },
+                state: new SessionMessage.ToolStatePending({ status: "pending", input: "" }),
               }) as DraftTool,
             )
           }),

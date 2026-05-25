@@ -2,6 +2,7 @@ import { Effect, Exit, Layer, PubSub, Scope, Context, Stream, Schema } from "eff
 import { EffectBridge } from "@/effect/bridge"
 import * as Log from "@opencode-ai/core/util/log"
 import { BusEvent } from "./bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { GlobalBus } from "./global"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -12,7 +13,13 @@ import { InstanceRef } from "@/effect/instance-ref"
 
 const log = Log.create({ service: "bus" })
 
-type BusProperties<D extends BusEvent.Definition<string, Schema.Top>> = Schema.Schema.Type<D["properties"]>
+type BusDefinition = BusEvent.Definition<string, Schema.Top> | EventV2.Definition<string, Schema.Top>
+type BusSchema<D extends BusDefinition> = D extends { data: infer S extends Schema.Top }
+  ? S
+  : D extends { properties: infer S extends Schema.Top }
+    ? S
+    : never
+type BusProperties<D extends BusDefinition> = Schema.Schema.Type<BusSchema<D>>
 
 export const InstanceDisposed = BusEvent.define(
   "server.instance.disposed",
@@ -21,7 +28,7 @@ export const InstanceDisposed = BusEvent.define(
   }),
 )
 
-type Payload<D extends BusEvent.Definition = BusEvent.Definition> = {
+type Payload<D extends BusDefinition = BusDefinition> = {
   id: string
   type: D["type"]
   properties: BusProperties<D>
@@ -33,7 +40,7 @@ type State = {
 }
 
 export interface Interface {
-  readonly publish: <D extends BusEvent.Definition>(
+  readonly publish: <D extends BusDefinition>(
     def: D,
     properties: BusProperties<D>,
     options?: { id?: string },
@@ -44,11 +51,11 @@ export interface Interface {
   // Stream-returning shape acquired the subscription lazily on first pull,
   // opening a race window during which publishes were lost — see
   // test/bus/bus-effect.test.ts RACE tests.
-  readonly subscribe: <D extends BusEvent.Definition>(
+  readonly subscribe: <D extends BusDefinition>(
     def: D,
   ) => Effect.Effect<Stream.Stream<Payload<D>>, never, Scope.Scope>
   readonly subscribeAll: () => Effect.Effect<Stream.Stream<Payload>, never, Scope.Scope>
-  readonly subscribeCallback: <D extends BusEvent.Definition>(
+  readonly subscribeCallback: <D extends BusDefinition>(
     def: D,
     callback: (event: Payload<D>) => unknown,
   ) => Effect.Effect<() => void>
@@ -86,7 +93,7 @@ export const layer = Layer.effect(
       }),
     )
 
-    function getOrCreate<D extends BusEvent.Definition>(state: State, def: D) {
+    function getOrCreate<D extends BusDefinition>(state: State, def: D) {
       return Effect.gen(function* () {
         let ps = state.typed.get(def.type)
         if (!ps) {
@@ -97,7 +104,7 @@ export const layer = Layer.effect(
       })
     }
 
-    function publish<D extends BusEvent.Definition>(def: D, properties: BusProperties<D>, options?: { id?: string }) {
+    function publish<D extends BusDefinition>(def: D, properties: BusProperties<D>, options?: { id?: string }) {
       return Effect.gen(function* () {
         const s = yield* InstanceState.get(state)
         const payload: Payload = { id: options?.id ?? createID(), type: def.type, properties }
@@ -120,7 +127,7 @@ export const layer = Layer.effect(
       })
     }
 
-    const subscribe = <D extends BusEvent.Definition>(
+    const subscribe = <D extends BusDefinition>(
       def: D,
     ): Effect.Effect<Stream.Stream<Payload<D>>, never, Scope.Scope> =>
       Effect.gen(function* () {
@@ -169,7 +176,7 @@ export const layer = Layer.effect(
       })
     }
 
-    const subscribeCallback = Effect.fn("Bus.subscribeCallback")(function* <D extends BusEvent.Definition>(
+    const subscribeCallback = Effect.fn("Bus.subscribeCallback")(function* <D extends BusDefinition>(
       def: D,
       callback: (event: Payload<D>) => unknown,
     ) {

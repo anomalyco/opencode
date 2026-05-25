@@ -8,7 +8,7 @@ import { SessionRevert } from "./revert"
 import * as Session from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "../provider/schema"
+
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
@@ -239,8 +239,8 @@ export const layer = Layer.effect(
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
       session: Session.Info
       history: SessionLegacy.WithParts[]
-      providerID: ProviderID
-      modelID: ModelID
+      providerID: ProviderV2.ID
+      modelID: ProviderV2.ModelID
     }) {
       if (input.session.parentID) return
       if (!Session.isDefaultTitle(input.session.title)) return
@@ -651,8 +651,8 @@ export const layer = Layer.effect(
     })
 
     const getModel = Effect.fn("SessionPrompt.getModel")(function* (
-      providerID: ProviderID,
-      modelID: ModelID,
+      providerID: ProviderV2.ID,
+      modelID: ProviderV2.ModelID,
       sessionID: SessionID,
     ) {
       const exit = yield* provider.getModel(providerID, modelID).pipe(Effect.exit)
@@ -679,8 +679,8 @@ export const layer = Layer.effect(
         .pipe(Effect.orDie)
       if (current?.model) {
         return {
-          providerID: ProviderID.make(current.model.providerID),
-          modelID: ModelID.make(current.model.id),
+          providerID: ProviderV2.ID.make(current.model.providerID),
+          modelID: ProviderV2.ModelID.make(current.model.id),
           ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
         }
       }
@@ -1666,8 +1666,8 @@ export const defaultLayer = Layer.suspend(() =>
   ),
 )
 const ModelRef = Schema.Struct({
-  providerID: ProviderID,
-  modelID: ModelID,
+  providerID: ProviderV2.ID,
+  modelID: ProviderV2.ModelID,
 })
 
 export const PromptInput = Schema.Struct({

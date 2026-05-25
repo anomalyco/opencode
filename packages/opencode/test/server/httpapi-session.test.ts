@@ -8,7 +8,7 @@ import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
@@ -65,7 +65,7 @@ function createTextMessage(sessionID: SessionIDType, text: string) {
       role: "user",
       sessionID,
       agent: "build",
-      model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
       time: { created: Date.now() },
     })
     const part = yield* svc.updatePart({

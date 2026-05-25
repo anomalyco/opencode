@@ -20,7 +20,7 @@ import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { Git } from "../../src/git"
 import { Image } from "../../src/image/image"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
@@ -57,6 +57,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
 
@@ -70,8 +71,8 @@ const summary = Layer.succeed(
 )
 
 const ref = {
-  providerID: ProviderID.make("test"),
-  modelID: ModelID.make("test-model"),
+  providerID: ProviderV2.ID.make("test"),
+  modelID: ProviderV2.ModelID.make("test-model"),
 }
 
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
@@ -727,8 +728,8 @@ it.instance("failed subtask preserves metadata on error tool state", () =>
     expect(tool.state.metadata).toBeDefined()
     expect(tool.state.metadata?.sessionId).toBeDefined()
     expect(tool.state.metadata?.model).toEqual({
-      providerID: ProviderID.make("test"),
-      modelID: ModelID.make("missing-model"),
+      providerID: ProviderV2.ID.make("test"),
+      modelID: ProviderV2.ModelID.make("missing-model"),
     })
   }),
 )
@@ -2172,7 +2173,7 @@ noLLMServer.instance(
       const other = yield* prompt.prompt({
         sessionID: session.id,
         agent: "build",
-        model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
+        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ProviderV2.ModelID.make("kimi-k2.5-free") },
         noReply: true,
         parts: [{ type: "text", text: "hello" }],
       })
@@ -2187,8 +2188,8 @@ noLLMServer.instance(
       })
       if (match.info.role !== "user") throw new Error("expected user message")
       expect(match.info.model).toEqual({
-        providerID: ProviderID.make("test"),
-        modelID: ModelID.make("test-model"),
+        providerID: ProviderV2.ID.make("test"),
+        modelID: ProviderV2.ModelID.make("test-model"),
         variant: "xhigh",
       })
       expect(match.info.model.variant).toBe("xhigh")

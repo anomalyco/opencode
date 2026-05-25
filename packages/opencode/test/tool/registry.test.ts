@@ -31,10 +31,11 @@ import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
-import { ProviderID, ModelID } from "@/provider/schema"
+
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -148,8 +149,8 @@ describe("tool.registry", () => {
       const build = yield* agent.get("build")
       if (!build) throw new Error("build agent not found")
       const task = (yield* registry.tools({
-        providerID: ProviderID.opencode,
-        modelID: ModelID.make("test"),
+        providerID: ProviderV2.ID.opencode,
+        modelID: ProviderV2.ModelID.make("test"),
         agent: build,
       })).find((tool) => tool.id === "task")
 
@@ -335,8 +336,8 @@ describe("tool.registry", () => {
 
       const agents = yield* Agent.Service
       const promptTools = yield* registry.tools({
-        providerID: ProviderID.opencode,
-        modelID: ModelID.make("test"),
+        providerID: ProviderV2.ID.opencode,
+        modelID: ProviderV2.ModelID.make("test"),
         agent: yield* agents.defaultInfo(),
       })
       const promptTool = promptTools.find((tool) => tool.id === "sql")

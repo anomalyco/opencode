@@ -60,7 +60,7 @@ const publishConnected = Bus.use.publish(ServerEvent.Connected, {})
 
 const publishPartUpdated = (partID: ReturnType<typeof PartID.ascending>) => {
   const sessionID = SessionID.make(`ses_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
-  return SyncEvent.use.run(MessageV2.Event.PartUpdated, {
+  return Bus.use.publish(MessageV2.Event.PartUpdated, {
     sessionID,
     part: { id: partID, sessionID, messageID: MessageID.ascending(), type: "text", text: "diag" },
     time: Date.now(),

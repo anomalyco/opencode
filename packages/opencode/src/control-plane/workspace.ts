@@ -669,12 +669,7 @@ export const layer = Layer.effect(
         }
 
         if (input.workspaceID === null) {
-          yield* sync.run(Session.Event.Updated, {
-            sessionID: input.sessionID,
-            info: {
-              workspaceID: null,
-            },
-          })
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined })
 
           log.info("session warp complete", {
             workspaceID: input.workspaceID,
@@ -695,12 +690,7 @@ export const layer = Layer.effect(
         const target = yield* WorkspaceAdapterRuntime.target(space)
 
         if (target.type === "local") {
-          yield* sync.run(Session.Event.Updated, {
-            sessionID: input.sessionID,
-            info: {
-              workspaceID: input.workspaceID,
-            },
-          })
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
 
           log.info("session warp complete", {
             workspaceID: input.workspaceID,

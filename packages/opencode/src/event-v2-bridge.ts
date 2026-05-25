@@ -5,24 +5,11 @@ import { Bus as ProjectBus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
-import { SyncEvent } from "@/sync"
 import { EventV2 } from "@opencode-ai/core/event"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
 import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session/event"
 import { Context, Effect, Layer, Option, Stream } from "effect"
-
-export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {
-  const result = {
-    type: definition.type,
-    version: definition.sync?.version,
-    aggregate: definition.sync?.aggregate,
-    schema: definition.data,
-    properties: definition.data,
-  }
-  return result as SyncEvent.Definition<D["type"], D["data"], D["data"]>
-}
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
 
@@ -76,9 +63,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provideMerge(SessionProjector.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(ProjectBus.defaultLayer),
 )
 

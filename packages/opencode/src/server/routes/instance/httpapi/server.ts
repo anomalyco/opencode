@@ -46,6 +46,7 @@ import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Database } from "@opencode-ai/core/database/database"
 import { Skill } from "@/skill"
 import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "@/sync"
@@ -196,6 +197,7 @@ export function createRoutes(
       Auth.defaultLayer,
       Command.defaultLayer,
       Config.defaultLayer,
+      Database.defaultLayer,
       File.defaultLayer,
       FileWatcher.defaultLayer,
       Format.defaultLayer,

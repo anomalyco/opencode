@@ -1,6 +1,8 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
@@ -24,6 +26,8 @@ const it = testEffect(
       Layer.provide(Storage.defaultLayer),
       Layer.provide(SyncEvent.defaultLayer),
       Layer.provide(Database.defaultLayer),
+      Layer.provide(EventV2.defaultLayer),
+      Layer.provide(SessionProjector.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(BackgroundJob.defaultLayer),
     ),

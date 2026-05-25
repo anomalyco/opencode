@@ -8,7 +8,7 @@ import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
-import { ModelID } from "@/provider/schema"
+
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
@@ -19,6 +19,7 @@ import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const log = Log.create({ service: "session.tools" })
 
@@ -74,7 +75,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   })
 
   for (const item of yield* registry.tools({
-    modelID: ModelID.make(input.model.api.id),
+    modelID: ProviderV2.ModelID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
   })) {

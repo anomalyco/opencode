@@ -21,6 +21,7 @@ const log = Log.create({ service: "server.sync" })
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
+    const session = yield* Session.Service
     const scope = yield* Scope.Scope
     const sync = yield* SyncEvent.Service
 
@@ -61,12 +62,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
       const workspaceID = yield* InstanceState.workspaceID
       if (!workspaceID) return yield* new HttpApiError.BadRequest({})
 
-      yield* sync.run(Session.Event.Updated, {
-        sessionID: ctx.payload.sessionID,
-        info: {
-          workspaceID,
-        },
-      })
+      yield* session.setWorkspace({ sessionID: ctx.payload.sessionID, workspaceID })
 
       log.info("sync session stolen", {
         sessionID: ctx.payload.sessionID,

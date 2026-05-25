@@ -1,5 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID, PartID } from "./schema"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import {
   APIError,
   AbortedError,
@@ -14,14 +16,11 @@ import {
   SubtaskPart,
   User,
   WithParts,
-  type ModelID,
-  type ProviderID,
   type ToolPart,
 } from "@opencode-ai/core/session/legacy"
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import { SyncEvent } from "../sync"
 import { Database } from "@opencode-ai/core/database/database"
 import { NotFoundError } from "@/storage/storage"
 import { and } from "drizzle-orm"
@@ -56,47 +55,10 @@ function truncateToolOutput(text: string, maxChars?: number) {
   return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
 }
 
-const UpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: Info,
-})
-
-const RemovedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  messageID: MessageID,
-})
-
-const PartUpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  part: Part,
-  time: Schema.Number,
-})
-
-const PartRemovedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  messageID: MessageID,
-  partID: PartID,
-})
-
 export const Event = {
-  Updated: SyncEvent.define({
-    type: "message.updated",
-    version: 1,
-    aggregate: "sessionID",
-    schema: UpdatedEventSchema,
-  }),
-  Removed: SyncEvent.define({
-    type: "message.removed",
-    version: 1,
-    aggregate: "sessionID",
-    schema: RemovedEventSchema,
-  }),
-  PartUpdated: SyncEvent.define({
-    type: "message.part.updated",
-    version: 1,
-    aggregate: "sessionID",
-    schema: PartUpdatedEventSchema,
-  }),
+  Updated: BusEvent.define("message.updated", SessionLegacy.Event.MessageUpdated.data),
+  Removed: BusEvent.define("message.removed", SessionLegacy.Event.MessageRemoved.data),
+  PartUpdated: BusEvent.define("message.part.updated", SessionLegacy.Event.PartUpdated.data),
   PartDelta: BusEvent.define(
     "message.part.delta",
     Schema.Struct({
@@ -107,12 +69,7 @@ export const Event = {
       delta: Schema.String,
     }),
   ),
-  PartRemoved: SyncEvent.define({
-    type: "message.part.removed",
-    version: 1,
-    aggregate: "sessionID",
-    schema: PartRemovedEventSchema,
-  }),
+  PartRemoved: BusEvent.define("message.part.removed", SessionLegacy.Event.PartRemoved.data),
 }
 
 const Cursor = Schema.Struct({
@@ -656,7 +613,7 @@ export function latest(msgs: WithParts[]) {
 
 export function fromError(
   e: unknown,
-  ctx: { providerID: ProviderID; aborted?: boolean },
+  ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":

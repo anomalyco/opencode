@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "@/provider/transform"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -1089,8 +1089,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     const result = ProviderTransform.message(
       msgs,
       {
-        id: ModelID.make("deepseek/deepseek-chat"),
-        providerID: ProviderID.make("deepseek"),
+        id: ProviderV2.ModelID.make("deepseek/deepseek-chat"),
+        providerID: ProviderV2.ID.make("deepseek"),
         api: {
           id: "deepseek-chat",
           url: "https://api.deepseek.com",
@@ -1151,8 +1151,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     const result = ProviderTransform.message(
       msgs,
       {
-        id: ModelID.make("openai/gpt-4"),
-        providerID: ProviderID.make("openai"),
+        id: ProviderV2.ModelID.make("openai/gpt-4"),
+        providerID: ProviderV2.ID.make("openai"),
         api: {
           id: "gpt-4",
           url: "https://api.openai.com",

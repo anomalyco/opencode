@@ -103,6 +103,7 @@ export function definitions() {
 export interface PublishOptions {
   readonly id?: ID
   readonly metadata?: Record<string, unknown>
+  readonly location?: Location.Ref
 }
 
 export interface Interface {
@@ -236,7 +237,7 @@ export const layer = Layer.effect(
 
     function publish<D extends Definition>(definition: D, data: Data<D>, options?: PublishOptions) {
       return Effect.gen(function* () {
-        const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+        const location = options?.location ?? Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
         const event = {
           id: options?.id ?? ID.create(),
           ...(options?.metadata ? { metadata: options.metadata } : {}),

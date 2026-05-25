@@ -15,7 +15,7 @@ import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import type { Config } from "@/config/config"
 import { Session as SessionNs } from "@/session/session"
 import { errorMessage } from "../../src/util/error"
@@ -25,6 +25,7 @@ import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
@@ -311,7 +312,7 @@ function seedMessage(directory: string, sessionID: string) {
             role: "user",
             time: { created: Date.now() },
             agent: "test",
-            model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
             tools: {},
           } satisfies SessionLegacy.User)
           const part = yield* svc.updatePart({

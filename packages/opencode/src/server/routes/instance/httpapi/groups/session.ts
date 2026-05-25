@@ -1,7 +1,7 @@
 import { Permission } from "@/permission"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { PermissionID } from "@/permission/schema"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -23,6 +23,7 @@ import {
 import { ApiNotFoundError, PermissionNotFoundError, SessionBusyError } from "../errors"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const root = "/session"
 export const ListQuery = Schema.Struct({
@@ -55,13 +56,13 @@ export const UpdatePayload = Schema.Struct({
 })
 export const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"]))
 export const InitPayload = Schema.Struct({
-  modelID: ModelID,
-  providerID: ProviderID,
+  modelID: ProviderV2.ModelID,
+  providerID: ProviderV2.ID,
   messageID: MessageID,
 })
 export const SummarizePayload = Schema.Struct({
-  providerID: ProviderID,
-  modelID: ModelID,
+  providerID: ProviderV2.ID,
+  modelID: ProviderV2.ModelID,
   auto: Schema.optional(Schema.Boolean),
 })
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))

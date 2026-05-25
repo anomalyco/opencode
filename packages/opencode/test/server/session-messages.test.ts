@@ -4,19 +4,20 @@ import { Effect } from "effect"
 import { Server } from "../../src/server/server"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
 
 const it = testEffect(SessionNs.defaultLayer)
 
 const model = {
-  providerID: ProviderID.make("test"),
-  modelID: ModelID.make("test"),
+  providerID: ProviderV2.ID.make("test"),
+  modelID: ProviderV2.ModelID.make("test"),
 }
 
 afterEach(async () => {

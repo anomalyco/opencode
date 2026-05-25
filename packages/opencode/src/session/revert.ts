@@ -3,7 +3,6 @@ import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Bus } from "../bus"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
-import { SyncEvent } from "../sync"
 import * as Log from "@opencode-ai/core/util/log"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
@@ -37,7 +36,6 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
-    const sync = yield* SyncEvent.Service
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
@@ -121,10 +119,7 @@ export const layer = Layer.effect(
         remove.push(msg)
       }
       for (const msg of remove) {
-        yield* sync.run(MessageV2.Event.Removed, {
-          sessionID,
-          messageID: msg.info.id,
-        })
+        yield* sessions.removeMessage({ sessionID, messageID: msg.info.id })
       }
       if (session.revert.partID && target) {
         const partID = session.revert.partID
@@ -133,11 +128,7 @@ export const layer = Layer.effect(
           const removeParts = target.parts.slice(idx)
           target.parts = target.parts.slice(0, idx)
           for (const part of removeParts) {
-            yield* sync.run(MessageV2.Event.PartRemoved, {
-              sessionID,
-              messageID: target.info.id,
-              partID: part.id,
-            })
+            yield* sessions.removePart({ sessionID, messageID: target.info.id, partID: part.id })
           }
         }
       }
@@ -156,7 +147,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Storage.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
   ),
 )
 

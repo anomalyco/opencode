@@ -397,7 +397,6 @@ export const All = Schema.Union(
     mode: "oneOf",
   },
 ).pipe(Schema.toTaggedUnion("type"))
-
 export type Event = typeof All.Type
 export type Type = Event["type"]
 

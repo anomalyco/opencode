@@ -6,7 +6,7 @@ import { Account } from "@/account/account"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import type { SessionID } from "@/session/schema"
@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm"
 import { Config } from "@/config/config"
 import * as Log from "@opencode-ai/core/util/log"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const log = Log.create({ service: "share-next" })
 const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
@@ -290,7 +291,7 @@ export const layer = Layer.effect(
               .map((item) => [`${item.providerID}/${item.modelID}`, item] as const),
           ).values(),
         ),
-        (item) => provider.getModel(ProviderID.make(item.providerID), ModelID.make(item.modelID)),
+        (item) => provider.getModel(ProviderV2.ID.make(item.providerID), ProviderV2.ModelID.make(item.modelID)),
         { concurrency: 8 },
       )
 
