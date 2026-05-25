@@ -182,6 +182,7 @@ export const dict = {
   "dialog.provider.vercel.note": "使用 Vercel 账号或 API 密钥连接",
 
   "dialog.model.select.title": "选择模型",
+  "dialog.model.current": "当前模型",
   "dialog.model.search.placeholder": "搜索模型",
   "dialog.model.empty": "未找到模型",
   "dialog.model.manage": "管理模型",
