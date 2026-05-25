@@ -584,17 +584,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             <span data-slot="question-option-main">
               <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
               <textarea
-                ref={(el) =>
-                  setTimeout(() => {
-                    el.focus()
-                    el.style.height = "0px"
-                    el.style.height = `${el.scrollHeight}px`
-                  }, 0)
-                }
+                ref={(el) => setTimeout(() => el.focus(), 0)}
                 data-slot="question-custom-input"
                 placeholder={language.t("ui.question.custom.placeholder")}
                 value={input()}
-                rows={1}
+                rows={2}
                 disabled={store.sending}
                 onPaste={(e) => void pasteImage(e)}
                 onKeyDown={(e) => {
@@ -609,8 +603,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 }}
                 onInput={(e) => {
                   customUpdate(e.currentTarget.value)
-                  e.currentTarget.style.height = "0px"
-                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
                 }}
               />
               <PromptImageAttachments

@@ -1572,11 +1572,19 @@
     line-height: var(--line-height-large);
     color: var(--text-base);
     min-width: 0;
+    height: 2lh;
+    max-height: 4lh;
     cursor: text;
     resize: none;
-    overflow: hidden;
+    overflow-y: auto;
     overflow-wrap: anywhere;
     margin-top: 6px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
 
     &::placeholder {
       color: var(--text-weak);
