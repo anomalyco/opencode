@@ -284,6 +284,8 @@ export const dict = {
   "prompt.context.includeActiveFile": "包含作用中檔案",
   "prompt.context.removeActiveFile": "從上下文移除目前檔案",
   "prompt.context.removeFile": "從上下文移除檔案",
+  "prompt.context.chatQuoteLabel": "聊天引用",
+  "prompt.context.removeChatQuote": "移除聊天引用",
   "prompt.action.attachFile": "附加檔案",
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",

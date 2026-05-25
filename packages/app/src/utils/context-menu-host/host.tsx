@@ -52,8 +52,11 @@ type MenuState = {
   provider: SelectionProvider | null
   /** PDF/office 来源文件路径(SelectionResult.sourceMeta.path)。
    *  非空 → submitToChat 用卡片(FileContextItem)而非 textarea blockquote;
-   *  空 → chat 选区(无 source 文件),走老路径 markdown 引用块。 */
+   *  空 → 无 source 信息,走老路径 markdown 引用块。 */
   sourcePath: string
+  /** 选区来源种类。"file" = PDF/office 文件,"chat" = 聊天区。决定卡片视觉 + LLM 模板。
+   *  [feat: 聊天选区-卡片化-换行] 2026-05-25 */
+  sourceKind: "file" | "chat" | ""
 }
 
 type HighlightRect = { left: number; top: number; width: number; height: number }
@@ -67,6 +70,7 @@ const INITIAL_MENU: MenuState = {
   partial: false,
   provider: null,
   sourcePath: "",
+  sourceKind: "",
 }
 
 export function ContextMenuHost(props: {
@@ -255,6 +259,11 @@ export function ContextMenuHost(props: {
 
     applyHighlight(matched.sel)
     setComment("")
+    // FORK: sourceKind 区分 chat / pdf-office;chat 走聊天引用卡片 + LLM 模板分流
+    // [feat: 聊天选区-卡片化-换行] 2026-05-25
+    const metaKind = matched.sel.sourceMeta?.kind
+    const sourceKind: "chat" | "file" | "" =
+      metaKind === "chat" ? "chat" : metaKind === "pdf-office" ? "file" : ""
     setMenu({
       open: true,
       x: event.clientX,
@@ -264,6 +273,7 @@ export function ContextMenuHost(props: {
       partial: matched.sel.partial === true,
       provider: matched.provider,
       sourcePath: matched.sel.sourceMeta?.path ?? "",
+      sourceKind,
     })
   }
 
@@ -316,17 +326,16 @@ export function ContextMenuHost(props: {
     close()
     if (!m.text.trim() && !c.trim()) return
 
-    // FORK: PDF/office 选区走"卡片"路径(复用 FileContextItem),chat 选区仍走 markdown 引用块
-    // [feat: office-选中加聊天] 2026-05-25 user QA 反馈 textarea 长 blockquote 形势不好
+    // FORK: PDF/office + chat 选区都走"卡片"路径(复用 FileContextItem + commentOrigin="quote"),
+    // 由 kind 字段区分 LLM 模板(formatCommentNote 分流):
+    //   - kind="file" (PDF/office) → "comment regarding this file of {path}" 模板
+    //   - kind="chat" (聊天引用) → "user is quoting earlier in this conversation" 模板
+    // 卡片 UI 也按 kind 分流(file 显文件名 + file icon / chat 显"聊天引用" + bubble icon)。
+    // [feat: 聊天选区-卡片化-换行] 2026-05-25
     //
-    // 复用现有 file 上下文卡片:path=PDF 文件路径,preview=选中文字,comment=user 后续问题。
-    // 命中 build-request-parts 的 comment 分支 → formatCommentNote 自动拼出
-    // "The user made the following comment regarding this file of {path}: {comment}
-    //  Selected text: \"\"\"\n{preview}\n\"\"\"" 这种 LLM 友好的格式 + 同时附文件。
-    //
-    // 关键:commentID 用 preview 的 checksum 强制每次不同选区生成不同 key,
-    // 否则 contextItemKey 算法在没 selection 行号的情况下会把同 PDF 多次选区认为同一项 dedup 掉。
-    if (m.sourcePath) {
+    // 关键:commentID 用 preview 的 hash 强制每次不同选区生成不同 key,
+    // 否则 contextItemKey 算法在没 selection 行号的情况下会把同源多次选区认为同一项 dedup 掉。
+    if (m.sourceKind === "file" || m.sourceKind === "chat") {
       // 空 comment 时给个默认占位,formatCommentNote 才会把 preview 段拼进去(没 comment 它返回空)
       const effectiveComment = c.trim() || "(see selected text)"
       let hash = 0
@@ -341,6 +350,7 @@ export function ContextMenuHost(props: {
         preview: m.text,
         commentID,
         commentOrigin: "quote",
+        kind: m.sourceKind,
       })
       requestAnimationFrame(focusChatInput)
       showToast({
@@ -350,13 +360,11 @@ export function ContextMenuHost(props: {
       return
     }
 
-    // chat 选区无 sourcePath → 老路径:markdown 引用块塞 textarea
+    // sourceKind 为空(理论上不该出现,Provider 必返 sourceMeta;留兜底走老路径)
     const composed = composeQuotedMarkdown(m.text, c)
     if (!composed) return
     const current = prompt.current()
     const next = insertTextIntoPrompt(current, composed)
-    // 光标到末尾 + focus chat input,user 可立刻继续打字
-    // rAF 跟 prompt-input.tsx applyHistoryPrompt 同套路 — 等 store update 触发的 editor re-render 完再 focus
     prompt.set(next, promptLength(next))
     requestAnimationFrame(focusChatInput)
     showToast({

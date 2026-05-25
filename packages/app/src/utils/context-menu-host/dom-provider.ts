@@ -64,7 +64,18 @@ export class DomSelectionProvider implements SelectionProvider {
       (r) => r.width > 0 && r.height > 0,
     )
     const partial = inPdfViewer && this.spansMultiplePdfPages(range)
-    return { text: raw, rects, range, partial }
+
+    // FORK: chat 区(session-turn-list)选区也透传 sourceMeta,Host 据此走"卡片"路径
+    // kind="chat" 让 LLM 模板分流为 "user is quoting earlier in this conversation"。
+    // path 用固定标识 "<chat selection>"(LLM 端不会用它,卡片渲染也不显示),
+    // 真正区分多次选区靠 Host 生成 commentID=quote-{textHash}-{ts}。
+    // [feat: 聊天选区-卡片化-换行] 2026-05-25
+    const inChatRegion = target.closest('[data-slot="session-turn-list"]') != null
+    const sourceMeta = inChatRegion
+      ? ({ kind: "chat" as const, path: "<chat selection>" })
+      : undefined
+
+    return { text: raw, rects, range, partial, sourceMeta }
   }
 
   /**

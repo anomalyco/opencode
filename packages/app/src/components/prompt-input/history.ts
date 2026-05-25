@@ -13,6 +13,7 @@ export type PromptHistoryComment = {
   time: number
   origin?: "review" | "file" | "quote"
   preview?: string
+  kind?: "chat" | "file"
 }
 
 export type PromptHistoryEntry = {

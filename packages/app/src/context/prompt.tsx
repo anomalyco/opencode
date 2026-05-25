@@ -46,6 +46,9 @@ export type FileContextItem = {
   commentID?: string
   commentOrigin?: "review" | "file" | "quote"
   preview?: string
+  // FORK: 区分 quote 来源(chat 聊天引用 vs file 文件引用) — 影响卡片视觉 + LLM 模板
+  // [feat: 聊天选区-卡片化-换行] 2026-05-25
+  kind?: "chat" | "file"
 }
 
 export type ContextItem = FileContextItem

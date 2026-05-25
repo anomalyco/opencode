@@ -6,6 +6,9 @@ export type PromptComment = {
   comment: string
   preview?: string
   origin?: "review" | "file" | "quote"
+  // FORK: quote 子分类 — "chat" = 聊天引用走 LLM 模板分流;"file" / undefined = 文件引用
+  // [feat: 聊天选区-卡片化-换行] 2026-05-25
+  kind?: "chat" | "file"
 }
 
 function selection(selection: unknown) {
@@ -31,6 +34,7 @@ export function createCommentMetadata(input: PromptComment) {
       comment: input.comment,
       preview: input.preview,
       origin: input.origin,
+      kind: input.kind,
     },
   }
 }
@@ -44,12 +48,14 @@ export function readCommentMetadata(value: unknown) {
   if (typeof path !== "string" || typeof comment !== "string") return
   const preview = (meta as { preview?: unknown }).preview
   const origin = (meta as { origin?: unknown }).origin
+  const kind = (meta as { kind?: unknown }).kind
   return {
     path,
     selection: selection((meta as { selection?: unknown }).selection),
     comment,
     preview: typeof preview === "string" ? preview : undefined,
     origin: origin === "review" || origin === "file" || origin === "quote" ? origin : undefined,
+    kind: kind === "chat" || kind === "file" ? kind : undefined,
   } satisfies PromptComment
 }
 
@@ -58,7 +64,18 @@ export function formatCommentNote(input: {
   selection?: FileSelection
   comment: string
   preview?: string
+  kind?: "chat" | "file"
 }) {
+  // FORK: kind="chat" 走聊天引用模板,让 LLM 明白引文来自同一对话历史(继承上下文)
+  // [feat: 聊天选区-卡片化-换行] 2026-05-25
+  if (input.kind === "chat") {
+    const preview = input.preview?.trim()
+    const quoteSection = preview
+      ? `The user is quoting text from earlier in this conversation:\n"""\n${preview}\n"""\n\n`
+      : ""
+    return `${quoteSection}Their follow-up question/comment: ${input.comment}`
+  }
+
   const start = input.selection ? Math.min(input.selection.startLine, input.selection.endLine) : undefined
   const end = input.selection ? Math.max(input.selection.startLine, input.selection.endLine) : undefined
   const range =
