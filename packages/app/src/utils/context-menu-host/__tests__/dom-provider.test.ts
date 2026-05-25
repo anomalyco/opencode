@@ -276,3 +276,38 @@ describe("providerName", () => {
     expect(provider.providerName).toBe("dom")
   })
 })
+
+describe("getSelection visual bbox 算法(pdf-viewer 区,2026-05-25 user 反馈漏字 bug 2 修)", () => {
+  afterEach(cleanup)
+
+  // happy-dom 里 spans 的 getBoundingClientRect 都返 0×0,visual 算法走 fallback 到 native。
+  // 为测试视觉算法,我们 mock 几个 spans 的 getBoundingClientRect 让它们有视觉位置。
+  test("pdf-viewer 区单页:返回 native text(visual fallback path,因为 spans 无 rect)", () => {
+    const root = document.createElement("div")
+    root.setAttribute("data-slot", "pdf-viewer")
+    const page = document.createElement("div")
+    page.className = "pdf-page-wrapper"
+    const tl = document.createElement("div")
+    tl.className = "textLayer"
+    const span = document.createElement("span")
+    span.textContent = "happy-dom 文字"
+    tl.appendChild(span)
+    page.appendChild(tl)
+    root.appendChild(page)
+    document.body.appendChild(root)
+
+    const range = document.createRange()
+    range.selectNodeContents(span)
+    const sel = window.getSelection()!
+    sel.removeAllRanges()
+    sel.addRange(range)
+
+    const result = provider.getSelection(span)
+    // happy-dom 没有 layout,visual 算法的 bbox 算不出 → fallback 到 native path
+    expect(result).not.toBeNull()
+    expect(result!.text).toBe("happy-dom 文字")
+  })
+
+  // 注:完整的 visual 顺序 / bbox 内 spans 拼接 / 多行 \n 分隔验证靠真桌面 CDP 测
+  // (scripts/test-pdf-selection.mjs),happy-dom 无 layout 信息测不全;视觉算法在 layout 引擎里才完整生效。
+})

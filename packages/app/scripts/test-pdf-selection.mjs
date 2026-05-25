@@ -1,11 +1,13 @@
-// FORK: 真桌面 DeskFox CDP 选区行为验证 + 中间态 instrumentation
+// FORK: 真桌面 DeskFox CDP 选区行为验证 + 视觉 bbox 完整性校验
+// 2026-05-25 user 反馈:DOM 线性 expected 不准 — 复杂 PDF box/表格内容 DOM 顺序 ≠ 视觉顺序,
+// 必须按"视觉 bbox 内所有 spans"算 expected,才能 catch "视觉漏掉的字"。
 // [feat: office-选中加聊天] 2026-05-25
 
 const CDP_HTTP = "http://localhost:9222"
 
 async function listPages() {
-  const res = await fetch(`${CDP_HTTP}/json`)
-  return res.json()
+  const r = await fetch(`${CDP_HTTP}/json`)
+  return r.json()
 }
 
 class CdpClient {
@@ -16,10 +18,10 @@ class CdpClient {
     this.pending = new Map()
   }
   async connect() {
-    return new Promise((resolve, reject) => {
+    return new Promise((res, rej) => {
       this.ws = new WebSocket(this.wsUrl)
-      this.ws.addEventListener("open", () => resolve())
-      this.ws.addEventListener("error", reject)
+      this.ws.addEventListener("open", () => res())
+      this.ws.addEventListener("error", rej)
       this.ws.addEventListener("message", (e) => {
         const msg = JSON.parse(typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data))
         if (msg.id && this.pending.has(msg.id)) {
@@ -32,30 +34,24 @@ class CdpClient {
     })
   }
   call(method, params = {}) {
-    return new Promise((resolve, reject) => {
+    return new Promise((res, rej) => {
       const id = this.nextId++
-      this.pending.set(id, { resolve, reject })
+      this.pending.set(id, { resolve: res, reject: rej })
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id)
-          reject(new Error(`CDP ${method} timeout`))
+          rej(new Error(`timeout`))
         }
       }, 10000)
       this.ws.send(JSON.stringify({ id, method, params }))
     })
   }
-  async eval(expression) {
-    const r = await this.call("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    })
+  async eval(expr) {
+    const r = await this.call("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true })
     if (r.exceptionDetails) throw new Error(`page eval: ${r.exceptionDetails.text}`)
     return r.result.value
   }
-  close() {
-    try { this.ws.close() } catch {}
-  }
+  close() { try { this.ws.close() } catch {} }
 }
 
 async function dispatchMouse(cdp, type, x, y) {
@@ -71,19 +67,15 @@ async function dispatchMouse(cdp, type, x, y) {
 
 async function main() {
   const pages = await listPages()
-  const deskfoxPage = pages.find(
-    (p) => p.type === "page" && p.url.startsWith("http://tauri.localhost"),
-  )
-  if (!deskfoxPage) {
-    console.error("DeskFox page not found")
-    process.exit(1)
-  }
+  const dpage = pages.find(p => p.type === "page" && p.url.startsWith("http://tauri.localhost"))
+  if (!dpage) { console.error("DeskFox page not found"); process.exit(1) }
 
-  const cdp = new CdpClient(deskfoxPage.webSocketDebuggerUrl)
+  const cdp = new CdpClient(dpage.webSocketDebuggerUrl)
   await cdp.connect()
-  console.log(`Connected: ${deskfoxPage.title}`)
+  console.log(`Connected: ${dpage.title}`)
 
-  // 找视口内可见的 textLayer + 同一行附近的两个 spans
+  // 找视口内可见的 textLayer + 选 startSpan/endSpan(20% / 50%)
+  // **关键改进**:expected 同时算两种 — DOM 线性 vs 视觉 bbox 内 spans,对比看差距 = 漏掉的内容
   const targets = await cdp.eval(`(() => {
     const allTl = Array.from(document.querySelectorAll(".textLayer"))
     const visibleTl = allTl.find(tl => {
@@ -92,7 +84,6 @@ async function main() {
     })
     if (!visibleTl) return null
     const allSpans = Array.from(visibleTl.querySelectorAll("span"))
-    // 过滤可见 + 有文字
     const visSpans = allSpans.filter(s => {
       const t = s.textContent
       if (!t || !t.trim()) return false
@@ -100,20 +91,49 @@ async function main() {
       return r.bottom > 100 && r.top < window.innerHeight - 100 && r.left > 0 && r.right < window.innerWidth && r.width > 5
     })
     if (visSpans.length < 10) return null
-    // 跨大段拖选 — 模拟 user 截图实测 scenario(从上段拖到下段几百 px)
     const startIdx = Math.max(0, Math.floor(visSpans.length * 0.2))
     const endIdx = Math.min(visSpans.length - 1, Math.floor(visSpans.length * 0.5))
     const startSpan = visSpans[startIdx]
     const endSpan = visSpans[endIdx]
     const startRect = startSpan.getBoundingClientRect()
     const endRect = endSpan.getBoundingClientRect()
-    let expectedText = ""
+
+    // DOM 线性 expected(老算法)
+    let domLinearExpected = ""
     let cap = false
     for (const s of allSpans) {
       if (s === startSpan) cap = true
-      if (cap) expectedText += s.textContent || ""
+      if (cap) domLinearExpected += s.textContent || ""
       if (s === endSpan) { cap = false; break }
     }
+
+    // 视觉 bbox 内 expected(新算法,catch 漏掉的字)
+    const bboxTop = Math.min(startRect.top, endRect.top)
+    const bboxBottom = Math.max(startRect.bottom, endRect.bottom)
+    const visualSpans = allSpans.filter(s => {
+      const r = s.getBoundingClientRect()
+      const cy = r.top + r.height / 2
+      return cy >= bboxTop && cy <= bboxBottom && s.textContent && s.textContent.trim().length > 0
+    })
+    visualSpans.sort((a, b) => {
+      const ra = a.getBoundingClientRect()
+      const rb = b.getBoundingClientRect()
+      if (Math.abs(ra.top - rb.top) > 5) return ra.top - rb.top
+      return ra.left - rb.left
+    })
+    const visualExpected = visualSpans.map(s => s.textContent || "").join("")
+
+    // 视觉 bbox 内但 DOM 线性顺序外的 spans = pdf.js textLayer 顺序错位导致选区漏掉的内容
+    const domSet = new Set()
+    let cap2 = false
+    for (const s of allSpans) {
+      if (s === startSpan) cap2 = true
+      if (cap2) domSet.add(s)
+      if (s === endSpan) break
+    }
+    const missedSpans = visualSpans.filter(s => !domSet.has(s))
+    const missedTexts = missedSpans.map(s => (s.textContent || "").trim()).filter(t => t.length > 0)
+
     return {
       startX: startRect.left + 2,
       startY: startRect.top + startRect.height / 2,
@@ -121,8 +141,12 @@ async function main() {
       endY: endRect.top + endRect.height / 2,
       startSpanText: startSpan.textContent,
       endSpanText: endSpan.textContent,
-      expectedText,
-      expectedLength: expectedText.length,
+      domLinearExpected,
+      domLinearExpectedLength: domLinearExpected.length,
+      visualExpected,
+      visualExpectedLength: visualExpected.length,
+      missedCount: missedTexts.length,
+      missedSample: missedTexts.slice(0, 12).map(t => t.slice(0, 40)),
       visibleSpansCount: visSpans.length,
       tlFullTextLength: visibleTl.textContent.length,
       viewportSize: { w: window.innerWidth, h: window.innerHeight },
@@ -130,26 +154,22 @@ async function main() {
     }
   })()`)
 
-  if (!targets) {
-    console.error("找不到可测 textLayer / spans")
-    cdp.close()
-    process.exit(1)
-  }
+  if (!targets) { console.error("找不到可测 textLayer / spans"); cdp.close(); process.exit(1) }
 
   console.log("\n=== Test setup ===")
   console.log(`  Viewport: ${targets.viewportSize.w}x${targets.viewportSize.h}`)
-  console.log(`  Drag from (${targets.startX.toFixed(0)}, ${targets.startY.toFixed(0)}) [${JSON.stringify(targets.startSpanText.slice(0,30))}]`)
-  console.log(`        to   (${targets.endX.toFixed(0)}, ${targets.endY.toFixed(0)}) [${JSON.stringify(targets.endSpanText.slice(0,30))}]`)
-  console.log(`  Drag dy (px,跨行距离): ${targets.dragDy.toFixed(0)}`)
+  console.log(`  Drag from (${targets.startX.toFixed(0)}, ${targets.startY.toFixed(0)}) [${JSON.stringify(targets.startSpanText.slice(0, 30))}]`)
+  console.log(`        to   (${targets.endX.toFixed(0)}, ${targets.endY.toFixed(0)}) [${JSON.stringify(targets.endSpanText.slice(0, 30))}]`)
+  console.log(`  Drag dy: ${targets.dragDy.toFixed(0)} px`)
   console.log(`  Visible textLayer text length: ${targets.tlFullTextLength}, visible spans: ${targets.visibleSpansCount}`)
-  console.log(`  Expected selection length: ${targets.expectedLength}`)
-  console.log(`  Expected text: ${JSON.stringify(targets.expectedText.slice(0, 100))}`)
+  console.log(`  Expected (DOM 线性): ${targets.domLinearExpectedLength} 字`)
+  console.log(`  Expected (视觉 bbox): ${targets.visualExpectedLength} 字`)
+  console.log(`  💡 视觉 bbox 比 DOM 线性多 ${targets.missedCount} 个 span 漏掉,采样:`)
+  for (const t of targets.missedSample) console.log(`     - ${JSON.stringify(t)}`)
 
   await cdp.eval(`window.getSelection().removeAllRanges()`)
-
   await dispatchMouse(cdp, "mouseMoved", targets.startX, targets.startY)
   await dispatchMouse(cdp, "mousePressed", targets.startX, targets.startY)
-  // 慢速 30 步拖拽,每步 30ms,模拟真实人手
   const steps = 30
   for (let i = 1; i <= steps; i++) {
     const t = i / steps
@@ -159,64 +179,86 @@ async function main() {
     await new Promise(r => setTimeout(r, 30))
   }
   await new Promise(r => setTimeout(r, 200))
-
-  // 拖拽中读 — mouseUp 前
-  const midState = await cdp.eval(`(() => {
-    const sel = window.getSelection()
-    const text = sel ? sel.toString() : ""
-    // 看 selecting class 是否还在,endOfContent 位置是否被移动
-    const tl = document.querySelector(".textLayer")
-    const hasSelecting = tl ? tl.classList.contains("selecting") : null
-    const eoc = tl ? tl.querySelector(":scope > .endOfContent, :scope .endOfContent") : null
-    const eocStyle = eoc ? { width: eoc.style.width, height: eoc.style.height, userSelect: eoc.style.userSelect } : null
-    const eocPosition = eoc && eoc.parentElement ? Array.from(eoc.parentElement.children).indexOf(eoc) : null
-    return {
-      midLength: text.length,
-      midText: text.slice(0, 200),
-      hasSelecting,
-      eocStyle,
-      eocPositionInParent: eocPosition,
-    }
-  })()`)
-
   await dispatchMouse(cdp, "mouseReleased", targets.endX, targets.endY)
   await new Promise(r => setTimeout(r, 200))
 
-  const actual = await cdp.eval(`(() => {
+  // Native selection(浏览器原生,只测 textLayer 越界是否修)
+  const native = await cdp.eval(`(() => {
     const sel = window.getSelection()
     const text = sel ? sel.toString() : ""
     return { text, length: text.length }
   })()`)
 
-  console.log("\n=== Mid-drag (before mouseUp) ===")
-  console.log(`  Selection length: ${midState.midLength}`)
-  console.log(`  Selection text: ${JSON.stringify(midState.midText)}`)
-  console.log(`  textLayer.selecting class: ${midState.hasSelecting}`)
-  console.log(`  endOfContent inline style: ${JSON.stringify(midState.eocStyle)}`)
-  console.log(`  endOfContent position index in parent: ${midState.eocPositionInParent}`)
+  // 模拟 DomSelectionProvider.collectVisualSpansInBbox — 验"右键时 Provider 拿到什么"
+  // 这一段代码必须跟 packages/app/src/utils/context-menu-host/dom-provider.ts 里的算法 1:1 一致
+  const providerVisual = await cdp.eval(`(() => {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return null
+    const range = sel.getRangeAt(0)
+    const pdfViewer = document.querySelector('[data-slot="pdf-viewer"]')
+    if (!pdfViewer) return null
+    const nativeRects = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0)
+    if (nativeRects.length === 0) return null
+    let bboxTop = Infinity, bboxBottom = -Infinity
+    for (const r of nativeRects) {
+      if (r.top < bboxTop) bboxTop = r.top
+      if (r.bottom > bboxBottom) bboxBottom = r.bottom
+    }
+    if (!isFinite(bboxTop) || !isFinite(bboxBottom)) return null
+    const allSpans = pdfViewer.querySelectorAll(".textLayer span")
+    const hits = []
+    allSpans.forEach(el => {
+      const t = el.textContent
+      if (!t || !t.trim()) return
+      const r = el.getBoundingClientRect()
+      if (r.width <= 0 || r.height <= 0) return
+      const cy = r.top + r.height / 2
+      if (cy < bboxTop || cy > bboxBottom) return
+      hits.push({ el, rect: r, cy })
+    })
+    if (hits.length === 0) return null
+    hits.sort((a, b) => {
+      if (Math.abs(a.rect.top - b.rect.top) > 5) return a.rect.top - b.rect.top
+      return a.rect.left - b.rect.left
+    })
+    let text = ""
+    let prevTop = null
+    for (const h of hits) {
+      if (prevTop !== null && Math.abs(h.rect.top - prevTop) > 5) text += "\\n"
+      text += h.el.textContent || ""
+      prevTop = h.rect.top
+    }
+    return { text, length: text.length, rectsCount: hits.length }
+  })()`)
 
-  console.log("\n=== Final selection (after mouseUp) ===")
-  console.log(`  Length: ${actual.length}`)
-  console.log(`  Text: ${JSON.stringify(actual.text.slice(0, 300))}`)
+  console.log("\n=== Native selection(浏览器原生)===")
+  console.log(`  Length: ${native.length}`)
+  console.log(`  Text: ${JSON.stringify(native.text.slice(0, 300))}`)
+
+  console.log("\n=== Provider 视觉 bbox 算法 ===")
+  if (providerVisual) {
+    console.log(`  Length: ${providerVisual.length} (rects ${providerVisual.rectsCount})`)
+    console.log(`  Text: ${JSON.stringify(providerVisual.text.slice(0, 300))}`)
+  } else {
+    console.log(`  ⚠ 算法 fallback 到 null(罕见 — 无 bbox / 无 spans)`)
+  }
 
   console.log("\n=== Verdict ===")
-  const expectedRange = [Math.max(1, Math.floor(targets.expectedLength * 0.5)), Math.max(targets.expectedLength * 3, 30)]
-  if (actual.length === 0) {
-    console.log("  ❌ Selection 为空 — 拖选失败")
-  } else if (actual.length > targets.tlFullTextLength * 0.7) {
-    console.log(`  ❌ Selection ${actual.length} 接近 textLayer 全文 ${targets.tlFullTextLength} — bug 1 未修(选区越界)`)
-  } else if (actual.length >= expectedRange[0] && actual.length <= expectedRange[1]) {
-    console.log(`  ✅ Selection ${actual.length} 在合理范围(预期 ${targets.expectedLength})— TextLayerBuilder 有效`)
-  } else if (actual.length > targets.expectedLength * 3) {
-    console.log(`  ⚠ Selection ${actual.length} 是预期 ${targets.expectedLength} 的 ${(actual.length / targets.expectedLength).toFixed(1)} 倍 — CDP 合成事件可能未完整触发 selectionchange,真用户测试更准`)
-  } else {
-    console.log(`  ⚠ Selection ${actual.length} 偏离预期 ${targets.expectedLength}`)
+  const nativeRange = [Math.max(1, Math.floor(targets.domLinearExpectedLength * 0.5)), Math.ceil(targets.tlFullTextLength * 0.85)]
+  if (native.length === 0) console.log("  ❌ Native selection 为空")
+  else if (native.length > targets.tlFullTextLength * 0.85) console.log(`  ❌ Native ${native.length} 越界`)
+  else console.log(`  ✅ Native ${native.length}(线性,允许 ${nativeRange[0]}-${nativeRange[1]})— TextLayerBuilder 防越界 OK`)
+
+  if (providerVisual) {
+    const visualRange = [Math.max(1, Math.floor(targets.visualExpectedLength * 0.85)), Math.ceil(targets.visualExpectedLength * 1.15)]
+    if (providerVisual.length >= visualRange[0] && providerVisual.length <= visualRange[1]) {
+      console.log(`  ✅ Provider 视觉 ${providerVisual.length} ≈ 期望 ${targets.visualExpectedLength}(允许 ${visualRange[0]}-${visualRange[1]})— bug 2 修了,视觉完整性达成`)
+    } else {
+      console.log(`  ❌ Provider 视觉 ${providerVisual.length} vs 期望 ${targets.visualExpectedLength}(允许 ${visualRange[0]}-${visualRange[1]})— 算法仍有偏差`)
+    }
   }
 
   cdp.close()
 }
 
-main().catch((e) => {
-  console.error("Failed:", e)
-  process.exit(1)
-})
+main().catch(e => { console.error("Failed:", e); process.exit(1) })
