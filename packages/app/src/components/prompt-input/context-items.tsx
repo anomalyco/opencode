@@ -18,7 +18,9 @@ type ContextItemsProps = {
 export const PromptContextItems: Component<ContextItemsProps> = (props) => {
   return (
     <Show when={props.items.length > 0}>
-      <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
+      {/* FORK: 卡片多了从横向滚改为自动换行,max-h 兜底防止挤压聊天区
+            [feat: 聊天选区-卡片化-换行] 2026-05-25 */}
+      <div class="flex flex-wrap items-start gap-2 p-2 max-h-[140px] overflow-y-auto">
         <For each={props.items}>
           {(item) => {
             const directory = getDirectory(item.path)
