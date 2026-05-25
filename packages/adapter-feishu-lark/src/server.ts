@@ -295,8 +295,6 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           enabled: account.enabled,
           model: account.model ?? null,
           botName: account.botName ?? "",
-          // [feat: feishu-create-group-toggle-gui] 2026-05-24 暴露当前 flag 给 GUI 显示
-          enableAutoGroupCreate: account.enableAutoGroupCreate,
           // [feat: feishu-group-mention-policy] 2026-05-24 暴露 requireMention 给 GUI
           requireMention: account.requireMention,
         }))
@@ -342,15 +340,15 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
       return jsonResponse({ updated: true, model: cleanModel }, 200)
     }
 
-    // POST /accounts/update-settings — body: { accountId, model?, enableAutoGroupCreate?, requireMention? }
+    // POST /accounts/update-settings — body: { accountId, model?, requireMention? }
     // [feat: feishu-create-group-toggle-gui] 2026-05-24 — partial update
     // [feat: feishu-group-mention-policy] 2026-05-24 — 扩 requireMention 字段
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate 字段
     // 任一字段子集都接受,空 patch reject 防 noop,未知字段 reject 防 schema injection。
     if (req.method === "POST" && url.pathname === "/accounts/update-settings") {
       let body: {
         accountId?: string
         model?: { providerID?: string; modelID?: string } | null
-        enableAutoGroupCreate?: boolean
         requireMention?: boolean
       } & Record<string, unknown>
       try {
@@ -362,12 +360,7 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
         return jsonResponse({ error: "missing_account_id" }, 400)
       }
       // 白名单字段校验 — 拒绝未知字段防 schema injection
-      const allowed = new Set([
-        "accountId",
-        "model",
-        "enableAutoGroupCreate",
-        "requireMention",
-      ])
+      const allowed = new Set(["accountId", "model", "requireMention"])
       const unknown = Object.keys(body).filter((k) => !allowed.has(k))
       if (unknown.length > 0) {
         return jsonResponse(
@@ -377,24 +370,17 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
       }
       // partial:必须至少一项 settings(单 accountId 不算改动)
       const hasModel = "model" in body
-      const hasFlag = "enableAutoGroupCreate" in body
       const hasReqMention = "requireMention" in body
-      if (!hasModel && !hasFlag && !hasReqMention) {
+      if (!hasModel && !hasReqMention) {
         return jsonResponse(
           {
             error: "empty_patch",
-            message: "至少需要 model / enableAutoGroupCreate / requireMention 之一",
+            message: "至少需要 model / requireMention 之一",
           },
           400,
         )
       }
       // 类型校验
-      if (hasFlag && typeof body.enableAutoGroupCreate !== "boolean") {
-        return jsonResponse(
-          { error: "invalid_field", field: "enableAutoGroupCreate", expected: "boolean" },
-          400,
-        )
-      }
       if (hasReqMention && typeof body.requireMention !== "boolean") {
         return jsonResponse(
           { error: "invalid_field", field: "requireMention", expected: "boolean" },
@@ -408,9 +394,6 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           m && m.providerID && m.modelID
             ? { providerID: m.providerID, modelID: m.modelID }
             : null
-      }
-      if (hasFlag) {
-        patch.enableAutoGroupCreate = body.enableAutoGroupCreate!
       }
       if (hasReqMention) {
         patch.requireMention = body.requireMention!

@@ -102,8 +102,6 @@ export const SettingsFeishu: Component = () => {
           <x.FeishuEditAccountDialog
             accountId={acc.account_id}
             currentModel={acc.model ?? null}
-            // [feat: feishu-create-group-toggle-gui] 2026-05-24
-            currentEnableAutoGroupCreate={acc.enable_auto_group_create ?? false}
             // [feat: feishu-group-mention-policy] 2026-05-24
             currentRequireMention={acc.require_mention ?? true}
             onSaved={() => refetch()}

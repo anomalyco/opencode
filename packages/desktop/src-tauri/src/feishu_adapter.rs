@@ -334,9 +334,7 @@ pub struct AccountSummary {
     pub enabled: Option<bool>,
     pub model: Option<ModelRef>,
     pub bot_name: Option<String>,
-    /// [feat: feishu-create-group-toggle-gui] 2026-05-24 — 当前 enableAutoGroupCreate
-    #[serde(default)]
-    pub enable_auto_group_create: Option<bool>,
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enable_auto_group_create 字段
     /// [feat: feishu-group-mention-policy] 2026-05-24 — 当前 requireMention
     #[serde(default)]
     pub require_mention: Option<bool>,
@@ -394,8 +392,6 @@ pub async fn feishu_save_account(
         enabled: None,
         model: None,
         bot_name: r.bot_name,
-        // 新绑账号默认 false(saveAccount normalizeAccount 已落,这里不必查询再传)
-        enable_auto_group_create: Some(false),
         // [feat: feishu-group-mention-policy] 2026-05-24 — 新绑账号默认 requireMention=true
         require_mention: Some(true),
     })
@@ -456,18 +452,17 @@ pub async fn feishu_update_account_model(
 // [feat: feishu-create-group-toggle-gui] 2026-05-24
 // ============================================================
 
-/// Tauri 命令请求 — partial settings 更新(model + enableAutoGroupCreate + requireMention 任一子集)。
+/// Tauri 命令请求 — partial settings 更新(model + requireMention 任一子集)。
 /// 字段都 Option:`None` = 不动,`Some(value)` = 改;model 的 `Some(None)` 用 nested Option
 /// 区分(Some(Some(m))=设 model,Some(None)=清,None=不动)。
+///
+/// [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enable_auto_group_create 字段
 #[derive(Debug, Serialize, Deserialize, specta::Type)]
 pub struct UpdateAccountSettingsRequest {
     pub account_id: String,
     /// Some(Some(m)) = 设 model;Some(None) = 清除走 default;None = 不动
     #[serde(default)]
     pub model: Option<Option<ModelRef>>,
-    /// Some(true/false) = 改 flag;None = 不动
-    #[serde(default)]
-    pub enable_auto_group_create: Option<bool>,
     /// [feat: feishu-group-mention-policy] 2026-05-24 — Some(true/false) = 改 flag;None = 不动
     #[serde(default)]
     pub require_mention: Option<bool>,
@@ -480,11 +475,6 @@ struct UpdateAccountSettingsWire<'a> {
     /// 仅当 Outer Some 时序列化(serde_json::Value::Null = nested None 表"清",省略 = 不动)
     #[serde(skip_serializing_if = "Option::is_none")]
     model: Option<Option<ModelRefWire<'a>>>,
-    #[serde(
-        rename = "enableAutoGroupCreate",
-        skip_serializing_if = "Option::is_none"
-    )]
-    enable_auto_group_create: Option<bool>,
     #[serde(rename = "requireMention", skip_serializing_if = "Option::is_none")]
     require_mention: Option<bool>,
 }
@@ -509,7 +499,6 @@ pub async fn feishu_update_account_settings(
                 model_id: &m.model_id,
             })
         }),
-        enable_auto_group_create: request.enable_auto_group_create,
         require_mention: request.require_mention,
     };
     let r: UpdateAccountSettingsWireResponse =
@@ -552,9 +541,7 @@ struct ListAccountWireItem {
     model: Option<ListAccountModelWire>,
     #[serde(rename = "botName", default)]
     bot_name: Option<String>,
-    /// [feat: feishu-create-group-toggle-gui] 2026-05-24
-    #[serde(rename = "enableAutoGroupCreate", default)]
-    enable_auto_group_create: Option<bool>,
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enable_auto_group_create 字段
     /// [feat: feishu-group-mention-policy] 2026-05-24
     #[serde(rename = "requireMention", default)]
     require_mention: Option<bool>,
@@ -612,7 +599,6 @@ pub async fn feishu_list_accounts(
                 model_id: m.model_id,
             }),
             bot_name: w.bot_name,
-            enable_auto_group_create: w.enable_auto_group_create,
             require_mention: w.require_mention,
         })
         .collect())

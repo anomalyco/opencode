@@ -1060,13 +1060,15 @@ export const dict = {
   // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
   "settings.feishu.edit.modelSectionTitle": "模型",
   "settings.feishu.edit.advancedSectionTitle": "進階功能",
-  "settings.feishu.edit.enableAutoGroupCreate.label": "允許 AI 自動建立新群組",
-  "settings.feishu.edit.enableAutoGroupCreate.hint":
-    "開啟後私訊說「幫我建群」AI 會發確認卡片,你點准才真建。預設關閉 防 prompt injection 誘導 AI 建群。",
-  // FORK: [feat: feishu-group-mention-policy] 2026-05-24
-  "settings.feishu.edit.requireMention.label": "群組裡需要 @ 後再回應",
-  "settings.feishu.edit.requireMention.hint":
-    "預設開啟:bot 在群組裡只回 @ 自己的訊息。\n⚠️ 關閉前需在 Lark 後台改:open.larksuite.com → 選 bot → 事件設定 `im.message.receive_v1` 訂閱範圍改「全部群組訊息」+ 權限管理申請 `im:message` + 重新發布。否則 Lark 不推非 @ 訊息,本開關無效。",
+  // FORK: [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 刪 enableAutoGroupCreate flag
+  // 老 key 已刪,新 key groupCommand.info 描述 /group 用法
+  // 標點全形(中文 UI 文案規約,2026-05-25 user 拍板)
+  "settings.feishu.edit.groupCommand.info":
+    "建群方式：私訊發送 `/group <群名>`（例：`/group 專案討論`），AI 彈確認卡片，點確認才真建。",
+  // FORK: [feat: feishu-group-mention-policy] 2026-05-24 → [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 反轉 + 改 key
+  "settings.feishu.edit.allowReadAll.label": "允許 AI 免@ 讀取群組裡所有訊息",
+  "settings.feishu.edit.allowReadAll.hint":
+    "預設關閉：bot 在群組裡只回 @ 自己的訊息。\n開啟後：① bot 回應群組裡所有訊息（適合 1 群 1 專案獨佔用法）；② 群組任一成員可發送 `/new` 在當前群組開啟新對話（清空 session，**影響所有人**）。\n⚠️ 開啟前需在 Lark 後台改：open.larksuite.com → 選 bot → 事件設定 `im.message.receive_v1` 訂閱範圍改「全部群組訊息」+ 權限管理申請 `im:message` + 重新發布。否則 Lark 不推送非 @ 訊息，本開關無效。",
   "settings.feishu.edit.saving": "儲存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

@@ -103,7 +103,18 @@ export const FeishuAccountSchema = z.object({
   groups: z.record(z.string(), FeishuGroupConfigSchema).default(() => ({})),
   /** 副用户绑定码池(运行时 in-memory,不写盘 — 这里 schema 仅占位) */
   // secondaryBindingCodes 不进 schema(运行时状态)
-  /** opencode agent 名(默认 "imbot" — DeskFox setup hook 注入的安全 agent,同 build 能力但 unattended 危险工具默认 ask)*/
+  /**
+   * opencode agent 名(默认 "imbot" — DeskFox setup hook 注入的安全 agent,
+   * 同 build 能力但 unattended 危险工具默认 ask)。
+   *
+   * **GUI 故意不暴露此字段** — 普通用户走默认 imbot,自然受安全防线约束。
+   * **研发能力的 user 可通过编辑 ~/.opencode/feishu-config.json 改此字段 opt-out**
+   * 走自定义 agent(开源软件"默认安全 + 显式 opt-out"范式,跟 Linux root / Docker
+   * `--privileged` 同款)。schema 故意保留 z.string() 不锁 z.literal("imbot") —
+   * 不阻挠合法 power user 自定义需求。
+   *
+   * 详 OPENCODE-PLAN 仓 `架构决策/im桥接-imbot单一架构.md` §1.1。
+   */
   agent: z.string().default("imbot"),
   /**
    * per-account 模型选择(可选)。
@@ -128,12 +139,9 @@ export const FeishuAccountSchema = z.object({
   tables: TableStrategySchema.default("bullets"),
   /** 短 token 流式聚合阈值(ms)(spec G3),默认 50 */
   blockStreamingCoalesce: z.number().int().min(0).max(1000).default(50),
-  /**
-   * [feat: feishu-bridge-light] AI 自动建群 opt-in。
-   * true 时 system prompt 教 LLM 用 `[CREATE_GROUP:群名]` marker,触发会发飞书 permission-card
-   * 让 user 二次确认才真创建。默认 false 安全(prompt injection 防护)。
-   */
-  enableAutoGroupCreate: z.boolean().default(false),
+  // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25 — 删 enableAutoGroupCreate 死开关
+  // 老配置文件含此字段也 OK,zod 默认 strip unknown(无 migration 风险)。
+  // 建群现在统一走 user 显式 /group <群名> 命令(feishu-group-slash-command),不再有 opt-in flag。
 })
 
 export type FeishuAccount = z.infer<typeof FeishuAccountSchema>

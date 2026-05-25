@@ -341,6 +341,8 @@ function makeAccount(overrides: Partial<FeishuAccount> = {}): FeishuAccount {
     appSecret: { type: "plaintext", value: "test_secret" },
     domain: "feishu",
     agent: "build",
+    // 跟 config-schema.ts 的 zod default 对齐
+    requireMention: true,
     ...overrides,
   } as FeishuAccount
 }
@@ -415,7 +417,9 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
     expect(fakes.sentTexts[0]!.text).toBe("✅ 已开启新对话")
   })
 
-  test("群聊 /new → 拒绝,session 不清", async () => {
+  test("群聊 /new + requireMention=true(默认)→ 拒绝,session 不清,引导开高级能力", async () => {
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+    // 默认 requireMention=true(GUI checkbox "允许免@" 不勾)→ 群里 /new 拒绝
     store.set("acc1", "oc_chat_x", "ses_old")
     await pipeline.testHandle(
       makeEvent({
@@ -425,9 +429,61 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
     )
     // session 应保留
     expect(store.get("acc1", "oc_chat_x")).toBe("ses_old")
-    // 提示文字
+    // 引导文字含「允许 AI 免@ 读取群里所有信息」
     expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("/new 仅支持私聊")
+    expect(fakes.sentTexts[0]!.text).toContain("允许 AI 免@ 读取群里所有信息")
+    expect(fakes.sentTexts[0]!.text).toContain("高级能力")
+  })
+
+  test("群聊 /new + requireMention=false(免@ 模式)→ 清 session + 提示影响所有成员", async () => {
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+    // user 主动开 requireMention=false(channel-as-workspace 模式)→ 群里 /new 允许
+    const localFakes = makeNewCmdFakes()
+    const localPipeline = new MessagePipeline({
+      account: makeAccount({ requireMention: false } as any),
+      accountId: "acc1",
+      opencodeClient: localFakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: localFakes.larkClient,
+    })
+    store.set("acc1", "oc_chat_x", "ses_old")
+    await localPipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "/new" }),
+      }),
+    )
+    // session 应清空
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    // 回复含"影响所有成员"提示
+    expect(localFakes.sentTexts).toHaveLength(1)
+    expect(localFakes.sentTexts[0]!.text).toContain("已开启新对话")
+    expect(localFakes.sentTexts[0]!.text).toContain("影响所有成员")
+    // /new 早退,不应触发 ack
+    expect(localFakes.ackedMessages).toHaveLength(0)
+  })
+
+  test("群聊 + requireMention=false + @bot /new → strip mention 后命中,清 session", async () => {
+    const localFakes = makeNewCmdFakes()
+    const localPipeline = new MessagePipeline({
+      account: makeAccount({ requireMention: false } as any),
+      accountId: "acc1",
+      opencodeClient: localFakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: localFakes.larkClient,
+    })
+    store.set("acc1", "oc_chat_x", "ses_old")
+    await localPipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "@_user_1 /new" }),
+        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot" }],
+      }),
+    )
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    expect(localFakes.sentTexts[0]!.text).toContain("影响所有成员")
   })
 
   test("私聊 /new 无原 session(冷启)→ 也发确认,不抛", async () => {
@@ -449,17 +505,18 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
 })
 
 // ============================================================
-// 建群意图硬拦截 (feat: feishu-create-group-hard-block) 2026-05-24
+// /group slash command + 自然语言引导
+// [feat: feishu-group-slash-command] 2026-05-24
 // ============================================================
 
-describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () => {
+describe("/group slash command (feat: feishu-group-slash-command)", () => {
   let tmpDir: string
   let store: ChatSessionStore
   let dispatcher: PromptDispatcher
   let fakes: ReturnType<typeof makeNewCmdFakes>
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "hard-block-test-"))
+    tmpDir = mkdtempSync(join(tmpdir(), "group-cmd-test-"))
     store = new ChatSessionStore(join(tmpDir, "sessions.json"))
     dispatcher = new PromptDispatcher()
     fakes = makeNewCmdFakes()
@@ -469,9 +526,9 @@ describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () =>
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  function makePipeline(opts: { enable: boolean }): MessagePipeline {
+  function makePipeline(): MessagePipeline {
     return new MessagePipeline({
-      account: makeAccount({ enableAutoGroupCreate: opts.enable } as any),
+      account: makeAccount(),
       accountId: "acc1",
       opencodeClient: fakes.opencodeClient,
       dispatcher,
@@ -480,38 +537,96 @@ describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () =>
     })
   }
 
-  test("disabled + p2p + '帮我建群' → 硬拦截,不调 promptAsync,直接发 GUI 引导", async () => {
-    const pipeline = makePipeline({ enable: false })
-    // spy 一下 promptAsync 看是否被调
+  test("p2p + /group 项目讨论 → 发 confirm card,不调 LLM,不触发 ack", async () => {
+    const pipeline = makePipeline()
     let promptAsyncCalled = false
     fakes.opencodeClient.session.promptAsync = async () => {
       promptAsyncCalled = true
       return { data: {} } as any
     }
+    await pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: "/group 项目讨论" }) }),
+    )
+    await new Promise((r) => setTimeout(r, 50))
 
+    expect(promptAsyncCalled).toBe(false)
+    // confirm card 不在 sentTexts 中(走 interactive msg_type)
+    expect(fakes.sentTexts.find((s) => s.text?.includes("仅支持私聊"))).toBeUndefined()
+    expect(fakes.sentTexts.find((s) => s.text?.includes("用法:"))).toBeUndefined()
+    expect(fakes.ackedMessages).toHaveLength(0)
+  })
+
+  test("p2p + /group(无参数)→ reply 用法提示", async () => {
+    const pipeline = makePipeline()
+    await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "/group" }) }))
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("用法")
+    expect(fakes.sentTexts[0]!.text).toContain("/group <群名>")
+    expect(fakes.sentTexts[0]!.text).toContain("项目讨论")
+  })
+
+  test("p2p + /group <31字符长名> → reply 超长拒绝", async () => {
+    const pipeline = makePipeline()
+    const longName = "a".repeat(31)
+    await pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: `/group ${longName}` }) }),
+    )
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("超长")
+    expect(fakes.sentTexts[0]!.text).toContain("30")
+  })
+
+  test("群聊 + /group X → reply 仅支持私聊", async () => {
+    const pipeline = makePipeline()
+    await pipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "/group 项目讨论" }),
+      }),
+    )
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("仅支持私聊")
+  })
+
+  test("p2p + 自然语言'帮我建群' → reply 引导用 /group,不调 LLM", async () => {
+    const pipeline = makePipeline()
+    let promptAsyncCalled = false
+    fakes.opencodeClient.session.promptAsync = async () => {
+      promptAsyncCalled = true
+      return { data: {} } as any
+    }
     await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "帮我建群" }) }))
 
     expect(promptAsyncCalled).toBe(false)
     expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("此账号未启用自动建群能力")
-    expect(fakes.sentTexts[0]!.text).toContain("DeskFox 设置")
-    expect(fakes.sentTexts[0]!.text).toContain("高级能力")
-    // 硬拦截早退,不应触发 ack(ackMessage 在 hard-block 之后才执行)
+    expect(fakes.sentTexts[0]!.text).toContain("/group <群名>")
+    expect(fakes.sentTexts[0]!.text).toContain("项目讨论")
     expect(fakes.ackedMessages).toHaveLength(0)
   })
 
-  test("disabled + p2p + '今天天气真好' → 不拦截,走正常流程(触发 ack)", async () => {
-    const pipeline = makePipeline({ enable: false })
-    void pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "今天天气真好" }) }))
+  test("p2p + '建群怎么操作'(查询后缀)→ 不拦截,走 LLM", async () => {
+    const pipeline = makePipeline()
+    void pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: "建群怎么操作" }) }),
+    )
     await new Promise((r) => setTimeout(r, 50))
-    // 不命中关键字 → 不拦截 → 走正常流程 → ack 触发
+    // 查询后缀排除 → 走正常 LLM 流程 → 触发 ack
     expect(fakes.ackedMessages).toEqual(["om_test_1"])
-    // 不应发 GUI 引导文字
-    expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
+    expect(fakes.sentTexts.find((s) => s.text?.includes("/group <群名>"))).toBeUndefined()
   })
 
-  test("disabled + 群聊 + '帮我建群' → 不拦截(p2p gate),走正常流程", async () => {
-    const pipeline = makePipeline({ enable: false })
+  test("p2p + '建立群体精神'(不在白名单)→ 不拦截,走 LLM", async () => {
+    const pipeline = makePipeline()
+    void pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: "建立群体精神" }) }),
+    )
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+    expect(fakes.sentTexts.find((s) => s.text?.includes("/group <群名>"))).toBeUndefined()
+  })
+
+  test("群聊 + '帮我建群' → 不拦截(p2p gate),走 LLM", async () => {
+    const pipeline = makePipeline()
     void pipeline.testHandle(
       makeEvent({
         chatType: "group",
@@ -520,72 +635,39 @@ describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () =>
     )
     await new Promise((r) => setTimeout(r, 50))
     expect(fakes.ackedMessages).toEqual(["om_test_1"])
-    expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
+    expect(fakes.sentTexts.find((s) => s.text?.includes("/group"))).toBeUndefined()
   })
 
-  test("enabled + p2p + '帮我建群'(无群名)→ direct-dispatch 提示 user 说群名,不调 LLM", async () => {
-    // [feat: feishu-create-group-hard-block] 2026-05-24 direct-dispatch 路径
-    // flag=true 时也走 pipeline 早退,不进 LLM(provider-agnostic)
-    const pipeline = makePipeline({ enable: true })
-    let promptAsyncCalled = false
-    fakes.opencodeClient.session.promptAsync = async () => {
-      promptAsyncCalled = true
-      return { data: {} } as any
-    }
-    await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "帮我建群" }) }))
-
-    expect(promptAsyncCalled).toBe(false)
-    expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("好的,要建群")
-    expect(fakes.sentTexts[0]!.text).toContain("请在一条消息里告诉我群名")
-    // 应含多个口令示例
-    expect(fakes.sentTexts[0]!.text).toContain("帮我建群叫")
-    expect(fakes.sentTexts[0]!.text).toContain("群名是")
-    // direct-dispatch 早退,ack 不应触发(ackMessage 在 dispatch 之后)
-    expect(fakes.ackedMessages).toHaveLength(0)
-  })
-
-  test("enabled + p2p + '帮我建群叫 test 007' → direct-dispatch 发 confirm card,不调 LLM", async () => {
-    const pipeline = makePipeline({ enable: true })
-    let promptAsyncCalled = false
-    fakes.opencodeClient.session.promptAsync = async () => {
-      promptAsyncCalled = true
-      return { data: {} } as any
-    }
-    await pipeline.testHandle(
-      makeEvent({ content: JSON.stringify({ text: "帮我建群叫 test 007" }) }),
-    )
-    // 给 fire-and-forget confirm card 发送一点时间
-    await new Promise((r) => setTimeout(r, 50))
-
-    expect(promptAsyncCalled).toBe(false)
-    // 应发了一张 confirm card(走 confirmController.start,内部 sendCard 调 lark im.v1.message.create)
-    // confirm card 用 interactive msg_type,fake 解 JSON 时 text 字段是 undefined
-    // 验"不应有"GUI 引导文字 / "未启用"文字,用 optional chaining 防 text undefined
-    expect(fakes.sentTexts.find((s) => s.text?.includes("好的,要建群"))).toBeUndefined()
-    expect(fakes.sentTexts.find((s) => s.text?.includes("未启用自动建群"))).toBeUndefined()
-    expect(fakes.ackedMessages).toHaveLength(0)
-  })
-
-  test("disabled + p2p + '@bot 帮我建群' → strip mention 后命中,硬拦截", async () => {
-    const pipeline = makePipeline({ enable: false })
+  test("p2p + '@bot 帮我建群' → strip mention 后命中,走 /group 引导", async () => {
+    const pipeline = makePipeline()
+    // 用 Tier 1 短语"建群"避免撞已知漏拦"建一个X群"
     await pipeline.testHandle(
       makeEvent({
-        content: JSON.stringify({ text: "@_user_1 帮我建一个项目讨论群" }),
+        content: JSON.stringify({ text: "@_user_1 帮我建群" }),
         mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot" }],
       }),
     )
     expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("此账号未启用自动建群能力")
+    expect(fakes.sentTexts[0]!.text).toContain("/group <群名>")
   })
 
-  test("disabled + p2p + 'create a group for us' → 英文命中,硬拦截", async () => {
-    const pipeline = makePipeline({ enable: false })
+  test("p2p + 'create a group for us' → 英文命中,走 /group 引导", async () => {
+    const pipeline = makePipeline()
     await pipeline.testHandle(
       makeEvent({ content: JSON.stringify({ text: "create a group for us" }) }),
     )
     expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("此账号未启用自动建群能力")
+    expect(fakes.sentTexts[0]!.text).toContain("/group <群名>")
+  })
+
+  test("p2p + 'new group rule'(noun phrase 排除)→ 不拦截,走 LLM", async () => {
+    const pipeline = makePipeline()
+    void pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: "what is the new group rule" }) }),
+    )
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+    expect(fakes.sentTexts.find((s) => s.text?.includes("/group <群名>"))).toBeUndefined()
   })
 })
 
@@ -793,28 +875,23 @@ interface AttachFakeMessageCall {
   content: string
 }
 
+/**
+ * [feishu-attach-upload-robustness iter 4] 2026-05-24
+ * uploadImage / uploadFile 改走 Bun-native fetch → 这里加 fetch mock,
+ * 让原 imageCalls / fileCalls 断言面继续工作(image_type / file_type / file_name 都从 FormData 提)。
+ */
 function makeAttachFakes(opts: { imageError?: Error; fileError?: Error } = {}) {
   const imageCalls: AttachFakeImageCall[] = []
   const fileCalls: AttachFakeFileCall[] = []
   const messageCalls: AttachFakeMessageCall[] = []
 
   const larkClient = {
+    domain: "https://open.feishu.cn",
+    tokenManager: {
+      getTenantAccessToken: async (_o: object) => "fake_tenant_token",
+    },
     im: {
       v1: {
-        image: {
-          create: async (args: any) => {
-            if (opts.imageError) throw opts.imageError
-            imageCalls.push({ image_type: args.data.image_type })
-            return { image_key: `img_${imageCalls.length}` }
-          },
-        },
-        file: {
-          create: async (args: any) => {
-            if (opts.fileError) throw opts.fileError
-            fileCalls.push({ file_type: args.data.file_type, file_name: args.data.file_name })
-            return { file_key: `file_${fileCalls.length}` }
-          },
-        },
         message: {
           create: async (args: any) => {
             messageCalls.push({
@@ -830,8 +907,58 @@ function makeAttachFakes(opts: { imageError?: Error; fileError?: Error } = {}) {
     },
   } as any
 
+  const originalFetch = globalThis.fetch
+  const installFetchMock = () => {
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const url = typeof input === "string" ? input : input?.url ?? String(input)
+      const isImage = url.includes("/open-apis/im/v1/images")
+      const isFile = url.includes("/open-apis/im/v1/files")
+      if (!isImage && !isFile) {
+        throw new Error(`makeAttachFakes: unexpected fetch URL ${url}`)
+      }
+      const form = init?.body as FormData | undefined
+      const fields: Record<string, string> = {}
+      if (form && typeof form.entries === "function") {
+        for (const [k, v] of form.entries()) {
+          if (typeof v !== "object") fields[k] = String(v)
+          else if (v === null) continue
+          else if (!("size" in (v as object))) fields[k] = String(v)
+        }
+      }
+      if (isImage) {
+        if (opts.imageError) throw opts.imageError
+        imageCalls.push({ image_type: fields.image_type ?? "" })
+        return new Response(
+          JSON.stringify({ code: 0, msg: "ok", data: { image_key: `img_${imageCalls.length}` } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      } else {
+        if (opts.fileError) throw opts.fileError
+        fileCalls.push({
+          file_type: fields.file_type ?? "",
+          file_name: fields.file_name ?? "",
+        })
+        return new Response(
+          JSON.stringify({ code: 0, msg: "ok", data: { file_key: `file_${fileCalls.length}` } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }
+    }) as unknown as typeof fetch
+  }
+  const uninstallFetchMock = () => {
+    globalThis.fetch = originalFetch
+  }
+
   const opencodeClient = { session: { create: async () => ({}) } } as any
-  return { imageCalls, fileCalls, messageCalls, larkClient, opencodeClient }
+  return {
+    imageCalls,
+    fileCalls,
+    messageCalls,
+    larkClient,
+    opencodeClient,
+    installFetchMock,
+    uninstallFetchMock,
+  }
 }
 
 describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
@@ -844,7 +971,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "attach-pipeline-test-"))
-    workspaceRoot = join(tmpDir, "feishu-workspace")
+    workspaceRoot = join(tmpDir, "imbot-workspace")
     // 用 mkdir 创建 workspace 根 + 写文件 fixture
     writeFileSync(join(tmpDir, "non-fixture.txt"), "outside")
     // 使用 fs.mkdirSync 显式建 workspace 子目录
@@ -852,6 +979,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
     store = new ChatSessionStore(join(tmpDir, "sessions.json"))
     dispatcher = new PromptDispatcher()
     fakes = makeAttachFakes()
+    fakes.installFetchMock()
     pipeline = new MessagePipeline({
       account: makeAccount(),
       accountId: "acc1",
@@ -864,6 +992,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
   })
 
   afterEach(() => {
+    fakes.uninstallFetchMock()
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
@@ -938,7 +1067,11 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
   })
 
   test("上传抛错 → 不阻断,append warning", async () => {
-    fakes = makeAttachFakes({ imageError: new Error("lark 502") })
+    // [feat: feishu-attach-upload-robustness] 2026-05-24
+    // 用 non-recoverable 错(401)避免 retry 3 次拖慢测试(1s+3s prod delay)
+    fakes.uninstallFetchMock() // 拆掉 beforeEach 的默认 mock,换装 imageError 版
+    fakes = makeAttachFakes({ imageError: new Error("401 Unauthorized") })
+    fakes.installFetchMock()
     pipeline = new MessagePipeline({
       account: makeAccount(),
       accountId: "acc1",
@@ -953,7 +1086,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
     expect(fakes.imageCalls).toHaveLength(0) // image.create 抛了,不计 push
     expect(fakes.messageCalls).toHaveLength(0)
     expect(out).toContain("⚠️ 发送")
-    expect(out).toContain("lark 502")
+    expect(out).toContain("401 Unauthorized")
   })
 
   test("仅 ATTACH 无其它文字 → cleanText 空,只发附件", async () => {
@@ -971,264 +1104,19 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
   })
 })
 
-// ============================================================
-// [CREATE_GROUP:name] processGroupMarkers 集成测 (feat: feishu-bridge-light Phase 3)
-// ============================================================
-
-interface GroupFakeCreateCall {
-  name: string
-  user_id_list?: string[]
-}
-
-function makeGroupFakes(opts: { createError?: Error; linkError?: Error; linkResponse?: any } = {}) {
-  const sentCards: Array<{ chatId: string; content: string }> = []
-  const sentTexts: Array<{ chatId: string; text: string }> = []
-  const deletedCards: string[] = []
-  const createCalls: GroupFakeCreateCall[] = []
-  const linkCalls: string[] = []
-  let counter = 0
-
-  const larkClient = {
-    im: {
-      v1: {
-        message: {
-          create: async (args: any) => {
-            counter++
-            if (args.data.msg_type === "interactive") {
-              sentCards.push({ chatId: args.data.receive_id, content: args.data.content })
-            } else if (args.data.msg_type === "text") {
-              const parsed = JSON.parse(args.data.content)
-              sentTexts.push({ chatId: args.data.receive_id, text: parsed.text })
-            }
-            return { data: { message_id: `om_${counter}` } }
-          },
-          delete: async (args: any) => {
-            deletedCards.push(args.path.message_id)
-            return { data: {} }
-          },
-        },
-        messageReaction: { create: async () => ({ data: {} }) },
-        chat: {
-          create: async (args: any) => {
-            if (opts.createError) throw opts.createError
-            createCalls.push({ name: args.data.name, user_id_list: args.data.user_id_list })
-            return { data: { chat_id: `oc_NEW_${createCalls.length}`, name: args.data.name } }
-          },
-          link: async (args: any) => {
-            linkCalls.push(args.path.chat_id)
-            if (opts.linkError) throw opts.linkError
-            return opts.linkResponse ?? { data: { share_link: "https://applink.feishu.cn/x" } }
-          },
-        },
-      },
-    },
-  } as any
-
-  const opencodeClient = { session: { create: async () => ({}) } } as any
-  return { sentCards, sentTexts, deletedCards, createCalls, linkCalls, larkClient, opencodeClient }
-}
-
-describe("processGroupMarkers (feat: feishu-bridge-light Phase 3)", () => {
-  let store: ChatSessionStore
-  let dispatcher: PromptDispatcher
-  let fakes: ReturnType<typeof makeGroupFakes>
-  let pipeline: MessagePipeline
-  let tmpDirGroup: string
-
-  function build(enable: boolean) {
-    fakes = makeGroupFakes()
-    pipeline = new MessagePipeline({
-      account: makeAccount({ enableAutoGroupCreate: enable } as any),
-      accountId: "acc1",
-      opencodeClient: fakes.opencodeClient,
-      dispatcher,
-      chatSessionStore: store,
-      larkClient: fakes.larkClient,
-    })
-  }
-
-  beforeEach(() => {
-    tmpDirGroup = mkdtempSync(join(tmpdir(), "group-pipeline-test-"))
-    store = new ChatSessionStore(join(tmpDirGroup, "sessions.json"))
-    dispatcher = new PromptDispatcher()
-  })
-
-  afterEach(() => {
-    if (pipeline) pipeline.confirmController.abortAll()
-    rmSync(tmpDirGroup, { recursive: true, force: true })
-  })
-
-  function makeEventGroup(overrides: Partial<ImMessageEvent> = {}): ImMessageEvent {
-    return {
-      accountId: "acc1",
-      messageId: "om_user_msg",
-      chatId: "oc_orig_chat",
-      chatType: "p2p",
-      messageType: "text",
-      content: "",
-      senderOpenId: "ou_user_sender",
-      ts: String(Date.now()),
-      mentions: [],
-      ...overrides,
-    }
-  }
-
-  test("opt-in + p2p:CREATE_GROUP marker → 发 confirm 卡片,marker strip", async () => {
-    build(true)
-    const cleanText = pipeline.processGroupMarkers(
-      "好,我创建一个 [CREATE_GROUP:需求讨论] 群",
-      makeEventGroup(),
-    )
-    expect(cleanText).not.toContain("[CREATE_GROUP:")
-    expect(cleanText).toContain("我创建一个")
-    expect(cleanText).toContain("群")
-    // 给 fire-and-forget confirm.start 一点时间
-    await new Promise((r) => setTimeout(r, 30))
-    expect(fakes.sentCards).toHaveLength(1)
-    const cardJson = JSON.parse(fakes.sentCards[0]!.content)
-    expect(cardJson.header.title.content).toContain("需求讨论")
-  })
-
-  test("opt-in 关:marker strip 但不发卡片", async () => {
-    build(false)
-    const cleanText = pipeline.processGroupMarkers(
-      "[CREATE_GROUP:讨论]",
-      makeEventGroup(),
-    )
-    expect(cleanText).not.toContain("[CREATE_GROUP:")
-    await new Promise((r) => setTimeout(r, 30))
-    expect(fakes.sentCards).toHaveLength(0)
-  })
-
-  test("opt-in 开 + 群聊:marker strip 但不发卡片(p2p only)", async () => {
-    build(true)
-    pipeline.processGroupMarkers(
-      "[CREATE_GROUP:讨论]",
-      makeEventGroup({ chatType: "group" }),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    expect(fakes.sentCards).toHaveLength(0)
-  })
-
-  test("无 marker → 不发卡片,返原文", async () => {
-    build(true)
-    const out = pipeline.processGroupMarkers("普通回复", makeEventGroup())
-    expect(out).toBe("普通回复")
-    expect(fakes.sentCards).toHaveLength(0)
-  })
-
-  test("多 marker → 发多张 confirm 卡片", async () => {
-    build(true)
-    pipeline.processGroupMarkers(
-      "[CREATE_GROUP:A] [CREATE_GROUP:B]",
-      makeEventGroup(),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    expect(fakes.sentCards).toHaveLength(2)
-  })
-
-  test("user 点确认 → chat.create + getShareLink + 发结果文字", async () => {
-    build(true)
-    pipeline.processGroupMarkers(
-      "我建一个 [CREATE_GROUP:需求讨论]",
-      makeEventGroup(),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    expect(fakes.sentCards).toHaveLength(1)
-    // 模拟 user 点【确认】— 直接驱动 confirmController
-    // requestID 形如 cg_<messageId>_<counter>
-    const requestID = `cg_om_user_msg_1`
-    await pipeline.confirmController.handleReply({ requestID, reply: "yes" })
-    expect(fakes.createCalls).toHaveLength(1)
-    expect(fakes.createCalls[0]!.name).toBe("需求讨论")
-    expect(fakes.createCalls[0]!.user_id_list).toEqual(["ou_user_sender"])
-    expect(fakes.linkCalls).toHaveLength(1)
-    // 结果文字发到原 chat
-    expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.chatId).toBe("oc_orig_chat")
-    expect(fakes.sentTexts[0]!.text).toContain("已创建群")
-    expect(fakes.sentTexts[0]!.text).toContain("https://applink.feishu.cn/x")
-  })
-
-  test("user 点拒绝 → 不调 chat.create", async () => {
-    build(true)
-    pipeline.processGroupMarkers(
-      "[CREATE_GROUP:需求讨论]",
-      makeEventGroup(),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    const requestID = `cg_om_user_msg_1`
-    await pipeline.confirmController.handleReply({ requestID, reply: "no" })
-    expect(fakes.createCalls).toHaveLength(0)
-    expect(fakes.linkCalls).toHaveLength(0)
-  })
-
-  test("share_link 失败 → 降级 chat_id 显示", async () => {
-    build(true)
-    fakes.larkClient.im.v1.chat.link = async () => {
-      throw new Error("permission denied")
-    }
-    pipeline.processGroupMarkers(
-      "[CREATE_GROUP:讨论]",
-      makeEventGroup(),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    await pipeline.confirmController.handleReply({
-      requestID: `cg_om_user_msg_1`,
-      reply: "yes",
-    })
-    expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("chat_id")
-    expect(fakes.sentTexts[0]!.text).toContain("分享链接获取失败")
-  })
-
-  test("chat.create 抛错 → 错误消息发回 user", async () => {
-    build(true)
-    fakes.larkClient.im.v1.chat.create = async () => {
-      throw new Error("lark 502")
-    }
-    pipeline.processGroupMarkers(
-      "[CREATE_GROUP:讨论]",
-      makeEventGroup(),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    await pipeline.confirmController.handleReply({
-      requestID: `cg_om_user_msg_1`,
-      reply: "yes",
-    })
-    expect(fakes.sentTexts).toHaveLength(1)
-    expect(fakes.sentTexts[0]!.text).toContain("创建群")
-    expect(fakes.sentTexts[0]!.text).toContain("失败")
-    expect(fakes.sentTexts[0]!.text).toContain("lark 502")
-  })
-
-  test("senderOpenId 缺失 → user_id_list 不传(只 bot 在群)", async () => {
-    build(true)
-    pipeline.processGroupMarkers(
-      "[CREATE_GROUP:讨论]",
-      makeEventGroup({ senderOpenId: undefined }),
-    )
-    await new Promise((r) => setTimeout(r, 30))
-    await pipeline.confirmController.handleReply({
-      requestID: `cg_om_user_msg_1`,
-      reply: "yes",
-    })
-    expect(fakes.createCalls[0]!.user_id_list).toBeUndefined()
-  })
-})
 
 // ============================================================
 // getSystemPrompt 动态拼接 (feat: feishu-bridge-light Phase 3)
 // ============================================================
 
-describe("getSystemPrompt (feat: feishu-bridge-light Phase 3)", () => {
-  function buildPipeline(enable: boolean): MessagePipeline {
+describe("getSystemPrompt (feat: feishu-group-slash-command)", () => {
+  function buildPipeline(): MessagePipeline {
     const tmpDir = mkdtempSync(join(tmpdir(), "sysprompt-test-"))
     const store = new ChatSessionStore(join(tmpDir, "sessions.json"))
     const dispatcher = new PromptDispatcher()
     const fakes = makeAttachFakes()
     const pipeline = new MessagePipeline({
-      account: makeAccount({ enableAutoGroupCreate: enable } as any),
+      account: makeAccount(),
       accountId: "acc1",
       opencodeClient: fakes.opencodeClient,
       dispatcher,
@@ -1238,50 +1126,39 @@ describe("getSystemPrompt (feat: feishu-bridge-light Phase 3)", () => {
     return pipeline
   }
 
-  test("enableAutoGroupCreate=false:含 ATTACH + 禁止建群指令,不含 CREATE_GROUP marker 协议", () => {
-    const p = buildPipeline(false)
-    // 用 bracket 访问 private method(等同 testHandle 模式)
+  test("含 ATTACH 协议 + 建群引导段", () => {
+    const p = buildPipeline()
     const prompt = (p as any).getSystemPrompt()
     expect(prompt).toContain("文件回传协议")
     expect(prompt).toContain("[ATTACH:")
-    expect(prompt).not.toContain("自动建群协议")
-    expect(prompt).not.toContain("[CREATE_GROUP:")
-    // [feat: feishu-create-group-toggle-gui] 2026-05-24:soft constraint 段
-    expect(prompt).toContain("建群能力未启用")
-    expect(prompt).toContain("DeskFox 设置")
+    // 建群引导段(替代了原 CREATE_GROUP_MARKER_PROMPT 和 CREATE_GROUP_DISABLED_PROMPT)
+    expect(prompt).toContain("建群引导")
+    expect(prompt).toContain("/group <群名>")
+    expect(prompt).toContain("/group 项目讨论")
   })
 
-  test("enableAutoGroupCreate=true:含 ATTACH 和 CREATE_GROUP marker 协议,不含禁令段", () => {
-    const p = buildPipeline(true)
+  test("不含已删除的 [CREATE_GROUP:name] marker 协议", () => {
+    const p = buildPipeline()
     const prompt = (p as any).getSystemPrompt()
-    expect(prompt).toContain("文件回传协议")
-    expect(prompt).toContain("自动建群协议")
-    expect(prompt).toContain("[CREATE_GROUP:")
-    // 启用时不拼禁令段
+    expect(prompt).not.toContain("[CREATE_GROUP:")
+    expect(prompt).not.toContain("自动建群协议")
     expect(prompt).not.toContain("建群能力未启用")
   })
 
+  test("建群引导段明确禁止替代路径 + 防凭证泄露", () => {
+    const p = buildPipeline()
+    const prompt = (p as any).getSystemPrompt()
+    expect(prompt).toContain("不要")
+    expect(prompt).toContain("不要尝试自己建群")
+    expect(prompt).toContain("不要读源码")
+    expect(prompt).toContain("不要调飞书 SDK")
+    expect(prompt).toContain("appSecret")
+  })
+
   test("base prompt 总是含禁用反问工具的指引", () => {
-    const p = buildPipeline(false)
+    const p = buildPipeline()
     const prompt = (p as any).getSystemPrompt()
     expect(prompt).toContain("禁止")
     expect(prompt).toContain("反问")
-  })
-
-  // [feat: feishu-create-group-toggle-gui] 2026-05-24
-  test("disabled 时禁令段明确禁止替代路径 + 引导 GUI 开启", () => {
-    const p = buildPipeline(false)
-    const prompt = (p as any).getSystemPrompt()
-    // 关键禁止指令(`**不要**尝试...` 含 markdown bold,验单串)
-    expect(prompt).toContain("不要")
-    expect(prompt).toContain("尝试通过其他途径建群")
-    // 关键替代路径明确点名
-    expect(prompt).toContain("不要读源码")
-    expect(prompt).toContain("不要尝试调飞书 SDK")
-    // GUI 引导路径
-    expect(prompt).toContain("飞书桥接")
-    expect(prompt).toContain("高级能力")
-    // 凭证防护(防 LLM 让 user 提供 appSecret)
-    expect(prompt).toContain("appSecret")
   })
 })

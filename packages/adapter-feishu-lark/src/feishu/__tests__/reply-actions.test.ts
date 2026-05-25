@@ -6,12 +6,12 @@ import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import {
   classifyAttachment,
-  extractGroupName,
-  FEISHU_WORKSPACE_ROOT,
+  IMBOT_WORKSPACE_ROOT,
+  GROUP_NAME_MAX_LEN,
   isBotMentioned,
   isGroupCreationIntent,
   parseAttachMarkers,
-  parseCreateGroupMarkers,
+  parseGroupCommand,
   stripMentions,
   type MentionRef,
 } from "../reply-actions"
@@ -187,315 +187,195 @@ describe("classifyAttachment", () => {
     expect(classifyAttachment(ROOT, ROOT)).toEqual({ kind: "file", fileType: "stream" })
   })
 
-  test("默认 workspaceRoot = ~/.opencode/feishu-workspace", () => {
-    const inWs = join(FEISHU_WORKSPACE_ROOT, "test.png")
+  test("默认 workspaceRoot = ~/.opencode/imbot-workspace", () => {
+    const inWs = join(IMBOT_WORKSPACE_ROOT, "test.png")
     expect(classifyAttachment(inWs).kind).toBe("image")
-    expect(FEISHU_WORKSPACE_ROOT).toBe(join(homedir(), ".opencode", "feishu-workspace"))
+    expect(IMBOT_WORKSPACE_ROOT).toBe(join(homedir(), ".opencode", "imbot-workspace"))
   })
 })
 
 // ============================================================
-// parseCreateGroupMarkers — [CREATE_GROUP:name] 解析 + strip
+// parseGroupCommand — /group <群名> slash command
+// [feat: feishu-group-slash-command] 2026-05-24
 // ============================================================
 
-describe("parseCreateGroupMarkers", () => {
-  test("无 marker → names 空,cleanText 原样 trim", () => {
-    const r = parseCreateGroupMarkers("  普通回复  ")
-    expect(r.names).toEqual([])
-    expect(r.cleanText).toBe("普通回复")
+describe("parseGroupCommand", () => {
+  test("/group 项目讨论 → matched: true, groupName: 项目讨论", () => {
+    const r = parseGroupCommand("/group 项目讨论")
+    expect(r).toEqual({ matched: true, groupName: "项目讨论" })
   })
 
-  test("单 marker → 提取群名", () => {
-    const r = parseCreateGroupMarkers("我创建一个 [CREATE_GROUP:需求讨论] 好了")
-    expect(r.names).toEqual(["需求讨论"])
-    expect(r.cleanText).toBe("我创建一个  好了")
+  test("/group (无参数) → matched: true, error: no_name", () => {
+    const r = parseGroupCommand("/group")
+    expect(r).toEqual({ matched: true, groupName: null, error: "no_name" })
   })
 
-  test("多 marker → 按出现顺序", () => {
-    const r = parseCreateGroupMarkers("先 [CREATE_GROUP:A] 再 [CREATE_GROUP:B]")
-    expect(r.names).toEqual(["A", "B"])
+  test("'/group ' (trailing space 无群名) → matched: true, error: no_name", () => {
+    const r = parseGroupCommand("/group ")
+    expect(r).toEqual({ matched: true, groupName: null, error: "no_name" })
   })
 
-  test("群名 trim + 内嵌空格保留", () => {
-    const r = parseCreateGroupMarkers("[CREATE_GROUP:  需求 讨论组  ]")
-    expect(r.names).toEqual(["需求 讨论组"])
+  test("/group project plan 2026 → 群名允许内部空格", () => {
+    const r = parseGroupCommand("/group project plan 2026")
+    expect(r).toEqual({ matched: true, groupName: "project plan 2026" })
   })
 
-  test("空 marker [CREATE_GROUP:] → 跳过", () => {
-    const r = parseCreateGroupMarkers("[CREATE_GROUP:]")
-    expect(r.names).toEqual([])
+  test("超 30 字符群名 → matched: true, error: too_long", () => {
+    const longName = "a".repeat(31)
+    const r = parseGroupCommand(`/group ${longName}`)
+    expect(r).toEqual({ matched: true, groupName: null, error: "too_long" })
   })
 
-  test("跟 ATTACH marker 独立 — CREATE_GROUP 不解析 ATTACH", () => {
-    const r = parseCreateGroupMarkers("[ATTACH:/a.png] [CREATE_GROUP:讨论]")
-    expect(r.names).toEqual(["讨论"])
-    // ATTACH marker 仍在 cleanText 里(本函数只 strip 自己的 marker)
-    expect(r.cleanText).toContain("[ATTACH:/a.png]")
+  test("恰好 30 字符 → 通过(边界)", () => {
+    const name = "a".repeat(30)
+    const r = parseGroupCommand(`/group ${name}`)
+    expect(r).toEqual({ matched: true, groupName: name })
   })
 
-  test("跟 ATTACH 联合 — 调用方应链式调两个 parser", () => {
-    const groupParse = parseCreateGroupMarkers("[ATTACH:/a.png] [CREATE_GROUP:讨论]")
-    const attachParse = parseAttachMarkers(groupParse.cleanText)
-    expect(groupParse.names).toEqual(["讨论"])
-    expect(attachParse.paths).toEqual(["/a.png"])
-    expect(attachParse.cleanText).toBe("")
+  test("/groupabc(粘连)→ matched: false", () => {
+    expect(parseGroupCommand("/groupabc")).toEqual({ matched: false, groupName: null })
+  })
+
+  test("/Group X(大写)→ matched: false(跟 /new 一致大小写敏感)", () => {
+    expect(parseGroupCommand("/Group X")).toEqual({ matched: false, groupName: null })
+  })
+
+  test("普通文本不是命令 → matched: false", () => {
+    expect(parseGroupCommand("帮我建群")).toEqual({ matched: false, groupName: null })
+  })
+
+  test("空 / undefined / null → matched: false 安全返回", () => {
+    expect(parseGroupCommand("")).toEqual({ matched: false, groupName: null })
+    expect(parseGroupCommand(undefined as unknown as string)).toEqual({
+      matched: false,
+      groupName: null,
+    })
+    expect(parseGroupCommand(null as unknown as string)).toEqual({
+      matched: false,
+      groupName: null,
+    })
+  })
+
+  test("外层空格 trim → 内部命中", () => {
+    const r = parseGroupCommand("   /group 项目讨论   ")
+    expect(r).toEqual({ matched: true, groupName: "项目讨论" })
+  })
+
+  test("GROUP_NAME_MAX_LEN export = 30", () => {
+    expect(GROUP_NAME_MAX_LEN).toBe(30)
   })
 })
 
 // ============================================================
-// isGroupCreationIntent (Phase 2 hard block)
-// [feat: feishu-create-group-hard-block] 2026-05-24
+// isGroupCreationIntent — 白名单短语 + 查询后缀排除
+// [feat: feishu-group-slash-command] 2026-05-24
 // ============================================================
 
-describe("isGroupCreationIntent", () => {
-  // 中文命中 case
-  test("'帮我建群' → true", () => {
-    expect(isGroupCreationIntent("帮我建群")).toBe(true)
+describe("isGroupCreationIntent (白名单 + 查询排除)", () => {
+  // Tier 1 中文短语全命中
+  test.each([
+    ["帮我建群", true],
+    ["请创建群", true],
+    ["新建群", true],
+    ["拉群讨论", true],
+  ])("Tier 1 中文 \"%s\" → %s", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  test("'帮我建一个 X 项目讨论群' → true(建一个群 substring)", () => {
-    expect(isGroupCreationIntent("帮我建一个 X 项目讨论群")).toBe(true)
+  // Tier 2 中文口语变体抽样(均含 contiguous Tier 2 短语)
+  test.each([
+    ["帮我建个群", true],         // 含 "建个群"
+    ["拉个群我们聊", true],        // 含 "拉个群"
+    ["拉一个群", true],           // 含 "拉一个群"
+    ["开个群", true],            // 含 "开个群"
+    ["开一个群", true],           // 含 "开一个群"
+    ["新建个群", true],          // 含 "新建个群"
+    ["创建一个群", true],         // 含 "创建一个群"
+  ])("Tier 2 中文 \"%s\" → %s", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  test("'拉个群讨论吧' → true", () => {
-    expect(isGroupCreationIntent("拉个群讨论吧")).toBe(true)
+  // 已知漏拦(白名单 strict substring 设计 trade)— 这类 "建一个X群" 的 X 插入断开了
+  // contiguous 匹配。User 应改用 /group <群名> 显式命令或换"建群叫 X" 短语。
+  test.each([
+    ["建一个项目讨论群", false],
+    ["创建一个项目群", false],
+  ])("已知漏拦 \"%s\" → false(中间字插入断开 contiguous,user 改用 /group)", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  test("'我想新建群' → true(新建群)", () => {
-    expect(isGroupCreationIntent("我想新建群")).toBe(true)
+  // 中文查询后缀排除 — 命中短语但意图是查询
+  test.each([
+    ["建群怎么操作", false],
+    ["建群如何使用", false],
+    ["拉群方法是什么", false],
+    ["创建群步骤", false],
+    ["建一个群流程怎么走", false],
+    ["建群教程", false],
+    ["为什么要建群", false],
+  ])("中文查询排除 \"%s\" → %s", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  test("'再帮我创建一个新群,名字叫 test 002' → true(创建群 substring)", () => {
-    expect(isGroupCreationIntent("再帮我创建一个新群,名字叫 test 002")).toBe(true)
+  // 已知误拦 → 现在不命中(白名单短语都不含)
+  test.each([
+    ["建立群体精神", false],
+    ["新群规", false],
+    ["群规怎么定", false],
+    ["建立群众基础", false],
+    ["群是怎么建的", false],
+    ["建立公司", false],
+    ["群讨论", false],
+    ["今天天气真好", false],
+  ])("不命中 \"%s\" → false(短语不在白名单)", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  // 英文命中 case
-  test("'create a group for us' → true", () => {
-    expect(isGroupCreationIntent("create a group for us")).toBe(true)
+  // 英文 4 个白名单短语
+  test.each([
+    ["create a group for the team", true],
+    ["make a group called X", true],
+    ["start a group", true],
+    ["new group called dev", true],
+  ])("英文 \"%s\" → %s", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  test("'CREATE GROUP test' → true(大小写不敏感)", () => {
-    expect(isGroupCreationIntent("CREATE GROUP test")).toBe(true)
+  // 英文 lowercase 比较
+  test("CREATE A GROUP → 大写也命中(lowercase 比较)", () => {
+    expect(isGroupCreationIntent("CREATE A GROUP NOW")).toBe(true)
   })
 
-  test("'please make group called dev-talk' → true", () => {
-    expect(isGroupCreationIntent("please make group called dev-talk")).toBe(true)
+  // 英文查询后缀排除
+  test.each([
+    ["create a group how", false],
+    ["create a group how to use", false],
+  ])("英文查询排除 \"%s\" → %s", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  // 不命中 case
-  test("'群是怎么建的?' → false(含'建'但不含'建群')", () => {
-    expect(isGroupCreationIntent("群是怎么建的?")).toBe(false)
+  // new group 专用排除(noun phrase)
+  test.each([
+    ["new group rule", false],
+    ["new group of users", false],
+    ["new group policy", false],
+    ["new group chat history", false],
+    ["new group channel", false],
+    ["new group members", false],
+    ["new group settings", false],
+  ])("\"new group\" noun phrase 排除 \"%s\" → %s", (text, expected) => {
+    expect(isGroupCreationIntent(text as string)).toBe(expected)
   })
 
-  test("'今天天气真好' → false", () => {
-    expect(isGroupCreationIntent("今天天气真好")).toBe(false)
-  })
-
-  test("'how do I create a new project' → false(含 create + new 但不组成关键字)", () => {
-    expect(isGroupCreationIntent("how do I create a new project")).toBe(false)
-  })
-
-  // edge case
-  test("空串 → false", () => {
+  // 空 / 非字符串安全返回 false
+  test("空 / undefined / null → false", () => {
     expect(isGroupCreationIntent("")).toBe(false)
-  })
-
-  test("null / undefined → false(防御性,实际上 TypeScript 不会传)", () => {
     expect(isGroupCreationIntent(undefined as unknown as string)).toBe(false)
     expect(isGroupCreationIntent(null as unknown as string)).toBe(false)
   })
 
-  test("number 类型 → false", () => {
-    expect(isGroupCreationIntent(123 as unknown as string)).toBe(false)
-  })
-
-  // 1-spec 已知误拦 — 接受
-  test("'如何创建一个群?' → true(已知误拦,user 问知识但命中'创建...群'模式)", () => {
-    expect(isGroupCreationIntent("如何创建一个群?")).toBe(true)
-  })
-
-  // regex 比 substring 精准:动词 + 群 才命中,'新群规'里'新'不是动词,正确不拦
-  test("'新群规是什么?' → false(regex 比 substring 精准,'新'非动词不命中)", () => {
-    expect(isGroupCreationIntent("新群规是什么?")).toBe(false)
-  })
-
-  // 更多 regex 边界测
-  test("'帮我建一个项目讨论群' → true(动词'建' + 字符 + '群')", () => {
-    expect(isGroupCreationIntent("帮我建一个项目讨论群")).toBe(true)
-  })
-
-  test("'拉个群讨论这个 bug' → true", () => {
-    expect(isGroupCreationIntent("拉个群讨论这个 bug")).toBe(true)
-  })
-
-  test("'群讨论是什么意思' → false('群'在动词前)", () => {
-    expect(isGroupCreationIntent("群讨论是什么意思")).toBe(false)
-  })
-
-  test("'建立公司' → false(无'群')", () => {
-    expect(isGroupCreationIntent("建立公司")).toBe(false)
-  })
-
-  test("'set up a group for the team' → true(英文 'set up a group')", () => {
-    expect(isGroupCreationIntent("set up a group for the team")).toBe(true)
-  })
-})
-
-// ============================================================
-// extractGroupName — 群名提取(direct dispatch 用)
-// [feat: feishu-create-group-hard-block] 2026-05-24
-// ============================================================
-
-describe("extractGroupName", () => {
-  // 中文 "叫" 模式
-  test("'帮我建群叫 test 006' → 'test 006'", () => {
-    expect(extractGroupName("帮我建群叫 test 006")).toBe("test 006")
-  })
-
-  test("'建个群叫做 X' → 'X'", () => {
-    expect(extractGroupName("建个群叫做 X")).toBe("X")
-  })
-
-  // 中文 "名字" / "名为" 模式
-  test("'建群名字叫 我的群' → '我的群'", () => {
-    expect(extractGroupName("建群名字叫 我的群")).toBe("我的群")
-  })
-
-  test("'建群名字为 工作组' → '工作组'", () => {
-    expect(extractGroupName("建群名字为 工作组")).toBe("工作组")
-  })
-
-  test("'建群名为 团队会' → '团队会'", () => {
-    expect(extractGroupName("建群名为 团队会")).toBe("团队会")
-  })
-
-  test("'拉个群命名 项目讨论' → '项目讨论'", () => {
-    expect(extractGroupName("拉个群命名 项目讨论")).toBe("项目讨论")
-  })
-
-  test("'建群命名为 一个组' → '一个组'", () => {
-    expect(extractGroupName("建群命名为 一个组")).toBe("一个组")
-  })
-
-  // 英文模式
-  test("'create group called test' → 'test'", () => {
-    expect(extractGroupName("create group called test")).toBe("test")
-  })
-
-  test("'create new group named foo' → 'foo'", () => {
-    expect(extractGroupName("create new group named foo")).toBe("foo")
-  })
-
-  test("'CREATE GROUP CALLED Test' → 'Test'(大小写不敏感)", () => {
-    expect(extractGroupName("CREATE GROUP CALLED Test")).toBe("Test")
-  })
-
-  // 分隔符锚定 — 多句不贪婪
-  test("'建群叫 Foo, 然后把人拉进来' → 'Foo'(逗号锚定)", () => {
-    expect(extractGroupName("建群叫 Foo, 然后把人拉进来")).toBe("Foo")
-  })
-
-  test("'建群叫 X。把所有人拉进来' → 'X'(句号锚定)", () => {
-    expect(extractGroupName("建群叫 X。把所有人拉进来")).toBe("X")
-  })
-
-  // 不提取(没 name keyword)
-  test("'帮我建群' → null(没说群名)", () => {
-    expect(extractGroupName("帮我建群")).toBeNull()
-  })
-
-  test("'建一个项目讨论群' → null(没 name keyword)", () => {
-    expect(extractGroupName("建一个项目讨论群")).toBeNull()
-  })
-
-  test("'create a group for us' → null(没 called/named)", () => {
-    expect(extractGroupName("create a group for us")).toBeNull()
-  })
-
-  // 边界
-  test("空串 → null", () => {
-    expect(extractGroupName("")).toBeNull()
-  })
-
-  test("undefined / null → null(防御)", () => {
-    expect(extractGroupName(undefined as unknown as string)).toBeNull()
-    expect(extractGroupName(null as unknown as string)).toBeNull()
-  })
-
-  // trim
-  test("群名前后空格 → trim", () => {
-    expect(extractGroupName("建群叫   test  ,然后...")).toBe("test")
-  })
-
-  // [follow-up 2026-05-24] 扩展 introducer:群名 / 名称 / 起名 三组
-  test("'建个群 群名是012' → '012'", () => {
-    expect(extractGroupName("建个群 群名是012")).toBe("012")
-  })
-
-  test("'帮我建个群,群名是012' → '012'", () => {
-    expect(extractGroupName("帮我建个群,群名是012")).toBe("012")
-  })
-
-  test("'帮我建群,群名叫 X' → 'X'", () => {
-    expect(extractGroupName("帮我建群,群名叫 X")).toBe("X")
-  })
-
-  test("'建群,群名为 工作组' → '工作组'", () => {
-    expect(extractGroupName("建群,群名为 工作组")).toBe("工作组")
-  })
-
-  test("'建群,名字是 我的群' → '我的群'(名字是)", () => {
-    expect(extractGroupName("建群,名字是 我的群")).toBe("我的群")
-  })
-
-  test("'建群,名称叫 工作组' → '工作组'(名称叫)", () => {
-    expect(extractGroupName("建群,名称叫 工作组")).toBe("工作组")
-  })
-
-  test("'建群,名称是 X' → 'X'", () => {
-    expect(extractGroupName("建群,名称是 X")).toBe("X")
-  })
-
-  test("'建群名叫 团队会' → '团队会'(名叫)", () => {
-    expect(extractGroupName("建群名叫 团队会")).toBe("团队会")
-  })
-
-  test("'建群名是 工作组' → '工作组'(名是)", () => {
-    expect(extractGroupName("建群名是 工作组")).toBe("工作组")
-  })
-
-  test("'拉个群起名 项目讨论' → '项目讨论'(起名)", () => {
-    expect(extractGroupName("拉个群起名 项目讨论")).toBe("项目讨论")
-  })
-
-  test("'拉个群起名叫 项目讨论' → '项目讨论'(起名叫)", () => {
-    expect(extractGroupName("拉个群起名叫 项目讨论")).toBe("项目讨论")
-  })
-
-  // [follow-up 2026-05-24] short form:动词+群+空格+名字
-  test("'帮我建群 012' → '012'(短形式,动词后空格)", () => {
-    expect(extractGroupName("帮我建群 012")).toBe("012")
-  })
-
-  test("'建群 项目讨论' → '项目讨论'(短形式)", () => {
-    expect(extractGroupName("建群 项目讨论")).toBe("项目讨论")
-  })
-
-  test("'拉个群 我们组' → '我们组'(拉+群+空格+名字)", () => {
-    expect(extractGroupName("拉个群 我们组")).toBe("我们组")
-  })
-
-  test("'创建讨论群 X' → 'X'(动词+字符+群+空格+名字)", () => {
-    expect(extractGroupName("创建讨论群 X")).toBe("X")
-  })
-
-  // 短形式不应误吞:动词+群+无空格 → 不匹配
-  test("'建群讨论' → null(无空格,'讨论' 应被当延续不是名字)", () => {
-    expect(extractGroupName("建群讨论")).toBeNull()
-  })
-
-  test("'建群讨论这个 bug' → null(无空格分隔)", () => {
-    expect(extractGroupName("建群讨论这个 bug")).toBeNull()
+  test("纯净中文命中 → true(无查询后缀)", () => {
+    expect(isGroupCreationIntent("帮我建群叫项目讨论吧")).toBe(true)
   })
 })
 

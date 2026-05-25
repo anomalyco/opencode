@@ -1,11 +1,13 @@
 // [fork-only] reply-actions — feishu-bridge-light 纯函数 helper
 // [feat: feishu-bridge-light] 2026-05-23
+// [feat: feishu-group-slash-command] 2026-05-24 — 删 [CREATE_GROUP:name] marker / parseCreateGroupShortForm / 改写 isGroupCreationIntent
 //
 // 收纳本 feat 的可单测纯函数,跟 message-pipeline.ts 的 IO/状态隔离:
 //   - stripMentions — 从 text 里 strip 飞书 @mention 标记(/new 检测前用)
-//   - parseAttachMarkers — AI reply 里 [ATTACH:path] marker(Phase 2)
-//   - classifyAttachment — 扩展名 → image/file/reject 分流 + 路径白名单校验(Phase 2)
-//   - (后续 Phase 3 加)parseCreateGroupMarkers — AI reply 里 [CREATE_GROUP:name] marker
+//   - parseAttachMarkers — AI reply 里 [ATTACH:path] marker
+//   - classifyAttachment — 扩展名 → image/file/reject 分流 + 路径白名单校验
+//   - parseGroupCommand — `/group <群名>` slash command 解析(feishu-group-slash-command)
+//   - isGroupCreationIntent — 自然语言建群意图白名单检测(降级为 /group 引导用)
 
 import { homedir } from "node:os"
 import { extname, isAbsolute, join, resolve, sep } from "node:path"
@@ -43,7 +45,7 @@ export function stripMentions(text: string, mentions: ReadonlyArray<MentionRef>)
 export type LarkFileType = "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream"
 
 /** 默认 workspace 根 — 所有 ATTACH 路径必须在此子树内才允许上传 */
-export const FEISHU_WORKSPACE_ROOT = join(homedir(), ".opencode", "feishu-workspace")
+export const IMBOT_WORKSPACE_ROOT = join(homedir(), ".opencode", "imbot-workspace")
 
 /** 走 image.create 的扩展名(返回 image_key,≤10MB) */
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".ico"])
@@ -59,15 +61,9 @@ const FILE_TYPE_MAP: Record<string, LarkFileType> = {
 }
 
 const ATTACH_MARKER_RE = /\[ATTACH:([^\]]+)\]/g
-const CREATE_GROUP_MARKER_RE = /\[CREATE_GROUP:([^\]]+)\]/g
 
 export interface ParsedMarkers {
   paths: string[]
-  cleanText: string
-}
-
-export interface ParsedGroupMarkers {
-  names: string[]
   cleanText: string
 }
 
@@ -85,25 +81,6 @@ export function parseAttachMarkers(text: string): ParsedMarkers {
   }
   const cleanText = stripMarkers(text, ATTACH_MARKER_RE)
   return { paths, cleanText }
-}
-
-/**
- * 解析 reply 里所有 `[CREATE_GROUP:name]` marker(Phase 3 自动建群)。
- *
- * - names:按出现顺序,trim 后的群名(空 marker 跳过)
- * - cleanText:strip 后清行尾空格 + 收敛多余空行
- *
- * 跟 parseAttachMarkers 共享 stripMarkers 帮手;两类 marker 独立解析,
- * 调用方负责按 marker 类型路由处理。
- */
-export function parseCreateGroupMarkers(text: string): ParsedGroupMarkers {
-  const names: string[] = []
-  for (const m of text.matchAll(CREATE_GROUP_MARKER_RE)) {
-    const n = m[1]?.trim()
-    if (n) names.push(n)
-  }
-  const cleanText = stripMarkers(text, CREATE_GROUP_MARKER_RE)
-  return { names, cleanText }
 }
 
 /** strip 一种 marker + 清行尾空格 + 收敛空行 + trim */
@@ -128,11 +105,11 @@ export type AttachClassification =
  * - resolve 后必须在 workspaceRoot 子树内
  *
  * @param path 来自 LLM reply 的 `[ATTACH:xxx]` 解析串
- * @param workspaceRoot 默认 `~/.opencode/feishu-workspace`,单测可覆盖
+ * @param workspaceRoot 默认 `~/.opencode/imbot-workspace`,单测可覆盖
  */
 export function classifyAttachment(
   path: string,
-  workspaceRoot: string = FEISHU_WORKSPACE_ROOT,
+  workspaceRoot: string = IMBOT_WORKSPACE_ROOT,
 ): AttachClassification {
   if (!isAbsolute(path)) {
     return { kind: "reject", reason: "非绝对路径" }
@@ -150,128 +127,172 @@ export function classifyAttachment(
 }
 
 // ============================================================
-// 建群意图关键字检测 — provider-agnostic 硬拦截
-// [feat: feishu-create-group-hard-block] 2026-05-24
+// /group slash command 解析 + 自然语言建群意图白名单
+// [feat: feishu-group-slash-command] 2026-05-24
 // ============================================================
 //
-// 起因:claude-code 等 spawn-based opencode provider 跳过 role=system 消息,
-// pipeline 通过 promptAsync({ system }) 设的 disabled-prompt 软约束失效,LLM
-// 尝试翻 fork 源码 / 让 user 给凭证等替代路径帮 user 建群,撞 imbot read
-// permission 卡。硬拦截在 pipeline 入口层判断,不依赖 LLM 听话,任何 provider
-// 都生效。
+// 起因:之前的自然语言 regex(`feishu-create-group-hard-block`)虽然 provider-agnostic
+// 但宽容 regex `/(?:开|建|创建|新建|拉|搞|做)[^群]{0,20}群/` 误拦"如何建群" /
+// "建立群体精神" / "新群规" 等查询/陈述,user 反馈不可接受。
 //
-// 关键字列表锁版(改之前 user 双签),substring 简单匹配,不做 NLP。误拦权衡
-// 接受度高(详 1-spec.md 误拦风险评估段)。
+// 改造:
+//   1. **主路径** `/group <名字>` slash command 显式触发 — 0 误触 / 0 LLM 调用 /
+//      provider-agnostic / 跟 `/new` 一致
+//   2. **回退引导**:自然语言关键字 regex 替换为**白名单短语**(中文 14 + 英文 4)+
+//      **查询后缀排除兜底**,误拦率显著降低;命中不走 LLM 直接 reply 引导 user 用 /group
+//
+// 删除的旧路径:
+//   - [CREATE_GROUP:name] LLM marker(provider 跳过 system prompt 时完全失效)
+//   - parseCreateGroupShortForm 半结构化"建群 X" 路径(UX 跟 /group 重叠混淆源)
 
 /**
- * 中文建群意图正则 — 动词 + [可选 0-20 字符,不含'群'] + '群'
+ * `/group <群名>` 命令解析结果。
  *
- * 命中:"建群" / "创建群" / "拉个群" / "新建...讨论群" / "建一个项目群" / "开新群"
- * 不命中:"群是怎么建的"(动词在'群'后面)/ "建立公司"(无'群')/ "群讨论"(无动词)
- *
- * 误拦 case 接受(详 1-spec):"如何创建群" / "新群规" / "建立群体精神" — flag=false
- * 时 user 主动选择不允许,误拦后回复 GUI 引导成本低。
+ * - `matched: false` — text 不是 /group 命令(`/groupabc` 粘连 / `/Group X` 大写 / 完全无关文本)
+ * - `matched: true, groupName: "X"` — 解析成功
+ * - `matched: true, groupName: null, error: "no_name"` — `/group` 无参数
+ * - `matched: true, groupName: null, error: "too_long"` — 群名超 30 字符
  */
-const GROUP_CREATION_INTENT_ZH = /(?:开|建|创建|新建|拉|搞|做)[^群]{0,20}群/
+export interface GroupCommandParseResult {
+  matched: boolean
+  groupName: string | null
+  error?: "no_name" | "too_long"
+}
 
-/** 英文建群关键字 — text 转 lowercase 后 substring 命中即拦 */
-const GROUP_CREATION_KEYWORDS_EN = [
-  "create group",
-  "new group",
-  "make group",
-  "create a group",
-  "new chat group",
-  "create chat",
-  "set up a group",
-  "set up group",
-]
+/** 飞书 chat name 上限 30 字符 — 主动拒绝信息友好,而非后端抛错 */
+export const GROUP_NAME_MAX_LEN = 30
 
 /**
- * 判断 user message 是否含建群意图。
+ * 解析 `/group <群名>` slash command。
  *
- * 输入约定:调用方负责先 strip mentions(此 helper 不再 strip),输入是
- * 已 clean 的 text 内容。空 / 非字符串返 false。
+ * 命中条件:
+ *   - text trim 后以 "/group " 开头 OR 等于 "/group"
+ *   - 大小写敏感(跟 /new 一致 `/Group X` 不命中)
  *
- * 实现:中文走正则(动词 + 可选 0-20 字符不含'群' + '群'),英文走 lowercase
- * + substring 命中。中文 NLP 不做,误拦权衡接受。
+ * 群名规则:
+ *   - 允许中文 / 英文 / 数字 / `-` / `_` / 内部空格
+ *   - 长度 1 ≤ name.length ≤ 30(GROUP_NAME_MAX_LEN)
  *
- * 调用方应同时检查 `account.enableAutoGroupCreate=false` + `chatType==="p2p"`
- * 两道门控,本 helper 只负责文本意图判断。
+ * 输入约定:调用方先 strip mention,本 helper 不做 mention 处理。
  */
-export function isGroupCreationIntent(text: string): boolean {
-  if (!text || typeof text !== "string") return false
-  if (GROUP_CREATION_INTENT_ZH.test(text)) return true
-  const lower = text.toLowerCase()
-  for (const kw of GROUP_CREATION_KEYWORDS_EN) {
-    if (lower.includes(kw)) return true
+export function parseGroupCommand(text: string): GroupCommandParseResult {
+  if (!text || typeof text !== "string") return { matched: false, groupName: null }
+  const trimmed = text.trim()
+  if (trimmed === "/group") {
+    return { matched: true, groupName: null, error: "no_name" }
   }
-  return false
+  if (!trimmed.startsWith("/group ")) {
+    return { matched: false, groupName: null }
+  }
+  const name = trimmed.slice("/group ".length).trim()
+  if (!name) return { matched: true, groupName: null, error: "no_name" }
+  if (name.length > GROUP_NAME_MAX_LEN) {
+    return { matched: true, groupName: null, error: "too_long" }
+  }
+  return { matched: true, groupName: name }
 }
 
 /**
- * 中文群名提取 — 双 pattern 策略覆盖自然语言表达:
+ * 中文建群短语白名单(Tier 1 + Tier 2,user 拍板 2026-05-24)。
  *
- * **Pattern 1 (introducer)**:命名引导词 + 群名
- *   - `群名(是|叫|为)` / `名字(叫|是|为)` / `名(叫|是|为)`
- *   - `名称(是|叫|为)` / `命名(为)?` / `叫做` / `叫` / `起名(叫|为)?`
+ * Tier 1:核心动宾短语(精准度极高)
+ * Tier 2:加量词口语变体(精准,常用)
  *
- * **Pattern 2 (short form)**:动词 + '群' + 空格 + 群名(无 introducer)
- *   - `建群 012` / `拉个群 我们组` / `创建群 项目组`
- *   - 必须 '群' 后**显式空格分隔**(防误判 "建群讨论" 的 "讨论" 被当群名)
- *
- * 锚到分隔符([,，。;；\n] 或 EOL)避免贪婪吞后续语句。
- *
- * [feat: feishu-create-group-hard-block] direct-dispatch follow-up 2026-05-24
+ * 改这个列表前需 user 同意 — 这是 hard-block 行为面的精确性来源。
  */
-const ZH_NAME_PATTERN_INTRODUCER =
-  /(?:群名(?:是|叫|为)|名字(?:叫|是|为)|名(?:为|是|叫)|名称(?:是|叫|为)|命名(?:为)?|起名(?:叫|为)?|叫做|叫)\s*["「『'"`]?([^"「『」』'"`,，。;；\n]{1,40}?)["」』'"`]?\s*(?:$|[,，。;；])/
+const GROUP_CREATION_PHRASES_ZH = [
+  // Tier 1(4)
+  "建群",
+  "创建群",
+  "新建群",
+  "拉群",
+  // Tier 2(10)— 加量词口语变体
+  "建个群",
+  "建一个群",
+  "创建个群",
+  "创建一个群",
+  "新建个群",
+  "新建一个群",
+  "拉个群",
+  "拉一个群",
+  "开个群",
+  "开一个群",
+] as const
 
-const ZH_NAME_PATTERN_SHORT_FORM =
-  /(?:开|建|创建|新建|拉|搞|做)[^群]{0,20}群\s+["「『'"`]?([^"「『」』'"`,，。;；\s\n]{1,40})["」』'"`]?\s*(?:$|[,，。;；])/
-
-const EN_NAME_PATTERN =
-  /(?:called|named?)\s+["'`]?([^"'`,;\n]{1,40}?)["'`]?\s*(?:$|[,;.])/i
+/** 英文建群短语 — lowercase 比较 */
+const GROUP_CREATION_PHRASES_EN = [
+  "create a group",
+  "make a group",
+  "start a group",
+  "new group",
+] as const
 
 /**
- * 从 user message 提取群名。
- *
- * 输入约定:已 strip mention 的 cleaned text。
- * 返回:成功 = 群名字符串(已 trim);失败 = null(没找到 name keyword,或匹配失败)。
- *
- * 用法:配合 isGroupCreationIntent() 在 pipeline 检测到建群意图后,提取群名
- * 直接走 confirm card 流程(bypass LLM,provider-agnostic)。
- *
- * 支持表达:
- *   中文 introducer:`群名是 X` / `群名叫 X` / `群名为 X` / `名字叫 X` / `名字是 X` /
- *     `名字为 X` / `名叫 X` / `名为 X` / `名是 X` / `名称叫 X` / `命名 X` /
- *     `命名为 X` / `起名 X` / `叫做 X` / `叫 X`
- *   中文 short form:`建群 X` / `帮我建群 X` / `拉个群 X` / `创建讨论群 X`(需空格分隔)
- *   英文:`called X` / `named X`
- *
- * 不支持(返 null):没引导词且无空格分隔的纯意图("帮我建群"/"create a group")。
- * fallback:pipeline 回复"请告诉我群叫什么名字"提示 user 重发。
+ * 中文查询后缀排除 — 命中短语但 user 是在查询/讨论建群,不是真要建群。
+ * 例:"建群怎么操作" 含"建群" 但 user 是问操作方法,放走给 LLM 处理。
  */
-export function extractGroupName(text: string): string | null {
-  if (!text || typeof text !== "string") return null
-  // Pattern 1:introducer 优先(更可靠,避免短形式误吞 introducer 之后的名字)
-  const m1 = text.match(ZH_NAME_PATTERN_INTRODUCER)
-  if (m1 && m1[1]) {
-    const name = m1[1].trim()
-    if (name.length > 0) return name
+const QUERY_SUFFIXES_ZH = [
+  "怎么",
+  "如何",
+  "方法",
+  "步骤",
+  "流程",
+  "教程",
+  "为什么",
+] as const
+
+/**
+ * 英文 `new group` 专用排除 — 防"new group rule" / "new group of users" 等 noun
+ * phrase 误拦。命中 "new group" 时,如果后面紧跟这些 token 之一,放走给 LLM。
+ */
+const NEW_GROUP_EXCLUDE_TOKENS = [
+  " rule",
+  " of ",
+  " policy",
+  " chat",
+  " channel",
+  " members",
+  " settings",
+] as const
+
+/** 英文通用查询后缀 — "create a group how" 等 */
+const QUERY_SUFFIXES_EN = [" how", " how to"] as const
+
+/**
+ * 判断 user message 是否含建群意图(白名单短语命中 + 查询后缀排除兜底)。
+ *
+ * 输入约定:调用方负责先 strip mention,输入是已 clean 的 text。空 / 非字符串返 false。
+ *
+ * 命中规则:
+ *   1. 含任一中文白名单短语 → 命中候选;若同时含中文查询后缀 → 排除,返 false
+ *   2. 含任一英文白名单短语 → 命中候选;若同时含英文查询后缀 → 排除,返 false
+ *   3. 含 "new group" → 额外检查 NEW_GROUP_EXCLUDE_TOKENS(如紧跟 " rule" 等)→ 排除
+ *
+ * 用法:pipeline 检测到命中 → 不调 LLM,reply 引导 user 用 /group <群名>。
+ */
+export function isGroupCreationIntent(text: string): boolean {
+  if (!text || typeof text !== "string") return false
+
+  const zhHit = GROUP_CREATION_PHRASES_ZH.some((p) => text.includes(p))
+  const lower = text.toLowerCase()
+  const enHit = GROUP_CREATION_PHRASES_EN.some((p) => lower.includes(p))
+
+  if (!zhHit && !enHit) return false
+
+  // 排除规则按命中语言分别检查
+  if (zhHit) {
+    if (QUERY_SUFFIXES_ZH.some((s) => text.includes(s))) return false
   }
-  // Pattern 2:short form fallback(动词+群+空格+名字)
-  const m2 = text.match(ZH_NAME_PATTERN_SHORT_FORM)
-  if (m2 && m2[1]) {
-    const name = m2[1].trim()
-    if (name.length > 0) return name
+  if (enHit) {
+    if (QUERY_SUFFIXES_EN.some((s) => lower.includes(s))) return false
+    // "new group" 专用 noun-phrase 排除(rule / of / policy 等)
+    if (lower.includes("new group")) {
+      if (NEW_GROUP_EXCLUDE_TOKENS.some((s) => lower.includes("new group" + s))) {
+        return false
+      }
+    }
   }
-  // 英文
-  const m3 = text.match(EN_NAME_PATTERN)
-  if (m3 && m3[1]) {
-    const name = m3[1].trim()
-    if (name.length > 0) return name
-  }
-  return null
+  return true
 }
 
 // ============================================================

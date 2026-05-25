@@ -41,11 +41,11 @@ import {
 import type { PromptDispatcher } from "./prompt-dispatcher"
 import {
   classifyAttachment,
-  extractGroupName,
+  GROUP_NAME_MAX_LEN,
   isBotMentioned,
   isGroupCreationIntent,
   parseAttachMarkers,
-  parseCreateGroupMarkers,
+  parseGroupCommand,
   stripMentions,
 } from "./reply-actions"
 import type { ImMessageEvent } from "./wss-client"
@@ -58,7 +58,7 @@ export type OpencodeSDKClient = ReturnType<typeof createOpencodeClient>
  * 目录下,跟 user 主窗口的项目隔离。GUI sidebar 不会显示(因为 archive),
  * 也不污染 user 实际项目环境。
  */
-const FEISHU_WORKSPACE = join(homedir(), ".opencode", "feishu-workspace")
+const IMBOT_WORKSPACE = join(homedir(), ".opencode", "imbot-workspace")
 
 const FEISHU_OPEN_API_DOMAIN: Record<"feishu" | "lark", string> = {
   feishu: "https://open.feishu.cn",
@@ -98,48 +98,39 @@ const ATTACH_MARKER_PROMPT = [
   "系统会自动上传到飞书并 strip 掉这个 marker(用户看不到 marker,只看到文件)。",
   "",
   "约束:",
-  "- 路径必须是绝对路径,且在 `~/.opencode/feishu-workspace/` 子树内(写文件请用这个目录)",
+  "- 路径必须是绝对路径,且在 `~/.opencode/imbot-workspace/` 子树内(写文件请用这个目录)",
   "- 图片(jpg/png/gif/webp/bmp/tiff/ico)≤ 10MB",
   "- 文件(pdf/doc/xls/ppt/mp4/opus)≤ 30MB,其它扩展名(docx/xlsx/txt/md/zip 等)走 stream 兜底",
   "- 一次回复可嵌多个 marker,系统按出现顺序处理",
 ].join("\n")
 
 /**
- * [feat: feishu-bridge-light] CREATE_GROUP marker 协议 — 教 LLM 怎么触发自动建群。
- * 仅在 account.enableAutoGroupCreate=true 时拼入 system prompt(opt-in)。
- * 默认关闭防 prompt injection — 即便启用,真触发还需 user 二次确认。
- */
-const CREATE_GROUP_MARKER_PROMPT = [
-  "## 自动建群协议",
-  "当用户明确表达想创建新群(例如'拉个群讨论 X' / '建一个 Y 群')时,在回复里嵌入 marker:",
-  "  `[CREATE_GROUP:群名]`",
-  "系统会发飞书确认卡片让用户点【✅ 确认】或【❌ 拒绝】,确认后才真创建群并把用户拉进群。",
-  "",
-  "约束:",
-  "- 仅适用于私聊场景(系统会自动拒绝群里再次建群的请求)",
-  "- 群名直接写中文,系统会按字面值建群",
-  "- marker 不在用户可见的回复里(系统自动 strip)",
-  "- 同一回复嵌多个 marker → 系统发多张确认卡片",
-].join("\n")
-
-/**
- * [feat: feishu-create-group-toggle-gui] 2026-05-24
- * `enableAutoGroupCreate=false` 时拼入的"禁止建群"指令 — soft constraint。
+ * [feat: feishu-group-slash-command] 2026-05-24
+ * 建群引导 — 教 LLM 用户表达建群意图时回复"请用 /group <群名>",不再 emit marker。
  *
- * 起因:仅"不教 marker"不足以阻止 LLM — agent 仍会尝试翻源码 / 调 SDK / 装 MCP 等
- * 替代路径帮用户达成建群目的(2026-05-24 实测撞 imbot read permission ask 卡)。
+ * 替换了 v1 的 CREATE_GROUP_MARKER_PROMPT([CREATE_GROUP:name] 协议)和 v2 的
+ * CREATE_GROUP_DISABLED_PROMPT(flag=false 时禁令)。
  *
- * 加这段后:LLM 收到明确禁令 + 引导 user 到 GUI 开关。即便 prompt injection 绕过,
- * imbot agent 受限的 tool 默认权限 + user 在飞书看到权限卡仍能拒绝,是第二道闸。
+ * 设计:flag 状态不再影响 system prompt — 任何 flag 状态下 LLM 都引导用户用 /group。
+ * /group 路径本身在 pipeline.handle() 层处理(0 LLM 调用),flag=false 时 user 用
+ * /group 仍能建群(slash command 显式触发,绕过 flag);flag=true 时让 LLM 自动建群的
+ * 老能力被砍掉(LLM marker 路径已删,这是 user 拍板的 tradeoff:0 LLM 漂移)。
+ *
+ * **provider-agnostic 兜底**:跳过 system prompt 的 provider(claude-code 等)看不到这段,
+ * 但 pipeline 入口层的 isGroupCreationIntent 白名单会拦住自然语言建群请求并 reply 引导,
+ * user 仍能学会用 /group。
  */
-const CREATE_GROUP_DISABLED_PROMPT = [
-  "## 建群能力未启用",
-  "此账号未启用「AI 自动创建新群」能力。当用户请求建群时(例如'帮我建群' / '拉个群' / 'create group' 等),请:",
-  "1. 明确告知用户「此账号未启用自动建群,如需启用请在 DeskFox 设置 → 飞书桥接 → 选此账号点【编辑】→ 高级能力 → 勾选「允许 AI 自动创建新群」后重试」",
-  "2. **不要**尝试通过其他途径建群 — 不要读源码 / 不要尝试调飞书 SDK / 不要装 MCP / 不要找替代方案",
-  "3. **不要**让用户提供飞书 appId/appSecret/token 等凭证试图自己调用 API",
+const GROUP_CREATION_GUIDE_PROMPT = [
+  "## 建群引导",
+  "如果用户表达建群意图(例如'帮我建群' / '把刚才内容拉个群继续' / 'create a group for X'),",
+  "**不要尝试自己建群**,请回复用户使用斜杠命令:",
   "",
-  "原因:建群是用户**主动授权**的能力(opt-in),关闭意味着用户明确选择「不允许」,你应当尊重此决定。",
+  "  `/group <群名>`",
+  "",
+  "例:`/group 项目讨论`。让用户自己决定是否触发建群。",
+  "",
+  "**不要**尝试通过其他途径建群 — 不要读源码 / 不要调飞书 SDK / 不要装 MCP / 不要找替代方案,",
+  "**不要**让用户提供飞书 appId/appSecret/token 等凭证。",
 ].join("\n")
 
 /**
@@ -197,7 +188,7 @@ export interface PipelineOptions {
    */
   larkClient?: Client
   /**
-   * 可选 ATTACH 路径白名单根 — 默认 ~/.opencode/feishu-workspace(FEISHU_WORKSPACE)。
+   * 可选 ATTACH 路径白名单根 — 默认 ~/.opencode/imbot-workspace(IMBOT_WORKSPACE)。
    * 单测用 temp 目录覆盖,避免污染真实 workspace。
    * [feat: feishu-bridge-light]
    */
@@ -233,7 +224,7 @@ export class MessagePipeline {
     this.permissionController = new PermissionCardController({
       opencodeClient: opts.opencodeClient,
       larkClient: this.larkClient,
-      workspaceDir: FEISHU_WORKSPACE,
+      workspaceDir: IMBOT_WORKSPACE,
     })
     this.confirmController = new ConfirmCardController({
       larkClient: this.larkClient,
@@ -241,22 +232,18 @@ export class MessagePipeline {
   }
 
   /**
-   * [feat: feishu-bridge-light] 动态拼接 system prompt:
+   * 动态拼接 system prompt:
    * - base(总是)
    * - ATTACH marker(总是 — 路径白名单 + size 限制安全)
-   * - CREATE_GROUP marker(`account.enableAutoGroupCreate=true` 时)
-   * - CREATE_GROUP DISABLED(`enableAutoGroupCreate=false` 时,soft constraint)
-   *   [feat: feishu-create-group-toggle-gui] 2026-05-24 加 — 仅"不教 marker"
-   *   不足以阻止 LLM 找替代路径建群,加明确禁令 + GUI 引导。
+   * - 建群引导(总是 — 教 LLM 引导用户用 /group,不再 emit marker)
+   *   [feat: feishu-group-slash-command] 2026-05-24
    */
   private getSystemPrompt(): string {
-    const parts = [FEISHU_SESSION_SYSTEM_PROMPT_BASE, ATTACH_MARKER_PROMPT]
-    if (this.opts.account.enableAutoGroupCreate) {
-      parts.push(CREATE_GROUP_MARKER_PROMPT)
-    } else {
-      parts.push(CREATE_GROUP_DISABLED_PROMPT)
-    }
-    return parts.join("\n\n")
+    return [
+      FEISHU_SESSION_SYSTEM_PROMPT_BASE,
+      ATTACH_MARKER_PROMPT,
+      GROUP_CREATION_GUIDE_PROMPT,
+    ].join("\n\n")
   }
 
   /**
@@ -316,91 +303,118 @@ export class MessagePipeline {
     }
     if (!text) return
 
-    // [feat: feishu-bridge-light] /new slash command — 私聊清当前 session 切话题
-    // 群聊禁用(chatId 共享会影响全员);先 strip mention 再判,允许 "@bot /new" 形态
+    // [feat: feishu-bridge-light] /new slash command — 清当前 chat session 切话题
+    // [feat: feishu-group-new-cmd-and-mention-rename] 2026-05-25
+    // 启用条件:p2p 永远允许;group 只在 requireMention=false(免@ 模式)时允许 —
+    // user 主动选 channel-as-workspace 模式,清群 session 是 channel-level 共识操作。
+    // 先 strip mention 再判,允许 "@bot /new" 形态。
     const cleaned = stripMentions(text, event.mentions)
     if (cleaned === "/new") {
-      if (event.chatType !== "p2p") {
-        await this.sendFeishuText(event.chatId, "⚠️ /new 仅支持私聊(群里清会影响全员)")
+      if (event.chatType !== "p2p" && this.opts.account.requireMention) {
+        await this.sendFeishuText(
+          event.chatId,
+          "⚠️ 群里使用 /new 需先开启「允许 AI 免@ 读取群里所有信息」（DeskFox 设置 → 飞书桥接 → 选此账号 → 编辑 → 高级能力）",
+        )
         return
       }
       const sessionID = this.chatToSession.get(event.chatId)
       this.opts.chatSessionStore.delete(this.opts.accountId, event.chatId)
       this.chatToSession.delete(event.chatId)
       if (sessionID) this.sessionToChat.delete(sessionID)
-      await this.sendFeishuText(event.chatId, "✅ 已开启新对话")
+      const replyText =
+        event.chatType === "p2p"
+          ? "✅ 已开启新对话"
+          : "✅ 已开启新对话（群 session 已清，影响所有成员）"
+      await this.sendFeishuText(event.chatId, replyText)
       console.log(
-        `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"})`,
+        `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"}, chatType=${event.chatType})`,
       )
       return
     }
 
-    // [feat: feishu-create-group-hard-block] 2026-05-24
-    // 建群意图 provider-agnostic 处理(p2p only,群聊跳过避免误拦"群是怎么建的"
-    // 学术问题)。两条路径根据 flag 分流,都不依赖 LLM 处理"建群"transactional 操作:
+    // [feat: feishu-group-slash-command] 2026-05-24
+    // /group <群名> — 显式建群命令(主路径,0 LLM 调用)
     //
-    // 1. flag=false(disabled)→ hard-block:不调 LLM,直接发 GUI 引导
-    // 2. flag=true(enabled)→ direct-dispatch:提取群名 + 直发 confirm card(bypass LLM)
+    // 群聊禁用:跟 /new 一致策略,群里建子群 UX 不清晰。
+    // 私聊命中:解析成功 → 弹 confirm card → user 点 ✅ → executeGroupCreate
+    //         解析失败(无参数 / 超长) → reply 提示
     //
-    // 起因:claude-code 等 spawn-based provider 跳过 role=system 消息,导致 system
-    // prompt 软约束失效 + marker 协议教学也失效(LLM 不知道 [CREATE_GROUP:] 协议)。
-    // 此 pipeline 早退分支保证任何 provider 都行为一致。
-    if (event.chatType === "p2p" && isGroupCreationIntent(cleaned)) {
-      const enabled = this.opts.account.enableAutoGroupCreate
-      if (!enabled) {
-        console.log(
-          `[pipeline ${this.opts.accountId}] hard-block CREATE_GROUP intent ` +
-            `(text="${cleaned.slice(0, 50)}", flag=false, p2p) — skip LLM, send GUI guidance`,
-        )
+    // 设计:绕开 LLM provider,所有 provider(default / claude-code / imbot)行为一致。
+    const groupCmd = parseGroupCommand(cleaned)
+    if (groupCmd.matched) {
+      if (event.chatType !== "p2p") {
         await this.sendFeishuText(
           event.chatId,
-          "此账号未启用自动建群能力。如需启用请在 DeskFox 设置 → 飞书桥接 → 选此账号点【编辑】→ 高级能力 → 勾选「允许 AI 自动创建新群」后重试。",
+          "⚠️ /group 仅支持私聊（群里建子群 UX 不清晰，请在私聊里执行）",
         )
         return
       }
-      // flag=true 直发 confirm card(bypass LLM)
-      const name = extractGroupName(cleaned)
-      if (name) {
-        console.log(
-          `[pipeline ${this.opts.accountId}] direct-dispatch CREATE_GROUP name="${name}" — skip LLM, send confirm card`,
+      if (groupCmd.error === "no_name") {
+        await this.sendFeishuText(
+          event.chatId,
+          "⚠️ 用法：`/group <群名>`，例：`/group 项目讨论`",
         )
-        const requestID = `cg_${event.messageId}_${++this.confirmCounter}`
-        const spec = {
-          title: `🆕 创建群【${name}】?`,
-          body: `你请求创建群 **${name}** 并把你拉进群。点【✅ 确认】才会建,【❌ 拒绝】不动。`,
-        }
-        // fire-and-forget:卡片发送 + user 后续点击都是 async
-        void this.confirmController
-          .start(requestID, event.chatId, spec, async (confirmed) => {
-            if (!confirmed) {
-              console.log(
-                `[pipeline ${this.opts.accountId}] user rejected direct-dispatch group create '${name}'`,
-              )
-              return
-            }
-            await this.executeGroupCreate(name, event.chatId, event.senderOpenId)
-          })
-          .catch((err) => {
-            console.error(
-              `[pipeline ${this.opts.accountId}] direct-dispatch confirmController.start error:`,
-              err,
-            )
-          })
         return
       }
-      // 提取群名失败 → 友好提示 user,不调 LLM(provider-agnostic UX)
+      if (groupCmd.error === "too_long") {
+        await this.sendFeishuText(
+          event.chatId,
+          `⚠️ 群名超长（最多 ${GROUP_NAME_MAX_LEN} 字符，飞书限制），请缩短后重试`,
+        )
+        return
+      }
+      const name = groupCmd.groupName!
       console.log(
-        `[pipeline ${this.opts.accountId}] direct-dispatch intent without name — prompting user`,
+        `[pipeline ${this.opts.accountId}] /group dispatch name="${name}" — skip LLM, send confirm card`,
+      )
+      const requestID = `cg_${event.messageId}_${++this.confirmCounter}`
+      const spec = {
+        title: `🆕 创建群【${name}】?`,
+        body: `你请求创建群 **${name}** 并把你拉进群。点【✅ 确认】才会建,【❌ 拒绝】不动。`,
+      }
+      void this.confirmController
+        .start(requestID, event.chatId, spec, async (confirmed) => {
+          if (!confirmed) {
+            console.log(
+              `[pipeline ${this.opts.accountId}] user rejected /group create '${name}'`,
+            )
+            return
+          }
+          await this.executeGroupCreate(name, event.chatId, event.senderOpenId)
+        })
+        .catch((err) => {
+          console.error(
+            `[pipeline ${this.opts.accountId}] /group confirmController.start error:`,
+            err,
+          )
+        })
+      return
+    }
+
+    // [feat: feishu-group-slash-command] 2026-05-24
+    // 自然语言建群意图回退引导 — 白名单短语命中 → 不走 LLM,reply 引导用 /group
+    //
+    // 设计:provider-agnostic 兜底防 imbot wall(claude-code 等跳过 system prompt 的
+    // provider 看不到 GROUP_CREATION_GUIDE_PROMPT,这里直接拦)。p2p only 跟 /new 一致。
+    // flag 不再影响行为(flag 关时 user 仍可以 /group,不需要"启用"操作 — slash command
+    // 显式触发是 user 主动授权,不需要预先 opt-in)。
+    if (event.chatType === "p2p" && isGroupCreationIntent(cleaned)) {
+      console.log(
+        `[pipeline ${this.opts.accountId}] natural-language group intent detected ` +
+          `(text="${cleaned.slice(0, 50)}") — guide user to /group`,
       )
       await this.sendFeishuText(
         event.chatId,
         [
-          "好的,要建群。请在一条消息里告诉我群名,例如:",
-          "• 帮我建群叫 **项目讨论**",
-          "• 建群,群名是 **项目讨论**",
-          "• 帮我建群,名字叫 **项目讨论**",
-          "• 建群 **项目讨论**(动词后空格 + 群名)",
-          "• create group called **project-talk**",
+          "你想创建群？请使用斜杠命令：",
+          "",
+          "  `/group <群名>`",
+          "",
+          "例：",
+          "  • `/group 项目讨论`",
+          "  • `/group 产品需求-2026Q2`",
+          "",
+          "（创建后我会拉你进群，后续讨论在那里继续）",
         ].join("\n"),
       )
       return
@@ -449,7 +463,7 @@ export class MessagePipeline {
     if (!sessionID) {
       try {
         const res = await this.opts.opencodeClient.session.create({
-          query: { directory: FEISHU_WORKSPACE },
+          query: { directory: IMBOT_WORKSPACE },
           body: {
             title: `Feishu ${event.chatType}/${event.chatId.slice(-8)}`,
           },
@@ -490,11 +504,10 @@ export class MessagePipeline {
       return
     }
 
-    // [feat: feishu-bridge-light] reply 后处理:
-    // 1. CREATE_GROUP marker(opt-in)→ 发 confirm 卡片让 user 确认(异步),strip marker
-    // 2. ATTACH marker(总是)→ 上传文件(同步)、strip marker、失败 warning append
-    const afterGroup = this.processGroupMarkers(reply, event)
-    const finalText = await this.processAttachments(afterGroup, event.chatId)
+    // reply 后处理:ATTACH marker(总是)→ 上传文件(同步)、strip marker、失败 warning append。
+    // [CREATE_GROUP:name] marker 路径已删([feat: feishu-group-slash-command] 2026-05-24),
+    // 建群只走用户显式 /group slash command。
+    const finalText = await this.processAttachments(reply, event.chatId)
 
     if (!finalText.trim()) {
       console.warn(`[pipeline ${this.opts.accountId}] empty reply for chat=${event.chatId}`)
@@ -517,7 +530,7 @@ export class MessagePipeline {
   /**
    * [feat: feishu-bridge-light] 解析 reply 里的 [ATTACH:path] marker、上传文件、strip marker。
    *
-   * 安全约束:路径必须在 ~/.opencode/feishu-workspace/ 子树内(classifyAttachment 判)。
+   * 安全约束:路径必须在 ~/.opencode/imbot-workspace/ 子树内(classifyAttachment 判)。
    * 单个 ATTACH 失败不影响其它;失败原因追加到最终文本 warnings 段尾,user 可见。
    *
    * 返回最终要发到飞书的文本(可能为空 — 全是附件无文字时)。
@@ -558,59 +571,6 @@ export class MessagePipeline {
       }
     }
     return [cleanText, ...warnings].filter((s) => s.trim()).join("\n\n")
-  }
-
-  /**
-   * [feat: feishu-bridge-light] 解析 reply 里 [CREATE_GROUP:name] marker。
-   *
-   * 触发条件(双门控):
-   *   - account.enableAutoGroupCreate === true(opt-in 配置)
-   *   - event.chatType === "p2p"(仅私聊,群里不准 AI 再建群)
-   *
-   * 触发时为每个 marker 发 confirm 卡片(异步,通过 ConfirmCardController);
-   * user 点确认 → callback 触发 chat.create + getShareLink + sendFeishuText 结果消息。
-   * 不论触发与否,marker 都从 reply 文本 strip 掉。
-   *
-   * 不阻塞 — 卡片发送和后续 user 点击都是 async,本方法立即返回 strip 后的文本。
-   */
-  processGroupMarkers(reply: string, event: ImMessageEvent): string {
-    const { names, cleanText } = parseCreateGroupMarkers(reply)
-    if (names.length === 0) return reply
-
-    const enabled = this.opts.account.enableAutoGroupCreate
-    const isP2P = event.chatType === "p2p"
-    if (!enabled || !isP2P) {
-      console.log(
-        `[pipeline ${this.opts.accountId}] CREATE_GROUP markers (${names.length}) stripped but not triggered (enableAutoGroupCreate=${enabled}, chatType=${event.chatType})`,
-      )
-      return cleanText
-    }
-
-    for (const name of names) {
-      const requestID = `cg_${event.messageId}_${++this.confirmCounter}`
-      const spec = {
-        title: `🆕 创建群【${name}】?`,
-        body: `AI 想自动创建群 **${name}** 并把你拉进群。点【✅ 确认】才会建,【❌ 拒绝】不动。`,
-      }
-      // fire-and-forget:卡片发送 + user 后续点击都是 async
-      void this.confirmController
-        .start(requestID, event.chatId, spec, async (confirmed) => {
-          if (!confirmed) {
-            console.log(
-              `[pipeline ${this.opts.accountId}] user rejected group create '${name}'`,
-            )
-            return
-          }
-          await this.executeGroupCreate(name, event.chatId, event.senderOpenId)
-        })
-        .catch((err) => {
-          console.error(
-            `[pipeline ${this.opts.accountId}] confirmController.start error:`,
-            err,
-          )
-        })
-    }
-    return cleanText
   }
 
   /**
@@ -680,7 +640,7 @@ export class MessagePipeline {
     void this.opts.opencodeClient.session
       .promptAsync({
         path: { id: sessionID },
-        query: { directory: FEISHU_WORKSPACE },
+        query: { directory: IMBOT_WORKSPACE },
         body: {
           agent,
           system: this.getSystemPrompt(),
@@ -703,7 +663,7 @@ export class MessagePipeline {
     // 直接拉 messages 取 last assistant text(role 准确,不会 echo user prompt)
     const msgsRes = await this.opts.opencodeClient.session.messages({
       path: { id: sessionID },
-      query: { directory: FEISHU_WORKSPACE },
+      query: { directory: IMBOT_WORKSPACE },
     })
     const wrap = msgsRes as {
       data?: Array<{
@@ -771,7 +731,7 @@ export class MessagePipeline {
   async debugFetchMessages(sessionID: string): Promise<unknown> {
     const r = await this.opts.opencodeClient.session.messages({
       path: { id: sessionID },
-      query: { directory: FEISHU_WORKSPACE },
+      query: { directory: IMBOT_WORKSPACE },
     })
     const wrap = r as {
       data?: unknown
@@ -806,7 +766,7 @@ export class MessagePipeline {
     await (rawClient as { patch: (req: unknown) => Promise<unknown> }).patch({
       url: "/session/{id}",
       path: { id: sessionID },
-      query: { directory: FEISHU_WORKSPACE },
+      query: { directory: IMBOT_WORKSPACE },
       body: {
         time: { archived: Date.now() },
       },

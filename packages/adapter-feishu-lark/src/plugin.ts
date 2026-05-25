@@ -26,7 +26,7 @@
 //   5. lark.im.v1.message.create 发回飞书
 //   6. saveAccount/deleteAccount 后 server 触发 onAccountsChanged → hot-sync WSS
 
-import { mkdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
@@ -41,8 +41,71 @@ import { startServer, type ServerReadyData } from "./server"
 
 /** plugin server ready 信息 → 写到此文件给 DeskFox 主进程读 */
 const PLUGIN_SERVER_PATH = join(homedir(), ".opencode", "feishu-plugin-server.json")
-/** 飞书桥接专用 workspace — 跟 user 主窗口任何项目隔离 */
-const FEISHU_WORKSPACE = join(homedir(), ".opencode", "feishu-workspace")
+
+/**
+ * [feat: imbot-workspace-rename] 2026-05-25
+ * IM 桥接共享 home base workspace — 跟 user 主窗口任何项目隔离。所有 IM plugin
+ * (飞书 / 未来 telegram / 钉钉)共用此路径(对齐 ADR `OPENCODE-PLAN/架构决策/
+ * im桥接-imbot单一架构.md` "imbot 跨 IM 共享 home base"语义)。
+ *
+ * 老路径 `feishu-workspace`(2026-05-23 feishu-bridge-light 起)在本 feat 中
+ * 重命名为 `imbot-workspace`;启动时 `migrateLegacyWorkspace` 自动迁移老用户。
+ */
+const LEGACY_WORKSPACE = join(homedir(), ".opencode", "feishu-workspace")
+const IMBOT_WORKSPACE = join(homedir(), ".opencode", "imbot-workspace")
+
+/**
+ * 把老 ~/.opencode/feishu-workspace/ 迁移到新 ~/.opencode/imbot-workspace/(原子 rename)。
+ *
+ * 行为表(详 `docs/features/imbot-workspace-rename/1-spec.md §测试用例`):
+ *   - legacy 存在 + new 不存在 → mv,返 "migrated"
+ *   - legacy 不存在 + new 存在 → no-op
+ *   - 两者都不存在 → no-op(初次安装)
+ *   - 两者都存在 → warn,不动(罕见 — user 自己建过)
+ *   - mv 抛错 → warn + 不崩
+ *
+ * [feat: imbot-workspace-rename] 2026-05-25 helper extract,DI 友好测
+ */
+export type MigrateResult =
+  | "migrated"
+  | "noop-already-new"
+  | "noop-no-legacy"
+  | "skipped-both-exist"
+  | "failed"
+
+export function migrateLegacyWorkspace(
+  legacyPath: string,
+  newPath: string,
+  fs: {
+    existsSync: (p: string) => boolean
+    renameSync: (o: string, n: string) => void
+  },
+  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+): MigrateResult {
+  const legacyExists = fs.existsSync(legacyPath)
+  const newExists = fs.existsSync(newPath)
+  if (!legacyExists && newExists) return "noop-already-new"
+  if (!legacyExists && !newExists) return "noop-no-legacy"
+  if (legacyExists && newExists) {
+    logger.warn(
+      `[feishu-plugin] both legacy ${legacyPath} and new ${newPath} exist — keeping new, please check legacy manually`,
+    )
+    return "skipped-both-exist"
+  }
+  // legacyExists && !newExists
+  try {
+    fs.renameSync(legacyPath, newPath)
+    logger.info(
+      `[feishu-plugin] migrated legacy workspace path ${legacyPath} → ${newPath}`,
+    )
+    return "migrated"
+  } catch (e) {
+    logger.warn(
+      `[feishu-plugin] failed to migrate legacy workspace ${legacyPath} → ${newPath}: ${(e as Error).message}. Please mv manually.`,
+    )
+    return "failed"
+  }
+}
 
 /**
  * Plugin 模块级单例 — multi-instance 场景下避免 N 个 server / WSS。
@@ -121,11 +184,20 @@ export const FeishuBridgePlugin = async (input: PluginInput): Promise<Hooks> => 
  * 触发本地 syncAccounts() 让 wssManager 接受新账号 hot reload(0 跨进程延迟)。
  */
 async function initBackground(): Promise<void> {
-  // 0. 确保飞书专用 workspace 目录存在(plugin 创建的 session 都在这跑)
+  // [feat: imbot-workspace-rename] 2026-05-25
+  // 0a. 老路径 feishu-workspace 自动迁移到 imbot-workspace(legacy → new mv)
+  migrateLegacyWorkspace(
+    LEGACY_WORKSPACE,
+    IMBOT_WORKSPACE,
+    { existsSync, renameSync },
+    { info: (m) => console.log(m), warn: (m) => console.warn(m) },
+  )
+
+  // 0b. 确保 IM 桥接共享 workspace 目录存在(plugin 创建的 session 都在这跑)
   try {
-    mkdirSync(FEISHU_WORKSPACE, { recursive: true })
+    mkdirSync(IMBOT_WORKSPACE, { recursive: true })
   } catch (err) {
-    console.warn(`[feishu-plugin] mkdir ${FEISHU_WORKSPACE} failed:`, err)
+    console.warn(`[feishu-plugin] mkdir ${IMBOT_WORKSPACE} failed:`, err)
   }
 
   // 0.5 chatId → sessionID 持久化映射(plugin 重启后同 chat 复用 session)
@@ -161,7 +233,7 @@ async function initBackground(): Promise<void> {
       return pipeline.debugFetchMessages(sessionID)
     },
   })
-  console.log(`[feishu-plugin] server: ${handle.url} workspace=${FEISHU_WORKSPACE}`)
+  console.log(`[feishu-plugin] server: ${handle.url} workspace=${IMBOT_WORKSPACE}`)
 
   // 2. 首次 sync(读已绑定 accounts → 起 WSS)
   await syncAccounts()

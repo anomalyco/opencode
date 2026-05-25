@@ -17,6 +17,51 @@
 
 
 
+
+## [macOS] 2026.5.25.1 — 2026-05-25
+
+**主题**:首个生产级飞书桥接 + 文件编辑器增强(自 2026-05-12 prod `2026.5.12.1` 以来 148 commits)
+
+**新功能**:
+- 🔗 **飞书桥接(全新)**:绑飞书 bot 账号后,直接在飞书 IM 跟 AI 对话
+  - 私聊 / 群聊全支持(群聊默认 @ 才响应,可在 GUI 改"允许免@")
+  - `/new` 清当前对话切话题
+  - `/group <群名>` 显式创建群(替代易误触的自然语言建群)
+  - `[ATTACH:/path]` 文件回传(图片 ≤10MB / 文件 ≤30MB)
+  - 多账号支持 + 多群独立 session
+- 📝 **文件查看器**:
+  - 编辑态 1s 自动落盘 + 切 tab/关窗口前 flush 兜底(REQ-001 dirty tab)
+  - 100MB+ 大文件预览防护 4 层(office 200MB / 媒体 ∞ / 用本机软件兜底)
+  - 选区右键"加入聊天" + 焦点自动跟回输入框
+- 🔍 **文件树**:
+  - 多选 Shift/Ctrl 拖到聊天接通
+  - AI 创建新文件后自动浮现(不用 F5)
+
+**修复**:
+- 聊天拖拽接收浮层卡死
+- 飞书 ATTACH 上传 100% 失败(Bun + axios + Node form-data + Buffer 互操作 bug,iter 4 绕开整条 SDK 链才修)
+- 中文文件名飞书展示乱码(`%E6%8A%A5%E5%91%8A.md`)
+
+**治理**:
+- 三档发布渠道规范化(Tier 1 prod / Tier 2 dev / Tier 3 本地)+ ship 脚本统一
+- e2e 测试基础设施(Phase 1 mock mode)+ pre-push gate
+- 主分支重命名 `dev` → `main`(2026-05-21,跟 installer channel `dev` 命名空间解耦)
+
+**安装**:
+- macOS:`.dmg` 装到 `/Applications/DeskFox.app`(Apple Silicon)
+- 不签名 → 首次打开右键 → 打开 → 仍要打开
+
+**回退**:之前 prod 是 `2026.5.12.1`(2026-05-12),如有问题可回装那个 .dmg。
+
+**包内容**:
+- main HEAD ship 节点:`2842ef378`
+- 配套 plugin / sidecar:本地构建,跟 .app 同 commit
+- 配套 installer:`DeskFox-2026.5.25.1_aarch64.dmg`(64.7 MB)
+
+- GitHub Release `ship-mac-prod-2026.5.25.1`(主仓 `zoulukuang/deskfox`)
+- Gitee Release(镜像 `zoulukuang/deskfox`)
+
+---
 ## [macOS] 2026.5.24.1-dev — 2026-05-24
 
 **包含**:feishu-bridge-light 三件套全套(`/new` 私聊清话题 / `[ATTACH:path]` 文件回传 / `[CREATE_GROUP:name]` opt-in 自动建群) + e2e-pre-push-gate + e2e-vite-warmup 等 main 上 commits。
