@@ -21,6 +21,8 @@ import { recordRunSpanError, setRunSpanAttributes, withRunSpan } from "./otel"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
 import type { RunInput, RunPrompt, RunProvider } from "./types"
+import { UI } from "../../ui"
+import { initHeartbeat, checkHeartbeat } from "@/effect/instance-heartbeat"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -717,6 +719,13 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
       "opencode.demo": input.demo,
     },
     async () => {
+      await initHeartbeat()
+
+      const heart = await checkHeartbeat().catch(() => undefined)
+      if (heart && heart.severity !== "fine") {
+        UI.println(UI.Style.TEXT_WARNING_BOLD + "!", UI.Style.TEXT_NORMAL, heart.message)
+      }
+
       const sdk = createOpencodeClient({
         baseUrl: "http://opencode.internal",
         fetch: input.fetch,

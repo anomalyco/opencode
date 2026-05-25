@@ -35,6 +35,7 @@ import { ConfigModelID } from "./model-id"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
 import { ConfigPermission } from "./permission"
+import { ConfigPsychosisDetector } from "./psychosis-detector"
 import { ConfigPlugin } from "./plugin"
 import { ConfigProvider } from "./provider"
 import { ConfigReference } from "./reference"
@@ -303,6 +304,10 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  psychosis_detector: Schema.optional(ConfigPsychosisDetector.Info).annotate({
+    description:
+      "AI psychosis detector — warns when too many instances run for too long",
+  }),
 }).annotate({ identifier: "Config" })
 
 // Uses the shared `DeepMutable` from `@opencode-ai/core/schema`. See the definition

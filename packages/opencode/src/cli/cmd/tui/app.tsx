@@ -61,6 +61,7 @@ import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import { initHeartbeat, checkHeartbeat } from "@/effect/instance-heartbeat"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
@@ -376,6 +377,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   const args = useArgs()
   onMount(() => {
+    initHeartbeat().then(() => {
+      checkHeartbeat().then((heart) => {
+        if (heart.severity !== "fine" && kv.get("psychosis_detector_enabled", false)) {
+          toast.show({
+            variant: heart.severity === "worried" || heart.severity === "urgent" ? "error" : "warning",
+            message: heart.message,
+            duration: 8000,
+          })
+        }
+      }).catch(() => {})
+    })
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
@@ -813,6 +825,25 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
+          dialog.clear()
+        },
+      },
+      {
+        name: "app.toggle.psychosis_detector",
+        title: kv.get("psychosis_detector_enabled", false)
+          ? "Disable AI psychosis detector"
+          : "Enable AI psychosis detector",
+        category: "System",
+        run: () => {
+          const next = !kv.get("psychosis_detector_enabled", false)
+          kv.set("psychosis_detector_enabled", next)
+          toast.show({
+            variant: "info",
+            message: next
+              ? "AI psychosis detector enabled. Will warn about excessive usage."
+              : "AI psychosis detector disabled.",
+            duration: 3000,
+          })
           dialog.clear()
         },
       },

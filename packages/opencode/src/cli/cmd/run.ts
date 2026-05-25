@@ -27,6 +27,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceRef } from "@/effect/instance-ref"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import { initHeartbeat, checkHeartbeat } from "@/effect/instance-heartbeat"
 
 const runtimeTask = import("./run/runtime")
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
@@ -248,6 +249,7 @@ export const RunCommand = effectCmd({
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
+      await initHeartbeat()
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
@@ -614,6 +616,11 @@ export const RunCommand = effectCmd({
           process.exit(1)
         }
         const sessionID = sess.id
+
+        const heart = await checkHeartbeat().catch(() => undefined)
+        if (heart && heart.severity !== "fine") {
+          UI.println(UI.Style.TEXT_WARNING_BOLD + "!", UI.Style.TEXT_NORMAL, heart.message)
+        }
 
         function emit(type: string, data: Record<string, unknown>) {
           if (args.format === "json") {
