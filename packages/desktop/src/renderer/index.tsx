@@ -17,13 +17,14 @@ import {
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
 import { useTheme } from "@opencode-ai/ui/theme"
+import type { ExtraAgentServer } from "../preload/types"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -70,7 +71,7 @@ const listenForDeepLinks = () => {
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
-const createPlatform = (): Platform => {
+const createPlatform = (refreshExtraAgents?: () => void): Platform => {
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -194,6 +195,24 @@ const createPlatform = (): Platform => {
       return window.api.openPath(path, app)
     },
 
+    openInFinder: (path: string) => window.api.openInFinder(path),
+
+    openInVscode: (path: string) => window.api.openInEditor("vscode", path),
+
+    openInEditor: (editor: string, path: string) => window.api.openInEditor(editor, path),
+
+    getCustomEditorPath: () => window.api.getCustomEditorPath(),
+
+    setCustomEditorPath: (path) => window.api.setCustomEditorPath(path),
+
+    getDefaultEditor: () => window.api.getDefaultEditor(),
+
+    setDefaultEditor: (editor) => window.api.setDefaultEditor(editor),
+
+    reloadBackend: async () => {
+      await window.api.reloadBackend()
+    },
+
     back() {
       window.history.back()
     },
@@ -284,6 +303,59 @@ const createPlatform = (): Platform => {
       return window.api.checkAppExists(appName)
     },
 
+    filterDirectories: (paths: string[]) => window.api.filterDirectories(paths),
+
+    listConfigFiles: (directory?: string | null) => window.api.listConfigFiles(directory),
+
+    readConfigFile: (path: string) => window.api.readConfigFile(path),
+
+    writeConfigFile: (path: string, content: string) => window.api.writeConfigFile(path, content),
+
+    createConfigFile: (path: string, content: string) => window.api.createConfigFile(path, content),
+
+    getConfigWorkspace: () => window.api.getConfigWorkspace(),
+
+    listConfigDirectory: (path: string) => window.api.listConfigDirectory(path),
+
+    listLocalDirectory: (path: string) => window.api.listLocalDirectory(path),
+
+    listTrellisTasks: (directory: string) => window.api.listTrellisTasks(directory),
+
+    getOpenclawConfig: () => window.api.getOpenclawConfig(),
+
+    setOpenclawConfig: async (config) => {
+      await window.api.setOpenclawConfig(config)
+      refreshExtraAgents?.()
+    },
+
+    testOpenclawConfig: (config) => window.api.testOpenclawConfig(config),
+
+    detectOpenclawConfig: () => window.api.detectOpenclawConfig(),
+
+    abortOpenclawTest: () => window.api.abortOpenclawTest(),
+
+    getGenericagentConfig: () => window.api.getGenericagentConfig(),
+
+    setGenericagentConfig: async (config) => {
+      await window.api.setGenericagentConfig(config)
+      refreshExtraAgents?.()
+    },
+
+    testGenericagentConfig: (config) => window.api.testGenericagentConfig(config),
+
+    abortGenericagentTest: () => window.api.abortGenericagentTest(),
+
+    getHermesConfig: () => window.api.getHermesConfig(),
+
+    setHermesConfig: async (config) => {
+      await window.api.setHermesConfig(config)
+      refreshExtraAgents?.()
+    },
+
+    testHermesConfig: (config) => window.api.testHermesConfig(config),
+
+    abortHermesTest: () => window.api.abortHermesTest(),
+
     async readClipboardImage() {
       const image = await window.api.readClipboardImage().catch(() => null)
       if (!image) return null
@@ -302,7 +374,8 @@ window.api.onMenuCommand((id) => {
 listenForDeepLinks()
 
 render(() => {
-  const platform = createPlatform()
+  const [extraAgentVersion, setExtraAgentVersion] = createSignal(0)
+  const platform = createPlatform(() => setExtraAgentVersion((value) => value + 1))
   const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
@@ -320,6 +393,7 @@ render(() => {
 
   // Fetch sidecar credentials (available immediately, before health check)
   const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+  const [extraAgents] = createResource(extraAgentVersion, () => window.api.listExtraAgentServers().catch(() => []))
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {
@@ -341,7 +415,7 @@ render(() => {
         password: data.password ?? undefined,
       },
     }
-    return [server] as ServerConnection.Any[]
+    return [server, ...extraAgentConnections(extraAgents.latest ?? [])] as ServerConnection.Any[]
   }
 
   function handleClick(e: MouseEvent) {
@@ -384,6 +458,7 @@ render(() => {
           when={
             !defaultServer.loading &&
             !sidecar.loading &&
+            !extraAgents.loading &&
             !windowConfig.loading &&
             !windowCount.loading &&
             !locale.loading
@@ -405,3 +480,22 @@ render(() => {
     </PlatformProvider>
   )
 }, root!)
+
+function extraAgentConnections(items: ExtraAgentServer[]): ServerConnection.Http[] {
+  return items.map((item) => ({
+    displayName: extraAgentLabel(item.id),
+    integration: item.id,
+    type: "http",
+    http: {
+      url: item.url,
+      username: item.username ?? undefined,
+      password: item.password ?? undefined,
+    },
+  }))
+}
+
+function extraAgentLabel(id: ExtraAgentServer["id"]) {
+  if (id === "openclaw") return "OpenClaw"
+  if (id === "hermes") return "Hermes"
+  return "GenericAgent"
+}

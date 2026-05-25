@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import { getCurrentSidecar, windowsify, copyBinaryToSidecarFolder } from "./utils"
 
 await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
@@ -37,6 +38,8 @@ if (!baseline) {
   const result = await build(false)
   if (result.exitCode !== 0) process.exit(result.exitCode)
 }
+
+await $`bun script/build-node.ts`.cwd("../opencode")
 
 const binaryPath = windowsify(`../opencode/dist/${binary}/bin/opencode`)
 

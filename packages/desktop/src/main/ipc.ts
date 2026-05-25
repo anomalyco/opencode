@@ -13,8 +13,40 @@ import type {
   WslConfig,
 } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import {
+  abortExtraAgentTest,
+  listExtraAgentServers,
+  testGenericagentBridge,
+  testHermesBridge,
+  testOpenclawBridge,
+} from "./extra-agents"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  createConfigFile,
+  detectOpenclawConfig,
+  filterDirectories,
+  getConfigWorkspace,
+  getCustomEditorPath,
+  getDefaultEditor,
+  getGenericagentConfig,
+  getHermesConfig,
+  getOpenclawConfig,
+  installCli,
+  listConfigDirectory,
+  listConfigFiles,
+  listLocalDirectory,
+  listTrellisTasks,
+  openInEditor,
+  openInFinder,
+  readConfigFile,
+  setCustomEditorPath,
+  setDefaultEditor,
+  setGenericagentConfig,
+  setHermesConfig,
+  setOpenclawConfig,
+  writeConfigFile,
+} from "./native"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -23,6 +55,7 @@ const pickerFilters = (ext?: string[]) => {
 
 type Deps = {
   killSidecar: () => Promise<void> | void
+  reloadBackend: () => Promise<void> | void
   awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
   getWindowConfig: () => Promise<WindowConfig> | WindowConfig
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
@@ -47,6 +80,8 @@ type Deps = {
 
 export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
+  ipcMain.handle("install-cli", () => installCli())
+  ipcMain.handle("reload-backend", () => deps.reloadBackend())
   ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
     const send = (step: InitStep) => event.sender.send("init-step", step)
     return deps.awaitInitialization(send)
@@ -160,6 +195,47 @@ export function registerIpcHandlers(deps: Deps) {
       execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
     })
   })
+  ipcMain.handle("open-in-finder", (_event: IpcMainInvokeEvent, path: string) => openInFinder(path))
+  ipcMain.handle("open-in-editor", (_event: IpcMainInvokeEvent, editor: string, path: string) =>
+    openInEditor(editor, path),
+  )
+  ipcMain.handle("get-custom-editor-path", () => getCustomEditorPath())
+  ipcMain.handle("set-custom-editor-path", (_event: IpcMainInvokeEvent, path: string | null) =>
+    setCustomEditorPath(path),
+  )
+  ipcMain.handle("get-default-editor", () => getDefaultEditor())
+  ipcMain.handle("set-default-editor", (_event: IpcMainInvokeEvent, editor: string | null) =>
+    setDefaultEditor(editor),
+  )
+  ipcMain.handle("filter-directories", (_event: IpcMainInvokeEvent, paths: string[]) => filterDirectories(paths))
+  ipcMain.handle("list-config-files", (_event: IpcMainInvokeEvent, directory?: string | null) =>
+    listConfigFiles(directory),
+  )
+  ipcMain.handle("read-config-file", (_event: IpcMainInvokeEvent, path: string) => readConfigFile(path))
+  ipcMain.handle("write-config-file", (_event: IpcMainInvokeEvent, path: string, content: string) =>
+    writeConfigFile(path, content),
+  )
+  ipcMain.handle("create-config-file", (_event: IpcMainInvokeEvent, path: string, content: string) =>
+    createConfigFile(path, content),
+  )
+  ipcMain.handle("get-config-workspace", () => getConfigWorkspace())
+  ipcMain.handle("list-config-directory", (_event: IpcMainInvokeEvent, path: string) => listConfigDirectory(path))
+  ipcMain.handle("list-local-directory", (_event: IpcMainInvokeEvent, path: string) => listLocalDirectory(path))
+  ipcMain.handle("list-trellis-tasks", (_event: IpcMainInvokeEvent, directory: string) => listTrellisTasks(directory))
+  ipcMain.handle("get-openclaw-config", () => getOpenclawConfig())
+  ipcMain.handle("set-openclaw-config", (_event: IpcMainInvokeEvent, config) => setOpenclawConfig(config))
+  ipcMain.handle("test-openclaw-config", (_event: IpcMainInvokeEvent, config) => testOpenclawBridge(config))
+  ipcMain.handle("detect-openclaw-config", () => detectOpenclawConfig())
+  ipcMain.handle("abort-openclaw-test", () => abortExtraAgentTest("openclaw"))
+  ipcMain.handle("get-genericagent-config", () => getGenericagentConfig())
+  ipcMain.handle("set-genericagent-config", (_event: IpcMainInvokeEvent, config) => setGenericagentConfig(config))
+  ipcMain.handle("test-genericagent-config", (_event: IpcMainInvokeEvent, config) => testGenericagentBridge(config))
+  ipcMain.handle("abort-genericagent-test", () => abortExtraAgentTest("genericagent"))
+  ipcMain.handle("get-hermes-config", () => getHermesConfig())
+  ipcMain.handle("set-hermes-config", (_event: IpcMainInvokeEvent, config) => setHermesConfig(config))
+  ipcMain.handle("test-hermes-config", (_event: IpcMainInvokeEvent, config) => testHermesBridge(config))
+  ipcMain.handle("abort-hermes-test", () => abortExtraAgentTest("hermes"))
+  ipcMain.handle("list-extra-agent-servers", () => listExtraAgentServers())
 
   ipcMain.handle("read-clipboard-image", () => {
     const image = clipboard.readImage()

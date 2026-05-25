@@ -2,8 +2,9 @@ import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import * as fs from "node:fs/promises"
+import path from "node:path"
 
-const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const OPENCODE_SERVER_DIST = path.resolve(import.meta.dirname, "../opencode/dist/node")
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -54,7 +55,7 @@ export default defineConfig({
         name: "opencode:virtual-server-module",
         enforce: "pre",
         resolveId(id) {
-          if (id === "virtual:opencode-server") return this.resolve(`${OPENCODE_SERVER_DIST}/node.js`)
+          if (id === "virtual:opencode-server") return path.join(OPENCODE_SERVER_DIST, "node.js")
         },
       },
       {

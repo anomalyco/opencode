@@ -14,6 +14,7 @@ import contextMenu from "electron-context-menu"
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
+import { reloadExtraAgents } from "./extra-agents"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
@@ -87,6 +88,10 @@ async function killSidecar() {
   const current = server
   server = null
   await current.stop()
+}
+
+async function killBackends() {
+  await Promise.all([killSidecar(), reloadExtraAgents()])
 }
 
 function ensureLoopbackNoProxy() {
@@ -190,11 +195,11 @@ const main = Effect.gen(function* () {
   })
 
   app.on("before-quit", () => {
-    void killSidecar()
+    void killBackends()
   })
 
   app.on("will-quit", () => {
-    void killSidecar()
+    void killBackends()
   })
 
   app.on("child-process-gone", (_event, details) => {
@@ -206,7 +211,7 @@ const main = Effect.gen(function* () {
   })
 
   setRelaunchHandler(() => {
-    void killSidecar().finally(() => {
+    void killBackends().finally(() => {
       app.relaunch()
       app.exit(0)
     })
@@ -214,15 +219,19 @@ const main = Effect.gen(function* () {
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void killSidecar().finally(() => app.exit(0))
+      void killBackends().finally(() => app.exit(0))
     })
   }
 
   const serverReady = Deferred.makeUnsafe<ServerReadyData>()
   const loadingComplete = Deferred.makeUnsafe<void>()
+  let reloadBackend: () => Promise<void> = async () => {
+    throw new Error("Backend reload is not ready")
+  }
 
   registerIpcHandlers({
-    killSidecar: () => killSidecar(),
+    killSidecar: () => killBackends(),
+    reloadBackend: () => reloadBackend(),
     awaitInitialization: Effect.fnUntraced(
       function* (sendStep) {
         sendStep(initStep)
@@ -252,9 +261,9 @@ const main = Effect.gen(function* () {
     wslPath: async (path, mode) => wslPath(path, mode),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     loadingWindowComplete: () => Deferred.doneUnsafe(loadingComplete, Effect.void),
-    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killSidecar),
+    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killBackends),
     checkUpdate: async () => checkUpdate(),
-    installUpdate: async () => installUpdate(killSidecar),
+    installUpdate: async () => installUpdate(killBackends),
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
@@ -311,46 +320,64 @@ const main = Effect.gen(function* () {
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
 
-  const loadingTask = yield* Effect.gen(function* () {
-    logger.log("sidecar connection started", { url })
+  initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
+    setInitStep({ phase: "sqlite_waiting" })
+    if (overlay) sendSqliteMigrationProgress(overlay, progress)
+    if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
+  })
 
-    initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
-      setInitStep({ phase: "sqlite_waiting" })
-      if (overlay) sendSqliteMigrationProgress(overlay, progress)
-      if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
-    })
+  let reloading = Promise.resolve()
+  const startSidecar = async (mode: "startup" | "reload", migrateDatabase: boolean) => {
+    await killSidecar()
+    logger.log("sidecar connection started", { url })
 
     ensureLoopbackNoProxy()
     useEnvProxy()
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
-        needsMigration,
-        userDataPath: app.getPath("userData"),
-        onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
-        onStdout: (message) => writeLog("server", "stdout", { message }),
-        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
-        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-      }),
-    )
-    server = listener
-    yield* Deferred.succeed(serverReady, {
-      url,
-      username: "opencode",
-      password,
+    const { listener, health } = await spawnLocalServer(hostname, port, password, {
+      needsMigration: migrateDatabase,
+      userDataPath: app.getPath("userData"),
+      onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+      onStdout: (message) => writeLog("server", "stdout", { message }),
+      onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+      onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
     })
+    server = listener
+    if (mode === "startup") {
+      Effect.runSync(
+        Deferred.succeed(serverReady, {
+          url,
+          username: "opencode",
+          password,
+        }),
+      )
+    }
 
-    yield* Effect.promise(() => health.wait).pipe(
+    await health.wait
+
+    logger.log("loading task finished")
+  }
+
+  reloadBackend = () => {
+    reloading = reloading.then(async () => {
+      setInitStep({ phase: "server_waiting" })
+      await startSidecar("reload", false)
+      setInitStep({ phase: "done" })
+    })
+    return reloading
+  }
+
+  const loadingTask = yield* Effect.gen(function* () {
+    yield* Effect.promise(() => startSidecar("startup", needsMigration)).pipe(
       Effect.timeout("30 seconds"),
       Effect.catch((e) =>
         Effect.sync(() => {
-          logger.error("sidecar health check failed", e.toString())
+          logger.error("sidecar startup failed", e.toString())
+          throw e
         }),
       ),
     )
-
-    logger.log("loading task finished")
   }).pipe(Effect.forkChild)
 
   if (needsMigration) {
@@ -379,10 +406,10 @@ const main = Effect.gen(function* () {
         if (win) sendMenuCommand(win, id)
       },
       checkForUpdates: () => {
-        void checkForUpdates(true, killSidecar)
+        void checkForUpdates(true, killBackends)
       },
       relaunch: () => {
-        void killSidecar().finally(() => {
+        void killBackends().finally(() => {
           app.relaunch()
           app.exit(0)
         })

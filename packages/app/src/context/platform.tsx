@@ -1,7 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
-import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 
 type PickerPaths = string | string[] | null
@@ -9,16 +8,6 @@ type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
-type PlatformName = "web" | "desktop"
-type DesktopOS = "macos" | "windows" | "linux"
-
-export type FatalRendererErrorLog = {
-  error: string
-  url: string
-  version?: string
-  platform: PlatformName
-  os?: DesktopOS
-}
 
 export type ConfigFile = {
   id: string
@@ -90,6 +79,13 @@ export type OpenclawTest = {
   logs: string[]
 }
 
+export type OpenclawDetection = {
+  ok: boolean
+  config?: OpenclawConfig
+  source?: string
+  logs: string[]
+}
+
 export type GenericagentConfig = {
   enabled: boolean
   pythonExecutable?: string
@@ -127,10 +123,10 @@ export type HermesTest = {
 
 export type Platform = {
   /** Platform discriminator */
-  platform: PlatformName
+  platform: "web" | "desktop"
 
   /** Desktop OS (Tauri only) */
-  os?: DesktopOS
+  os?: "macos" | "windows" | "linux"
 
   /** App version */
   version?: string
@@ -159,6 +155,9 @@ export type Platform = {
   /** Set default editor (desktop only) */
   setDefaultEditor?(editor: string | null): Promise<void>
 
+  /** Open a local path in a local app (desktop only) */
+  openPath?(path: string, app?: string): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 
@@ -186,11 +185,26 @@ export type Platform = {
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
-  /** Check for a downloadable desktop update */
+  /** Check for updates (Tauri only) */
   checkUpdate?(): Promise<UpdateInfo>
 
-  /** Install the downloaded update using the platform restart flow */
+  /** Install updates (Tauri only) */
+  update?(): Promise<void>
+
+  /** Install pending update and relaunch (desktop only) */
   updateAndRestart?(): Promise<void>
+
+  /** Export bundled debug log archive path (desktop only) */
+  exportDebugLogs?(): Promise<string>
+
+  /** Forward a fatal renderer error to the main process for logging (desktop only) */
+  recordFatalRendererError?(error: {
+    error: string
+    url: string
+    version?: string
+    platform: string
+    os?: string
+  }): Promise<void> | void
 
   /** Fetch override */
   fetch?: typeof fetch
@@ -215,6 +229,9 @@ export type Platform = {
 
   /** Save and test the configured OpenClaw integration (desktop only) */
   testOpenclawConfig?(config: OpenclawConfig): Promise<OpenclawTest>
+
+  /** Detect local OpenClaw gateway settings (desktop only) */
+  detectOpenclawConfig?(): Promise<OpenclawDetection>
 
   /** Abort a running OpenClaw connection test (desktop only) */
   abortOpenclawTest?(): Promise<boolean>
@@ -255,14 +272,11 @@ export type Platform = {
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 
-  /** Get whether native pinch/Ctrl-scroll zoom gestures are enabled (desktop only) */
-  getPinchZoomEnabled?(): Promise<boolean> | boolean
+  /** Get pinch-zoom enabled flag (desktop only) */
+  getPinchZoomEnabled?(): Promise<boolean>
 
-  /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
-  setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
-
-  /** Run a desktop-only menu action from the app chrome */
-  runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
+  /** Set pinch-zoom enabled flag (desktop only) */
+  setPinchZoomEnabled?(enabled: boolean): Promise<void>
 
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
@@ -299,6 +313,9 @@ export type Platform = {
 
   /** List a local directory without bootstrapping an opencode workspace (desktop only) */
   listLocalDirectory?(path: string): Promise<ConfigTreeItem[]>
+
+  /** Invoke a desktop menu action handler (desktop only) */
+  runDesktopMenuAction?(action: import("@/desktop-menu").DesktopMenuAction): Promise<void> | void
 }
 
 export type DisplayBackend = "auto" | "wayland"

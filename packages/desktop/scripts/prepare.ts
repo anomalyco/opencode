@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
+import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
+import { getCurrentSidecar, windowsify, copyBinaryToSidecarFolder } from "./utils"
 
 await import("./prebuild")
 
