@@ -40,6 +40,7 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
+import { errorMessage } from "@/util/error"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
@@ -216,14 +217,25 @@ export function Prompt(props: PromptProps) {
 
   async function createWorkspace(selection: Extract<WorkspaceSelection, { type: "new" }>) {
     setCreatingWorkspace(true)
-    const result = await sdk.client.experimental.workspace
-      .create({ type: selection.workspaceType, branch: null })
-      .catch(() => undefined)
-    if (result == undefined || result.error || !result.data) {
+    let result
+    try {
+      result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
+    } catch (err) {
       selectWorkspace(undefined)
       setCreatingWorkspace(false)
       toast.show({
-        message: "Creating workspace failed",
+        title: "Creating workspace failed",
+        message: errorMessage(err),
+        variant: "error",
+      })
+      return
+    }
+    if (result.error || !result.data) {
+      selectWorkspace(undefined)
+      setCreatingWorkspace(false)
+      toast.show({
+        title: "Creating workspace failed",
+        message: errorMessage(result.error ?? "no response"),
         variant: "error",
       })
       return
