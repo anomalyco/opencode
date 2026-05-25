@@ -12,21 +12,37 @@ export const ServeCommand = effectCmd({
   // need for an ambient project InstanceContext at startup.
   instance: false,
   handler: Effect.fn("Cli.serve")(function* (args) {
-    if (!Flag.OPENCODE_SERVER_PASSWORD) {
-      // ADR-0001: refuse to start in production without a password.  Without one,
-      // the opencode HttpApi is publicly reachable (PTY, file API, session creation
-      // can be driven by anyone who can reach the URL).  Set OPENCODE_ALLOW_UNAUTHENTICATED=1
-      // for the rare cases (single-tenant dev box on a private network) where you
-      // genuinely want this disabled — it must be explicit, not the default.
-      if (process.env["NODE_ENV"] === "production" && process.env["OPENCODE_ALLOW_UNAUTHENTICATED"] !== "1") {
+    // ADR-0001 production-startup gate.  Two valid auth models:
+    //   - OPENCODE_SERVER_PASSWORD set (basic auth gate)
+    //   - OPENCODE_AUTH_MODE=collab    (OAuth-cookie gate; basic is OFF)
+    // Either one in production is enough.  OPENCODE_ALLOW_UNAUTHENTICATED=1
+    // overrides both for local dev.
+    //
+    // Collab mode additionally requires GITHUB_ORG_NAME so the OAuth
+    // callback's org-membership probe has something to compare against.
+    const authMode = process.env["OPENCODE_AUTH_MODE"] ?? "basic"
+    const hasPassword = !!Flag.OPENCODE_SERVER_PASSWORD
+    const isCollabMode = authMode === "collab"
+    const allowUnauthenticated = process.env["OPENCODE_ALLOW_UNAUTHENTICATED"] === "1"
+
+    if (process.env["NODE_ENV"] === "production" && !allowUnauthenticated) {
+      if (!hasPassword && !isCollabMode) {
         console.error(
-          "FATAL: OPENCODE_SERVER_PASSWORD is not set in production. " +
-            "Refusing to start an unsecured server. " +
-            "Set OPENCODE_SERVER_PASSWORD, or set OPENCODE_ALLOW_UNAUTHENTICATED=1 to override.",
+          "FATAL: no auth configured in production.  Set OPENCODE_SERVER_PASSWORD " +
+            "(basic auth) or OPENCODE_AUTH_MODE=collab (OAuth cookie).  Use " +
+            "OPENCODE_ALLOW_UNAUTHENTICATED=1 only for private dev boxes.",
         )
         process.exit(1)
       }
-      console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+      if (isCollabMode && !process.env["GITHUB_ORG_NAME"]) {
+        console.error(
+          "FATAL: OPENCODE_AUTH_MODE=collab requires GITHUB_ORG_NAME to be set. " +
+            "The OAuth callback's org-membership check has nothing to compare against otherwise.",
+        )
+        process.exit(1)
+      }
+    } else if (!hasPassword && !isCollabMode) {
+      console.log("Warning: no auth configured; server is unsecured (NODE_ENV != production).")
     }
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))

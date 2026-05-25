@@ -4,7 +4,7 @@ import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "e
 import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
 import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
 import { isPublicUIPath } from "@/server/shared/public-ui"
-import { cookieAuthorizesRequest } from "@/collab/cookie-auth"
+import { authMode, cookieAuthorizesRequest } from "@/collab/cookie-auth"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
@@ -54,7 +54,15 @@ function validateCredential<A, E, R>(
       // password to an unscoped user.
       return yield* new HttpApiError.Unauthorized({})
     }
-    // fallthrough → basic-auth path
+    // fallthrough: in collab mode there is no basic-auth fallback —
+    // unauthenticated request always fails.  No www-authenticate header =>
+    // no browser native dialog.  HttpApi middleware can't easily emit a 302
+    // (the contract is fail-with-Unauthorized or return the effect), so the
+    // 302-for-HTML redirect lives in the router middleware below.  Here we
+    // just deny without leaking the password.
+    if (authMode() === "collab") {
+      return yield* new HttpApiError.Unauthorized({})
+    }
 
     if (!ServerAuth.authorized(credential, config)) {
       yield* HttpEffect.appendPreResponseHandler((_request, response) =>
@@ -146,23 +154,51 @@ export const authorizationRouterMiddleware = HttpRouter.middleware()(
 
         const cookieDecision = cookieDecisionFromHttpRequest(request, url)
         if (cookieDecision === "allow") return yield* effect
+        const mode = authMode()
         if (cookieDecision === "deny") {
-          // Same rationale as in validateCredential — scoped-cookie miss
-          // must not fall through to basic-auth.
+          // Cookie present but not scoped to this resource.  No basic-auth
+          // fallthrough (would leak the password's existence).  In collab
+          // mode we drop the WWW-Authenticate header so the browser doesn't
+          // pop its native dialog.
           return yield* Effect.succeed(
             HttpServerResponse.empty({
               status: UNAUTHORIZED,
-              headers: { "www-authenticate": WWW_AUTHENTICATE },
+              headers: mode === "collab" ? {} : { "www-authenticate": WWW_AUTHENTICATE },
             }),
           )
         }
-        // fallthrough → basic-auth path
+        // fallthrough.  Collab mode: no basic-auth fallback.  Redirect HTML
+        // navigations to OAuth, JSON 401 for everything else (still no
+        // www-authenticate, so no native dialog).
+        if (mode === "collab") {
+          if (isHtmlNavigation(request)) {
+            const next = url.pathname + url.search
+            return yield* Effect.succeed(
+              HttpServerResponse.empty({
+                status: 302,
+                headers: { location: "/collab/auth/github?next=" + encodeURIComponent(next) },
+              }),
+            )
+          }
+          return yield* Effect.succeed(
+            HttpServerResponse.jsonUnsafe(
+              { error: "Unauthorised" },
+              { status: UNAUTHORIZED, headers: { "cache-control": "no-store" } },
+            ),
+          )
+        }
         return yield* credentialFromURL(url, request).pipe(
           Effect.flatMap((credential) => validateRawCredential(effect, credential, config)),
         )
       })
   }),
 )
+
+function isHtmlNavigation(request: HttpServerRequest.HttpServerRequest): boolean {
+  const accept = (request.headers.accept ?? "").toString()
+  const fetchMode = (request.headers["sec-fetch-mode"] ?? "").toString()
+  return fetchMode === "navigate" || accept.includes("text/html")
+}
 
 export const authorizationLayer = Layer.effect(
   Authorization,

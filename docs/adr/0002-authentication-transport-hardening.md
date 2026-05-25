@@ -1,7 +1,16 @@
 # ADR-0002: Cookie, CSRF, and OAuth-state hardening
 
-- Status: Proposed
+- Status: Proposed (partial: cookie TTL reduced to 24h on 2026-05-24)
 - Date: 2026-05-21
+
+## 2026-05-24 — cookie TTL reduced
+
+`collab_sid` cookie Max-Age is now 24 hours (was 7 days).  Same stale-
+membership window as before, just narrower — a user removed from the
+GitHub org keeps access for at most 24 h instead of a week.  Live
+re-check of org membership on every request remains a future option
+documented elsewhere in this ADR.  See `COOKIE_TTL_SECONDS` in
+`packages/opencode/src/collab/router.ts`.
 
 ## Context
 

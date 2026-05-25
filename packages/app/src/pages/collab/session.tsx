@@ -14,6 +14,7 @@
 
 import {
   createSignal,
+  createResource,
   onMount,
   onCleanup,
   For,
@@ -789,6 +790,16 @@ function CollabSessionInner(props: { me: Me }) {
           </div>
         </Show>
 
+        {/* Iframe gate: no repos → render the recovery panel instead of the
+            iframe.  Server side enforces the same — /<base64>/?cs=<id> with
+            an empty-repos session 401s (see cookie-auth.ts).  Both are needed:
+            client side for UX (no broken iframe), server side for security
+            (no URL-crafting around the gate). */}
+        <Show
+          when={(collab.session()?.repos.length ?? 0) > 0}
+          fallback={<EmptyReposPanel />}
+        >
+
         <Show
           when={collab.nativeSessionDirectory()}
           fallback={
@@ -843,12 +854,124 @@ function CollabSessionInner(props: { me: Me }) {
             )
           }}
         </Show>
+        </Show>
       </div>
 
       {/* Invite dialog */}
       <Show when={showInvite()}>
         <InviteDialog onClose={() => setShowInvite(false)} />
       </Show>
+    </div>
+  )
+}
+
+// ── Empty-repos fallback panel ────────────────────────────────────────────────
+//
+// Renders in place of the iframe when the collab session has no linked repos.
+// Server side enforces the same gate (cookie-auth iframe rule); this panel
+// is the in-UI recovery path so a Driver can fix it without deleting and
+// re-creating the session.
+
+interface FallbackRepo {
+  full_name: string
+  name: string
+  description?: string | null
+  private?: boolean
+}
+
+function EmptyReposPanel() {
+  const collab = useCollab()
+  const isDriver = () => collab.viewerRole() === "driver"
+
+  const [repos] = createResource<FallbackRepo[]>(async () => {
+    const res = await fetch("/collab/repos")
+    if (!res.ok) return []
+    return res.json()
+  })
+  const [selected, setSelected] = createSignal<string[]>([])
+  const [adding, setAdding] = createSignal(false)
+  const [err, setErr] = createSignal<string | null>(null)
+
+  function toggle(repoFullName: string) {
+    setSelected((prev) =>
+      prev.includes(repoFullName) ? prev.filter((r) => r !== repoFullName) : [...prev, repoFullName],
+    )
+  }
+
+  async function submit() {
+    if (selected().length === 0) return
+    setErr(null)
+    setAdding(true)
+    try {
+      await collab.addRepos(selected())
+      setSelected([])
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div class="flex-1 flex flex-col items-center justify-center bg-zinc-950 p-8 overflow-auto">
+      <div class="max-w-2xl w-full">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 rounded-full bg-zinc-800/60 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-zinc-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+            </svg>
+          </div>
+          <h2 class="text-lg font-semibold text-zinc-200">No repositories linked</h2>
+          <p class="text-sm text-zinc-400 mt-1">
+            <Show when={isDriver()} fallback="A Driver of this session needs to add a repository before the workspace can open.">
+              Pick at least one repository to add to this collab session. The workspace and iframe open once it's cloned.
+            </Show>
+          </p>
+        </div>
+
+        <Show when={isDriver()}>
+          <Show
+            when={repos()?.length}
+            fallback={<div class="text-sm text-zinc-500 text-center">Loading repositories…</div>}
+          >
+            <div class="max-h-96 overflow-y-auto rounded-lg border border-zinc-800 divide-y divide-zinc-800 bg-zinc-900/40">
+              <For each={repos() ?? []}>
+                {(repo) => (
+                  <label class="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-zinc-800/40">
+                    <input
+                      type="checkbox"
+                      class="mt-1"
+                      checked={selected().includes(repo.full_name)}
+                      onChange={() => toggle(repo.full_name)}
+                    />
+                    <span class="flex-1 min-w-0">
+                      <span class="text-sm text-zinc-200 truncate block">{repo.full_name}</span>
+                      <Show when={repo.description}>
+                        <span class="text-xs text-zinc-500 line-clamp-1">{repo.description}</span>
+                      </Show>
+                    </span>
+                  </label>
+                )}
+              </For>
+            </div>
+
+            <Show when={err()}>
+              <div class="text-xs text-red-400 mt-2">{err()}</div>
+            </Show>
+
+            <div class="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                class="px-3 py-1.5 text-sm rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                disabled={selected().length === 0 || adding()}
+                onClick={submit}
+              >
+                {adding() ? "Adding…" : `Add ${selected().length} repo${selected().length === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </Show>
+        </Show>
+      </div>
     </div>
   )
 }

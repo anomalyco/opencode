@@ -156,6 +156,46 @@ export function linkNativeSession(collabSessionId: string, sessionId: string): v
   })
 }
 
+/**
+ * Append `repos` to the collab session's linked-repo list.
+ *
+ * - Idempotent: existing repos in the set are skipped, returning only the
+ *   actually-new ones.  Callers use the returned list to drive
+ *   initSessionWorkspace (clone only the new ones, not everything).
+ * - Caller is responsible for any access-control checks (Driver-only).
+ * - No-op + empty return when the session is soft-deleted.
+ */
+export function addRepos(collabSessionId: string, repos: string[]): string[] {
+  if (repos.length === 0) return []
+  return Database.transaction((db) => {
+    const session = db
+      .select({ id: CollabSessionTable.id })
+      .from(CollabSessionTable)
+      .where(and(eq(CollabSessionTable.id, collabSessionId), isNull(CollabSessionTable.deleted_at)))
+      .get()
+    if (!session) return []
+
+    const existing = new Set(
+      db
+        .select({ name: CollabRepoTable.repo_full_name })
+        .from(CollabRepoTable)
+        .where(eq(CollabRepoTable.collab_session_id, collabSessionId))
+        .all()
+        .map((r) => r.name),
+    )
+
+    const added: string[] = []
+    for (const repo of repos) {
+      if (existing.has(repo)) continue
+      db.insert(CollabRepoTable)
+        .values({ id: collabId("rp"), collab_session_id: collabSessionId, repo_full_name: repo })
+        .run()
+      added.push(repo)
+    }
+    return added
+  })
+}
+
 export function deleteCollabSession(id: string): void {
   Database.use((db) => {
     db.update(CollabSessionTable)

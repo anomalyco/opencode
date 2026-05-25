@@ -16,6 +16,15 @@
 > the same shape (ECS Fargate + ALB + EFS + Secrets Manager).
 >
 > **GH Actions repository secret required**: `AWS_UTILS_ACCOUNT_ID = 637226132752`.
+>
+> **Auth model (utils deployment)**: `OPENCODE_AUTH_MODE=collab` is set; the
+> GitHub OAuth cookie is the **sole** auth gate.  Basic auth
+> (`OPENCODE_SERVER_PASSWORD`) is OFF.  Unauthenticated HTML navigations 302 to
+> `/collab/auth/github?next=<path>`; XHR / fetch get `401 JSON` (no browser
+> dialog).  Only members of `GITHUB_ORG_NAME` can complete the OAuth callback.
+> Iframe access additionally requires the collab session to have at least one
+> linked repository — the SPA's `/collab/<id>` page renders a recovery panel
+> with an "Add repositories" form if none were selected at create time.
 
 This document walks an operator through standing up the collab fork behind
 `https://collab.unleashlive.com` on AWS ECS, plus answers two recurring

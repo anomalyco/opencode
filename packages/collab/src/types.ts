@@ -122,3 +122,4 @@ export type CollabEvent =
         | { kind: "note"; noteId: string; excerpt: string }
     }
   | { type: "collab:note_added"; note: CollabNote }
+  | { type: "collab:repos_added"; repos: string[]; addedBy: string }

@@ -24,6 +24,7 @@ import {
   CollabAuthSessionTable,
   CollabSessionTable,
   CollabParticipantTable,
+  CollabRepoTable,
 } from "./schema.sql"
 
 // NOTE: the auth gate only needs the cookie holder's identity
@@ -208,6 +209,19 @@ function cookieAllowedWithoutScope(pathname: string): boolean {
 export type CookieAuthDecision = "allow" | "deny" | "fallthrough"
 
 /**
+ * Auth mode.  Driven by OPENCODE_AUTH_MODE env:
+ *   - "collab" → OAuth-cookie is the sole gate; basic-auth is disabled.
+ *                Fallthrough decisions become "deny" so unauthenticated
+ *                requests don't escape into the basic-auth path.
+ *   - else    → cookie-OR-basic.  Fallthrough hands off to basic-auth.
+ *
+ * Read at request time so a redeploy can flip mode without code change.
+ */
+export function authMode(): "collab" | "basic" {
+  return process.env["OPENCODE_AUTH_MODE"] === "collab" ? "collab" : "basic"
+}
+
+/**
  * 3-rule decision function — see CONTEXT.md → Cookie Authorization Scope.
  *
  * - `"allow"`   — cookie present, valid, scoped to this resource.  Caller
@@ -217,7 +231,8 @@ export type CookieAuthDecision = "allow" | "deny" | "fallthrough"
  *                  basic-auth (avoids signalling the password's existence
  *                  in response to a scoped-cookie miss).
  * - `"fallthrough"` — no cookie at all (or invalid/expired).  Caller
- *                  proceeds to basic-auth validation.
+ *                  proceeds to basic-auth validation, EXCEPT in collab
+ *                  mode where the caller MUST treat fallthrough as deny.
  */
 export function cookieAuthorizesRequest(req: Request): CookieAuthDecision {
   const id = lookupCookieIdentity(req)
@@ -228,22 +243,59 @@ export function cookieAuthorizesRequest(req: Request): CookieAuthDecision {
   // Rule (a): cookie-only paths (no scope check needed).
   if (cookieAllowedWithoutScope(url.pathname)) return "allow"
 
-  // Rule (b): workspace-addressed routes — bind on directory.
+  // Rule (b): workspace-addressed routes — bind on directory + repos > 0.
   const dir = workspaceParamFrom(req)
   if (dir) {
     const sessionId = directoryToCollabSessionId(dir)
     if (!sessionId) return "deny"
-    return participantOfSession(sessionId, id.githubId) ? "allow" : "deny"
+    if (!participantOfSession(sessionId, id.githubId)) return "deny"
+    // Iframe-gate: a workspace-scoped request to a collab session that has
+    // no linked repos must be denied (matches the "iframe only after OAuth
+    // AND repository selection" requirement — the SPA renders a fallback
+    // panel at /collab/<id> in that case).
+    return sessionHasRepos(sessionId) ? "allow" : "deny"
   }
 
-  // Rule (c): native-session-addressed routes — bind on Native Session ID.
+  // Rule (c): native-session-addressed routes — bind on Native Session ID
+  // + repos > 0 (same iframe-gate rationale as (b)).
   const nativeSessionId = nativeSessionIdFrom(req)
   if (nativeSessionId) {
-    return participantOfNativeSession(nativeSessionId, id.githubId) ? "allow" : "deny"
+    if (!participantOfNativeSession(nativeSessionId, id.githubId)) return "deny"
+    return nativeSessionHasRepos(nativeSessionId) ? "allow" : "deny"
   }
 
-  // Rule (d): no addressing → fall through to basic-auth.  /global/event,
-  // /global/config, /global/dispose, /global/upgrade etc. land here and
-  // require the server credential.
+  // Rule (d): no addressing → fall through.  /global/event, /global/config,
+  // /global/dispose, /global/upgrade etc. land here.  In basic-mode this
+  // hands off to basic-auth (server-internal callers).  In collab-mode the
+  // caller treats fallthrough as deny — there should be no unscoped HttpApi
+  // access without a workspace context when collab gates everything.
   return "fallthrough"
+}
+
+/** Does a collab session have at least one linked repo? */
+function sessionHasRepos(collabSessionId: string): boolean {
+  return Database.use((db) => {
+    const row = db
+      .select({ id: CollabRepoTable.id })
+      .from(CollabRepoTable)
+      .where(eq(CollabRepoTable.collab_session_id, collabSessionId))
+      .get()
+    return !!row
+  })
+}
+
+/** Does the collab session bound to this Native Session ID have repos? */
+function nativeSessionHasRepos(nativeSessionId: string): boolean {
+  return Database.use((db) => {
+    const row = db
+      .select({ id: CollabRepoTable.id })
+      .from(CollabRepoTable)
+      .innerJoin(
+        CollabSessionTable,
+        eq(CollabRepoTable.collab_session_id, CollabSessionTable.id),
+      )
+      .where(eq(CollabSessionTable.session_id, nativeSessionId))
+      .get()
+    return !!row
+  })
 }

@@ -1,10 +1,50 @@
 # ADR-0001: Refuse to start without `OPENCODE_SERVER_PASSWORD`; authenticate `/preview/*`
 
-- Status: Accepted
+- Status: Accepted (Phase 2: collab-cookie universal auth for utils deployment)
 - Date: 2026-05-21
 - Implemented: 2026-05-22 (password enforcement in commit `ed22169b0`;
   preview proxy auth + cookie-or-basic auth gate in commit
   `97637896b` on branch `deploy/auth-fix`)
+- Phase 2 amended: 2026-05-24 — `OPENCODE_AUTH_MODE=collab` makes the
+  OAuth cookie the sole gate.  Basic auth is OFF in the utils deployment;
+  preserved in the codebase for `opencode serve` localhost users.
+
+## Phase 2 — collab-cookie universal auth (utils deployment)
+
+The cookie-or-basic gate (commit `97637896b`) closed the leak but left
+basic auth as the universal mechanism, which means:
+
+- The browser's native basic-auth dialog fires on any HttpApi 401, fighting
+  the OAuth flow.
+- The server password is the actual security boundary; OAuth + org check
+  is a convenience layer on top.
+
+`OPENCODE_AUTH_MODE=collab` flips both:
+
+- `cookieAuthorizesRequest`'s `"fallthrough"` decision is treated as
+  `"deny"` by middlewares — no basic-auth fallback.
+- The deny response **never** includes `www-authenticate: Basic`, so the
+  browser doesn't pop its native dialog.
+- HTML navigations (`Accept: text/html` or `Sec-Fetch-Mode: navigate`) get
+  `302 → /collab/auth/github?next=<encoded path>`; everything else gets
+  `401 application/json {"error":"Unauthorised"}`.
+- `serve.ts` fail-fast requires either `OPENCODE_SERVER_PASSWORD` OR
+  `OPENCODE_AUTH_MODE=collab` in production.
+
+The cookie scope rules from Phase 1 still apply (workspace-addressed and
+native-session-addressed requests must come from a participant of the
+collab session that owns the workspace), with one addition for the
+"iframe only after repository selection" requirement:
+
+- A workspace- or native-session-scoped request to a collab session with
+  **zero linked repos** is denied.  The SPA's `/collab/<id>` page renders
+  a recovery panel where a Driver can `PATCH /collab/session/<id>` with
+  repos to fix it without re-creating the session.
+
+In the utils deployment this replaces basic auth entirely; the Terraform
+task definition drops `OPENCODE_SERVER_PASSWORD` from `secrets` and adds
+`OPENCODE_AUTH_MODE=collab` to `environment`.  Cookie TTL was reduced
+from 7 days to 24 hours in the same change (ADR-0002 update).
 
 ## Context
 

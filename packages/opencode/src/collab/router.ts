@@ -354,10 +354,23 @@ async function executePromptOnNativeSession(
 // ── Config ──────────────────────────────────────────────────────────────────────
 
 function cfg() {
+  const orgName = process.env["GITHUB_ORG_NAME"] ?? ""
+  // Defence-in-depth: serve.ts fails fast at startup when collab mode is on
+  // and GITHUB_ORG_NAME is missing.  This second check catches mid-life
+  // misconfigurations (env reload, container restart with bad config) where
+  // a request might reach the OAuth flow without an org to validate against.
+  // Without this, isOrgMember would call /user/memberships/orgs/ with an
+  // empty path segment and silently fail; this surfaces it as a clear 500.
+  if (!orgName) {
+    throw new Error(
+      "GITHUB_ORG_NAME is required.  Set it to the GitHub organisation whose " +
+        "members are allowed to authenticate (e.g. 'unleashlive').",
+    )
+  }
   return {
     clientId: process.env["GITHUB_OAUTH_CLIENT_ID"] ?? "",
     clientSecret: process.env["GITHUB_OAUTH_CLIENT_SECRET"] ?? "",
-    orgName: process.env["GITHUB_ORG_NAME"] ?? "",
+    orgName,
     baseUrl: (process.env["OPENCODE_BASE_URL"] ?? "http://localhost:4096").replace(/\/$/, ""),
     sessionSecret: process.env["SESSION_SECRET"] ?? "dev-secret-change-me",
   }
@@ -429,10 +442,17 @@ function getSession(req: Request): CookieSession | null {
   })
 }
 
+// Cookie lifetime.  ADR-0002 trade-off: shorter window = smaller stale-
+// membership exposure (a user removed from the org keeps access until expiry,
+// since membership is only re-checked at OAuth callback), longer window =
+// less re-auth friction.  24h is the agreed compromise for the utils dev
+// deployment.  A future ADR can move this to live re-check on every request.
+const COOKIE_TTL_SECONDS = 24 * 3600
+
 function setSession(session: CookieSession): { token: string; header: string } {
   const token = randomBytes(32).toString("hex")
   const now = Date.now()
-  const expiresAt = now + 7 * 24 * 3600 * 1000
+  const expiresAt = now + COOKIE_TTL_SECONDS * 1000
   // Encrypt the at-rest token (ADR-0004).  In-memory the plaintext stays
   // available via getSession() so GitHub API calls keep working unchanged.
   const encryptedAccessToken = encryptToken(session.githubAccessToken, cfg().sessionSecret)
@@ -449,7 +469,7 @@ function setSession(session: CookieSession): { token: string; header: string } {
   })
   return {
     token,
-    header: `collab_sid=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}`,
+    header: `collab_sid=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS}`,
   }
 }
 
@@ -966,6 +986,34 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // Clean up server workspace
     cleanupSessionWorkspace(sessionId)
     return json({ ok: true })
+  }
+
+  // PATCH /collab/session/:id — Drivers only.  Currently only supports adding
+  // repos to an empty (or partially-populated) session — the recovery path
+  // for the "I created a session without repos" UX (see SPA fallback panel
+  // in pages/collab/session.tsx).  Cloning happens fire-and-forget; the
+  // /collab/<id>/repos endpoint reflects the new state immediately because
+  // the DB row exists before clone completes.
+  if (req.method === "PATCH" && parts.length === 3) {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    const body = (await req.json().catch(() => null)) as { repos?: string[] } | null
+    const requestedRepos = Array.isArray(body?.repos) ? body!.repos!.filter((s) => typeof s === "string") : []
+    if (requestedRepos.length === 0) return json({ error: "repos: string[] required" }, 400)
+    const added = Session.addRepos(sessionId, requestedRepos)
+    if (added.length > 0) {
+      // Fire-and-forget: clone the newly-added repos.  Existing repos in the
+      // workspace are untouched (initSessionWorkspace's existsSync guard).
+      // We pass the full new repo list so checkoutCollabBranch + commit-hook
+      // installation re-run idempotently across the whole set.
+      const updated = Session.getCollabSession(sessionId)
+      if (updated) {
+        initSessionWorkspace(sessionId, added, sess.githubAccessToken, updated.name, updated.branch).catch((err) =>
+          console.error("[collab.patch] workspace init for added repos failed:", err),
+        )
+      }
+      broadcastSse(sessionId, { type: "collab:repos_added", repos: added, addedBy: sess.githubLogin })
+    }
+    return json({ added })
   }
 
   // GET /collab/session/:id/repos — list org repos

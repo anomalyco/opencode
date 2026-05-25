@@ -22,6 +22,11 @@ export class Config extends ConfigService.Service<Config>()("@opencode/ServerAut
 export type Info = Context.Service.Shape<typeof Config>
 
 export function required(config: Info) {
+  // Auth required when either: a basic-auth password is set, OR
+  // OPENCODE_AUTH_MODE=collab is set (OAuth-cookie gate is on).
+  // The middleware reads `cookieAuthorizesRequest` first and consults
+  // basic-auth as a fallback only outside collab mode.
+  if (process.env["OPENCODE_AUTH_MODE"] === "collab") return true
   return Option.isSome(config.password) && config.password.value !== ""
 }
 

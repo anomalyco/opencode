@@ -11,7 +11,7 @@ import {
   useContext,
   type ParentProps,
 } from "solid-js"
-import type { CollabSession, CollabEvent, PromptSuggestion, Participant, CollabNote } from "@opencode-ai/collab"
+import type { CollabSession, CollabEvent, CollabRole, PromptSuggestion, Participant, CollabNote } from "@opencode-ai/collab"
 
 interface CollabContextValue {
   session: () => CollabSession | null
@@ -46,6 +46,13 @@ interface CollabContextValue {
   createInvite: (role: string) => Promise<{ url: string; token: string }>
   /** Driver-only: git push + open a GitHub PR with collab session metadata in the body. */
   openPullRequest: () => Promise<{ url: string }>
+  /** Viewer's role in this collab session.  Falls back to "viewer" until
+   *  the session/participant data has loaded (safe default for gating UI). */
+  viewerRole: () => CollabRole
+  /** Driver-only: append repos to a session.  Used by the empty-session
+   *  fallback UI in /collab/<id> when no repos were selected at create
+   *  time.  Returns the actually-new repos (existing ones are skipped). */
+  addRepos: (repos: string[]) => Promise<{ added: string[] }>
   deleteSession: () => Promise<void>
   /** Broadcast that the local user has started/stopped typing.  Debounced by caller. */
   setTyping: (typing: boolean) => Promise<void>
@@ -377,6 +384,14 @@ export function CollabProvider(props: CollabProviderProps) {
         setNotes((prev) => [...prev, deserializeNote(event.note)])
         break
 
+      case "collab:repos_added":
+        // Repos can only be added by a Driver via PATCH /collab/session/:id.
+        // Refetch the session so the SPA's iframe gate (and the iframe URL
+        // itself, which encodes the workspace directory) re-evaluates
+        // against the new repo list.
+        fetchSession()
+        break
+
       case "collab:mention":
         // Only react if it's me being mentioned (every browser receives the
         // broadcast — we filter client-side so the SSE stream stays simple).
@@ -449,6 +464,12 @@ export function CollabProvider(props: CollabProviderProps) {
     unreadMentions,
     clearMentions: () => setUnreadMentions(0),
     notes,
+    viewerRole: () => {
+      const sess = session()
+      if (!sess || props.meGithubId == null) return "viewer"
+      const me = sess.participants.find((p) => p.githubId === props.meGithubId)
+      return me?.role ?? "viewer"
+    },
 
     async submitPrompt(content) {
       await api("/prompt", "POST", { content })
@@ -481,6 +502,13 @@ export function CollabProvider(props: CollabProviderProps) {
     async openPullRequest() {
       const res = await api("/pr", "POST")
       return res.json() as Promise<{ url: string }>
+    },
+    async addRepos(repos) {
+      const res = await api("", "PATCH", { repos })
+      const data = (await res.json()) as { added: string[] }
+      // Optimistically refresh; SSE will also fire collab:repos_added.
+      fetchSession()
+      return data
     },
     async deleteSession() {
       await api("", "DELETE")
