@@ -35,14 +35,17 @@ export function tokenCount(tokens: MessageV2.Assistant["tokens"]) {
 
 // Returns true if a previous auto-compaction triggered at `previousTokens` did
 // not reduce reported token usage by at least (1 - threshold). Defaults to a
-// 5% reduction; less than that signals compaction is not making progress —
-// typically because the configured context window is smaller than what the
-// provider actually serves, so auto-compaction would loop indefinitely.
+// 5% reduction; anything less than that signals compaction is not making
+// progress — typically because the configured context window is smaller than
+// what the provider actually serves, so auto-compaction would loop forever.
+//
+// An exactly-(1-threshold) reduction (e.g. 200K → 190K at the default) counts
+// as progress and does NOT trip the guard.
 export function autoCompactStalled(input: {
   previousTokens: number | undefined
   currentTokens: number
   threshold?: number
 }) {
   if (input.previousTokens === undefined) return false
-  return input.currentTokens >= input.previousTokens * (input.threshold ?? 0.95)
+  return input.currentTokens > input.previousTokens * (input.threshold ?? 0.95)
 }

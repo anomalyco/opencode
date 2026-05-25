@@ -596,11 +596,13 @@ describe("session.overflow.autoCompactStalled", () => {
     expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 180_000 })).toBe(false)
   })
 
-  test("returns false right at the 5% boundary", () => {
-    // previous=200K, current=190K = exactly 95% → stalled (>=)
-    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 190_000 })).toBe(true)
-    // current=189_999 → just below 95% → progress
-    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 189_999 })).toBe(false)
+  test("counts an exactly-threshold reduction as progress (not stalled)", () => {
+    // previous=200K, current=190K = exactly a 5% reduction. The PR semantics
+    // require "at least 5% reduction" to escape the stall classification, and
+    // 5% satisfies "at least 5%" — so the guard must NOT trip here.
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 190_000 })).toBe(false)
+    // current=190_001 — reduction is 4.9995% (strictly less than 5%) → stalled.
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 190_001 })).toBe(true)
   })
 
   test("honors a custom threshold override", () => {
