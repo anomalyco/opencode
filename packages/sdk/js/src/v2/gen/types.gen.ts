@@ -975,8 +975,8 @@ export type PermissionConfig =
       external_directory?: PermissionRuleConfig
       todowrite?: PermissionActionConfig
       question?: PermissionActionConfig
-      webfetch?: PermissionActionConfig
-      websearch?: PermissionActionConfig
+      webfetch?: PermissionRuleConfig
+      websearch?: PermissionRuleConfig
       repo_clone?: PermissionRuleConfig
       repo_overview?: PermissionRuleConfig
       lsp?: PermissionRuleConfig

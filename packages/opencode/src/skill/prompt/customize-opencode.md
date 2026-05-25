@@ -337,8 +337,7 @@ everything" and is rarely what the user wants.
 Known permission keys: `read, edit, glob, grep, list, bash, task,
 external_directory, todowrite, question, webfetch, websearch, repo_clone,
 repo_overview, lsp, doom_loop, skill`. Some of these (`todowrite,
-question, webfetch, websearch, doom_loop`) only accept a flat
-action, not a per-pattern object.
+question, doom_loop`) only accept a flat action, not a per-pattern object.
 
 `external_directory` patterns are filesystem paths (use `~/`, absolute paths,
 or globs like `~/projects/**`).

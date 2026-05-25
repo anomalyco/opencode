@@ -5,6 +5,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
+import { Permission } from "../../src/permission"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
@@ -1290,6 +1291,30 @@ test("config parser preserves permission order while rejecting unknown top-level
     const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
     expect(error.data?.issues?.[0]).toMatchObject({ code: "unrecognized_keys", keys: ["invalid_field"], path: [] })
   }
+})
+
+test("config parser accepts web permission object rules", () => {
+  const config = ConfigParse.schema(
+    Config.Info,
+    {
+      permission: {
+        webfetch: {
+          "*": "ask",
+          "https://github.com/*": "allow",
+        },
+        websearch: {
+          "*": "ask",
+          "opencode *": "allow",
+        },
+      },
+    },
+    "test",
+  )
+
+  const rules = Permission.fromConfig(config.permission!)
+  expect(Permission.evaluate("webfetch", "https://example.com", rules).action).toBe("ask")
+  expect(Permission.evaluate("webfetch", "https://github.com/anomalyco/opencode", rules).action).toBe("allow")
+  expect(Permission.evaluate("websearch", "opencode permissions", rules).action).toBe("allow")
 })
 
 // MCP config merging tests
