@@ -73,7 +73,8 @@ export function expectOk<T>(response: JsonRpcResponse<T>) {
 
 export function selectConfigOption(options: SessionConfigOption[] | null | undefined, id: string) {
   return options?.find(
-    (option): option is Extract<SessionConfigOption, { type: "select" }> => option.id === id && option.type === "select",
+    (option): option is Extract<SessionConfigOption, { type: "select" }> =>
+      option.id === id && option.type === "select",
   )
 }
 
