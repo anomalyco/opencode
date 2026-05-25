@@ -433,7 +433,13 @@ export const layer = Layer.effect(
       )
       if (!("path" in options)) return data
 
-      yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
+      yield* Effect.promise(() => resolveLoadedPlugins(data, options.path)).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            log.error("plugin resolution failed", { path: source, cause })
+          }),
+        ),
+      )
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
         const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
