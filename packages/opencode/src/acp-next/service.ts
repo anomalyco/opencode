@@ -13,12 +13,18 @@ import {
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
+  type SetSessionModelRequest,
+  type SetSessionModelResponse,
+  type SetSessionModeRequest,
+  type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPNextError from "./error"
-import { buildConfigOptions } from "./config-option"
+import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { Directory } from "./directory"
 import { ACPNextSession } from "./session"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -34,6 +40,11 @@ export type Interface = {
   readonly authenticate: (input: AuthenticateRequest) => Effect.Effect<AuthenticateResponse, Error>
   readonly newSession: (input: NewSessionRequest) => Effect.Effect<NewSessionResponse, Error>
   readonly loadSession: (input: LoadSessionRequest) => Effect.Effect<LoadSessionResponse, Error>
+  readonly setSessionConfigOption: (
+    input: SetSessionConfigOptionRequest,
+  ) => Effect.Effect<SetSessionConfigOptionResponse, Error>
+  readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Error>
+  readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
 }
@@ -180,11 +191,96 @@ export function make(input: {
     }
   })
 
+  const setSessionConfigOption = Effect.fn("ACPNext.setSessionConfigOption")(function* (
+    params: SetSessionConfigOptionRequest,
+  ) {
+    const current = yield* session.get(params.sessionId)
+    const snapshot = yield* directorySnapshot(current.cwd)
+    if (typeof params.value !== "string") {
+      return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
+    }
+
+    if (params.configId === "model") {
+      const selected = yield* parseSelectedModel(snapshot, params.value)
+      const variant = selected.variant ?? selectVariant(snapshot, selected.model)
+      const state = yield* session
+        .setVariant(params.sessionId, Directory.variants(snapshot, selected.model) ? variant : undefined)
+        .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
+      return {
+        configOptions: configOptions(snapshot, {
+          model: state.model ?? selected.model,
+          variant: state.variant,
+          modeId: state.modeId,
+        }),
+      }
+    }
+
+    if (params.configId === "effort") {
+      const model = current.model ?? selectDefaultModel(snapshot)
+      const variants = Directory.variants(snapshot, model)
+      if (!variants || !Object.keys(variants).includes(params.value)) {
+        return yield* new ACPNextError.InvalidEffortError({ effort: params.value })
+      }
+      const state = yield* session.setVariant(params.sessionId, params.value)
+      return {
+        configOptions: configOptions(snapshot, {
+          model: state.model ?? model,
+          variant: state.variant,
+          modeId: state.modeId,
+        }),
+      }
+    }
+
+    if (params.configId === "mode") {
+      if (!snapshot.availableModes.some((mode) => mode.id === params.value)) {
+        return yield* new ACPNextError.InvalidModeError({ mode: params.value })
+      }
+      const state = yield* session.setMode(params.sessionId, params.value)
+      return {
+        configOptions: configOptions(snapshot, {
+          model: state.model ?? selectDefaultModel(snapshot),
+          variant: state.variant,
+          modeId: state.modeId,
+        }),
+      }
+    }
+
+    return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
+  })
+
+  const setSessionMode = Effect.fn("ACPNext.setSessionMode")(function* (params: SetSessionModeRequest) {
+    const current = yield* session.get(params.sessionId)
+    const snapshot = yield* directorySnapshot(current.cwd)
+    if (!snapshot.availableModes.some((mode) => mode.id === params.modeId)) {
+      return yield* new ACPNextError.InvalidModeError({ mode: params.modeId })
+    }
+    yield* session.setMode(params.sessionId, params.modeId)
+    return {}
+  })
+
+  const setSessionModel = Effect.fn("ACPNext.setSessionModel")(function* (params: SetSessionModelRequest) {
+    const current = yield* session.get(params.sessionId)
+    const snapshot = yield* directorySnapshot(current.cwd)
+    const selected = yield* parseSelectedModel(snapshot, params.modelId)
+    yield* session
+      .setVariant(
+        params.sessionId,
+        Directory.variants(snapshot, selected.model)
+          ? (selected.variant ?? selectVariant(snapshot, selected.model))
+          : undefined,
+      )
+      .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
+    return {}
+  })
+
   return {
     initialize,
     authenticate,
     newSession,
     loadSession,
+    setSessionConfigOption,
+    setSessionMode,
+    setSessionModel,
     prompt: Effect.fn("ACPNext.prompt")(function* (_input: PromptRequest) {
       return yield* new ACPNextError.UnsupportedOperationError({ method: "session/prompt" })
     }),
@@ -368,6 +464,30 @@ function configOptions(snapshot: Directory.Snapshot, session: ConfigState) {
     currentVariant: session.variant,
     modes: snapshot.availableModes,
     currentModeId: session.modeId,
+  })
+}
+
+function parseSelectedModel(snapshot: Directory.Snapshot, modelId: string) {
+  const selected = parseModelSelection(modelId, Object.values(snapshot.providers))
+  const provider = snapshot.providers[ProviderID.make(selected.model.providerID)]
+  const model = provider?.models[ModelID.make(selected.model.modelID)]
+  if (!model) {
+    return Effect.fail(
+      new ACPNextError.InvalidModelError({
+        providerId: selected.model.providerID,
+        modelId,
+      }),
+    )
+  }
+  if (selected.variant && !model.variants?.[selected.variant]) {
+    return Effect.fail(new ACPNextError.InvalidEffortError({ effort: selected.variant }))
+  }
+  return Effect.succeed({
+    model: {
+      providerID: provider.id,
+      modelID: model.id,
+    },
+    variant: selected.variant,
   })
 }
 

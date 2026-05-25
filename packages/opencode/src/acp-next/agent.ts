@@ -8,6 +8,9 @@ import {
   type LoadSessionRequest,
   type NewSessionRequest,
   type PromptRequest,
+  type SetSessionConfigOptionRequest,
+  type SetSessionModelRequest,
+  type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
@@ -39,6 +42,18 @@ export class Agent implements ACPAgent {
 
   loadSession(params: LoadSessionRequest) {
     return run(this.service.loadSession(params))
+  }
+
+  setSessionConfigOption(params: SetSessionConfigOptionRequest) {
+    return run(this.service.setSessionConfigOption(params))
+  }
+
+  setSessionMode(params: SetSessionModeRequest) {
+    return run(this.service.setSessionMode(params))
+  }
+
+  unstable_setSessionModel(params: SetSessionModelRequest) {
+    return run(this.service.setSessionModel(params))
   }
 
   prompt(params: PromptRequest) {
