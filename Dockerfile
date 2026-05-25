@@ -79,7 +79,23 @@ RUN mkdir -p /var/opencode/workspaces \
              /home/opencode/.config/opencode \
              /home/opencode/.cache/opencode/packages \
              /home/opencode/.claude && \
-    printf '{"plugin":["opencode-claude-auth@latest"]}\n' > /home/opencode/.config/opencode/opencode.json && \
+    # Bake a container-wide opencode config:
+    #   - `plugin`: pre-installed opencode-claude-auth (cached above at /root)
+    #   - `disabled_providers`: amazon-bedrock is disabled for this fork.
+    #     ap-southeast-2 (utils deployment) only offers LEGACY Claude 3 / 3.5
+    #     Sonnet v2 as ON_DEMAND models; the modern Claude 4.x family is
+    #     INFERENCE_PROFILE-only via `apac.*` cross-region profiles, and
+    #     opencode's bedrock region-prefix logic
+    #     (packages/opencode/src/provider/provider.ts:1747-1759) only handles
+    #     `us.*` / `eu.*` prefixes — `ap-*` falls back to whatever the sort
+    #     puts first, which lands on `us.anthropic.claude-sonnet-4-6`.  That
+    #     ID does not exist in ap-southeast-2 → Bedrock returns 400 "The
+    #     provided model identifier is invalid" on every request.
+    #     Disabling the provider removes the variant from the dropdown so
+    #     users can only pick Anthropic-native models (auth'd via the
+    #     opencode-claude-auth plugin).
+    printf '{"plugin":["opencode-claude-auth@latest"],"disabled_providers":["amazon-bedrock"]}\n' \
+      > /home/opencode/.config/opencode/opencode.json && \
     # Carry the pre-installed plugin tree across from /root.
     cp -r /root/.cache/opencode/packages/. /home/opencode/.cache/opencode/packages/ 2>/dev/null || true
 

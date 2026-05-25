@@ -423,6 +423,36 @@ Common gotchas you'll see in the logs if anything's misconfigured:
 7. **Watch the LLM work**: every commit it produces in the workspace is auto-stamped with `Collaborative-Commit: true`, `Collab-Session:`, `Collab-Session-Id:`, `Collab-Repo:`, `Collab-Branch:` trailers via the `prepare-commit-msg` hook installed at session-init.  Verify by opening the iframe's terminal panel and running `git log -1`.
 8. **Ship to GitHub** when ready: in the iframe terminal, `git push -u origin HEAD`.  The clone already has authentication baked into the remote URL via the server-side PAT, so no token entry is required from the participant.
 
+### Provider configuration
+
+The container is baked with a global opencode config at
+`/home/opencode/.config/opencode/opencode.json`:
+
+```json
+{ "plugin": ["opencode-claude-auth@latest"], "disabled_providers": ["amazon-bedrock"] }
+```
+
+`amazon-bedrock` is disabled in this fork because:
+
+- ap-southeast-2 Bedrock only exposes LEGACY Claude 3 / 3.5 Sonnet v2 as
+  ON_DEMAND models.  Modern Claude 4.x is INFERENCE_PROFILE-only via the
+  `apac.*` cross-region profile.
+- opencode's bedrock region-prefix logic
+  ([`packages/opencode/src/provider/provider.ts:1747-1759`](packages/opencode/src/provider/provider.ts))
+  only handles `us.*` / `eu.*` regions.  `ap-*` falls back to whatever the
+  sort returns first — usually `us.anthropic.claude-sonnet-4-6`, which
+  doesn't exist in `ap-southeast-2` → every request errors with
+  *"The provided model identifier is invalid"*.
+- Bedrock is also the first provider opencode registers, so its broken
+  default would beat the working Anthropic-native provider for the
+  `defaultModel()` fallback.
+
+Disabling removes the Bedrock variants from the model picker entirely and
+forces all Claude traffic through the `anthropic` provider, authenticated
+via the OAuth `opencode-claude-auth` plugin.  If a future deployment lives
+in a Bedrock-friendly region (`us-east-1`, `eu-west-1`, etc.) you can flip
+this off in the Dockerfile build.
+
 ### How Claude credentials are supplied
 
 Two paths, ranked by suitability for a server deployment:
