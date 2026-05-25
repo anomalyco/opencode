@@ -402,3 +402,54 @@ export const dfmt: Info = {
     return [match, "-i", "$FILE"]
   },
 }
+
+export const stylua: Info = {
+  name: "stylua",
+  extensions: [".lua"],
+  async enabled() {
+    const match = which("stylua")
+    if (!match) return false
+    return [match, "$FILE"]
+  },
+}
+
+export const swiftformat: Info = {
+  name: "swiftformat",
+  extensions: [".swift"],
+  async enabled() {
+    const match = which("swiftformat")
+    if (!match) return false
+    return [match, "$FILE"]
+  },
+}
+
+export const scalafmt: Info = {
+  name: "scalafmt",
+  extensions: [".scala"],
+  async enabled(context) {
+    if (!which("scalafmt")) return false
+    const items = await Filesystem.findUp(".scalafmt.conf", context.directory, context.worktree)
+    if (items.length > 0) return ["scalafmt", "$FILE"]
+    return false
+  },
+}
+
+export const typstfmt: Info = {
+  name: "typst",
+  extensions: [".typ", ".typc"],
+  async enabled() {
+    const match = which("typst")
+    if (!match) return false
+    return [match, "fmt", "$FILE"]
+  },
+}
+
+export const csharpier: Info = {
+  name: "csharpier",
+  extensions: [".cs"],
+  async enabled() {
+    const match = which("dotnet-csharpier")
+    if (!match) return false
+    return [match, "$FILE"]
+  },
+}
