@@ -5,6 +5,7 @@ export const domain = (() => {
 })()
 
 export const zoneID = "430ba34c138cfb5360826c4909f99be8"
+export const deployAws = $app.stage === "production" || $app.stage === "dev" || $app.stage === "adam"
 
 const githubActionsDeployRole = (() => {
   if ($app.stage !== "dev" && $app.stage !== "production") return

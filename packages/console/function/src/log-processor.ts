@@ -51,6 +51,7 @@ export default {
       ]
       console.log(JSON.stringify(data, null, 2))
 
+      const lakeIngest = getLakeIngest()
       const [honeycomb, lake] = await Promise.all([
         fetch("https://api.honeycomb.io/1/batch/zen", {
           method: "POST",
@@ -60,21 +61,35 @@ export default {
           },
           body: JSON.stringify(events),
         }),
-        fetch(Resource.LakeIngest.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${Resource.LakeIngest.secret}`,
-          },
-          body: JSON.stringify({ events: events.map((event) => toLakeEvent(event.time, event.data)) }),
-        }),
+        ...(lakeIngest
+          ? [
+              fetch(lakeIngest.url, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${lakeIngest.secret}`,
+                },
+                body: JSON.stringify({ events: events.map((event) => toLakeEvent(event.time, event.data)) }),
+              }),
+            ]
+          : []),
       ])
       console.log(honeycomb.status)
       console.log(await honeycomb.text())
-      console.log(lake.status)
-      console.log(await lake.text())
+      if (lake) {
+        console.log(lake.status)
+        console.log(await lake.text())
+      }
     }
   },
+}
+
+function getLakeIngest(): { url: string; secret: string } | undefined {
+  try {
+    return Resource.LakeIngest
+  } catch {
+    return undefined
+  }
 }
 
 function toLakeEvent(time: string, data: Record<string, unknown>) {

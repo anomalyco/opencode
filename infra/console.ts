@@ -1,7 +1,8 @@
-import { domain } from "./stage"
+import { deployAws, domain } from "./stage"
 import { EMAILOCTOPUS_API_KEY } from "./app"
 import { SECRET } from "./secret"
-import { lakeIngest } from "./lake"
+
+const lake = deployAws ? await import("./lake") : undefined
 
 ////////////////
 // DATABASE
@@ -241,7 +242,7 @@ const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
 
 const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
   handler: "packages/console/function/src/log-processor.ts",
-  link: [SECRET.HoneycombApiKey, lakeIngest],
+  link: [SECRET.HoneycombApiKey, ...(lake?.lakeIngest ? [lake.lakeIngest] : [])],
 })
 
 new sst.cloudflare.x.SolidStart("Console", {
