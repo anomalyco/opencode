@@ -5,6 +5,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
+import { DialogConfirm } from "../ui/dialog-confirm"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
@@ -15,6 +16,7 @@ import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
+import { type CustomProviderForm, validateCustomProvider } from "./dialog-custom-provider-form"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -65,9 +67,9 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
     ),
     {
       type: "custom",
-      title: "Other",
+      title: "Custom provider",
       value: CUSTOM_PROVIDER_OPTION_VALUE,
-      description: "Custom provider",
+      description: "OpenAI-compatible endpoint",
       category: "Providers",
     },
   ]
@@ -86,29 +88,6 @@ export function createDialogProviderOptions() {
   const toast = useToast()
   const { theme } = useTheme()
   const onboarded = useConnected()
-
-  async function promptCustomProviderID(): Promise<string | undefined> {
-    const value = await DialogPrompt.show(dialog, "Other", {
-      placeholder: "Provider id",
-      description: () => (
-        <text fg={theme.textMuted}>
-          This only stores a credential. Configure the provider in opencode.json to use it.
-        </text>
-      ),
-    })
-    if (value === null) return
-
-    const providerID = normalizeCustomProviderID(value)
-    if (providerID) return providerID
-
-    toast.show({
-      variant: "error",
-      message:
-        "Provider ids must start with a lowercase letter or number and only use lowercase letters, numbers, hyphens, and underscores",
-    })
-    return promptCustomProviderID()
-  }
-
   const options = createMemo(() => {
     return pipe(
       providerOptions(sync.data.provider_next.all),
@@ -120,9 +99,7 @@ export function createDialogProviderOptions() {
             description: provider.description,
             category: provider.category,
             async onSelect() {
-              const providerID = await promptCustomProviderID()
-              if (!providerID) return
-              return dialog.replace(() => <ApiMethod providerID={providerID} title="API key" custom />)
+              await CustomProviderMethod({ dialog, sdk, sync, toast })
             },
           }
         }
@@ -209,9 +186,7 @@ export function createDialogProviderOptions() {
                 if (!value) return
                 metadata = value
               }
-              return dialog.replace(() => (
-                <ApiMethod providerID={providerID} title={method.label} metadata={metadata} />
-              ))
+              return dialog.replace(() => <ApiMethod providerID={providerID} title={method.label} metadata={metadata} />)
             }
           },
         }
@@ -403,6 +378,211 @@ function ApiMethod(props: ApiMethodProps) {
       }}
     />
   )
+}
+
+async function CustomProviderMethod(input: {
+  dialog: ReturnType<typeof useDialog>
+  sdk: ReturnType<typeof useSDK>
+  sync: ReturnType<typeof useSync>
+  toast: ReturnType<typeof useToast>
+}) {
+  const prompt = (args: {
+    title: string
+    placeholder?: string
+    value?: string
+    validate?: (value: string) => string | undefined
+  }) => promptCustomProviderValue({ ...args, dialog: input.dialog, toast: input.toast })
+
+  const providerID = await prompt({
+    title: "Provider ID",
+    placeholder: "myprovider",
+    validate(value) {
+      if (!value.trim()) return "Provider ID is required"
+      if (!/^[a-z0-9][a-z0-9-_]*$/.test(value.trim())) {
+        return "Use lowercase letters, numbers, hyphens, and underscores"
+      }
+      const disabled = input.sync.data.config.disabled_providers ?? []
+      if (
+        input.sync.data.provider_next.all.some((provider) => provider.id === value.trim()) &&
+        !disabled.includes(value.trim())
+      ) {
+        return "Provider ID already exists"
+      }
+      return undefined
+    },
+  })
+  if (providerID === null) return
+
+  const name = await prompt({
+    title: "Display name",
+    placeholder: "My AI Provider",
+    value: providerID,
+    validate: (value) => (value.trim() ? undefined : "Display name is required"),
+  })
+  if (name === null) return
+
+  const baseURL = await prompt({
+    title: "Base URL",
+    placeholder: "https://api.myprovider.com/v1",
+    validate(value) {
+      if (!value.trim()) return "Base URL is required"
+      if (!/^https?:\/\//.test(value.trim())) return "Base URL must start with http:// or https://"
+      return undefined
+    },
+  })
+  if (baseURL === null) return
+
+  const apiKey = await prompt({
+    title: "API key",
+    placeholder: "Leave empty to skip, or use {env: PROVIDER_API_KEY}",
+  })
+  if (apiKey === null) return
+
+  const models: CustomProviderForm["models"] = []
+  while (true) {
+    const id = await prompt({
+      title: models.length === 0 ? "Model ID" : "Additional model ID",
+      placeholder: "model-id",
+      validate(value) {
+        const id = value.trim()
+        if (!id) return "Model ID is required"
+        if (models.some((model) => model.id.trim() === id)) return "Model ID already exists"
+        return undefined
+      },
+    })
+    if (id === null) return
+
+    const modelName = await prompt({
+      title: "Model name",
+      placeholder: "Display name",
+      value: id,
+      validate: (value) => (value.trim() ? undefined : "Model name is required"),
+    })
+    if (modelName === null) return
+    models.push({ id, name: modelName })
+
+    const more = await DialogConfirm.show(
+      input.dialog,
+      "Add another model?",
+      "Configure another model for this custom provider.",
+      "done",
+    )
+    if (more === undefined) return
+    if (!more) break
+  }
+
+  const headers: CustomProviderForm["headers"] = []
+  let addHeader = await DialogConfirm.show(
+    input.dialog,
+    "Add custom header?",
+    "Add optional headers to every request for this provider.",
+    "skip",
+  )
+  if (addHeader === undefined) return
+  while (addHeader) {
+    const key = await prompt({
+      title: "Header name",
+      placeholder: "Header-Name",
+      validate(value) {
+        const key = value.trim()
+        if (!key) return "Header name is required"
+        if (headers.some((header) => header.key.trim().toLowerCase() === key.toLowerCase())) {
+          return "Header already exists"
+        }
+        return undefined
+      },
+    })
+    if (key === null) return
+
+    const value = await prompt({
+      title: "Header value",
+      placeholder: "value",
+      validate: (value) => (value.trim() ? undefined : "Header value is required"),
+    })
+    if (value === null) return
+    headers.push({ key, value })
+
+    addHeader = await DialogConfirm.show(
+      input.dialog,
+      "Add another header?",
+      "Configure another custom header for this provider.",
+      "done",
+    )
+    if (addHeader === undefined) return
+  }
+
+  const result = validateCustomProvider({
+    form: {
+      providerID,
+      name,
+      baseURL,
+      apiKey,
+      models,
+      headers,
+    },
+    disabledProviders: input.sync.data.config.disabled_providers ?? [],
+    existingProviderIDs: new Set(input.sync.data.provider_next.all.map((provider) => provider.id)),
+  })
+
+  if (!result.ok) {
+    input.toast.show({ variant: "error", message: result.error })
+    return
+  }
+
+  input.dialog.replace(() => <DialogPrompt title="Saving custom provider" busy busyText="Updating configuration..." />)
+
+  try {
+    if (result.key) {
+      await input.sdk.client.auth.set({
+        providerID: result.providerID,
+        auth: {
+          type: "api",
+          key: result.key,
+        },
+      })
+    }
+
+    const disabledProviders = input.sync.data.config.disabled_providers ?? []
+    await input.sdk.client.global.config.update({
+      config: {
+        provider: { [result.providerID]: result.config },
+        disabled_providers: disabledProviders.filter((id) => id !== result.providerID),
+      },
+    })
+    await input.sync.bootstrap()
+    input.toast.show({ variant: "success", message: `${result.name} connected` })
+    input.dialog.replace(() => <DialogModel providerID={result.providerID} />)
+  } catch (err) {
+    input.dialog.clear()
+    input.toast.show({
+      variant: "error",
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+async function promptCustomProviderValue(input: {
+  dialog: ReturnType<typeof useDialog>
+  toast: ReturnType<typeof useToast>
+  title: string
+  placeholder?: string
+  value?: string
+  validate?: (value: string) => string | undefined
+}) {
+  let current = input.value
+  while (true) {
+    const value = await DialogPrompt.show(input.dialog, input.title, {
+      placeholder: input.placeholder,
+      value: current,
+    })
+    if (value === null) return null
+
+    const error = input.validate?.(value)
+    if (!error) return value
+
+    current = value
+    input.toast.show({ variant: "error", message: error })
+  }
 }
 
 interface PromptsMethodProps {
