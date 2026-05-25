@@ -10,7 +10,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import type { SessionID } from "@/session/schema"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { Config } from "@/config/config"
 import * as Log from "@opencode-ai/core/util/log"
@@ -79,9 +79,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sh
 
 export const use = serviceUse(Service)
 
-const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-  Effect.sync(() => Database.use(fn))
-
 function api(resource: string): Api {
   return {
     create: `/api/${resource}`,
@@ -115,12 +112,13 @@ export const layer = Layer.effect(
     const account = yield* Account.Service
     const bus = yield* Bus.Service
     const cfg = yield* Config.Service
+    const { db } = yield* Database.Service
     const http = yield* HttpClient.HttpClient
     const httpOk = HttpClient.filterStatusOk(http)
     const provider = yield* Provider.Service
     const session = yield* Session.Service
 
-    function sync(sessionID: SessionID, data: Data[]): Effect.Effect<void> {
+    function sync(sessionID: SessionID, data: Data[]) {
       return Effect.gen(function* () {
         if (disabled) return
         const share = yield* getCached(sessionID)
@@ -233,9 +231,12 @@ export const layer = Layer.effect(
     })
 
     const get = Effect.fnUntraced(function* (sessionID: SessionID) {
-      const row = yield* db((db) =>
-        db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
-      )
+      const row = yield* db
+        .select()
+        .from(SessionShareTable)
+        .where(eq(SessionShareTable.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
       if (!row) return
       return { id: row.id, secret: row.secret, url: row.url } satisfies Share
     })
@@ -321,16 +322,15 @@ export const layer = Layer.effect(
         Effect.flatMap((r) => httpOk.execute(r)),
         Effect.flatMap(HttpClientResponse.schemaBodyJson(ShareSchema)),
       )
-      yield* db((db) =>
-        db
-          .insert(SessionShareTable)
-          .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
-          .onConflictDoUpdate({
-            target: SessionShareTable.session_id,
-            set: { id: result.id, secret: result.secret, url: result.url },
-          })
-          .run(),
-      )
+      yield* db
+        .insert(SessionShareTable)
+        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
+        .onConflictDoUpdate({
+          target: SessionShareTable.session_id,
+          set: { id: result.id, secret: result.secret, url: result.url },
+        })
+        .run()
+        .pipe(Effect.orDie)
       const s = yield* InstanceState.get(state)
       s.shared.set(sessionID, result)
       yield* full(sessionID).pipe(
@@ -362,7 +362,7 @@ export const layer = Layer.effect(
         Effect.flatMap((r) => httpOk.execute(r)),
       )
 
-      yield* db((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
+      yield* db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run().pipe(Effect.orDie)
       s.shared.delete(sessionID)
       s.queue.delete(sessionID)
     })
@@ -375,6 +375,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Bus.layer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Config.defaultLayer),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Session.defaultLayer),

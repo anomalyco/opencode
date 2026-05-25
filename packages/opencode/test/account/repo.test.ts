@@ -14,7 +14,7 @@ const truncate = Layer.effectDiscard(
   }),
 )
 
-const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
+const it = testEffect(Layer.merge(AccountRepo.defaultLayer, truncate))
 
 it.live("list returns empty when no accounts exist", () =>
   Effect.gen(function* () {

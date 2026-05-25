@@ -14,7 +14,7 @@ import { Session } from "@/session/session"
 import type { SessionID } from "../../src/session/schema"
 import { ShareNext } from "@/share/share-next"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
@@ -22,7 +22,8 @@ import { testEffect } from "../lib/effect"
 
 const env = Layer.mergeAll(
   Session.defaultLayer,
-  AccountRepo.layer,
+  AccountRepo.defaultLayer,
+  Database.defaultLayer,
   NodeFileSystem.layer,
   CrossSpawnSpawner.defaultLayer,
 )
@@ -43,8 +44,9 @@ function live(client: HttpClient.HttpClient) {
   const http = Layer.succeed(HttpClient.HttpClient, client)
   return ShareNext.layer.pipe(
     Layer.provide(Bus.layer),
-    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(http))),
+    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(http))),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(Database.defaultLayer),
     Layer.provide(http),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Session.defaultLayer),
@@ -57,12 +59,13 @@ function wired(client: HttpClient.HttpClient) {
     Bus.layer,
     ShareNext.layer,
     Session.defaultLayer,
-    AccountRepo.layer,
+    AccountRepo.defaultLayer,
+    Database.defaultLayer,
     NodeFileSystem.layer,
     CrossSpawnSpawner.defaultLayer,
   ).pipe(
     Layer.provide(Bus.layer),
-    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(http))),
+    Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(http))),
     Layer.provide(Config.defaultLayer),
     Layer.provide(http),
     Layer.provide(Provider.defaultLayer),
@@ -70,7 +73,10 @@ function wired(client: HttpClient.HttpClient) {
 }
 
 const share = (id: SessionID) =>
-  Database.use((db) => db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, id)).get())
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return yield* db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, id)).get().pipe(Effect.orDie)
+  })
 
 const seed = (url: string, org?: string) =>
   AccountRepo.Service.use((repo) =>
@@ -169,7 +175,7 @@ describe("ShareNext", () => {
           expect(result.url).toBe("https://legacy-share.example.com/share/abc")
           expect(result.secret).toBe("sec_123")
 
-          const row = share(session.id)
+          const row = yield* share(session.id)
           expect(row?.id).toBe("shr_abc")
           expect(row?.url).toBe("https://legacy-share.example.com/share/abc")
           expect(row?.secret).toBe("sec_123")
@@ -207,7 +213,7 @@ describe("ShareNext", () => {
             yield* ShareNext.use.remove(session.id)
           }).pipe(Effect.provide(live(client)))
 
-          expect(share(session.id)).toBeUndefined()
+          expect(yield* share(session.id)).toBeUndefined()
           expect(seen.map((req) => [req.method, req.url])).toEqual([
             ["POST", "https://legacy-share.example.com/api/share"],
             ["DELETE", "https://legacy-share.example.com/api/share/shr_abc"],
@@ -228,7 +234,7 @@ describe("ShareNext", () => {
         )
 
         expect(Exit.isFailure(exit)).toBe(true)
-        expect(share(session.id)).toBeUndefined()
+        expect(yield* share(session.id)).toBeUndefined()
       }),
     ),
   )
@@ -252,19 +258,17 @@ describe("ShareNext", () => {
           const info = yield* session.create({ title: "first" })
           yield* share.init()
           yield* Effect.sleep(50)
-          yield* Effect.sync(() =>
-            Database.use((db) =>
-              db
-                .insert(SessionShareTable)
-                .values({
-                  session_id: info.id,
-                  id: "shr_abc",
-                  url: "https://legacy-share.example.com/share/abc",
-                  secret: "sec_123",
-                })
-                .run(),
-            ),
-          )
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(SessionShareTable)
+            .values({
+              session_id: info.id,
+              id: "shr_abc",
+              url: "https://legacy-share.example.com/share/abc",
+              secret: "sec_123",
+            })
+            .run()
+            .pipe(Effect.orDie)
 
           yield* bus.publish(Session.Event.Diff, {
             sessionID: info.id,

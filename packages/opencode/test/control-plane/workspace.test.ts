@@ -11,6 +11,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@/storage/db"
+import { Database as CoreDatabase } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Session as SessionNs } from "@/session/session"
@@ -52,6 +53,7 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
     Layer.provide(SessionPrompt.defaultLayer),
     Layer.provide(Project.defaultLayer),
     Layer.provide(Vcs.defaultLayer),
+    Layer.provide(CoreDatabase.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),

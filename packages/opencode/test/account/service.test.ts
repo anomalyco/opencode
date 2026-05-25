@@ -26,7 +26,7 @@ const truncate = Layer.effectDiscard(
   }),
 )
 
-const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
+const it = testEffect(Layer.merge(AccountRepo.defaultLayer, truncate))
 
 const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
 const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
