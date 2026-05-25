@@ -113,11 +113,36 @@ export async function openInEditor(editor: string, path: string) {
 
   const key = editor.toLowerCase()
   const entry = editors[key] ?? { command: editor, args: (input: string) => [input] }
+  if (process.platform === "darwin" && key === "wezterm") {
+    await openInWezTerm(target)
+    return
+  }
   if (process.platform === "darwin" && entry.macos) {
     await execFileAsync("open", ["-a", entry.macos, target])
     return
   }
   await execFileAsync(entry.command, entry.args(target))
+}
+
+async function openInWezTerm(path: string) {
+  const script = `
+on run argv
+  set targetPath to item 1 of argv
+
+  tell application "System Events"
+    set weztermRunning to (name of processes) contains "wezterm-gui"
+  end tell
+
+  if not weztermRunning then
+    tell application "WezTerm" to launch
+    delay 2
+  end if
+
+  tell application "WezTerm" to activate
+  do shell script "/Applications/WezTerm.app/Contents/MacOS/wezterm cli spawn --cwd " & quoted form of targetPath
+end run
+`
+  await execFileAsync("osascript", ["-e", script, path])
 }
 
 export function getCustomEditorPath() {
