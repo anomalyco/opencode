@@ -137,7 +137,11 @@ function resourceLinkToPart(link: ResourceLink): PromptPart {
   return { type: "text", text: parsed.text }
 }
 
-function uriToFilePart(uri: string, mime: string, filename?: string): MessageV2.FilePartInput | MessageV2.TextPartInput {
+function uriToFilePart(
+  uri: string,
+  mime: string,
+  filename?: string,
+): MessageV2.FilePartInput | MessageV2.TextPartInput {
   try {
     if (uri.startsWith("file://")) {
       return {
