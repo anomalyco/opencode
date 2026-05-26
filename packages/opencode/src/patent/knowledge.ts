@@ -1,5 +1,6 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Config } from "@/config/config"
 import path from "path"
 import { Database } from "bun:sqlite"
 
@@ -25,16 +26,21 @@ export const make = (dataDir: string) =>
         const exists = yield* fs.existsSafe(dbPath)
         if (!exists) return []
 
-        const db = new Database(dbPath, { readonly: true })
-        const results = db
-          .query(`SELECT title, content FROM chunks WHERE content LIKE ? LIMIT ?`)
-          .all(`%${query}%`, opts.limit)
-          .map((row: any) => ({
-            title: row.title,
-            content: row.content,
-            score: 1.0,
-          }))
-        db.close()
+        const results = yield* Effect.sync(() => {
+          const db = new Database(dbPath, { readonly: true })
+          try {
+            return (db
+              .query(`SELECT title, content FROM chunks WHERE content LIKE ? LIMIT ?`)
+              .all(`%${query}%`, opts.limit) as Array<{ title: string; content: string }>)
+              .map((row) => ({
+                title: row.title,
+                content: row.content,
+                score: 1.0,
+              }))
+          } finally {
+            db.close()
+          }
+        })
         return results
       },
     )
@@ -45,20 +51,25 @@ export const make = (dataDir: string) =>
       if (!exists) return []
 
       const entries = yield* fs.readDirectoryEntries(cardsDir).pipe(Effect.orElseSucceed(() => []))
-      const results: Array<{ title: string; content: string }> = []
 
-      for (const entry of entries) {
-        const file = entry.name
-        if (!file.includes(keyword)) continue
-        const filePath = path.join(cardsDir, file)
-        const content = yield* fs.readFileStringSafe(filePath).pipe(Effect.orElseSucceed(() => ""))
-        if (content !== undefined && content.toLowerCase().includes(keyword.toLowerCase())) {
-          const title = file.replace(/\.md$/, "")
-          results.push({ title, content })
-        }
-      }
+      const results = yield* Effect.all(
+        entries
+          .filter((entry) => entry.name.includes(keyword))
+          .map((entry) =>
+            Effect.gen(function* () {
+              const filePath = path.join(cardsDir, entry.name)
+              const content = yield* fs.readFileStringSafe(filePath).pipe(Effect.orElseSucceed(() => ""))
+              return {
+                title: entry.name.replace(/\.md$/, ""),
+                content: content ?? "",
+              }
+            }),
+          ),
+      )
 
-      return results
+      return results.filter(
+        (item) => item.content.toLowerCase().includes(keyword.toLowerCase()),
+      )
     })
 
     const searchGuidelines = Effect.fn("PatentKnowledge.searchGuidelines")(function* (topic: string) {
@@ -67,7 +78,9 @@ export const make = (dataDir: string) =>
       if (!exists) return ""
 
       const entries = yield* fs.readDirectoryEntries(guidelinesDir).pipe(Effect.orElseSucceed(() => []))
-      const matchedFiles = entries.filter((f: { name: string }) => f.name.toLowerCase().includes(topic.toLowerCase()))
+      const matchedFiles = entries.filter((entry) =>
+        entry.name.toLowerCase().includes(topic.toLowerCase()),
+      )
 
       if (matchedFiles.length === 0) return ""
 
@@ -83,7 +96,9 @@ export const make = (dataDir: string) =>
       if (!exists) return ""
 
       const entries = yield* fs.readDirectoryEntries(invalidationDir).pipe(Effect.orElseSucceed(() => []))
-      const matchedFiles = entries.filter((f: { name: string }) => f.name.toLowerCase().includes(topic.toLowerCase()))
+      const matchedFiles = entries.filter((entry) =>
+        entry.name.toLowerCase().includes(topic.toLowerCase()),
+      )
 
       if (matchedFiles.length === 0) return ""
 
@@ -99,12 +114,16 @@ export const make = (dataDir: string) =>
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const dataDir = path.join(process.env.HOME ?? "", ".opencode", "patent")
+    const config = yield* Config.Service
+    const cfg = yield* config.get()
+    const dataDir = cfg.patent?.dataDir ?? path.join(process.env.HOME ?? "", ".opencode", "patent")
     return yield* make(dataDir)
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Config.defaultLayer),
+)
 
 export * as PatentKnowledge from "./knowledge"

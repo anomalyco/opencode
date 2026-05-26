@@ -60,7 +60,10 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
           }
 
           const { Database } = yield* Effect.promise(() => import("bun:sqlite"))
-          const db = new Database(dbPath, { readonly: true })
+          const db = yield* Effect.acquireRelease(
+            Effect.succeed(new Database(dbPath, { readonly: true })),
+            (db) => Effect.sync(() => db.close()),
+          )
           return { db }
         }),
       ),
@@ -76,7 +79,9 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
 
       if (!row) return null
       const decoded = Schema.decodeUnknownExit(KGNodeSchema)(row, { errors: "all" })
-      return Exit.isSuccess(decoded) ? decoded.value : null
+      if (Exit.isSuccess(decoded)) return decoded.value
+      yield* Effect.logWarning("PatentKG: schema decode failed", decoded)
+      return null
     })
 
     const queryRelated = Effect.fn("PatentKG.queryRelated")(
@@ -88,12 +93,15 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
           ? db.query("SELECT * FROM edges WHERE source = ? AND relation = ?").all(nodeId, relation)
           : db.query("SELECT * FROM edges WHERE source = ?").all(nodeId)
 
-        return query
-          .map((row: unknown) => {
+        const result = yield* Effect.forEach(query, (row: unknown) =>
+          Effect.gen(function* () {
             const decoded = Schema.decodeUnknownExit(KGEdgeSchema)(row, { errors: "all" })
-            return Exit.isSuccess(decoded) ? decoded.value : null
-          })
-          .filter((v): v is KGEdge => v !== null)
+            if (Exit.isSuccess(decoded)) return decoded.value
+            yield* Effect.logWarning("PatentKG: schema decode failed", decoded)
+            return null
+          }),
+        )
+        return result.filter((v): v is KGEdge => v !== null)
       },
     )
 
@@ -106,12 +114,15 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
         unknown
       >[]
 
-      return rows
-        .map((row) => {
+      const result = yield* Effect.forEach(rows, (row) =>
+        Effect.gen(function* () {
           const decoded = Schema.decodeUnknownExit(KGNodeSchema)(row, { errors: "all" })
-          return Exit.isSuccess(decoded) ? decoded.value : null
-        })
-        .filter((v): v is KGNode => v !== null)
+          if (Exit.isSuccess(decoded)) return decoded.value
+          yield* Effect.logWarning("PatentKG: schema decode failed", decoded)
+          return null
+        }),
+      )
+      return result.filter((v): v is KGNode => v !== null)
     })
 
     const fullTextSearch = Effect.fn("PatentKG.fullTextSearch")(function* (query: string) {
@@ -122,12 +133,15 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
         .query(`SELECT * FROM nodes_fts WHERE nodes_fts MATCH ? ORDER BY rank LIMIT 100`)
         .all(query) as Record<string, unknown>[]
 
-      return rows
-        .map((row) => {
+      const result = yield* Effect.forEach(rows, (row) =>
+        Effect.gen(function* () {
           const decoded = Schema.decodeUnknownExit(KGNodeSchema)(row, { errors: "all" })
-          return Exit.isSuccess(decoded) ? decoded.value : null
-        })
-        .filter((v): v is KGNode => v !== null)
+          if (Exit.isSuccess(decoded)) return decoded.value
+          yield* Effect.logWarning("PatentKG: schema decode failed", decoded)
+          return null
+        }),
+      )
+      return result.filter((v): v is KGNode => v !== null)
     })
 
     return Service.of({ queryNode, queryRelated, queryByLawRef, fullTextSearch })

@@ -1,5 +1,3 @@
-export * as ConfigPatent from "./patent"
-
 import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
@@ -21,13 +19,13 @@ export type PatentAgentConfig = Schema.Schema.Type<typeof PatentAgentConfig>
 export const PatentSearchConfig = Schema.Struct({
   backend: Schema.optional(Schema.Union([Schema.Literal("none"), Schema.Literal("local"), Schema.Literal("google"), Schema.Literal("custom")])),
   connectionString: Schema.optional(Schema.String),
-})
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type PatentSearchConfig = Schema.Schema.Type<typeof PatentSearchConfig>
 
 export const PatentQualityConfig = Schema.Struct({
   threshold: Schema.optional(Schema.Number),
   maxIterations: Schema.optional(Schema.Number),
-})
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type PatentQualityConfig = Schema.Schema.Type<typeof PatentQualityConfig>
 
 export const Info = Schema.Struct({
@@ -37,3 +35,5 @@ export const Info = Schema.Struct({
   agent: Schema.optional(Schema.Record(Schema.String, PatentAgentConfig)),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Info = Schema.Schema.Type<typeof Info>
+
+export * as ConfigPatent from "./patent"

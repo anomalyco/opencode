@@ -1,7 +1,15 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import type { InstanceContext } from "@/project/instance"
 import { randomUUID } from "crypto"
+
+class WorkflowNotFoundError extends Schema.TaggedErrorClass<WorkflowNotFoundError>()("WorkflowNotFoundError", {
+  sessionId: Schema.String,
+}) {}
+
+class ActionMismatchError extends Schema.TaggedErrorClass<ActionMismatchError>()("ActionMismatchError", {
+  expected: Schema.String,
+  actual: Schema.String,
+}) {}
 
 type WorkflowType = "draft" | "oa" | "reexam" | "invalidation"
 type WorkflowStatus = "running" | "paused" | "completed" | "failed"
@@ -45,7 +53,7 @@ const WORKFLOW_STEPS: Record<WorkflowType, Step[]> = {
 
 export interface Interface {
   readonly create: (type: WorkflowType, sessionId: string) => Effect.Effect<WorkflowState>
-  readonly advance: (sessionId: string, action: string, output: string) => Effect.Effect<WorkflowState>
+  readonly advance: (sessionId: string, action: string, output: string) => Effect.Effect<WorkflowState, ActionMismatchError | WorkflowNotFoundError>
   readonly getState: (sessionId: string) => Effect.Effect<WorkflowState | null>
   readonly getCurrentStep: (state: WorkflowState) => Effect.Effect<Step | null>
   readonly reset: (sessionId: string) => Effect.Effect<void>
@@ -82,12 +90,12 @@ export const layer = Layer.effect(
         const stateMap = yield* InstanceState.get(state)
         const workflowState = stateMap.get(sessionId)
         if (!workflowState) {
-          return yield* Effect.die(new Error(`Workflow not found for session: ${sessionId}`))
+          return yield* new WorkflowNotFoundError({ sessionId })
         }
         const steps = WORKFLOW_STEPS[workflowState.workflowType] ?? []
         const currentStep = steps[workflowState.currentStep]
         if (currentStep?.action !== action) {
-          return yield* Effect.die(new Error(`Action mismatch: expected ${currentStep?.action}, got ${action}`))
+          return yield* new ActionMismatchError({ expected: currentStep?.action ?? "none", actual: action })
         }
         const updatedOutputs = { ...workflowState.stepOutputs, [action]: output }
         const nextStep = workflowState.currentStep + 1
