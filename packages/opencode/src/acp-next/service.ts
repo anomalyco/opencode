@@ -4,8 +4,14 @@ import {
   type AuthenticateResponse,
   type AuthMethod,
   type CancelNotification,
+  type CloseSessionRequest,
+  type CloseSessionResponse,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
   type McpServer,
@@ -13,6 +19,9 @@ import {
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type SessionInfo,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
   type SetSessionModelRequest,
@@ -21,6 +30,7 @@ import {
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import * as Log from "@opencode-ai/core/util/log"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPNextError from "./error"
@@ -32,6 +42,7 @@ import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
 export const AuthMethodID = "opencode-login"
+const log = Log.create({ service: "acp-next-service" })
 
 export type Error = ACPNextError.Error
 
@@ -40,6 +51,10 @@ export type Interface = {
   readonly authenticate: (input: AuthenticateRequest) => Effect.Effect<AuthenticateResponse, Error>
   readonly newSession: (input: NewSessionRequest) => Effect.Effect<NewSessionResponse, Error>
   readonly loadSession: (input: LoadSessionRequest) => Effect.Effect<LoadSessionResponse, Error>
+  readonly listSessions: (input: ListSessionsRequest) => Effect.Effect<ListSessionsResponse, Error>
+  readonly resumeSession: (input: ResumeSessionRequest) => Effect.Effect<ResumeSessionResponse, Error>
+  readonly closeSession: (input: CloseSessionRequest) => Effect.Effect<CloseSessionResponse, Error>
+  readonly forkSession: (input: ForkSessionRequest) => Effect.Effect<ForkSessionResponse, Error>
   readonly setSessionConfigOption: (
     input: SetSessionConfigOptionRequest,
   ) => Effect.Effect<SetSessionConfigOptionResponse, Error>
@@ -89,6 +104,12 @@ export function make(input: {
         promptCapabilities: {
           embeddedContext: true,
           image: true,
+        },
+        sessionCapabilities: {
+          close: {},
+          fork: {},
+          list: {},
+          resume: {},
         },
       },
       authMethods: [authMethod],
@@ -179,6 +200,135 @@ export function make(input: {
     })
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
+    yield* sendAvailableCommands(input.connection, state.id, snapshot)
+
+    return {
+      configOptions: configOptions(snapshot, {
+        model: state.model ?? model,
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    }
+  })
+
+  const listSessions = Effect.fn("ACPNext.listSessions")(function* (params: ListSessionsRequest) {
+    const cursor = params.cursor ? Number(params.cursor) : undefined
+    const limit = 100
+    const sessions = yield* request(
+      () =>
+        input.sdk.session.list(
+          {
+            ...(params.cwd ? { directory: params.cwd } : {}),
+            roots: true,
+          },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+    const filtered =
+      cursor === undefined || !Number.isFinite(cursor) ? sorted : sorted.filter((item) => item.time.updated < cursor)
+    const page = filtered.slice(0, limit)
+    const last = page.at(-1)
+    return {
+      sessions: page.map((item): SessionInfo => ({
+        sessionId: item.id,
+        cwd: item.directory,
+        title: item.title,
+        updatedAt: new Date(item.time.updated).toISOString(),
+      })),
+      ...(filtered.length > limit && last ? { nextCursor: String(last.time.updated) } : {}),
+    }
+  })
+
+  const resumeSession = Effect.fn("ACPNext.resumeSession")(function* (params: ResumeSessionRequest) {
+    const snapshot = yield* directorySnapshot(params.cwd)
+    yield* request(
+      () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
+      "session",
+    )
+    const messages = yield* request(
+      () =>
+        input.sdk.session.messages(
+          { directory: params.cwd, sessionID: params.sessionId, limit: 20 },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const model = restored.model ?? selectDefaultModel(snapshot)
+    const state = yield* session.load({
+      id: params.sessionId,
+      cwd: params.cwd,
+      mcpServers: params.mcpServers ?? [],
+      model,
+      variant: restored.variant ?? selectVariant(snapshot, model),
+      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+    })
+
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
+    yield* sendAvailableCommands(input.connection, state.id, snapshot)
+
+    return {
+      configOptions: configOptions(snapshot, {
+        model: state.model ?? model,
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    }
+  })
+
+  const closeSession = Effect.fn("ACPNext.closeSession")(function* (params: CloseSessionRequest) {
+    const removed = yield* session.remove(params.sessionId)
+    registeredMcp.delete(params.sessionId)
+    if (!removed) return {}
+
+    yield* request(
+      () => input.sdk.session.abort({ directory: removed.cwd, sessionID: params.sessionId }, { throwOnError: true }),
+      "session",
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          log.error("failed to abort session while closing ACP session", { error, sessionID: params.sessionId })
+        }),
+      ),
+    )
+    return {}
+  })
+
+  const forkSession = Effect.fn("ACPNext.forkSession")(function* (params: ForkSessionRequest) {
+    const snapshot = yield* directorySnapshot(params.cwd)
+    const forked = yield* request(
+      () =>
+        input.sdk.session.fork(
+          {
+            directory: params.cwd,
+            sessionID: params.sessionId,
+          },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const messages = yield* request(
+      () =>
+        input.sdk.session.messages(
+          { directory: params.cwd, sessionID: forked.id, limit: 20 },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const model = restored.model ?? selectDefaultModel(snapshot)
+    const state = yield* session.load({
+      id: forked.id,
+      cwd: params.cwd,
+      mcpServers: params.mcpServers ?? [],
+      model,
+      variant: restored.variant ?? selectVariant(snapshot, model),
+      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+    })
+
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
     return {
@@ -278,6 +428,10 @@ export function make(input: {
     authenticate,
     newSession,
     loadSession,
+    listSessions,
+    resumeSession,
+    closeSession,
+    forkSession,
     setSessionConfigOption,
     setSessionMode,
     setSessionModel,
