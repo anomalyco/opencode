@@ -9,7 +9,7 @@ const SYNC_INTERVAL = "1 hour"
 const runtimeLayer = Layer.mergeAll(statsLayer, Athena.layer)
 const syncPass = syncStats().pipe(
   Effect.catchCause((cause) =>
-    Effect.logWarning("stats sync failed").pipe(Effect.annotateLogs({ cause: Cause.pretty(cause) })),
+    Effect.logWarning(`stats sync failed ${JSON.stringify({ cause: Cause.pretty(cause) })}`),
   ),
 )
 const daemon = Effect.logInfo("stats sync daemon started").pipe(
