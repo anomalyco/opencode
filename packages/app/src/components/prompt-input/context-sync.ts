@@ -1,6 +1,6 @@
 import { DocCollection } from "@blocksuite/store"
 import { createEffect, onCleanup, type Accessor } from "solid-js"
-import { selectionFromLines } from "@/context/file"
+import { selectionFromLines, type FileSelection } from "@/context/file"
 import type { LineComment } from "@/context/comments"
 import { isLineContextItem, type FileContextItem } from "@/context/prompt"
 import { OpencodeDocSource, type DocSyncOpts } from "@/components/blocksuite/opencode-doc-source"
@@ -38,6 +38,14 @@ function selection(value: unknown) {
   if (item.side === "additions" || item.side === "deletions") next.side = item.side
   if (item.endSide === "additions" || item.endSide === "deletions") next.endSide = item.endSide
   return next
+}
+
+function range(value: FileSelection | undefined) {
+  if (!value) return
+  return {
+    start: value.startLine,
+    end: value.endLine,
+  } satisfies LineComment["selection"]
 }
 
 function read(value: unknown) {
@@ -85,25 +93,27 @@ export function createPromptContextSync(input: SyncInput) {
 
   let state: State | undefined
 
-  const local = () => {
-    const meta = new Map(
-      input.context
-        .items()
-        .filter(isLineContextItem)
-        .map((item) => [item.commentID, item] as const),
-    )
-    return input.comments().map((comment) => {
-      const item = meta.get(comment.id)
-      return {
-        id: comment.id,
-        file: comment.file,
-        selection: { ...comment.selection },
-        comment: comment.comment,
-        time: comment.time,
-        origin: item?.commentOrigin,
-        preview: item?.preview,
-      } satisfies Item
-    })
+  const local = (): Item[] => {
+    const byID = new Map(input.comments().map((item) => [item.id, item] as const))
+    return input.context
+      .items()
+      .filter(isLineContextItem)
+      .flatMap((item) => {
+        const id = item.commentID
+        if (!id) return []
+        const comment = byID.get(id)
+        const sel = comment?.selection ?? range(item.selection)
+        if (!sel) return []
+        return {
+          id,
+          file: item.path,
+          selection: { ...sel },
+          comment: item.comment ?? comment?.comment ?? "",
+          time: comment?.time ?? 0,
+          origin: item.commentOrigin,
+          preview: item.preview,
+        } satisfies Item
+      })
   }
 
   const connect = (opts: DocSyncOpts) => {

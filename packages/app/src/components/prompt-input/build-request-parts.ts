@@ -4,7 +4,7 @@ import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
-import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
+import { createCommentMetadata, formatCommentNote, formatReferenceNote } from "@/utils/comment-note"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -135,7 +135,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
     const path = absolute(input.sessionDirectory, item.path)
     const url = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
-    if (!comment && used.has(url)) return []
+    if (!comment && !item.commentID && used.has(url)) return []
     used.add(url)
 
     const filePart = {
@@ -146,7 +146,26 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       filename: getFilename(item.path),
     } satisfies PromptRequestPart
 
-    if (!comment) return [filePart]
+    if (!comment && !item.commentID) return [filePart]
+
+    if (!comment) {
+      return [
+        {
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: formatReferenceNote({ path: item.path, selection: item.selection }),
+          synthetic: true,
+          metadata: createCommentMetadata({
+            path: item.path,
+            selection: item.selection,
+            comment: "",
+            preview: item.preview,
+            origin: item.commentOrigin,
+          }),
+        } satisfies PromptRequestPart,
+        filePart,
+      ]
+    }
 
     return [
       {

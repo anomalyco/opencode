@@ -51,6 +51,7 @@ export function createPromptDoc(input: PromptDocInput) {
   const [ready, setReady] = createSignal(false)
   const [docID, setDocID] = createSignal<string | undefined>()
   const [actor, setActor] = createSignal<SessionActor | undefined>()
+  const [activeSync, setActiveSync] = createSignal<DocSyncOpts | undefined>()
   const [history, setHistory] = createStore({ undo: false, redo: false })
 
   const syncHistory = () => {
@@ -93,6 +94,7 @@ export function createPromptDoc(input: PromptDocInput) {
       name: actor.name,
       color: actor.color,
     }
+    setActiveSync(sync)
     init = true
     session = sessionID
   }
@@ -131,6 +133,7 @@ export function createPromptDoc(input: PromptDocInput) {
     historySub = undefined
     handle = fresh
     sync = next
+    setActiveSync(next)
     init = opts?.init ?? init
     if (opts?.sessionID) session = opts.sessionID
     await fresh.attach(el)
@@ -219,6 +222,7 @@ export function createPromptDoc(input: PromptDocInput) {
     const sessionID = session
     detach()
     sync = undefined
+    setActiveSync(undefined)
     init = true
     session = undefined
     live = undefined
@@ -283,7 +287,7 @@ export function createPromptDoc(input: PromptDocInput) {
   return {
     ready,
     docID,
-    sync: () => sync,
+    sync: activeSync,
     actorID: () => actor()?.actorID,
     actorName: () => actor()?.name,
     actors,

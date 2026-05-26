@@ -424,10 +424,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     submit: () => void submit(false),
   })
   createPromptContextSync({
-    sync: () => {
-      doc.docID()
-      return doc.sync()
-    },
+    sync: doc.sync,
     comments: comments.all,
     context: prompt.context,
     replace: comments.replace,
@@ -437,6 +434,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let approvalSession: string | undefined
 
   const approvalActor = () => doc.actorID()
+  const clearContext = () => {
+    for (const item of prompt.context.items()) {
+      prompt.context.remove(item.key)
+    }
+  }
   const closeApproval = () => {
     dialog.close()
     approvalID = undefined
@@ -447,6 +449,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!actorID) return
     if (!state.actors.some((item) => item.actorID === actorID)) return
     if (state.status === "sent") {
+      clearContext()
       if (approvalID === state.submitID) closeApproval()
       return
     }

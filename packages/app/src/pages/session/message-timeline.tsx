@@ -978,9 +978,13 @@ export function MessageTimeline(props: {
                                               )}
                                             </Show>
                                           </div>
-                                          <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                            {c().comment}
-                                          </div>
+                                          <Show when={c().comment.trim()}>
+                                            {(note) => (
+                                              <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                                {note()}
+                                              </div>
+                                            )}
+                                          </Show>
                                         </div>
                                       )}
                                     </Show>

@@ -4,20 +4,12 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
-import type { FileSelection } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import {
-  isCommentItem,
-  isLineContextItem,
-  type ContextItem,
-  type ImageAttachmentPart,
-  type Prompt,
-  usePrompt,
-} from "@/context/prompt"
+import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -208,15 +200,6 @@ type PromptSubmitInput = {
   approve?: (input: PromptApprovalInput) => Promise<boolean> | boolean
 }
 
-type CommentItem = {
-  path: string
-  selection?: FileSelection
-  comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
-  preview?: string
-}
-
 type Override =
   | Prompt
   | {
@@ -269,7 +252,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       .catch(() => {})
   }
 
-  const restoreCommentItems = (items: CommentItem[]) => {
+  const restoreContext = (items: (ContextItem & { key: string })[]) => {
     for (const item of items) {
       prompt.context.add({
         type: "file",
@@ -280,12 +263,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         commentOrigin: item.commentOrigin,
         preview: item.preview,
       })
-    }
-  }
-
-  const removeCommentItems = (items: { key: string }[]) => {
-    for (const item of items) {
-      prompt.context.remove(item.key)
     }
   }
 
@@ -517,7 +494,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
     }
 
-    const commentItems = context.filter((item) => isLineContextItem(item) || isCommentItem(item))
     const messageID = Identifier.ascending("message")
 
     const { requestParts } = buildRequestParts({
@@ -553,7 +529,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    removeCommentItems(commentItems)
+    clearContext()
     clearInput()
 
     const waitForWorktree = async () => {
@@ -570,7 +546,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sync.set("session_status", session.id, { type: "idle" })
         }
         removeOptimisticMessage()
-        restoreCommentItems(commentItems)
+        restoreContext(context)
         restoreInput()
       }
 
@@ -629,7 +605,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: errorMessage(err),
       })
       removeOptimisticMessage()
-      restoreCommentItems(commentItems)
+      restoreContext(context)
       restoreInput()
     })
     return session.id

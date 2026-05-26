@@ -100,6 +100,44 @@ describe("buildRequestParts", () => {
     expect(synthetic).toHaveLength(1)
   })
 
+  test("keeps empty line context visible in optimistic parts", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look here", start: 0, end: 9 }],
+      context: [
+        {
+          key: "ctx:line",
+          type: "file",
+          path: "src/foo.ts",
+          selection: { startLine: 7, startChar: 0, endLine: 7, endChar: 0 },
+          comment: "",
+          commentID: "comment_1",
+        },
+      ],
+      images: [],
+      text: "look here",
+      messageID: "msg_line",
+      sessionID: "ses_line",
+      sessionDirectory: "/repo",
+    })
+
+    const meta = result.optimisticParts.find(
+      (part) => part.type === "text" && part.synthetic && part.metadata?.opencodeComment,
+    )
+
+    expect(meta).toMatchObject({
+      type: "text",
+      synthetic: true,
+      metadata: {
+        opencodeComment: {
+          path: "src/foo.ts",
+          comment: "",
+          selection: { startLine: 7, startChar: 0, endLine: 7, endChar: 0 },
+        },
+      },
+    })
+    expect(result.optimisticParts.some((part) => part.type === "file" && part.url.includes("start=7&end=7"))).toBe(true)
+  })
+
   test("handles Windows paths correctly (simulated on macOS)", () => {
     const prompt: Prompt = [{ type: "file", path: "src\\foo.ts", content: "@src\\foo.ts", start: 0, end: 11 }]
 
