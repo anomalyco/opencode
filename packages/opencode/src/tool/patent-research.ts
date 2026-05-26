@@ -75,7 +75,7 @@ export const PatentResearchTool = Tool.define(
             results.push("## 法规搜索")
             const lawResults = yield* lawService.searchLaw(topic)
             if (lawResults.length > 0) {
-              results.push(...lawResults.map((law: any) => `- ${law.name} (${law.level})`).slice(0, 10))
+              results.push(...lawResults.map((law: { id: string; name: string; level: string }) => `- ${law.name} (${law.level})`).slice(0, 10))
             } else {
               results.push("未找到相关法规")
             }
@@ -106,7 +106,7 @@ export const PatentResearchTool = Tool.define(
             results.push("## IPC 分类搜索")
             const ipcResults = yield* ipcService.searchByDescription(topic)
             if (ipcResults.length > 0) {
-              results.push(...ipcResults.map((ipc: any) => `- ${ipc.code}: ${ipc.description}`).slice(0, 10))
+              results.push(...ipcResults.map((ipc: { code: string; description: string }) => `- ${ipc.code}: ${ipc.description}`).slice(0, 10))
             } else {
               results.push("未找到相关 IPC 分类")
             }

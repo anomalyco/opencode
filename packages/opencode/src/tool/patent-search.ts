@@ -53,7 +53,7 @@ export const PatentSearchTool = Tool.define(
 
           const output = results
             .map(
-              (patent: any) =>
+              (patent: { patentId: string; title: string; abstract: string; applicant: string; ipc: string }) =>
                 `## ${patent.patentId}: ${patent.title}\n\n` +
                 `**申请人**: ${patent.applicant}\n` +
                 `**IPC**: ${patent.ipc}\n\n` +

@@ -1,5 +1,7 @@
+import path from "path"
 import { Config } from "@/config/config"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Exit } from "effect"
+import type Database from "bun:sqlite"
 
 const PatentRecord = Schema.Struct({
   patentId: Schema.String,
@@ -41,18 +43,73 @@ export const layer = Layer.effect(
       return patentConfig?.backend !== "none" && patentConfig?.backend !== undefined
     })
 
-    const search = Effect.fn("PatentSearch.search")(function* (query: {
-      keyword?: string
-      ipc?: string
-      applicant?: string
-      limit?: number
-    }) {
-      const available = yield* isAvailable()
-      if (!available) {
-        return yield* new PatentSearchUnavailableError({ message: "Patent search is not available" })
-      }
-      return yield* new PatentSearchUnavailableError({ message: "Patent search backend not implemented" })
-    })
+    const search = Effect.fn("PatentSearch.search")(
+      function* (query: {
+        keyword?: string
+        ipc?: string
+        applicant?: string
+        limit?: number
+      }) {
+        const cfg = (yield* config.get()).patent
+        if (!cfg?.search?.backend || cfg.search.backend === "none") {
+          return yield* new PatentSearchUnavailableError({ message: "Patent search backend not configured" })
+        }
+
+        if (cfg.search.backend === "local") {
+          const dbPath =
+            cfg.search.connectionString ?? path.join(cfg.dataDir ?? "", "patent_search.db")
+          const { existsSync } = yield* Effect.promise(() => import("fs"))
+          if (!existsSync(dbPath)) {
+            return yield* new PatentSearchUnavailableError({
+              message: `Patent database not found at ${dbPath}`,
+            })
+          }
+
+          const rows = yield* Effect.suspend(() => {
+            const { Database } = require("bun:sqlite")
+            const db = new Database(dbPath, { readonly: true }) as Database
+            try {
+              const conditions: string[] = []
+              const params: string[] = []
+              if (query.keyword) {
+                conditions.push("(title LIKE ? OR abstract LIKE ?)")
+                params.push(`%${query.keyword}%`, `%${query.keyword}%`)
+              }
+              if (query.ipc) {
+                conditions.push("ipc LIKE ?")
+                params.push(`${query.ipc}%`)
+              }
+              if (query.applicant) {
+                conditions.push("applicant LIKE ?")
+                params.push(`%${query.applicant}%`)
+              }
+
+              const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+              const limit = Math.min(query.limit ?? 10, 100)
+              const sql = `SELECT patentId, title, abstract, applicant, ipc FROM patents ${where} LIMIT ${limit}`
+
+              return Effect.succeed(db.query(sql).all(...params) as Record<string, unknown>[])
+            } finally {
+              db.close()
+            }
+          })
+
+          const decoded = yield* Effect.forEach(rows, (row) =>
+            Effect.gen(function* () {
+              const decoded = Schema.decodeUnknownExit(PatentRecord)(row, { errors: "all" })
+              if (Exit.isSuccess(decoded)) return decoded.value
+              yield* Effect.logWarning("PatentSearch: schema decode failed", decoded)
+              return null
+            }),
+          )
+          return decoded.filter((v): v is PatentRecord => v !== null)
+        }
+
+        return yield* new PatentSearchUnavailableError({
+          message: `Patent search backend '${cfg.search.backend}' not implemented`,
+        })
+      },
+    )
 
     return Service.of({ search, isAvailable })
   }),
