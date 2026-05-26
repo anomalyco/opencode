@@ -5,8 +5,8 @@ import WebSocket from "ws"
 
 export interface CreateWebSocketFetchOptions {
   /**
-   * WebSocket endpoint URL.
-   * @default 'wss://api.openai.com/v1/responses'
+   * WebSocket endpoint URL. If omitted, the intercepted response URL is
+   * converted from HTTP(S) to WS(S).
    */
   url?: string
 }
@@ -38,13 +38,11 @@ export interface CreateWebSocketFetchOptions {
  * ```
  */
 export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
-  const wsUrl = options?.url ?? "wss://api.openai.com/v1/responses"
-
   let ws: WebSocket | null = null
   let connecting: Promise<WebSocket> | null = null
   let busy = false
 
-  function getConnection(authorization: string): Promise<WebSocket> {
+  function getConnection(url: string, headers: Record<string, string>): Promise<WebSocket> {
     if (ws?.readyState === WebSocket.OPEN && !busy) {
       return Promise.resolve(ws)
     }
@@ -52,12 +50,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     if (connecting && !busy) return connecting
 
     connecting = new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(wsUrl, {
-        headers: {
-          Authorization: authorization,
-          "OpenAI-Beta": "responses_websockets=2026-02-06",
-        },
-      })
+      const socket = new WebSocket(url, { headers })
 
       socket.on("open", () => {
         ws = socket
@@ -99,9 +92,11 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
 
     const headers = normalizeHeaders(init.headers)
-    const authorization = headers["authorization"] ?? ""
+    delete headers["content-length"]
+    headers["openai-beta"] ??= "responses_websockets=2026-02-06"
+    const wsUrl = options?.url ?? url.replace(/^http/, "ws")
 
-    const connection = await getConnection(authorization)
+    const connection = await getConnection(wsUrl, headers)
     busy = true
 
     const { stream: _, ...requestBody } = body
