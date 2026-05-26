@@ -68,7 +68,7 @@ Lorsque LSP est activé et qu'opencode ouvre un fichier, il :
 
 LSP peut aider l'agent à trouver et corriger des problèmes en fournissant les diagnostics des serveurs de langage. C'est utile dans certains projets, mais ce n'est pas toujours un gain net.
 
-Les serveurs de langage peuvent se désynchroniser, consommer beaucoup de mémoire, varier selon la version ou le projet, et ralentir les flux de travail de l'agent. Dans de nombreux projets, il est préférable de faire exécuter directement par l'agent le lint, le typecheck ou d'autres outils CLI de diagnostic, afin que les erreurs reviennent dans la boucle de l'agent sans ces compromis. Activez LSP lorsque votre projet bénéficie d'un retour supplémentaire des serveurs de langage.
+Les serveurs de langage peuvent se désynchroniser, consommer beaucoup de mémoire, varier selon la version ou le projet, et ralentir les flux de travail de l'agent. Dans de nombreux projets, il est préférable de faire exécuter directement par l'agent le lint, le typecheck ou d'autres outils CLI de diagnostic, afin que les erreurs reviennent dans la boucle de l'agent sans ces compromis. Documentez ces commandes dans des fichiers d'instructions comme `AGENTS.md` ou des skills afin que l'agent sache quoi exécuter. Activez LSP lorsque votre projet bénéficie d'un retour supplémentaire des serveurs de langage.
 
 ---
 
