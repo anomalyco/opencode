@@ -187,7 +187,7 @@ async function startOAuthServer(): Promise<void> {
   })
 
   await new Promise<void>((resolve, reject) => {
-    oauthServer!.listen(OAUTH_PORT, "127.0.0.1", () => {
+    oauthServer!.listen(OAUTH_PORT, () => {
       log.info("digitalocean oauth server started", { port: OAUTH_PORT })
       resolve()
     })
