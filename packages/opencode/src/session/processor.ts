@@ -182,6 +182,10 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               })) as MessageV2.ToolPart
 
+              if (value.toolName === "runWorkflow") {
+                return
+              }
+
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
