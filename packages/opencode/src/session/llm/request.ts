@@ -5,7 +5,6 @@ import { Permission } from "@/permission"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
-import { ProviderTransport } from "@/provider/transport"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -182,10 +181,6 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           }),
       ...input.model.headers,
       ...headers,
-      // Temporary fetch-layer hack for the OpenAI WebSocket pool. Title generation currently
-      // shares the conversation session ID, so this lets transport split it out until llm.ts
-      // can pass real transport context without smuggling state through request headers.
-      [ProviderTransport.INTERNAL_TRANSPORT_PURPOSE_HEADER]: ProviderTransport.purposeForAgent(input.agent.name),
     },
   }
 })

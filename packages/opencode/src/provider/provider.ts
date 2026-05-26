@@ -25,7 +25,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
-import { ProviderTransport } from "./transport"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -1617,11 +1616,6 @@ export const layer = Layer.effect(
 
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
-
-          // The WebSocket transport temporarily receives opencode-only routing metadata through
-          // headers because provider SDKs are still created below this layer. Never forward that
-          // metadata to upstream providers; replace this once llm.ts constructs SDK models directly.
-          if (opts.headers) opts.headers = ProviderTransport.stripInternalHeaders(opts.headers)
 
           // Strip openai itemId metadata following what codex does
           if (

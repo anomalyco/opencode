@@ -1,224 +1,206 @@
-// Approach in this file is sourced from vercel see:
-// https://github.com/vercel-labs/ai-sdk-openai-websocket/blob/main/packages/ai-sdk-openai-websocket-fetch/src/index.ts
+// Low-level OpenAI Responses WebSocket protocol helpers. Session pooling,
+// fallback, and continuation state intentionally live above this file.
 
 import WebSocket from "ws"
-import { ProviderTransport } from "@/provider/transport"
 
-export interface CreateWebSocketFetchOptions {
-  /**
-   * WebSocket endpoint URL. If omitted, the intercepted response URL is
-   * converted from HTTP(S) to WS(S).
-   */
-  url?: string
+export const PROTOCOL_HEADER = "responses_websockets=2026-02-06"
+
+export interface ConnectResponsesWebSocketOptions {
+  url: string
+  headers: Record<string, string>
+  timeout?: number
+  signal?: AbortSignal
 }
 
-/**
- * Creates a `fetch` function that routes OpenAI Responses API streaming
- * requests through a persistent WebSocket connection instead of HTTP.
- *
- * Non-streaming requests and requests to other endpoints are passed
- * through to the standard `fetch`.
- *
- * The connection is created lazily on the first streaming request and
- * reused for subsequent ones, which is the main source of latency
- * savings in multi-step tool-calling workflows.
- *
- * @example
- * ```ts
- * import { createOpenAI } from '@ai-sdk/openai';
- * import { createWebSocketFetch } from 'ai-sdk-openai-websocket-fetch';
- *
- * const wsFetch = createWebSocketFetch();
- * const openai = createOpenAI({ fetch: wsFetch });
- *
- * const result = streamText({
- *   model: openai('gpt-4.1-mini'),
- *   prompt: 'Hello!',
- *   onFinish: () => wsFetch.close(),
- * });
- * ```
- */
-export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
-  let ws: WebSocket | null = null
-  let connecting: Promise<WebSocket> | null = null
-  let busy = false
-
-  function getConnection(url: string, headers: Record<string, string>): Promise<WebSocket> {
-    if (ws?.readyState === WebSocket.OPEN && !busy) {
-      return Promise.resolve(ws)
-    }
-
-    if (connecting && !busy) return connecting
-
-    connecting = new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(url, { headers })
-
-      socket.on("open", () => {
-        ws = socket
-        connecting = null
-        resolve(socket)
-      })
-
-      socket.on("error", (err) => {
-        if (connecting) {
-          connecting = null
-          reject(err)
-        }
-      })
-
-      socket.on("close", () => {
-        if (ws === socket) ws = null
-      })
-    })
-
-    return connecting
-  }
-
-  async function websocketFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const url = input instanceof URL ? input.toString() : typeof input === "string" ? input : input.url
-    const internalHeaders = normalizeHeaders(init?.headers)
-    const httpInit = ProviderTransport.withoutInternalHeaders(init)
-
-    if (init?.method !== "POST" || !url.endsWith("/responses")) {
-      return globalThis.fetch(input, httpInit)
-    }
-
-    let body: Record<string, unknown>
-    try {
-      body = JSON.parse(typeof init.body === "string" ? init.body : "")
-    } catch {
-      return globalThis.fetch(input, httpInit)
-    }
-
-    // Temporary title-generation split: title requests share the conversation session ID today,
-    // so do not let them occupy or mutate the conversation WebSocket pool.
-    if (internalHeaders[ProviderTransport.INTERNAL_TRANSPORT_PURPOSE_HEADER] === ProviderTransport.PURPOSE.title) {
-      return globalThis.fetch(input, httpInit)
-    }
-
-    if (!body.stream) {
-      return globalThis.fetch(input, httpInit)
-    }
-
-    const headers = normalizeHeaders(httpInit?.headers)
-    delete headers["content-length"]
-    headers["openai-beta"] ??= "responses_websockets=2026-02-06"
-    const wsUrl = options?.url ?? url.replace(/^http/, "ws")
-
-    const connection = await getConnection(wsUrl, headers)
-    busy = true
-
-    const { stream: _, ...requestBody } = body
-    const encoder = new TextEncoder()
-
-    const responseStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        function cleanup() {
-          connection.off("message", onMessage)
-          connection.off("error", onError)
-          connection.off("close", onClose)
-          busy = false
-        }
-
-        function onMessage(data: WebSocket.RawData) {
-          const text = data.toString()
-          const lines = text.split(/\r?\n/)
-          const sseData = lines.map((line) => `data: ${line}`).join("\n")
-          controller.enqueue(encoder.encode(`${sseData}\n\n`))
-
-          try {
-            const event = JSON.parse(text)
-            if (
-              event.type === "response.completed" ||
-              event.type === "response.failed" ||
-              event.type === "response.incomplete" ||
-              event.type === "error"
-            ) {
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-              cleanup()
-              controller.close()
-            }
-          } catch {
-            // non-JSON frame, continue
-          }
-        }
-
-        function onError(err: Error) {
-          cleanup()
-          controller.error(err)
-        }
-
-        function onClose() {
-          cleanup()
-          try {
-            controller.close()
-          } catch {
-            // already closed
-          }
-        }
-
-        connection.on("message", onMessage)
-        connection.on("error", onError)
-        connection.on("close", onClose)
-
-        if (init?.signal) {
-          if (init.signal.aborted) {
-            cleanup()
-            controller.error(init.signal.reason ?? new DOMException("Aborted", "AbortError"))
-            return
-          }
-          init.signal.addEventListener(
-            "abort",
-            () => {
-              cleanup()
-              try {
-                controller.error(init!.signal!.reason ?? new DOMException("Aborted", "AbortError"))
-              } catch {
-                // already closed
-              }
-            },
-            { once: true },
-          )
-        }
-
-        connection.send(JSON.stringify({ type: "response.create", ...requestBody }))
-      },
-    })
-
-    return new Response(responseStream, {
-      status: 200,
-      headers: { "content-type": "text/event-stream" },
-    })
-  }
-
-  return Object.assign(websocketFetch, {
-    /** Close the underlying WebSocket connection. */
-    close() {
-      if (ws) {
-        ws.close()
-        ws = null
-      }
-    },
-  })
+export interface StreamResponsesWebSocketOptions {
+  socket: WebSocket
+  body: Record<string, unknown>
+  signal?: AbortSignal
+  onComplete?: (event: Record<string, unknown>) => void
+  onTerminal?: (event: Record<string, unknown>) => void
+  onConnectionInvalid?: (error: Error) => void
 }
 
-function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+export function toWebSocketUrl(url: string) {
+  return url.replace(/^http/, "ws")
+}
+
+export function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
   const result: Record<string, string> = {}
   if (!headers) return result
 
   if (headers instanceof Headers) {
-    headers.forEach((v, k) => {
-      result[k.toLowerCase()] = v
+    headers.forEach((value, key) => {
+      result[key.toLowerCase()] = value
     })
-  } else if (Array.isArray(headers)) {
-    for (const [k, v] of headers) {
-      result[k.toLowerCase()] = v
-    }
-  } else {
-    for (const [k, v] of Object.entries(headers)) {
-      if (v != null) result[k.toLowerCase()] = v
-    }
+    return result
   }
 
+  if (Array.isArray(headers)) {
+    for (const [key, value] of headers) {
+      result[key.toLowerCase()] = value
+    }
+    return result
+  }
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (value != null) result[key.toLowerCase()] = value
+  }
   return result
 }
+
+export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOptions) {
+  return new Promise<WebSocket>((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(options.signal.reason ?? new DOMException("Aborted", "AbortError"))
+      return
+    }
+
+    const headers: Record<string, string> = {
+      ...options.headers,
+      "openai-beta": options.headers["openai-beta"] ?? PROTOCOL_HEADER,
+    }
+    delete headers["content-length"]
+
+    const socket = new WebSocket(options.url, { headers })
+    const timeout = options.timeout
+      ? setTimeout(() => {
+          cleanup()
+          socket.terminate()
+          reject(new Error("WebSocket connect timed out"))
+        }, options.timeout)
+      : undefined
+
+    function cleanup() {
+      if (timeout) clearTimeout(timeout)
+      socket.off("open", onOpen)
+      socket.off("error", onError)
+      options.signal?.removeEventListener("abort", onAbort)
+    }
+
+    function onOpen() {
+      cleanup()
+      resolve(socket)
+    }
+
+    function onError(error: Error) {
+      cleanup()
+      reject(error)
+    }
+
+    function onAbort() {
+      cleanup()
+      socket.terminate()
+      reject(options.signal?.reason ?? new DOMException("Aborted", "AbortError"))
+    }
+
+    socket.once("open", onOpen)
+    socket.once("error", onError)
+    options.signal?.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
+export function streamResponsesWebSocket(options: StreamResponsesWebSocketOptions) {
+  const encoder = new TextEncoder()
+  let completed = false
+
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        function cleanup() {
+          options.socket.off("message", onMessage)
+          options.socket.off("error", onError)
+          options.socket.off("close", onClose)
+          options.signal?.removeEventListener("abort", onAbort)
+        }
+
+        function closeCompleted() {
+          cleanup()
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+          controller.close()
+        }
+
+        function invalidate(error: Error) {
+          cleanup()
+          options.onConnectionInvalid?.(error)
+          controller.error(error)
+        }
+
+        function onMessage(data: WebSocket.RawData, isBinary: boolean) {
+          if (isBinary) {
+            invalidate(new Error("Unexpected binary WebSocket frame"))
+            return
+          }
+
+          const text = data.toString()
+          controller.enqueue(encoder.encode(`${text.split(/\r?\n/).map((line) => `data: ${line}`).join("\n")}\n\n`))
+
+          const event = parseEvent(text)
+          if (!event) return
+
+          if (event.type === "response.completed") {
+            completed = true
+            options.onComplete?.(event)
+            options.onTerminal?.(event)
+            closeCompleted()
+            return
+          }
+
+          if (event.type === "response.failed" || event.type === "response.incomplete" || event.type === "error") {
+            completed = true
+            options.onTerminal?.(event)
+            closeCompleted()
+          }
+        }
+
+        function onError(error: Error) {
+          invalidate(error)
+        }
+
+        function onClose() {
+          if (completed) return
+          invalidate(new Error("WebSocket closed before response.completed"))
+        }
+
+        function onAbort() {
+          invalidate(options.signal?.reason ?? new DOMException("Aborted", "AbortError"))
+        }
+
+        options.socket.on("message", onMessage)
+        options.socket.once("error", onError)
+        options.socket.once("close", onClose)
+        options.signal?.addEventListener("abort", onAbort, { once: true })
+
+        if (options.signal?.aborted) {
+          onAbort()
+          return
+        }
+
+        options.socket.send(JSON.stringify(responseCreate(options.body)), (error) => {
+          if (!error) return
+          invalidate(error)
+        })
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    },
+  )
+}
+
+function responseCreate(body: Record<string, unknown>) {
+  const { stream: _stream, background: _background, ...payload } = body
+  return { type: "response.create", ...payload }
+}
+
+function parseEvent(text: string): Record<string, unknown> | undefined {
+  try {
+    const event = JSON.parse(text)
+    return typeof event === "object" && event !== null ? event : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export * as OpenAIWebSocket from "./ws"

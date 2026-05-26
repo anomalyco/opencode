@@ -5,6 +5,7 @@ import { OAUTH_DUMMY_KEY } from "../../auth"
 import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
+import { OpenAIWebSocketPool } from "./ws-pool"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -371,6 +372,7 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPluginOptions = {}): Promise<Hooks> {
   const issuer = options.issuer ?? ISSUER
   const codexApiEndpoint = options.codexApiEndpoint ?? CODEX_API_ENDPOINT
+  let websocketFetchInstalled = false
 
   return {
     provider: {
@@ -410,7 +412,9 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       provider: "openai",
       async loader(getAuth) {
         const auth = await getAuth()
-        if (auth.type !== "oauth") return {}
+        const websocketFetch = OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
+        websocketFetchInstalled = true
+        if (auth.type !== "oauth") return { fetch: websocketFetch }
 
         let refreshPromise:
           | Promise<{
@@ -436,7 +440,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
             }
 
             const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") return fetch(requestInput, init)
+            if (currentAuth.type !== "oauth") return websocketFetch(requestInput, init)
 
             // Cast to include accountId field
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
@@ -507,10 +511,12 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                 ? new URL(codexApiEndpoint)
                 : parsed
 
-            return fetch(url, {
+            const requestInit = {
               ...init,
               headers,
-            })
+            }
+            if (parsed.pathname.includes("/v1/responses")) return websocketFetch(url, requestInit)
+            return fetch(url, OpenAIWebSocketPool.withoutInternalHeaders(requestInit))
           },
         }
       },
@@ -639,6 +645,10 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       output.headers.originator = "opencode"
       output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
+      // Temporary fetch-layer hack: title generation currently shares the conversation
+      // session ID, so the OpenAI plugin marks it for HTTP fallback until transport
+      // context can be passed directly instead of smuggled through headers.
+      if (websocketFetchInstalled && input.agent === "title") output.headers[OpenAIWebSocketPool.TITLE_HEADER] = "true"
     },
     "chat.params": async (input, output) => {
       if (input.model.providerID !== "openai") return
