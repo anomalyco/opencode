@@ -925,6 +925,90 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - openai-compatible local refs", () => {
+  const model = {
+    providerID: "fireworks",
+    api: {
+      id: "accounts/fireworks/models/deepseek-v4-flash",
+      npm: "@ai-sdk/openai-compatible",
+    },
+  } as any
+
+  function hasRef(node: unknown): boolean {
+    if (node === null || typeof node !== "object") return false
+    if (Array.isArray(node)) return node.some(hasRef)
+    return Object.entries(node).some(([key, value]) => key === "$ref" || hasRef(value))
+  }
+
+  test("inlines local refs in MCP tool schemas", () => {
+    const result = ProviderTransform.schema(model, {
+      type: "object",
+      properties: {
+        operations: {
+          type: "array",
+          items: {
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  asset_id: {
+                    $ref: "#/$defs/AssetId",
+                    description: "The Canva asset id to edit.",
+                  },
+                },
+                required: ["asset_id"],
+              },
+            ],
+          },
+        },
+      },
+      $defs: {
+        AssetId: {
+          type: "string",
+          minLength: 1,
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.operations.items.anyOf[0].properties.asset_id).toEqual({
+      type: "string",
+      minLength: 1,
+      description: "The Canva asset id to edit.",
+    })
+    expect(result.$defs).toBeUndefined()
+    expect(hasRef(result)).toBe(false)
+  })
+
+  test("replaces recursive local refs with permissive schemas", () => {
+    const result = ProviderTransform.schema(model, {
+      type: "object",
+      properties: {
+        operation: {
+          $ref: "#/$defs/Operation",
+        },
+      },
+      $defs: {
+        Operation: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            child: { $ref: "#/$defs/Operation" },
+          },
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.operation).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        child: {},
+      },
+    })
+    expect(hasRef(result)).toBe(false)
+  })
+})
+
 describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   const moonshotModel = {
     providerID: "moonshotai",

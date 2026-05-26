@@ -1281,6 +1281,10 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
   */
 
+  if (model.api.npm === "@ai-sdk/openai-compatible") {
+    schema = inlineLocalRefs(schema)
+  }
+
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
     const sanitizeMoonshot = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") return obj
@@ -1379,6 +1383,68 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
 
   return schema
+}
+
+function inlineLocalRefs(schema: JSONSchema7): JSONSchema7 {
+  const visit = (node: unknown, stack: Set<string>): unknown => {
+    if (Array.isArray(node)) return node.map((item) => visit(item, stack))
+    if (!isSchemaObject(node)) return node
+
+    const ref = typeof node.$ref === "string" ? node.$ref : undefined
+    if (ref?.startsWith("#/")) {
+      if (stack.has(ref)) return localRefSiblings(node)
+
+      const target = resolveLocalRef(schema, ref)
+      if (target !== undefined) {
+        const nextStack = new Set(stack).add(ref)
+        const expanded = visit(target, nextStack)
+        const siblings = localRefSiblings(node)
+        const resolved = isSchemaObject(expanded) ? mergeDeep(expanded, siblings) : siblings
+        return visit(resolved, nextStack)
+      }
+      return localRefSiblings(node)
+    }
+
+    return Object.fromEntries(
+      Object.entries(node)
+        .filter(([key]) => key !== "$defs" && key !== "definitions")
+        .map(([key, value]) => [key, visit(value, stack)]),
+    )
+  }
+
+  const result = visit(schema, new Set())
+  if (isSchemaObject(result)) return result as JSONSchema7
+  return schema
+}
+
+function localRefSiblings(node: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(node)
+      .filter(([key]) => key !== "$ref")
+      .map(([key, value]) => [key, cloneSchemaValue(value)]),
+  )
+}
+
+function cloneSchemaValue(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(cloneSchemaValue)
+  if (!isSchemaObject(node)) return node
+  return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, cloneSchemaValue(value)]))
+}
+
+function resolveLocalRef(root: JSONSchema7, ref: string) {
+  return ref
+    .slice(2)
+    .split("/")
+    .map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"))
+    .reduce<unknown>((node, key) => {
+      if (isSchemaObject(node)) return node[key]
+      if (Array.isArray(node)) return node[Number(key)]
+      return undefined
+    }, root)
+}
+
+function isSchemaObject(node: unknown): node is Record<string, unknown> {
+  return node !== null && typeof node === "object" && !Array.isArray(node)
 }
 
 export * as ProviderTransform from "./transform"
