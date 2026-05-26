@@ -108,6 +108,54 @@ describe("session.retry.retryable", () => {
     expect(result).toBeUndefined()
   })
 
+  test("maps transient nested ChatGPT error shapes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        error: {
+          code: 504,
+          metadata: {
+            error_type: "upstream_timeout",
+          },
+        },
+      }),
+    )
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
+  test("maps retryable API status even when provider marks non-retryable", () => {
+    const error = new MessageV2.APIError({
+      message: "Bad Gateway",
+      statusCode: 502,
+      isRetryable: false,
+      responseBody: JSON.stringify({ error: { code: "bad_gateway" } }),
+    }).toObject()
+
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
+  test("keeps explicit non-retryable API errors non-retryable", () => {
+    const error = new MessageV2.APIError({
+      message: "Invalid prompt",
+      statusCode: 400,
+      isRetryable: false,
+      responseBody: JSON.stringify({ type: "error", error: { code: "invalid_prompt" } }),
+    }).toObject()
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not throw on deeply nested API error bodies", () => {
+    const body = `${'{"child":'.repeat(10_000)}"504"${"}".repeat(10_000)}`
+    const error = new MessageV2.APIError({
+      message: "Bad Gateway",
+      isRetryable: false,
+      responseBody: body,
+    }).toObject()
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
   test("returns undefined for non-json message", () => {
     const error = wrap("not-json")
     expect(SessionRetry.retryable(error)).toBeUndefined()
@@ -127,29 +175,14 @@ describe("session.message-v2.fromError", () => {
   test.concurrent(
     "converts ECONNRESET socket errors to retryable APIError",
     async () => {
-      using server = Bun.serve({
-        port: 0,
-        idleTimeout: 8,
-        async fetch(req) {
-          return new Response(
-            new ReadableStream({
-              async pull(controller) {
-                controller.enqueue("Hello,")
-                await Bun.sleep(10000)
-                controller.enqueue(" World!")
-                controller.close()
-              },
-            }),
-            { headers: { "Content-Type": "text/plain" } },
-          )
+      const result = MessageV2.fromError(
+        {
+          code: "ECONNRESET",
+          syscall: "read",
+          message: "The socket connection was closed unexpectedly",
         },
-      })
-
-      const error = await fetch(new URL("/", server.url.origin))
-        .then((res) => res.text())
-        .catch((e) => e)
-
-      const result = MessageV2.fromError(error, { providerID: "test" })
+        { providerID: "test" },
+      )
 
       expect(MessageV2.APIError.isInstance(result)).toBe(true)
       expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
@@ -184,5 +217,16 @@ describe("session.message-v2.fromError", () => {
     })
     const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("converts timeout DOMExceptions to retryable APIError", () => {
+    const result = MessageV2.fromError(new DOMException("Stream idle timed out after 5ms", "TimeoutError"), {
+      providerID: "openai",
+    }) as MessageV2.APIError
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect(result.data.isRetryable).toBe(true)
+    expect(result.data.message).toBe("Stream idle timed out after 5ms")
+    expect(result.data.metadata?.name).toBe("TimeoutError")
   })
 })

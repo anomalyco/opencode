@@ -10,6 +10,9 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { abortAfterAny } from "@/util/abort"
+
+export const SUBAGENT_TIMEOUT = 300_000
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -44,6 +47,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const limit = typeof ctx.extra?.subagentTimeout === "number" ? ctx.extra.subagentTimeout : SUBAGENT_TIMEOUT
+      if (limit <= 0) {
+        throw new Error(`Invalid subagent timeout value: ${limit}. Timeout must be greater than 0.`)
+      }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -121,26 +128,53 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       function cancel() {
         SessionPrompt.cancel(session.id)
       }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+      function done(reject: (reason?: unknown) => void) {
+        cancel()
+        if (ctx.abort.aborted) {
+          reject(ctx.abort.reason ?? new DOMException("Aborted", "AbortError"))
+          return
+        }
+        reject(new Error(`Subagent timed out after ${limit}ms`))
+      }
+      ctx.abort.throwIfAborted()
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      ctx.abort.throwIfAborted()
 
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
+      // Current callers pass a positive limit; abortAfterAny depends on a real timer.
+      const abort = abortAfterAny(limit, ctx.abort)
+      let listener: (() => void) | undefined
+      const timeout = new Promise<never>((_, reject) => {
+        listener = () => done(reject)
+        if (abort.signal.aborted) {
+          done(reject)
+          return
+        }
+        abort.signal.addEventListener("abort", listener, { once: true })
       })
+      using _ = defer(() => {
+        abort.clearTimeout()
+        if (listener) abort.signal.removeEventListener("abort", listener)
+      })
+
+      const result = await Promise.race([
+        SessionPrompt.prompt({
+          messageID,
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
+          },
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            ...(hasTaskPermission ? {} : { task: false }),
+            ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          },
+          parts: promptParts,
+        }),
+        timeout,
+      ])
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 

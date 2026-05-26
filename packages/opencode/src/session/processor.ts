@@ -18,16 +18,69 @@ import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  export const RETRY_MAX = 3
+  export const STREAM_FIRST_BYTE_TIMEOUT = 30_000
+  export const STREAM_IDLE_TIMEOUT = 120_000
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
+
+  async function next<T>(input: {
+    iterator: AsyncIterator<T>
+    abort: AbortSignal
+    timeout: number
+    message: string
+  }) {
+    input.abort.throwIfAborted()
+    let id: ReturnType<typeof setTimeout> | undefined
+    let listener: (() => void) | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      // Keep timer callbacks side-effect-only: they must reject this promise, not throw.
+      id = setTimeout(() => reject(new DOMException(input.message, "TimeoutError")), input.timeout)
+      listener = () => reject(input.abort.reason ?? new DOMException("Aborted", "AbortError"))
+      input.abort.addEventListener("abort", listener, { once: true })
+    })
+    try {
+      return await Promise.race([input.iterator.next(), timeout])
+    } finally {
+      if (id) clearTimeout(id)
+      if (listener) input.abort.removeEventListener("abort", listener)
+    }
+  }
+
+  async function* watch<T>(input: { stream: AsyncIterable<T>; abort: AbortSignal; firstByte: number; idle: number }) {
+    const iterator = input.stream[Symbol.asyncIterator]()
+    let started = false
+    try {
+      while (true) {
+        const result = await next({
+          iterator,
+          abort: input.abort,
+          timeout: started ? input.idle : input.firstByte,
+          message: started
+            ? `Stream idle timed out after ${input.idle}ms`
+            : `Stream first byte timed out after ${input.firstByte}ms`,
+        })
+        if (result.done) return
+        started = true
+        yield result.value
+      }
+    } finally {
+      await iterator.return?.()
+    }
+  }
 
   export function create(input: {
     assistantMessage: MessageV2.Assistant
     sessionID: string
     model: Provider.Model
     abort: AbortSignal
+    retryMax?: number
+    timeout?: {
+      firstByte?: number
+      idle?: number
+    }
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
@@ -44,15 +97,22 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        attempt = 0
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
+            input.abort.throwIfAborted()
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
-            for await (const value of stream.fullStream) {
+            for await (const value of watch({
+              stream: stream.fullStream,
+              abort: input.abort,
+              firstByte: input.timeout?.firstByte ?? STREAM_FIRST_BYTE_TIMEOUT,
+              idle: input.timeout?.idle ?? STREAM_IDLE_TIMEOUT,
+            })) {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
@@ -209,7 +269,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error: String(value.error),
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -347,17 +407,18 @@ export namespace SessionProcessor {
               }
               if (needsCompaction) break
             }
-          } catch (e: any) {
+          } catch (e) {
+            input.abort.throwIfAborted()
             log.error("process", {
               error: e,
-              stack: JSON.stringify(e.stack),
+              stack: e instanceof Error ? JSON.stringify(e.stack) : undefined,
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
               // TODO: Handle context overflow error
             }
             const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
+            if (retry !== undefined && attempt < (input.retryMax ?? RETRY_MAX)) {
               attempt++
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
@@ -366,7 +427,8 @@ export namespace SessionProcessor {
                 message: retry,
                 next: Date.now() + delay,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
+              await SessionRetry.sleep(delay, input.abort)
+              input.abort.throwIfAborted()
               continue
             }
             input.assistantMessage.error = error
