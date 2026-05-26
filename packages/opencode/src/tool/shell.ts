@@ -220,7 +220,7 @@ function pathArgs(list: Part[], ps: boolean, cmd = false) {
   return out
 }
 
-function preview(text: string) {
+export function previewMetadata(text: string) {
   if (Buffer.byteLength(text, "utf-8") <= MAX_METADATA_LENGTH) return text
   return "...\n\n" + tailBytes(text, MAX_METADATA_LENGTH)
 }
@@ -497,7 +497,7 @@ export const ShellTool = Tool.define(
                 cut = true
               }
 
-              last = preview(last + chunk)
+              last = previewMetadata(last + chunk)
 
               if (file) {
                 sink?.write(chunk)
@@ -589,7 +589,7 @@ export const ShellTool = Tool.define(
       return {
         title: input.description,
         metadata: {
-          output: last || preview(output),
+          output: last || previewMetadata(output),
           exit: code,
           description: input.description,
           truncated: cut,

@@ -1,11 +1,11 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
 import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
-import { ShellTool } from "../../src/tool/shell"
+import { ShellTool, previewMetadata } from "../../src/tool/shell"
 import { Filesystem } from "@/util/filesystem"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
@@ -1205,42 +1205,22 @@ describe("tool.shell truncation", () => {
     ),
   )
 
-  it.live("truncates metadata output by utf8 byte length", () =>
-    runIn(
-      projectRoot,
-      Effect.gen(function* () {
-        const result = yield* run({
-          command: `${bin} -e ${evalarg("process.stdout.write(String.fromCodePoint(0x4e00).repeat(10001))")}`,
-          description: "Generate CJK output exceeding metadata byte limit",
-        })
-        const output = result.metadata.output
-        if (typeof output !== "string") throw new Error("expected metadata output")
+  test("truncates metadata output by utf8 byte length", () => {
+    const output = previewMetadata(String.fromCodePoint(0x4e00).repeat(10001))
 
-        expect(output.startsWith("...\n\n")).toBe(true)
-        expect(Buffer.byteLength(output.slice("...\n\n".length), "utf-8")).toBeLessThanOrEqual(30_000)
-      }),
-    ),
-  )
+    expect(output.startsWith("...\n\n")).toBe(true)
+    expect(Buffer.byteLength(output.slice("...\n\n".length), "utf-8")).toBeLessThanOrEqual(30_000)
+  })
 
-  it.live("does not split surrogate pairs when truncating metadata output", () =>
-    runIn(
-      projectRoot,
-      Effect.gen(function* () {
-        const result = yield* run({
-          command: `${bin} -e ${evalarg(
-            "process.stdout.write(String.fromCharCode(97)+String.fromCodePoint(0x1f642).repeat(15000)+String.fromCharCode(98))",
-          )}`,
-          description: "Generate emoji output exceeding metadata byte limit",
-        })
-        const output = result.metadata.output
-        if (typeof output !== "string") throw new Error("expected metadata output")
+  test("does not split surrogate pairs when truncating metadata output", () => {
+    const output = previewMetadata(
+      String.fromCharCode(97) + String.fromCodePoint(0x1f642).repeat(15000) + String.fromCharCode(98),
+    )
+    const first = output.charCodeAt("...\n\n".length)
 
-        const first = output.charCodeAt("...\n\n".length)
-        expect(output.startsWith("...\n\n")).toBe(true)
-        expect(first < 0xdc00 || first > 0xdfff).toBe(true)
-      }),
-    ),
-  )
+    expect(output.startsWith("...\n\n")).toBe(true)
+    expect(first < 0xdc00 || first > 0xdfff).toBe(true)
+  })
 
   it.live("full output is saved to file when truncated", () =>
     runIn(
