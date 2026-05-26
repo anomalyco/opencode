@@ -583,12 +583,16 @@
     background: transparent;
   }
 
-  [data-component="codle-preview-panel"],
   [data-component="codle-side-panel"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
     border-radius: 18px;
     box-shadow: 0 14px 42px rgba(0, 0, 0, 0.08);
+  }
+
+  [data-component="codle-preview-panel"] {
+    background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
+    border-radius: 0;
   }
 
   [data-slot="preview-fallback"] {

@@ -72,7 +72,7 @@ export function SessionPreviewPanel() {
   const { previewSrc } = createSessionPreview()
 
   return (
-    <div data-component="codle-preview-panel" class="flex-1 min-w-0 h-full overflow-hidden">
+    <div data-component="codle-preview-panel" class="size-full min-w-0 overflow-hidden rounded-none">
       <Show when={previewSrc()} fallback={<SessionPreviewFallback />}>
         {(src) => (
           <iframe

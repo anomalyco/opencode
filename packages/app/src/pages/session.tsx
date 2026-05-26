@@ -29,6 +29,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/util/encode"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { useClientEnv } from "@/context/client-env"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -52,7 +53,6 @@ import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
-import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -62,10 +62,6 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
-
-const MINIMAL_MODE: boolean = true
-
-const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
@@ -319,6 +315,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
 export default function Page() {
   const globalSync = useGlobalSync()
+  const env = useClientEnv()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
@@ -433,12 +430,14 @@ export default function Page() {
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
-  const reviewTab = createMemo(() => isDesktop())
+  const reviewTab = createMemo(() => isDesktop() && !env.productionLayout())
+  const previewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
+    preview: previewTab,
     hasReview,
   })
   const contextOpen = tabState.contextOpen
@@ -1827,7 +1826,7 @@ export default function Page() {
     </>
   )
 
-  if (MINIMAL_MODE && !devMode) {
+  if (env.productionLayout()) {
     return (
       <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
         <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
@@ -1837,7 +1836,13 @@ export default function Page() {
           >
             <SessionPanelContent />
           </div>
-          <SessionPreviewPanel />
+          <SessionSidePanel
+            reviewPanel={reviewPanel}
+            activeDiff={tree.activeDiff}
+            focusReviewDiff={focusReviewDiff}
+            reviewSnap={ui.reviewSnap}
+            size={size}
+          />
         </div>
       </div>
     )

@@ -98,14 +98,14 @@ export function Titlebar() {
       id: "common.goBack",
       title: language.t("common.goBack"),
       category: language.t("command.category.view"),
-      keybind: "mod+[",
+      // keybind: "mod+[",
       onSelect: back,
     },
     {
       id: "common.goForward",
       title: language.t("common.goForward"),
       category: language.t("command.category.view"),
-      keybind: "mod+]",
+      // keybind: "mod+]",
       onSelect: forward,
     },
   ])

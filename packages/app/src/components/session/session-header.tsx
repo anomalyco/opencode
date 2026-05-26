@@ -11,6 +11,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
+import { useClientEnv } from "@/context/client-env"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -129,6 +130,7 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
 }
 
 export function SessionHeader() {
+  const env = useClientEnv()
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
@@ -435,21 +437,23 @@ export function SessionHeader() {
                 </TooltipKeybind>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
-                  <TooltipKeybind
-                    title={language.t("command.review.toggle")}
-                    keybind={command.keybind("review.toggle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => view().reviewPanel.toggle()}
-                      aria-label={language.t("command.review.toggle")}
-                      aria-expanded={view().reviewPanel.opened()}
-                      aria-controls="review-panel"
+                  <Show when={!env.productionLayout()}>
+                    <TooltipKeybind
+                      title={language.t("command.review.toggle")}
+                      keybind={command.keybind("review.toggle")}
                     >
-                      <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
-                    </Button>
-                  </TooltipKeybind>
+                      <Button
+                        variant="ghost"
+                        class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => view().reviewPanel.toggle()}
+                        aria-label={language.t("command.review.toggle")}
+                        aria-expanded={view().reviewPanel.opened()}
+                        aria-controls="review-panel"
+                      >
+                        <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
+                      </Button>
+                    </TooltipKeybind>
+                  </Show>
 
                   <TooltipKeybind
                     title={language.t("command.fileTree.toggle")}

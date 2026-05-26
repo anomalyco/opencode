@@ -91,9 +91,11 @@ export function pruneSessionKeys(input: {
     .slice(input.max)
 }
 
+const pseudoSessionTab = (tab: string) => tab === "review" || tab === "preview"
+
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
-  if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
+  if (pseudoSessionTab(tab)) return { all: all.filter((x) => x !== tab), active: tab }
   if (tab === "context") return { all: [tab, ...all.filter((x) => x !== tab)], active: tab }
   if (!all.includes(tab)) return { all: [...all, tab], active: tab }
   return { all, active: tab }
@@ -244,7 +246,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           panelOpened: true,
         },
         fileTree: {
-          opened: false,
+          opened: 'all',
           width: DEFAULT_FILE_TREE_WIDTH,
           tab: "changes" as "changes" | "all",
         },
@@ -882,7 +884,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return {
           tabs,
           active: createMemo(() => tabs().active),
-          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          all: createMemo(() => tabs().all.filter((tab) => !pseudoSessionTab(tab))),
           setActive(tab: string | undefined) {
             const session = key()
             const next = tab ? normalize(tab) : tab
@@ -894,7 +896,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setAll(all: string[]) {
             const session = key()
-            const next = normalizeAll(all).filter((tab) => tab !== "review")
+            const next = normalizeAll(all).filter((tab) => !pseudoSessionTab(tab))
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: next, active: undefined })
             } else {
@@ -911,7 +913,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const current = store.sessionTabs[session]
             if (!current) return
 
-            if (tab === "review") {
+            if (pseudoSessionTab(tab)) {
               if (current.active !== tab) return
               setStore("sessionTabs", session, "active", current.all[0])
               return

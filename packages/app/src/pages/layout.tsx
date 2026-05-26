@@ -15,6 +15,7 @@ import {
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { useClientEnv } from "@/context/client-env"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
@@ -87,10 +88,6 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
-const MINIMAL_MODE: boolean = true
-
-const devMode = typeof localStorage !== "undefined" && localStorage.getItem("devMode") === "true"
-
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
@@ -113,6 +110,7 @@ export default function Layout(props: ParentProps) {
   let dialogDead = false
 
   const params = useParams()
+  const env = useClientEnv()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
@@ -1029,21 +1027,21 @@ export default function Layout(props: ParentProps) {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),
-        keybind: "mod+o",
+        // keybind: "mod+o",
         onSelect: () => chooseProject(),
       },
       {
         id: "project.previous",
         title: language.t("command.project.previous"),
         category: language.t("command.category.project"),
-        keybind: "mod+alt+arrowup",
+        // keybind: "mod+alt+arrowup",
         onSelect: () => navigateProjectByOffset(-1),
       },
       {
         id: "project.next",
         title: language.t("command.project.next"),
         category: language.t("command.category.project"),
-        keybind: "mod+alt+arrowdown",
+        // keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
       {
@@ -1070,35 +1068,35 @@ export default function Layout(props: ParentProps) {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
-        keybind: "alt+arrowup",
+        // keybind: "alt+arrowup",
         onSelect: () => navigateSessionByOffset(-1),
       },
       {
         id: "session.next",
         title: language.t("command.session.next"),
         category: language.t("command.category.session"),
-        keybind: "alt+arrowdown",
+        // keybind: "alt+arrowdown",
         onSelect: () => navigateSessionByOffset(1),
       },
       {
         id: "session.previous.unseen",
         title: language.t("command.session.previous.unseen"),
         category: language.t("command.category.session"),
-        keybind: "shift+alt+arrowup",
+        // keybind: "shift+alt+arrowup",
         onSelect: () => navigateSessionByUnseen(-1),
       },
       {
         id: "session.next.unseen",
         title: language.t("command.session.next.unseen"),
         category: language.t("command.category.session"),
-        keybind: "shift+alt+arrowdown",
+        // keybind: "shift+alt+arrowdown",
         onSelect: () => navigateSessionByUnseen(1),
       },
       {
         id: "session.archive",
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
-        keybind: "mod+shift+backspace",
+        // keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
@@ -1109,7 +1107,7 @@ export default function Layout(props: ParentProps) {
         id: "workspace.new",
         title: language.t("workspace.new"),
         category: language.t("command.category.workspace"),
-        keybind: "mod+shift+w",
+        // keybind: "mod+shift+w",
         disabled: !workspaceSetting(),
         onSelect: () => {
           const project = currentProject()
@@ -2374,7 +2372,7 @@ export default function Layout(props: ParentProps) {
     />
   )
 
-  if (MINIMAL_MODE && !devMode) {
+  if (env.productionLayout()) {
     return (
       <div class="h-dvh w-screen overflow-hidden bg-background-base">
         <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
