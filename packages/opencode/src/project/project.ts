@@ -241,6 +241,19 @@ export const layer = Layer.effect(
       // Phase 2: upsert
       const projectID = ProjectID.make(data.id)
       yield* migrateProjectId(data.previous ? ProjectID.make(data.previous) : undefined, projectID)
+
+      const orphanRows = yield* db((d) =>
+        d
+          .select()
+          .from(ProjectTable)
+          .where(eq(ProjectTable.worktree, worktree))
+          .all()
+          .filter((row) => row.id !== projectID && row.id !== ProjectID.global),
+      )
+      for (const orphan of orphanRows) {
+        yield* migrateProjectId(orphan.id, projectID)
+      }
+
       const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())
       const existing = row
         ? fromRow(row)

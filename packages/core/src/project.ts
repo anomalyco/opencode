@@ -6,6 +6,7 @@ import { AbsolutePath, withStatics } from "./schema"
 import { AppFileSystem } from "./filesystem"
 import { Git } from "./git"
 import { Hash } from "./util/hash"
+import { InstallationChannel } from "./installation/version"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Project.ID"),
@@ -59,7 +60,8 @@ export const layer = Layer.effect(
     const git = yield* Git.Service
 
     const cached = Effect.fnUntraced(function* (dir: string) {
-      return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
+      const cacheFile = InstallationChannel === "latest" ? "opencode" : `opencode-${InstallationChannel}`
+      return yield* fs.readFileString(path.join(dir, cacheFile)).pipe(
         Effect.map((value) => value.trim()),
         Effect.map((value) => (value ? ID.make(value) : undefined)),
         Effect.catch(() => Effect.succeed(undefined)),
@@ -119,7 +121,8 @@ export const layer = Layer.effect(
     })
 
     const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
+      const cacheFile = InstallationChannel === "latest" ? "opencode" : `opencode-${InstallationChannel}`
+      yield* fs.writeFileString(path.join(input.store, cacheFile), input.id).pipe(Effect.ignore)
     })
 
     return Service.of({ resolve, commit })
