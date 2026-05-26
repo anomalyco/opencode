@@ -40,6 +40,7 @@ import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
+import { flushWriteStream } from "@/cli/stdout"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -247,5 +248,6 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
+  await Promise.all([flushWriteStream(process.stdout), flushWriteStream(process.stderr)])
   process.exit()
 }
