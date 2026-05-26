@@ -24,6 +24,11 @@ import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { StatusPopoverV2 } from "@/components/status-popover"
+import {
+  readSessionTabsRemovedDetail,
+  SESSION_TABS_REMOVED_EVENT,
+  type SessionTabsRemovedDetail,
+} from "@/components/titlebar-session-events"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -276,7 +281,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   )
                 },
                 removeTab: (href: string) => {
-                  startTransition(() => {
+                  void startTransition(() => {
                     setStore(
                       produce((tabs) => {
                         const index = tabs.findIndex((t) => t.href === href)
@@ -289,9 +294,43 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     )
                   })
                 },
+                removeSessions: (input: SessionTabsRemovedDetail) => {
+                  void startTransition(() => {
+                    setStore(
+                      produce((tabs) => {
+                        const sessionIDs = new Set(input.sessionIDs)
+                        const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
+                        const currentIndex = currentHref ? tabs.findIndex((tab) => tab.href === currentHref) : -1
+                        const removedCurrent =
+                          currentIndex !== -1 &&
+                          tabs[currentIndex]?.dir === input.directory &&
+                          sessionIDs.has(tabs[currentIndex]?.sessionId ?? "")
+
+                        for (let i = tabs.length - 1; i >= 0; i--) {
+                          const tab = tabs[i]
+                          if (!tab) continue
+                          if (tab.dir !== input.directory) continue
+                          if (!sessionIDs.has(tab.sessionId)) continue
+                          tabs.splice(i, 1)
+                        }
+
+                        if (!removedCurrent) return
+                        const nextTab = tabs[currentIndex] ?? tabs[tabs.length - 1]
+                        if (nextTab) navigate(nextTab.href)
+                        else navigate("/")
+                      }),
+                    )
+                  })
+                },
               }
 
               return [store, actions]
+            })
+
+            makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
+              const detail = readSessionTabsRemovedDetail(event)
+              if (!detail) return
+              tabsStoreActions.removeSessions(detail)
             })
 
             createEffect(() => {
