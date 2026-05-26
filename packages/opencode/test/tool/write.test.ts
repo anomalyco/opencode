@@ -10,7 +10,8 @@ import { Format } from "../../src/format"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Agent } from "../../src/agent/agent"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
+import type { MessageV2 } from "../../src/session/message-v2"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -25,6 +26,33 @@ const ctx = {
   metadata: () => Effect.void,
   ask: () => Effect.void,
 }
+
+const ctxWithRead = (filePath: string): Tool.Context => ({
+  ...ctx,
+  messages: [
+    {
+      info: {} as MessageV2.Info,
+      parts: [
+        {
+          id: PartID.make("prt_read"),
+          sessionID: ctx.sessionID,
+          messageID: MessageID.make("msg_read"),
+          type: "tool",
+          callID: "call_read",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath },
+            output: "",
+            title: filePath,
+            metadata: {},
+            time: { start: 0, end: 1 },
+          },
+        } as MessageV2.ToolPart,
+      ],
+    },
+  ],
+})
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -94,12 +122,25 @@ describe("tool.write", () => {
   })
 
   describe("existing file overwrite", () => {
+    it.instance("rejects overwriting an existing file that has not been read", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "existing.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
+        const exit = yield* run({ filePath: filepath, content: "new content" }).pipe(Effect.exit)
+
+        expect(exit._tag).toBe("Failure")
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("old content")
+      }),
+    )
+
     it.instance("overwrites existing file content", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const filepath = path.join(test.directory, "existing.txt")
         yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
-        const result = yield* run({ filePath: filepath, content: "new content" })
+        const result = yield* run({ filePath: filepath, content: "new content" }, ctxWithRead(filepath))
 
         expect(result.output).toContain("Wrote file successfully")
         expect(result.metadata.exists).toBe(true)
@@ -116,7 +157,7 @@ describe("tool.write", () => {
         const bom = String.fromCharCode(0xfeff)
         yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
 
-        yield* run({ filePath: filepath, content: "using Up;\n" })
+        yield* run({ filePath: filepath, content: "using Up;\n" }, ctxWithRead(filepath))
 
         const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
         expect(content.charCodeAt(0)).toBe(0xfeff)
@@ -133,7 +174,7 @@ describe("tool.write", () => {
           const bom = String.fromCharCode(0xfeff)
           yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
 
-          yield* run({ filePath: filepath, content: "using Up;\n" })
+          yield* run({ filePath: filepath, content: "using Up;\n" }, ctxWithRead(filepath))
 
           const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
           expect(content.charCodeAt(0)).toBe(0xfeff)
@@ -161,7 +202,7 @@ describe("tool.write", () => {
         const test = yield* TestInstance
         const filepath = path.join(test.directory, "file.txt")
         yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
-        const result = yield* run({ filePath: filepath, content: "new" })
+        const result = yield* run({ filePath: filepath, content: "new" }, ctxWithRead(filepath))
 
         expect(result.metadata).toHaveProperty("filepath", filepath)
         expect(result.metadata).toHaveProperty("exists", true)
@@ -255,7 +296,9 @@ describe("tool.write", () => {
         const readonlyPath = path.join(test.directory, "readonly.txt")
         yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
         yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
-        const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
+        const exit = yield* run({ filePath: readonlyPath, content: "new content" }, ctxWithRead(readonlyPath)).pipe(
+          Effect.exit,
+        )
         expect(exit._tag).toBe("Failure")
       }),
     )

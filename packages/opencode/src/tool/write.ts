@@ -44,6 +44,9 @@ export const WriteTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
+          if (exists && !hasRead(ctx.messages, filepath, instance.directory)) {
+            throw new Error(`File must be read before overwriting: ${filepath}`)
+          }
           const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
           const next = Bom.split(params.content)
           const desiredBom = source.bom || next.bom
@@ -102,3 +105,16 @@ export const WriteTool = Tool.define(
     }
   }),
 )
+
+function hasRead(messages: Tool.Context["messages"], filepath: string, directory: string) {
+  const target = AppFileSystem.normalizePath(filepath)
+  return messages.some((msg) =>
+    msg.parts.some((part) => {
+      if (part.type !== "tool" || part.tool !== "read" || part.state.status !== "completed") return false
+      if (part.state.time.compacted) return false
+      const input = part.state.input.filePath
+      if (typeof input !== "string") return false
+      return AppFileSystem.normalizePath(path.isAbsolute(input) ? input : path.join(directory, input)) === target
+    }),
+  )
+}
