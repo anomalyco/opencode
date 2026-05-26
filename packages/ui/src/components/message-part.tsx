@@ -59,6 +59,12 @@ import { animate } from "motion"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
 import { hookName, isCustomHookTool, normalizeTool } from "./tool-meta"
+import {
+  groupParts as groupOrderedParts,
+  orderTextReasoningSegments,
+  type PartGroup,
+} from "./message-part-order"
+export type { PartGroup } from "./message-part-order"
 
 type ProviderSummary = {
   id?: string
@@ -583,89 +589,8 @@ function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
   return a.every((x, i) => x === b[i])
 }
 
-type PartRef = {
-  messageID: string
-  partID: string
-}
-
-export type PartGroup =
-  | {
-      key: string
-      type: "part"
-      ref: PartRef
-    }
-  | {
-      key: string
-      type: "context"
-      refs: PartRef[]
-    }
-
-function sameRef(a: PartRef, b: PartRef) {
-  return a.messageID === b.messageID && a.partID === b.partID
-}
-
-function sameGroup(a: PartGroup, b: PartGroup) {
-  if (a === b) return true
-  if (a.key !== b.key) return false
-  if (a.type !== b.type) return false
-  if (a.type === "part") {
-    if (b.type !== "part") return false
-    return sameRef(a.ref, b.ref)
-  }
-  if (b.type !== "context") return false
-  if (a.refs.length !== b.refs.length) return false
-  return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
-}
-
-function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((item, i) => sameGroup(item, b[i]!))
-}
-
 export function groupParts(parts: { messageID: string; part: PartType }[]) {
-  const result: PartGroup[] = []
-  let start = -1
-
-  const flush = (end: number) => {
-    if (start < 0) return
-    const first = parts[start]
-    const last = parts[end]
-    if (!first || !last) {
-      start = -1
-      return
-    }
-    result.push({
-      key: `context:${first.part.id}`,
-      type: "context",
-      refs: parts.slice(start, end + 1).map((item) => ({
-        messageID: item.messageID,
-        partID: item.part.id,
-      })),
-    })
-    start = -1
-  }
-
-  parts.forEach((item, index) => {
-    if (isContextGroupTool(item.part)) {
-      if (start < 0) start = index
-      return
-    }
-
-    flush(index - 1)
-    result.push({
-      key: `part:${item.messageID}:${item.part.id}`,
-      type: "part",
-      ref: {
-        messageID: item.messageID,
-        partID: item.part.id,
-      },
-    })
-  })
-
-  flush(parts.length - 1)
-  return result
+  return groupOrderedParts(parts, isContextGroupTool)
 }
 
 function index<T extends { id: string }>(items: readonly T[]) {
@@ -739,8 +664,14 @@ export function AssistantParts(props: {
     }
 
     for (const message of props.messages) {
-      for (const part of list(data.store.part?.[message.id], emptyParts)) {
-        if (!renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true)) continue
+      const parts = orderTextReasoningSegments(
+        list(data.store.part?.[message.id], emptyParts).filter((part) =>
+          renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true),
+        ),
+        (part) => part,
+      )
+
+      for (const part of parts) {
         if (isContextGroupTool(part)) {
           if (ctx.length === 0) ctxKey = `context:${part.id}`
           ctx.push(part)
@@ -951,7 +882,10 @@ export function AssistantMessageDisplay(props: {
       items[key] = item
     }
 
-    const parts = props.parts
+    const parts = orderTextReasoningSegments(
+      props.parts.filter((part) => renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true)),
+      (part) => part,
+    )
     let start = -1
 
     const flush = (end: number) => {
@@ -970,8 +904,6 @@ export function AssistantMessageDisplay(props: {
     }
 
     parts.forEach((part, index) => {
-      if (!renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true)) return
-
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
         return

@@ -603,7 +603,7 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
         .select()
         .from(PartTable)
         .where(inArray(PartTable.message_id, ids))
-        .orderBy(PartTable.message_id, PartTable.id)
+        .orderBy(PartTable.message_id, PartTable.time_created, PartTable.id)
         .all(),
     )
     for (const row of partRows) {
@@ -991,7 +991,7 @@ export function* stream(sessionID: SessionID) {
 
 export function parts(message_id: MessageID) {
   const rows = Database.use((db) =>
-    db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
+    db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.time_created, PartTable.id).all(),
   )
   return rows.map(
     (row) =>

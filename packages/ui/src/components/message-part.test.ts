@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { Part, TextPart } from "@opencode-ai/sdk/v2"
+import type { Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
+import { groupParts } from "./message-part-order"
 import { skillText } from "./message-skill"
 import { hold, streamsplit } from "./message-part-stream"
 
@@ -13,6 +14,83 @@ function text(part: Partial<TextPart> = {}): TextPart {
     ...part,
   }
 }
+
+function reasoning(part: Partial<ReasoningPart> = {}): ReasoningPart {
+  return {
+    id: "part_reasoning",
+    sessionID: "ses_1",
+    messageID: "msg_1",
+    type: "reasoning",
+    text: "thinking",
+    time: { start: 1 },
+    ...part,
+  }
+}
+
+function tool(part: Partial<ToolPart> = {}): ToolPart {
+  return {
+    id: "part_tool",
+    sessionID: "ses_1",
+    messageID: "msg_1",
+    type: "tool",
+    callID: "call_1",
+    tool: "bash",
+    state: {
+      status: "completed",
+      input: {},
+      output: "",
+      title: "bash",
+      metadata: {},
+      time: { start: 1, end: 2 },
+    },
+    ...part,
+  }
+}
+
+describe("message-part groupParts", () => {
+  const isContextGroupTool = () => false
+
+  test("renders reasoning before text within the same assistant segment", () => {
+    const groups = groupParts(
+      [
+        { messageID: "msg_1", part: text({ id: "part_text" }) },
+        { messageID: "msg_1", part: reasoning({ id: "part_reasoning" }) },
+      ],
+      isContextGroupTool,
+    )
+
+    expect(groups.map((group) => group.key)).toEqual(["part:msg_1:part_reasoning", "part:msg_1:part_text"])
+  })
+
+  test("does not move reasoning across tool boundaries", () => {
+    const groups = groupParts(
+      [
+        { messageID: "msg_1", part: text({ id: "part_text" }) },
+        { messageID: "msg_1", part: tool({ id: "part_tool" }) },
+        { messageID: "msg_1", part: reasoning({ id: "part_reasoning" }) },
+      ],
+      isContextGroupTool,
+    )
+
+    expect(groups.map((group) => group.key)).toEqual([
+      "part:msg_1:part_text",
+      "part:msg_1:part_tool",
+      "part:msg_1:part_reasoning",
+    ])
+  })
+
+  test("does not move reasoning across message boundaries", () => {
+    const groups = groupParts(
+      [
+        { messageID: "msg_1", part: text({ id: "part_text_1", messageID: "msg_1" }) },
+        { messageID: "msg_2", part: reasoning({ id: "part_reasoning_2", messageID: "msg_2" }) },
+      ],
+      isContextGroupTool,
+    )
+
+    expect(groups.map((group) => group.key)).toEqual(["part:msg_1:part_text_1", "part:msg_2:part_reasoning_2"])
+  })
+})
 
 describe("message-part skillText", () => {
   test("returns synthetic skill template text", () => {
