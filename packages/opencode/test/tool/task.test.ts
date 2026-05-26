@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Bus } from "@/bus"
@@ -443,6 +443,245 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance(
+    "execute uses explicit model override before subagent and parent models",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const calls: unknown[] = []
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            model: "anthropic/claude-sonnet-4",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (input) =>
+              Effect.sync(() => {
+                calls.push(input)
+              }),
+          },
+        )
+
+        expect(result.metadata.model.providerID as string).toBe("anthropic")
+        expect(result.metadata.model.modelID as string).toBe("claude-sonnet-4")
+        expect((seen?.model?.providerID ?? "") as string).toBe("anthropic")
+        expect((seen?.model?.modelID ?? "") as string).toBe("claude-sonnet-4")
+        expect(calls[0]).toEqual({
+          permission: "model_override",
+          patterns: ["anthropic/claude-sonnet-4"],
+          always: ["anthropic/claude-sonnet-4"],
+          metadata: {
+            description: "inspect bug",
+            subagent_type: "general",
+            model: "anthropic/claude-sonnet-4",
+          },
+        })
+        expect(calls[1]).toEqual({
+          permission: "task",
+          patterns: ["general"],
+          always: ["*"],
+          metadata: {
+            description: "inspect bug",
+            subagent_type: "general",
+          },
+        })
+      }),
+    {
+      config: {
+        agent: {
+          general: {
+            model: "openai/gpt-4o-mini",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance("stops before task permission when model override permission fails", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const calls: unknown[] = []
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            model: "anthropic/claude-sonnet-4",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (input) =>
+              Effect.sync(() => {
+                calls.push(input)
+              }).pipe(
+                Effect.andThen(
+                  input.permission === "model_override"
+                    ? Effect.die(new Error("model override denied"))
+                    : Effect.void,
+                ),
+              ),
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(calls).toEqual([
+        {
+          permission: "model_override",
+          patterns: ["anthropic/claude-sonnet-4"],
+          always: ["anthropic/claude-sonnet-4"],
+          metadata: {
+            description: "inspect bug",
+            subagent_type: "general",
+            model: "anthropic/claude-sonnet-4",
+          },
+        },
+      ])
+    }),
+  )
+
+  it.instance(
+    "execute uses subagent model when no explicit override is provided",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(result.metadata.model.providerID as string).toBe("openai")
+        expect(result.metadata.model.modelID as string).toBe("gpt-4o-mini")
+        expect((seen?.model?.providerID ?? "") as string).toBe("openai")
+        expect((seen?.model?.modelID ?? "") as string).toBe("gpt-4o-mini")
+      }),
+    {
+      config: {
+        agent: {
+          general: {
+            model: "openai/gpt-4o-mini",
+          },
+        },
+      },
+    },
+  )
+
+  it.instance("execute uses parent assistant model when no explicit or subagent model is provided", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.metadata.model.providerID).toBe(ref.providerID)
+      expect(result.metadata.model.modelID).toBe(ref.modelID)
+      expect(seen?.model?.providerID).toBe(ref.providerID)
+      expect(seen?.model?.modelID).toBe(ref.modelID)
+    }),
+  )
+
+  it.instance("rejects invalid model override strings before asking permissions", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      yield* Effect.forEach(["gpt-4o", "openai/"], (model) =>
+        Effect.gen(function* () {
+          const calls: unknown[] = []
+          const exit = yield* def
+            .execute(
+              {
+                description: "inspect bug",
+                prompt: "look into the cache key path",
+                subagent_type: "general",
+                model,
+              },
+              {
+                sessionID: chat.id,
+                messageID: assistant.id,
+                agent: "build",
+                abort: new AbortController().signal,
+                extra: { promptOps: stubOps() },
+                messages: [],
+                metadata: () => Effect.void,
+                ask: (input) =>
+                  Effect.sync(() => {
+                    calls.push(input)
+                  }),
+              },
+            )
+            .pipe(Effect.exit)
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain(`Invalid model format: "${model}"`)
+          expect(calls).toHaveLength(0)
+        }),
+      )
+    }),
   )
 
   it.instance("rejects background execution when the experiment is disabled", () =>

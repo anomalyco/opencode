@@ -239,6 +239,10 @@ describe("tool parameters", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", background: true })
       expect(parsed.background).toBe(true)
     })
+    test("accepts optional model override", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", model: "openai/gpt-4o" })
+      expect(parsed.model).toBe("openai/gpt-4o")
+    })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)
     })

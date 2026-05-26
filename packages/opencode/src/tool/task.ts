@@ -9,6 +9,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { ModelID, ProviderID } from "../provider/schema"
 import { Cause, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -35,6 +36,10 @@ const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  model: Schema.optional(Schema.String).annotate({
+    description:
+      "Override the model for this subagent. Format: provider/model (e.g. anthropic/claude-sonnet-4, openai/gpt-4o). Takes precedence over the agent's configured model.",
+  }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
@@ -93,6 +98,19 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+function parseModelOverride(model: string): Effect.Effect<{ modelID: ModelID; providerID: ProviderID }, Error> {
+  const slash = model.indexOf("/")
+  if (slash <= 0 || slash === model.length - 1) {
+    return Effect.fail(
+      new Error(`Invalid model format: "${model}". Expected provider/model (e.g. anthropic/claude-sonnet-4)`),
+    )
+  }
+  return Effect.succeed({
+    providerID: ProviderID.make(model.slice(0, slash)),
+    modelID: ModelID.make(model.slice(slash + 1)),
+  })
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -113,6 +131,24 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
         )
+      }
+      const modelOverride = params.model
+      const overrideModel =
+        modelOverride === undefined
+          ? undefined
+          : yield* parseModelOverride(modelOverride)
+
+      if (overrideModel && modelOverride !== undefined) {
+        yield* ctx.ask({
+          permission: "model_override",
+          patterns: [modelOverride],
+          always: [modelOverride],
+          metadata: {
+            description: params.description,
+            subagent_type: params.subagent_type,
+            model: modelOverride,
+          },
+        })
       }
 
       if (!ctx.extra?.bypassAgentCheck) {
@@ -161,7 +197,7 @@ export const TaskTool = Tool.define(
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
-      const model = next.model ?? {
+      const model = overrideModel ?? next.model ?? {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }

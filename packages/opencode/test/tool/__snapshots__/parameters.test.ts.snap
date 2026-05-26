@@ -331,6 +331,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "A short (3-5 words) description of the task",
       "type": "string",
     },
+    "model": {
+      "description": "Override the model for this subagent. Format: provider/model (e.g. anthropic/claude-sonnet-4, openai/gpt-4o). Takes precedence over the agent's configured model.",
+      "type": "string",
+    },
     "prompt": {
       "description": "The task for the agent to perform",
       "type": "string",
