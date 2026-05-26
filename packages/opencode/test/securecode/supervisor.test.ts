@@ -8,6 +8,7 @@ import {
   buildSandboxConfig,
   loadUserConfig,
   resolveInnerCommand,
+  shellQuote,
   type UserConfig,
 } from "../../../../script/securecode-supervisor"
 
@@ -101,9 +102,9 @@ describe("resolveInnerCommand", () => {
 
   test("引数は加工せず opencode へ pass-through する (フラグも safe)", () => {
     const cmd = resolveInnerCommand(["--version"], { distBinPath: "/nonexistent/securecode-bin" })
-    expect(cmd).toContain('"--version"')
+    expect(cmd).toContain("'--version'")
     // 「--version」を target dir として resolve しないこと
-    expect(cmd).not.toContain(`/--version"`)
+    expect(cmd).not.toContain(`/--version'`)
   })
 
   test("配布バイナリ環境 (securecode-bin 存在) では opencode 単独バイナリを直接 spawn", () => {
@@ -112,8 +113,8 @@ describe("resolveInnerCommand", () => {
     writeFileSync(innerBin, "#!/bin/sh\necho ok\n", { mode: 0o755 })
     try {
       const cmd = resolveInnerCommand(["/tmp"], { distBinPath: innerBin })
-      expect(cmd).toContain(JSON.stringify(innerBin))
-      expect(cmd).toContain('"/tmp"')
+      expect(cmd).toContain(shellQuote(innerBin))
+      expect(cmd).toContain("'/tmp'")
       expect(cmd).not.toContain("bun run --cwd packages/opencode")
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -123,6 +124,48 @@ describe("resolveInnerCommand", () => {
   test("開発ツリー環境 (securecode-bin 不在) では bun run --cwd packages/opencode にフォールバック", () => {
     const cmd = resolveInnerCommand(["/tmp"], { distBinPath: "/nonexistent/securecode-bin" })
     expect(cmd).toContain("bun run --cwd packages/opencode --conditions=browser src/index.ts")
-    expect(cmd).toContain('"/tmp"')
+    expect(cmd).toContain("'/tmp'")
+  })
+
+  test("shell の特殊文字 ($, バックティック, !) を含む arg を literal として渡す", () => {
+    const cmd = resolveInnerCommand(["$HOME/repo", "`whoami`", "x!y"], {
+      distBinPath: "/nonexistent/securecode-bin",
+    })
+    // single quote で囲まれているため、shell 展開・コマンド置換は起きない。
+    expect(cmd).toContain("'$HOME/repo'")
+    expect(cmd).toContain("'`whoami`'")
+    expect(cmd).toContain("'x!y'")
+  })
+
+  test("arg 内の single quote を正しく escape する", () => {
+    const cmd = resolveInnerCommand(["it's a path"], { distBinPath: "/nonexistent/securecode-bin" })
+    // POSIX shell 標準の close-escape-reopen 形式 ('\'') で囲まれる。
+    expect(cmd).toContain("'it'\\''s a path'")
+  })
+})
+
+describe("shellQuote", () => {
+  test("通常文字列は single quote で囲むだけ", () => {
+    expect(shellQuote("foo")).toBe("'foo'")
+    expect(shellQuote("/tmp/dir")).toBe("'/tmp/dir'")
+  })
+
+  test("空文字は ''", () => {
+    expect(shellQuote("")).toBe("''")
+  })
+
+  test("$ / バックティック / ! / 改行 / バックスラッシュ も literal 化", () => {
+    // single quote で囲まれているので JSON.stringify と違い shell 展開されない。
+    expect(shellQuote("$HOME")).toBe("'$HOME'")
+    expect(shellQuote("`whoami`")).toBe("'`whoami`'")
+    expect(shellQuote("a!b")).toBe("'a!b'")
+    expect(shellQuote("a\nb")).toBe("'a\nb'")
+    expect(shellQuote("a\\b")).toBe("'a\\b'")
+  })
+
+  test("single quote を含む場合は close-escape-reopen 形式", () => {
+    expect(shellQuote("it's")).toBe("'it'\\''s'")
+    expect(shellQuote("'leading")).toBe("''\\''leading'")
+    expect(shellQuote("trailing'")).toBe("'trailing'\\'''")
   })
 })

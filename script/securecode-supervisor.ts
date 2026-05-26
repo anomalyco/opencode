@@ -43,6 +43,16 @@ function die(msg: string, code = 1): never {
   process.exit(code)
 }
 
+/**
+ * ユーザ設定ファイル (`~/.config/securecode/sandbox.json`) を読み込む。
+ *
+ * ファイル不在は正常系として扱い、空オブジェクトを返す (= 全フィールドが
+ * デフォルト値で起動する)。JSON parse 失敗のみ fatal error。
+ *
+ * @param path - 設定ファイルの絶対パス。テストから注入する用途で引数化している。
+ * @returns parse 済み UserConfig。ファイル不在時は `{}`。
+ * @throws `die()` 経由で `process.exit(1)`。読み込み or JSON parse 失敗時のみ。
+ */
 export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
   if (!existsSync(path)) {
     log(`no user config at ${path}, using defaults`)
@@ -56,6 +66,21 @@ export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
   }
 }
 
+/**
+ * `UserConfig` を sandbox-runtime に渡す `SandboxRuntimeConfig` に変換する。
+ *
+ * 合成ルール:
+ * - `allowedDomains` — `DEFAULT_ALLOWED_DOMAINS` (CIA endpoint) を常に先頭に固定し、
+ *   user 値を後ろに append する。user 設定で CIA を削除することはできない。
+ * - `denyRead` / `denyWrite` — `CONFIG_PATH` (sandbox.json 自身) を常に先頭に追加し、
+ *   sandbox 内のプロセスから設定ファイルの読み書きを物理的に封鎖する。
+ * - `allowWrite` — 未指定なら `["/"]` にフォールバック (= 書き込みは `denyWrite`
+ *   側だけで制御する運用)。
+ * - `allowPty` / `network.allowLocalBinding` — 常に `true` (TUI と dev server のため)。
+ *
+ * @param user - ユーザ設定。空オブジェクト `{}` も有効入力。
+ * @returns `SandboxManager.initialize()` にそのまま渡せる完全な config。
+ */
 export function buildSandboxConfig(user: UserConfig): SandboxRuntimeConfig {
   const allowedDomains = [...DEFAULT_ALLOWED_DOMAINS, ...(user.network?.allowedDomains ?? [])]
   const deniedDomains = user.network?.deniedDomains ?? []
@@ -91,6 +116,17 @@ export function buildSandboxConfig(user: UserConfig): SandboxRuntimeConfig {
   }
 }
 
+/**
+ * sandbox-runtime が現環境で利用可能かを fail-closed で検証する。
+ *
+ * 以下の条件のいずれかを満たさなければ起動拒否する:
+ * - プラットフォームが Linux または macOS であること
+ * - sandbox-runtime の依存ツール (Linux なら bubblewrap 等) が満たされていること
+ *
+ * `deps.warnings` レベル (= 致命ではない不整合) は stderr に流して続行する。
+ *
+ * @throws `die()` 経由で `process.exit(1)`。sandbox 起動不能と判断した場合のみ。
+ */
 export async function assertSandboxAvailable(): Promise<void> {
   if (!SandboxManager.isSupportedPlatform()) {
     die(
@@ -112,11 +148,47 @@ export async function assertSandboxAvailable(): Promise<void> {
 // release-securecode.ts がこの名前で配置する。
 export const INNER_BIN_NAME = "securecode-bin"
 
+/**
+ * POSIX shell の single-quote escape。`spawn(cmd, { shell: true })` に渡す
+ * コマンド文字列を組み立てるためのヘルパ。
+ *
+ * single quote で囲むと `\`, `$`, `` ` ``, `!`, 改行 を含むあらゆる特殊文字が
+ * literal として扱われる (POSIX shell の単一引用符の唯一の特性)。文字列中の
+ * single quote だけは `'\''` で閉じ直し → escape → 再 open する。
+ *
+ * `JSON.stringify` ではダメな理由: double-quote 内では `$` `` ` `` `\` `!` が
+ * 依然として shell の特殊文字として解釈され、`$HOME` 等が展開されてしまう。
+ */
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`
+}
+
+/**
+ * sandbox 内で起動する opencode 本体のコマンド文字列を解決する。
+ *
+ * 解決優先順位:
+ * 1. **テストモード** — `opts.distBinPath` が明示指定されたら、そのパスを使う
+ *    (テスト時に inner binary を任意の場所に置けるようにするための注入口)。
+ * 2. **配布バイナリ** — `process.execPath` (bun compile 後の supervisor 本体パス)
+ *    または `import.meta.dir` の隣に `securecode-bin` が存在すれば、それを直接 spawn。
+ * 3. **開発ツリーフォールバック** — どちらでも見つからなければ、リポジトリ
+ *    ルートに移動して `bun run --cwd packages/opencode --conditions=browser src/index.ts`
+ *    を組み立てる (= `bun run script/securecode-supervisor.ts` で起動した想定)。
+ *
+ * 引数 `args` は加工せず `JSON.stringify` でクオートして pass-through する。
+ * これは `--version` 等のフラグを target dir として誤解釈しないため。
+ *
+ * @param args - opencode へそのまま渡す引数列。通常は `process.argv.slice(2)`。
+ * @param opts.distBinPath - テスト用に inner binary の絶対パスを明示指定する。
+ * @returns `spawn(cmd, { shell: true })` に渡せる shell コマンド文字列。
+ */
 export function resolveInnerCommand(args: string[], opts: { distBinPath?: string } = {}): string {
   // supervisor は args を加工せず opencode へ pass-through する。target dir の
   // 解釈は opencode 側に任せる (フラグや subcommand を誤って resolve しない)。
-  const quotedArgs = args.map((a) => JSON.stringify(a)).join(" ")
-  const inner = (bin: string) => (quotedArgs ? `${JSON.stringify(bin)} ${quotedArgs}` : JSON.stringify(bin))
+  // shell injection / 意図しない展開を防ぐため shellQuote を使う
+  // (JSON.stringify は double-quote で `$HOME` 等を展開してしまうので不可)。
+  const quotedArgs = args.map(shellQuote).join(" ")
+  const inner = (bin: string) => (quotedArgs ? `${shellQuote(bin)} ${quotedArgs}` : shellQuote(bin))
 
   // テスト用に distBinPath が明示指定されたらそれだけ確認する。
   if (opts.distBinPath !== undefined) {
@@ -136,7 +208,7 @@ export function resolveInnerCommand(args: string[], opts: { distBinPath?: string
   // 開発ツリーフォールバック (script/securecode-supervisor.ts に居る前提): 親リポジトリの
   // packages/opencode を bun runtime で起動。
   const repoRoot = resolve(import.meta.dir, "..")
-  const quotedRoot = JSON.stringify(repoRoot)
+  const quotedRoot = shellQuote(repoRoot)
   const tail = quotedArgs ? ` ${quotedArgs}` : ""
   return `cd ${quotedRoot} && bun run --cwd packages/opencode --conditions=browser src/index.ts${tail}`
 }
