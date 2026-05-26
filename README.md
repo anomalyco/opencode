@@ -44,8 +44,10 @@ Acompany Secure Code は、機密ソースコードを Confidential Computing �
 ```bash
 bun install
 bun run guard:upstream
-./run-securecode.sh /path/to/your/repository
+bun run script/securecode-supervisor.ts /path/to/your/repository
 ```
+
+開発時も supervisor 経由で起動するため、opencode は OS sandbox (macOS Seatbelt / Linux bubblewrap) の中で動きます。詳細は [.specs/20260526_securecode-sandbox-phase0.md](./.specs/20260526_securecode-sandbox-phase0.md) を参照。
 
 UI を個別に確認する場合:
 

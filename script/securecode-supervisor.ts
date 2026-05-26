@@ -108,11 +108,25 @@ export async function assertSandboxAvailable(): Promise<void> {
   }
 }
 
-export function resolveInnerCommand(args: string[]): string {
-  const repoRoot = resolve(import.meta.dir, "..")
+// 配布バイナリで supervisor の隣に置かれる opencode 本体の名前。
+// release-securecode.ts がこの名前で配置する。
+export const INNER_BIN_NAME = "securecode-bin"
+
+export function resolveInnerCommand(args: string[], opts: { distBinPath?: string } = {}): string {
+  const supervisorDir = import.meta.dir
   const targetDir = args[0] ? resolve(args[0]) : process.cwd()
-  const quotedRoot = JSON.stringify(repoRoot)
   const quotedTarget = JSON.stringify(targetDir)
+
+  // 配布バイナリ環境: supervisor の隣に securecode-bin が居るのでそれを spawn。
+  const distBin = opts.distBinPath ?? join(supervisorDir, INNER_BIN_NAME)
+  if (existsSync(distBin)) {
+    const quotedBin = JSON.stringify(distBin)
+    return `${quotedBin} ${quotedTarget}`
+  }
+
+  // 開発ツリー環境 (script/ に居る): 親リポジトリの packages/opencode を bun で起動。
+  const repoRoot = resolve(supervisorDir, "..")
+  const quotedRoot = JSON.stringify(repoRoot)
   return `cd ${quotedRoot} && bun run --cwd packages/opencode --conditions=browser src/index.ts ${quotedTarget}`
 }
 

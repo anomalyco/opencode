@@ -10,7 +10,8 @@
 
 ### 必須要件 (Must)
 
-- SecureCode 起動時に opencode プロセス本体を `@anthropic-ai/sandbox-runtime` で**全体包み**する。
+- **配布バイナリ `securecode` を直接起動した時点で**、opencode プロセス本体が `@anthropic-ai/sandbox-runtime` で**全体包み**された状態で動作する。
+- `securecode` コマンドの実体は supervisor で、内部で同梱の opencode 単独バイナリ (`securecode-bin`) を sandbox 内で spawn する。ユーザは sandbox の有無を意識しない。
 - **macOS (Seatbelt) と Linux (bubblewrap) 両対応**。両 OS でスモーク検証を必須とする。
 - sandbox-runtime が利用不可な環境では**起動拒否 (fail-closed)**。
 - **デフォルト allowlist は CIA endpoint (`conf-ai.acompany-az.com`) のみ**。GitHub / npm 等は含めない。
@@ -30,7 +31,6 @@
 - **hot-reload**(設定変更の即時反映) → Phase 1
 - **プロジェクトローカル設定** (`.securecode/`) → Phase 1
 - **未許可ドメイン遮断時の専用エラー文面** → Phase 1(動的承認 UX とセット)
-- **配布バイナリ化**(CIA endpoint 同梱の単独バイナリ) → Phase 1+(`release-securecode.ts` / `install-securecode` の改修を伴う)
 - **escape hatch** (`bash:unsandboxed` 同等の送り口) → Phase 1+(配布バイナリでの「本番除去」とセットの概念)
 - **設定ファイルの専用ディレクトリ隔離**(ディレクトリごと deny) → Phase 1+
 - **credential brokering proxy**(CIA token を sandbox 外でヘッダ注入) → Phase 2
@@ -43,7 +43,7 @@
 
 ### 正常系
 
-- **起動**: supervisor が設定ファイルを読み込み → sandbox 初期化成功 → opencode 子プロセスを sandbox 内で spawn → 通常通り TUI 表示。
+- **起動**: ユーザが `securecode <target>` を実行 → supervisor (= `securecode` バイナリ) が設定ファイルを読み込み → sandbox 初期化成功 → 同梱の `securecode-bin` を sandbox 内で spawn → 通常通り TUI 表示。
 - **CIA 通信**: デフォルト allowlist で通過 → 成功。
 - **許可済みドメイン通信**: ユーザが事前に設定ファイルへ追加したドメインのみ成功。
 - **許可ドメインの追加**: SecureCode を終了 → 設定ファイルを手編集 → SecureCode を再起動 → 反映。
@@ -60,8 +60,9 @@
 ## 方針
 
 - 基盤: `@anthropic-ai/sandbox-runtime` の Node SDK (`SandboxManager.initialize` / `wrapWithSandbox`) を採用。
-- 構成: **supervisor (sandbox 外) + opencode (sandbox 内) の 2 プロセス構成**。supervisor は起動時に設定ファイルを読み、sandbox を初期化し、opencode を子プロセスとして spawn する。Phase 0 では supervisor の役割は「起動時の launcher」のみで、実行中の config 更新・IPC 受信・reset は行わない。
-- 起動経路: 開発ツリーから `run-securecode.sh` → supervisor → opencode を直接呼ぶ。配布バイナリ化は Phase 1+ で扱う。
+- 構成: **supervisor (sandbox 外) + opencode (sandbox 内) の 2 プロセス構成**。配布形態としては `securecode` (= supervisor を bun compile した単独バイナリ) と `securecode-bin` (= opencode を bun compile した単独バイナリ) を同梱し、`securecode` を叩くと supervisor が同梱の `securecode-bin` を sandbox 内 spawn する。Phase 0 では supervisor の役割は「起動時の launcher」のみで、実行中の config 更新・IPC 受信・reset は行わない。
+- 起動経路: **配布バイナリ `securecode` がデフォルト**。開発時は `bun run script/securecode-supervisor.ts` を直接呼ぶ(supervisor 内の判定ロジックが、隣に `securecode-bin` が無いと検知して開発ツリーモード = `bun run --cwd packages/opencode ...` にフォールバック)。`run-securecode.sh` は本仕様で削除する。
+- 配布バイナリの生成: `script/release-securecode.ts` で supervisor を `securecode` 名で bun compile、既存の opencode 単独バイナリは `securecode-bin` 名にリネームし、両者を platform archive に同梱する。`install-securecode` は両方を install dir に配置する。
 - 設定ファイルの隔離: 設定ファイルは opencode 本体の `~/.config/securecode/config.json` と同居する。ディレクトリごとの deny は opencode 起動を壊すため避け、`sandbox.json` をファイル単位で `denyRead` + `denyWrite` する。攻撃面の小さい専用ディレクトリ方式は Phase 1+ で再検討。
 - Layer 関係: 既存 opencode の Layer 1 permission (allow/ask/deny) はそのまま流用し、本仕様は Layer 2 (OS sandbox + egress allowlist) を追加する。Phase 0 では opencode 本体 (`packages/opencode/**`) のコードは触らない。
 - 拡張余地: Phase 0 では実装を最小に保ち、Phase 1 で supervisor に IPC 受信と hot-reload を足して動的承認 UX を実現する余地を残す。
@@ -70,10 +71,10 @@
 
 - 設定ファイル parse エラー時のユーザ向けエラー文面。
 - sandbox 初期化失敗時のユーザ向け案内文面。
-- supervisor 停止時の opencode 子プロセスのクリーンアップ手順 (SIGTERM → SIGKILL のタイムアウト等)。
+- supervisor 停止時の `securecode-bin` 子プロセスのクリーンアップ手順 (SIGTERM → SIGKILL のタイムアウト等)。
 
 ## 関連仕様
 
 - Notion: [SecureCode Sandbox 設計方針 (要点版)](https://www.notion.so/acompany-ac/SecureCode-Sandbox-34a269d8558681819ef1ecc234d1ea14)
 - 上流参考: opencode PR #21538, Claude Code sandboxing docs
-- 試行実装: PR #103 (`feat/securecode-sandbox-phase0`) — 本 spec の実装例として参考。本 spec 確定後に再実装/refactor して別 PR で再提出予定。
+- 試行実装: PR #103 (`feat/securecode-sandbox-phase0`) — 本 spec の前の試行(`run-securecode.sh` 経由のみで sandbox)。本 PR がマージされたら close 予定。

@@ -102,8 +102,21 @@ describe("resolveInnerCommand", () => {
     expect(cmd).toContain('"/tmp"')
   })
 
-  test("opencode 起動コマンドを内包", () => {
-    const cmd = resolveInnerCommand([])
+  test("配布バイナリ環境 (securecode-bin 存在) では opencode 単独バイナリを直接 spawn", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-bin-test-"))
+    const innerBin = join(dir, "securecode-bin")
+    writeFileSync(innerBin, "#!/bin/sh\necho ok\n", { mode: 0o755 })
+    try {
+      const cmd = resolveInnerCommand(["/tmp"], { distBinPath: innerBin })
+      expect(cmd).toContain(JSON.stringify(innerBin))
+      expect(cmd).not.toContain("bun run --cwd packages/opencode")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("開発ツリー環境 (securecode-bin 不在) では bun run --cwd packages/opencode にフォールバック", () => {
+    const cmd = resolveInnerCommand(["/tmp"], { distBinPath: "/nonexistent/securecode-bin" })
     expect(cmd).toContain("bun run --cwd packages/opencode --conditions=browser src/index.ts")
   })
 })

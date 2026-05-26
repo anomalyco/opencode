@@ -49,13 +49,26 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   const name = dir.name.replace(/^opencode-/, "securecode-")
   const ext = win || dir.name.includes("darwin") ? "zip" : "tar.gz"
   const tmp = path.join(out, name)
-  const dst = path.join(tmp, `securecode${win ? ".exe" : ""}`)
+  // securecode = supervisor (bun compile 単独バイナリ)、securecode-bin = opencode 本体。
+  // ユーザが `securecode` を叩くと supervisor が同じディレクトリの securecode-bin を
+  // sandbox 内で spawn する (詳細は .specs/20260526_securecode-sandbox-phase0.md 参照)。
+  const supervisorBin = path.join(tmp, `securecode${win ? ".exe" : ""}`)
+  const innerBin = path.join(tmp, `securecode-bin${win ? ".exe" : ""}`)
   const arc = path.join(out, `${name}.${ext}`)
 
   await fs.rm(tmp, { recursive: true, force: true })
   await fs.mkdir(tmp, { recursive: true })
-  await fs.copyFile(src, dst)
-  if (!win) await fs.chmod(dst, 0o755)
+
+  // 1) opencode 本体を securecode-bin として配置
+  await fs.copyFile(src, innerBin)
+  if (!win) await fs.chmod(innerBin, 0o755)
+
+  // 2) supervisor を securecode として bun compile (platform クロスコンパイル)
+  const platformSuffix = dir.name.replace(/^opencode-/, "")
+  const bunTarget = `bun-${platformSuffix}`
+  await $`bun build --compile --target=${bunTarget} script/securecode-supervisor.ts --outfile ${supervisorBin}`.cwd(root)
+  if (!win) await fs.chmod(supervisorBin, 0o755)
+
   await fs.copyFile(path.join(root, "LICENSE"), path.join(tmp, "LICENSE"))
   if (await exists(thirdPartyLicensesSrc)) {
     await fs.copyFile(thirdPartyLicensesSrc, path.join(tmp, "THIRD-PARTY-LICENSES.txt"))
