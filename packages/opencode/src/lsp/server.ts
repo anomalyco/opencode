@@ -884,7 +884,7 @@ export const FSharp: Info = {
 
 export const SourceKit: Info = {
   id: "sourcekit-lsp",
-  extensions: [".swift", ".objc", "objcpp"],
+  extensions: [".swift", ".m", ".mm"],
   root: NearestRoot(["Package.swift", "*.xcodeproj", "*.xcworkspace"]),
   async spawn(root) {
     // Check if sourcekit-lsp is available in the PATH
