@@ -3,8 +3,8 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
 import { Persist, persisted } from "@/utils/persist"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "./global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "./server-sync"
 import { useParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
 import {
@@ -48,13 +48,13 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
   name: "Permission",
   init: () => {
     const params = useParams()
-    const globalSDK = useGlobalSDK()
-    const globalSync = useGlobalSync()
+    const serverSDK = useServerSDK()
+    const serverSync = useServerSync()
 
     const permissionsEnabled = createMemo(() => {
       const directory = decode64(params.dir)
       if (!directory) return false
-      const [store] = globalSync.child(directory)
+      const [store] = serverSync.child(directory)
       return hasPermissionPromptRules(store.config.permission)
     })
 
@@ -86,7 +86,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       if (!ready()) return
       const directory = decode64(params.dir)
       if (!directory) return
-      const [childStore] = globalSync.child(directory)
+      const [childStore] = serverSync.child(directory)
       const perm = childStore.config.permission
       if (typeof perm === "string" && perm === "allow") {
         const key = directoryAcceptKey(directory)
@@ -118,7 +118,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     const respond: PermissionRespondFn = (input) => {
-      globalSDK.client.permission
+      serverSDK.client.permission
         .reply({
           requestID: input.permissionID,
           reply: input.response,
@@ -126,7 +126,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         })
         .then(() => {
           if (!input.directory) return
-          globalSync.child(input.directory, { bootstrap: false })[1]("permission", input.sessionID, (items) => {
+          serverSync.child(input.directory, { bootstrap: false })[1]("permission", input.sessionID, (items) => {
             return items?.filter((item) => item.id !== input.permissionID)
           })
         })
@@ -151,7 +151,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function isAutoAccepting(sessionID: string, directory?: string) {
-      const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
+      const session = directory ? serverSync.child(directory, { bootstrap: false })[0].session : []
       return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
     }
 
@@ -160,7 +160,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
-      const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
+      const session = directory ? serverSync.child(directory, { bootstrap: false })[0].session : []
       return autoRespondsPermission(store.autoAccept, session, permission, directory)
     }
 
@@ -171,7 +171,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return next
     }
 
-    const unsubscribe = globalSDK.event.listen((e) => {
+    const unsubscribe = serverSDK.event.listen((e) => {
       const event = e.details
       if (event?.type !== "permission.asked") return
 
@@ -190,7 +190,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      globalSDK.client.permission
+      serverSDK.client.permission
         .list({ directory })
         .then((x) => {
           if (!isAutoAcceptingDirectory(directory)) return
@@ -222,7 +222,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      globalSDK.client.permission
+      serverSDK.client.permission
         .list({ directory })
         .then((x) => {
           if (enableVersion.get(key) !== version) return
@@ -280,7 +280,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       },
       permissionsEnabled,
       isPermissionAllowAll(directory: string) {
-        const [childStore] = globalSync.child(directory)
+        const [childStore] = serverSync.child(directory)
         const perm = childStore.config.permission
         return typeof perm === "string" && perm === "allow"
       },

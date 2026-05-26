@@ -34,6 +34,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
+import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
 const tryParseJson = (text: string) =>
@@ -356,7 +357,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof PermissionResponsePayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response })
+      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
+        Effect.catchTag("Permission.NotFoundError", (error) =>
+          Effect.fail(
+            new PermissionNotFoundError({
+              requestID: String(error.requestID),
+              message: `Permission request not found: ${error.requestID}`,
+            }),
+          ),
+        ),
+      )
       return true
     })
 

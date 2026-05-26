@@ -602,6 +602,32 @@ describe("session HttpApi", () => {
         })
         expect(forked.id).not.toBe(created.id)
 
+        const forkedWithoutContentType = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.fork, { sessionID: created.id }),
+          {
+            method: "POST",
+            headers: { "x-opencode-directory": test.directory },
+          },
+        )
+        expect(forkedWithoutContentType.id).not.toBe(created.id)
+
+        const invalidFork = yield* request(pathFor(SessionPaths.fork, { sessionID: created.id }), {
+          method: "POST",
+          headers,
+          body: "{",
+        })
+        expect(invalidFork.status).toBe(400)
+
+        const forkedWhitespace = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.fork, { sessionID: created.id }),
+          {
+            method: "POST",
+            headers,
+            body: "  \n",
+          },
+        )
+        expect(forkedWhitespace.id).not.toBe(created.id)
+
         expect(
           yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: created.id }), {
             method: "POST",
@@ -821,19 +847,24 @@ describe("session HttpApi", () => {
           }),
         ).toMatchObject({ id: session.id })
 
-        expect(
-          yield* requestJson<boolean>(
-            pathFor(SessionPaths.permissions, {
-              sessionID: session.id,
-              permissionID: String(PermissionID.ascending()),
-            }),
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ response: "once" }),
-            },
-          ),
-        ).toBe(true)
+        const permissionID = String(PermissionID.ascending())
+        const permission = yield* request(
+          pathFor(SessionPaths.permissions, {
+            sessionID: session.id,
+            permissionID,
+          }),
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ response: "once" }),
+          },
+        )
+        expect(permission.status).toBe(404)
+        expect(yield* responseJson(permission)).toEqual({
+          _tag: "PermissionNotFoundError",
+          requestID: permissionID,
+          message: `Permission request not found: ${permissionID}`,
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

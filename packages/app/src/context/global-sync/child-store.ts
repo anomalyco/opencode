@@ -15,7 +15,7 @@ import {
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQueries } from "@tanstack/solid-query"
-import { QueryOptionsApi } from "../global-sync"
+import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
 import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 
@@ -202,7 +202,7 @@ export function createChildStoreManager(input: {
                 return { state: "", config: "", worktree: "", directory: "", home: "" }
               return pathQuery.data
             },
-            status: "complete" as const,
+            status: "loading" as const,
             agent: [],
             command: [],
             session: [],

@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
@@ -69,7 +69,7 @@ export interface Interface {
       whenToUse: string
       systemPrompt: string
     },
-    Provider.ModelNotFoundError
+    Provider.DefaultModelError
   >
 }
 
