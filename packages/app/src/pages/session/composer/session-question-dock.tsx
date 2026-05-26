@@ -469,7 +469,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         </>
       }
     >
-      <div data-slot="question-text">{question()?.question}</div>
+      <div data-slot="question-text" class="overflow-auto">
+        {question()?.question}
+      </div>
       <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
         <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
       </Show>

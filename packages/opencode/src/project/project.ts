@@ -1,4 +1,3 @@
-import z from "zod"
 import { and } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
@@ -10,14 +9,17 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
+import { Bus } from "@/bus"
+import { Command } from "@/command"
+import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "project" })
 
@@ -50,9 +52,7 @@ export const Info = Schema.Struct({
   commands: optionalOmitUndefined(ProjectCommands),
   time: ProjectTime,
   sandboxes: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "Project" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Project" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
@@ -86,33 +86,41 @@ export function fromRow(row: Row): Info {
   }
 }
 
-export const UpdateInput = z.object({
-  projectID: ProjectID.zod,
-  name: z.string().optional(),
-  icon: zod(ProjectIcon).optional(),
-  commands: zod(ProjectCommands).optional(),
+export const UpdateInput = Schema.Struct({
+  projectID: ProjectID,
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
 })
-export type UpdateInput = z.infer<typeof UpdateInput>
+export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(ProjectIcon),
   commands: Schema.optional(ProjectCommands),
-})
-  .annotate({ identifier: "ProjectUpdateInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
+  projectID: ProjectID,
+}) {}
 
 // ---------------------------------------------------------------------------
 // Effect service
 // ---------------------------------------------------------------------------
 
 export interface Interface {
+  /**
+   * Per-instance setup. Subscribes to the `/init` slash command for the
+   * current instance and stamps the project's initialized timestamp when it
+   * fires. Subscription lifetime is tied to the per-instance state scope.
+   */
+  readonly init: () => Effect.Effect<void>
   readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
-  readonly update: (input: UpdateInput) => Effect.Effect<Info>
+  readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
   readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
@@ -127,13 +135,15 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const pathSvc = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const bus = yield* Bus.Service
+    const flags = yield* RuntimeFlags.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -278,7 +288,7 @@ export const layer: Layer.Layer<
             time: { created: Date.now(), updated: Date.now() },
           }
 
-      if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
+      if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const result: Info = {
         ...existing,
@@ -366,7 +376,9 @@ export const layer: Layer.Layer<
       const base64 = Buffer.from(buffer).toString("base64")
       const mime = AppFileSystem.mimeType(shortest)
       const url = `data:${mime};base64,${base64}`
-      yield* update({ projectID: input.id, icon: { url } })
+      yield* update({ projectID: input.id, icon: { url } }).pipe(
+        Effect.catchTag("Project.NotFoundError", () => Effect.void),
+      )
     })
 
     const list = Effect.fn("Project.list")(function* () {
@@ -394,7 +406,7 @@ export const layer: Layer.Layer<
           .returning()
           .get(),
       )
-      if (!result) throw new Error(`Project not found: ${input.projectID}`)
+      if (!result) return yield* new NotFoundError({ projectID: input.projectID })
       const data = fromRow(result)
       yield* emitUpdated(data)
       return data
@@ -415,6 +427,21 @@ export const layer: Layer.Layer<
       yield* db((d) =>
         d.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
       )
+    })
+
+    const initState = yield* InstanceState.make(
+      Effect.fn("Project.initState")(function* (ctx) {
+        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
+          Stream.runForEach((payload) =>
+            payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
+          ),
+          Effect.forkScoped,
+        )
+      }),
+    )
+
+    const init = Effect.fn("Project.init")(function* () {
+      yield* InstanceState.get(initState)
     })
 
     const sandboxes = Effect.fn("Project.sandboxes")(function* (id: ProjectID) {
@@ -466,6 +493,7 @@ export const layer: Layer.Layer<
     })
 
     return Service.of({
+      init,
       fromDirectory,
       discover,
       list,
@@ -481,9 +509,11 @@ export const layer: Layer.Layer<
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(Bus.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export const use = serviceUse(Service)

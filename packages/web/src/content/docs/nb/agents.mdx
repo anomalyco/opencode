@@ -35,13 +35,13 @@ OpenCode kommer med to innebygde primære agenter, **Build** og **Plan**. Vi ser
 
 Underagenter er spesialiserte assistenter som primære agenter kan påkalle for spesifikke oppgaver. Du kan også starte dem manuelt ved å **@ nevne** dem i meldingene dine.
 
-OpenCode kommer med to innebygde underagenter, **General** og **Explore**. Vi skal se på dette nedenfor.
+OpenCode kommer med tre innebygde underagenter, **General**, **Explore** og **Scout**. Vi skal se på dette nedenfor.
 
 ---
 
 ## Innebygd
 
-OpenCode kommer med to innebygde primære agenter og to innebygde underagenter.
+OpenCode kommer med to innebygde primære agenter og tre innebygde underagenter.
 
 ---
 
@@ -80,6 +80,14 @@ En generell agent for å undersøke komplekse spørsmål og utføre flertrinnsop
 _Modus_: `subagent`
 
 En rask, skrivebeskyttet agent for å utforske kodebaser. Kan ikke endre filer. Bruk dette når du raskt trenger å finne filer etter mønstre, søke i kode etter nøkkelord eller svare på spørsmål om kodebasen.
+
+---
+
+### Bruk av Scout
+
+_Modus_: `subagent`
+
+En skrivebeskyttet agent for ekstern dokumentasjon og forskning på avhengigheter. Bruk denne når du trenger å klone et avhengighetsrepo inn i OpenCode sin administrerte cache, inspisere kildekoden til et bibliotek eller kryssjekke lokal kode mot upstream-implementasjoner uten å endre arbeidsområdet ditt.
 
 ---
 

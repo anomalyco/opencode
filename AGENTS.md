@@ -11,11 +11,20 @@
 - 英語を使うのは、ユーザーが明示的に要求した場合、外部プロジェクトの規約が英語必須な場合、または翻訳すると正確さが落ちる場合に限る。
 - securecode は `anomalyco/opencode` の fork として運用しており、新規機能 / 修正は upstream owned のソース (`packages/opencode/**`, `packages/core/**` 等) を直接触らない方針を優先する。実装場所の判断基準は [specs/upstream-policy.md](./specs/upstream-policy.md)、tag 単位の取り込み手順は [specs/upstream-sync.md](./specs/upstream-sync.md) を参照。
 
+## Commits and PR Titles
+
+Use conventional commit-style messages and PR titles: `type(scope): summary`.
+
+Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `app`, `desktop`, `sdk`, or `plugin`.
+
+Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
+
 ## Style Guide
 
 ### General Principles
 
 - Keep things in one function unless composable or reusable
+- Do not extract single-use helpers preemptively. Inline the logic at the call site unless the helper is reused, hides a genuinely complex boundary, or has a clear independent name that improves the caller.
 - Avoid `try`/`catch` where possible
 - Avoid using the `any` type
 - Use Bun APIs when possible, like `Bun.file()`
@@ -78,6 +87,29 @@ function foo() {
   else return 2
 }
 ```
+
+### Complex Logic
+
+When a function has several validation branches or supporting details, make the main function read as the happy path and move supporting details into small helpers below it.
+
+```ts
+// Good
+export function loadThing(input: unknown) {
+  const config = requireConfig(input)
+  const metadata = readMetadata(input)
+  return createThing({ config, metadata })
+}
+
+function requireConfig(input: unknown) {
+  ...
+}
+```
+
+- Keep helpers close to the code they support, below the main export when that improves readability.
+- Do not over-abstract simple expressions into many single-use helpers; extract only when it names a real concept like `requireConfig` or `readMetadata`.
+- Do not return `Effect` from helpers unless they actually perform effectful work. Synchronous parsing, validation, and option building should stay synchronous.
+- Prefer Effect schema helpers such as `Schema.UnknownFromJsonString` and `Schema.decodeUnknownOption` over manual `JSON.parse` wrapped in `Effect.try` when parsing untrusted JSON strings.
+- Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
 
 ### Schema Definitions (Drizzle)
 

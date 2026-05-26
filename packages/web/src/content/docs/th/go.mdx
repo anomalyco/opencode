@@ -9,10 +9,6 @@ export const email = `mailto:${config.email}`
 
 OpenCode Go คือการสมัครสมาชิกในราคาประหยัด — **$5 สำหรับเดือนแรก** จากนั้น **$10/เดือน** — ซึ่งให้คุณเข้าถึงโมเดลโอเพนซอร์สยอดนิยมสำหรับการเขียนโค้ดได้อย่างเสถียร
 
-:::note
-OpenCode Go ขณะนี้อยู่ในช่วงเบต้า
-:::
-
 Go ทำงานเหมือนกับผู้ให้บริการ (provider) รายอื่นๆ ใน OpenCode คุณสามารถสมัครสมาชิก OpenCode Go และรับ API key ของคุณ บริการนี้เป็น**ทางเลือกเพิ่มเติม** และคุณไม่จำเป็นต้องใช้มันเพื่อใช้งาน OpenCode
 
 บริการนี้ออกแบบมาเพื่อผู้ใช้ในระดับสากลเป็นหลัก โดยมีโมเดลโฮสต์อยู่ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงทั่วโลกที่เสถียร
@@ -57,10 +53,8 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **GLM-5.1**
 - **Kimi K2.5**
 - **Kimi K2.6**
-- **MiMo-V2-Pro**
-- **MiMo-V2-Omni**
-- **MiMo-V2.5-Pro**
 - **MiMo-V2.5**
+- **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
@@ -90,10 +84,8 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | GLM-5              | 1,150                  | 2,880               | 5,750             |
 | Kimi K2.5          | 1,850                  | 4,630               | 9,250             |
 | Kimi K2.6          | 1,150                  | 2,880               | 5,750             |
-| MiMo-V2-Pro        | 1,290                  | 3,225               | 6,450             |
-| MiMo-V2-Omni       | 2,150                  | 5,450               | 10,900            |
-| MiMo-V2.5-Pro      | 1,290                  | 3,225               | 6,450             |
 | MiMo-V2.5 (≤ 256K) | 2,150                  | 5,450               | 10,900            |
+| MiMo-V2.5-Pro      | 1,290                  | 3,225               | 6,450             |
 | MiniMax M2.7       | 3,400                  | 8,500               | 17,000            |
 | MiniMax M2.5       | 6,300                  | 15,900              | 31,800            |
 | Qwen3.6 Plus       | 3,300                  | 8,200               | 16,300            |
@@ -110,10 +102,8 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 - MiniMax M2.7/M2.5 — 300 input, 55,000 cached, 125 output tokens ต่อ request
 - Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens ต่อ request
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens ต่อ request
-- MiMo-V2-Pro — 350 input, 41,000 cached, 250 output tokens ต่อ request
-- MiMo-V2-Omni — 1000 input, 60,000 cached, 140 output tokens ต่อ request
-- MiMo-V2.5-Pro — 350 input, 41,000 cached, 250 output tokens ต่อ request
 - MiMo-V2.5 — 1000 input, 60,000 cached, 140 output tokens ต่อ request
+- MiMo-V2.5-Pro — 350 input, 41,000 cached, 250 output tokens ต่อ request
 
 คุณสามารถติดตามการใช้งานปัจจุบันของคุณได้ใน **<a href={console}>console</a>**
 
@@ -143,10 +133,8 @@ OpenCode Go มีขีดจำกัดดังต่อไปนี้:
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro       | mimo-v2-pro       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni      | mimo-v2-omni      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |

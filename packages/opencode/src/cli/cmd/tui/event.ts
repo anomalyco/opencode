@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
-import { PositiveInt } from "@/util/schema"
+import { PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Schema } from "effect"
 
 const DEFAULT_TOAST_DURATION = 5000

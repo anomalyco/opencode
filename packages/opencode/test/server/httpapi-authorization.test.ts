@@ -2,11 +2,13 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi"
+import { ServerAuth } from "../../src/server/auth"
 import {
   Authorization,
-  ServerAuthConfig,
   authorizationLayer,
+  V2Authorization,
+  v2AuthorizationLayer,
 } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { testEffect } from "../lib/effect"
 
@@ -16,27 +18,54 @@ const Api = HttpApi.make("test-authorization").add(
       HttpApiEndpoint.get("probe", "/probe", {
         success: Schema.String,
       }),
+      HttpApiEndpoint.get("missing", "/missing", {
+        success: Schema.String,
+        error: HttpApiError.NotFound,
+      }),
     )
     .middleware(Authorization),
 )
 
-const handlers = HttpApiBuilder.group(Api, "test", (handlers) => handlers.handle("probe", () => Effect.succeed("ok")))
+const V2Api = HttpApi.make("test-v2-authorization").add(
+  HttpApiGroup.make("test.v2")
+    .add(
+      HttpApiEndpoint.get("probe", "/api/probe", {
+        success: Schema.String,
+      }),
+    )
+    .middleware(V2Authorization),
+)
+
+const handlers = HttpApiBuilder.group(Api, "test", (handlers) =>
+  handlers
+    .handle("probe", () => Effect.succeed("ok"))
+    .handle("missing", () => Effect.fail(new HttpApiError.NotFound({}))),
+)
+
+const v2Handlers = HttpApiBuilder.group(V2Api, "test.v2", (handlers) =>
+  handlers.handle("probe", () => Effect.succeed("ok")),
+)
 
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(Api).pipe(Layer.provide(handlers), Layer.provide(authorizationLayer)),
   { disableListenLog: true, disableLogger: true },
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
-const noAuthLayer = ServerAuthConfig.layer({ password: Option.none(), username: "opencode" })
-const secretLayer = ServerAuthConfig.layer({ password: Option.some("secret"), username: "opencode" })
-const kitSecretLayer = ServerAuthConfig.layer({ password: Option.some("secret"), username: "kit" })
+const v2ApiLayer = HttpRouter.serve(
+  HttpApiBuilder.layer(V2Api).pipe(Layer.provide(v2Handlers), Layer.provide(v2AuthorizationLayer)),
+  { disableListenLog: true, disableLogger: true },
+).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+const noAuthLayer = ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })
+const secretLayer = ServerAuth.Config.layer({ password: Option.some("secret"), username: "opencode" })
+const kitSecretLayer = ServerAuth.Config.layer({ password: Option.some("secret"), username: "kit" })
 
 const it = testEffect(apiLayer.pipe(Layer.provide(noAuthLayer)))
 const itSecret = testEffect(apiLayer.pipe(Layer.provide(secretLayer)))
 const itKitSecret = testEffect(apiLayer.pipe(Layer.provide(kitSecretLayer)))
+const itV2Secret = testEffect(v2ApiLayer.pipe(Layer.provide(secretLayer)))
 
-const basic = (username: string, password: string) =>
-  `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+const basic = (username: string, password: string) => ServerAuth.header({ username, password }) ?? ""
 
 const token = (username: string, password: string) => Buffer.from(`${username}:${password}`).toString("base64")
 
@@ -68,7 +97,9 @@ describe("HttpApi authorization middleware", () => {
       )
 
       expect(missing.status).toBe(401)
+      expect(missing.headers["www-authenticate"] ?? "").toContain("Basic")
       expect(badPassword.status).toBe(401)
+      expect(badPassword.headers["www-authenticate"] ?? "").toContain("Basic")
       expect(good.status).toBe(200)
     }),
   )
@@ -93,11 +124,51 @@ describe("HttpApi authorization middleware", () => {
     }),
   )
 
+  itSecret.live("prefers auth token query credentials over basic auth", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.get(
+        `/probe?auth_token=${encodeURIComponent(token("opencode", "secret"))}`,
+      ).pipe(HttpClientRequest.setHeader("authorization", basic("opencode", "wrong")), HttpClient.execute)
+
+      expect(response.status).toBe(200)
+    }),
+  )
+
+  itSecret.live("preserves handler errors when basic auth succeeds", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.get("/missing").pipe(
+        HttpClientRequest.setHeader("authorization", basic("opencode", "secret")),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(404)
+    }),
+  )
+
+  itSecret.live("preserves handler errors when auth token query succeeds", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get(`/missing?auth_token=${encodeURIComponent(token("opencode", "secret"))}`)
+
+      expect(response.status).toBe(404)
+    }),
+  )
+
   itSecret.live("rejects malformed auth token query credentials", () =>
     Effect.gen(function* () {
       const response = yield* HttpClient.get("/probe?auth_token=not-base64")
 
       expect(response.status).toBe(401)
+    }),
+  )
+
+  itV2Secret.live("returns bodyful v2 unauthorized errors", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get("/api/probe")
+      const body = yield* response.json
+
+      expect(response.status).toBe(401)
+      expect(response.headers["www-authenticate"] ?? "").toContain("Basic")
+      expect(body).toEqual({ _tag: "UnauthorizedError", message: "Authentication required" })
     }),
   )
 })
