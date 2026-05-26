@@ -509,3 +509,37 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### iFlow Search
+
+Add the [iFlow Search MCP server](https://www.npmjs.com/package/@iflow-ai/search-mcp) to search the web, search images, and fetch the readable content of a page. This is a community/third-party MCP stdio server published as `@iflow-ai/search-mcp` and listed in the [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.zhengyanglsun/iflow-search`.
+
+```json title="opencode.json" {4-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "iflow_search": {
+      "type": "local",
+      "command": ["npx", "-y", "@iflow-ai/search-mcp"],
+      "environment": {
+        "IFLOW_MCP_CLIENT": "opencode"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+The server reads its iFlow API credential from the `IFLOW_API_KEY` environment variable of its own process. Provide it through the shell or secret manager that launches OpenCode rather than embedding it in `opencode.json`:
+
+```bash
+export IFLOW_API_KEY=YOUR_IFLOW_API_KEY
+```
+
+Once configured, three tools become available: `iflow_web_search`, `iflow_image_search`, and `iflow_web_fetch`. You can reference the server by its name in prompts.
+
+```txt "use iflow_search"
+Find recent posts about MCP stdio transports. use iflow_search
+```
