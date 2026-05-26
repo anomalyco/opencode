@@ -1205,6 +1205,43 @@ describe("tool.shell truncation", () => {
     ),
   )
 
+  it.live("truncates metadata output by utf8 byte length", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: `${bin} -e ${evalarg("process.stdout.write(String.fromCodePoint(0x4e00).repeat(10001))")}`,
+          description: "Generate CJK output exceeding metadata byte limit",
+        })
+        const output = result.metadata.output
+        if (typeof output !== "string") throw new Error("expected metadata output")
+
+        expect(output.startsWith("...\n\n")).toBe(true)
+        expect(Buffer.byteLength(output.slice("...\n\n".length), "utf-8")).toBeLessThanOrEqual(30_000)
+      }),
+    ),
+  )
+
+  it.live("does not split surrogate pairs when truncating metadata output", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: `${bin} -e ${evalarg(
+            "process.stdout.write(String.fromCharCode(97)+String.fromCodePoint(0x1f642).repeat(15000)+String.fromCharCode(98))",
+          )}`,
+          description: "Generate emoji output exceeding metadata byte limit",
+        })
+        const output = result.metadata.output
+        if (typeof output !== "string") throw new Error("expected metadata output")
+
+        const first = output.charCodeAt("...\n\n".length)
+        expect(output.startsWith("...\n\n")).toBe(true)
+        expect(first < 0xdc00 || first > 0xdfff).toBe(true)
+      }),
+    ),
+  )
+
   it.live("full output is saved to file when truncated", () =>
     runIn(
       projectRoot,
