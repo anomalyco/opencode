@@ -301,6 +301,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      openai_realtime: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Use the OpenAI Realtime (WebSocket) transport for OpenAI text models. Default: false. See packages/opencode/src/session/llm/REALTIME-DESIGN.md.",
+      }),
     }),
   ),
 }).annotate({ identifier: "Config" })
