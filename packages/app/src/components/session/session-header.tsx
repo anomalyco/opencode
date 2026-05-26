@@ -25,6 +25,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
+import { resolveOpenPathTarget } from "./session-header-path"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 
@@ -133,7 +134,7 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-export function SessionHeader() {
+export function SessionHeader(props: { selectedFilePath?: string } = {}) {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
@@ -235,6 +236,12 @@ export function SessionHeader() {
   const tint = createMemo(() =>
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
   )
+  const openPathTarget = createMemo(() =>
+    resolveOpenPathTarget({
+      projectDirectory: projectDirectory(),
+      selectedFilePath: props.selectedFilePath,
+    }),
+  )
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
@@ -251,14 +258,14 @@ export function SessionHeader() {
 
   const openDir = (app: OpenApp) => {
     if (opening() || !canOpen() || !platform.openPath) return
-    const directory = projectDirectory()
-    if (!directory) return
+    const target = openPathTarget()
+    if (!target) return
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
     setOpenRequest("app", app)
     platform
-      .openPath(directory, openWith)
+      .openPath(target, openWith)
       .catch((err: unknown) => showRequestError(language, err))
       .finally(() => {
         setOpenRequest("app", undefined)
@@ -266,16 +273,16 @@ export function SessionHeader() {
   }
 
   const copyPath = () => {
-    const directory = projectDirectory()
-    if (!directory) return
+    const target = openPathTarget()
+    if (!target) return
     navigator.clipboard
-      .writeText(directory)
+      .writeText(target)
       .then(() => {
         showToast({
           variant: "success",
           icon: "circle-check",
           title: language.t("session.share.copy.copied"),
-          description: directory,
+          description: target,
         })
       })
       .catch((err: unknown) => showRequestError(language, err))

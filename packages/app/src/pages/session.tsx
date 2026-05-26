@@ -1,4 +1,4 @@
-import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { FileNode, Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -873,6 +873,7 @@ export default function Page() {
     reviewScroll: undefined as HTMLDivElement | undefined,
     pendingDiff: undefined as string | undefined,
     activeDiff: undefined as string | undefined,
+    selectedFilePath: undefined as string | undefined,
   })
 
   createEffect(
@@ -883,7 +884,25 @@ export default function Page() {
           reviewScroll: undefined,
           pendingDiff: undefined,
           activeDiff: undefined,
+          selectedFilePath: undefined,
         })
+      },
+      { defer: true },
+    ),
+  )
+
+  const selectFileOpenTarget = (node: FileNode) => {
+    setTree("selectedFilePath", node.absolute || node.path)
+  }
+
+  createEffect(
+    on(
+      activeFileTab,
+      (tab) => {
+        if (!tab) return
+        const path = file.pathFromTab(tab)
+        if (!path) return
+        setTree("selectedFilePath", path)
       },
       { defer: true },
     ),
@@ -1709,7 +1728,7 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       {sessionSync() ?? ""}
-      <SessionHeader />
+      <SessionHeader selectedFilePath={tree.selectedFilePath} />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
@@ -1833,6 +1852,7 @@ export default function Page() {
           reviewPanel={reviewPanel}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
+          onFileSelect={selectFileOpenTarget}
           reviewSnap={ui.reviewSnap}
           size={size}
         />

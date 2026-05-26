@@ -8,7 +8,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileNode, SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
@@ -46,6 +46,7 @@ export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  onFileSelect?: (node: FileNode) => void
   reviewSnap: boolean
   size: Sizing
 }) {
@@ -413,7 +414,10 @@ export function SessionSidePanel(props: {
                               kinds={kinds()}
                               draggable={false}
                               active={props.activeDiff}
-                              onFileClick={(node) => props.focusReviewDiff(node.path)}
+                              onFileClick={(node) => {
+                                props.onFileSelect?.(node)
+                                props.focusReviewDiff(node.path)
+                              }}
                             />
                           </Show>
                         </Match>
@@ -428,7 +432,10 @@ export function SessionSidePanel(props: {
                             class="pt-3"
                             modified={diffFiles()}
                             kinds={kinds()}
-                            onFileClick={(node) => openTab(file.tab(node.path))}
+                            onFileClick={(node) => {
+                              props.onFileSelect?.(node)
+                              openTab(file.tab(node.path))
+                            }}
                           />
                         </Match>
                       </Switch>
