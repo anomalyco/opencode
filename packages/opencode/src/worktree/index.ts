@@ -395,8 +395,8 @@ export const layer: Layer.Layer<
 
       const directory = yield* canonical(input.directory)
 
-      // Bootstrapped worktrees may hold file handles, which must be released before removal on Windows.
-      if (directory !== (yield* canonical(ctx.worktree))) yield* store.disposeDirectory(directory)
+      // Preserve the loaded path casing for the store cache; `directory` is lowercased on Windows.
+      if (directory !== (yield* canonical(ctx.worktree))) yield* store.disposeDirectory(input.directory)
 
       const list = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
       if (list.code !== 0) {
@@ -415,6 +415,8 @@ export const layer: Layer.Layer<
         return true
       }
 
+      // Git may return the original casing when a caller supplied a normalized Windows path.
+      yield* store.disposeDirectory(entry.path)
       yield* stopFsmonitor(entry.path)
       const removed = yield* git(["worktree", "remove", "--force", entry.path], { cwd: ctx.worktree })
       if (removed.code !== 0) {
