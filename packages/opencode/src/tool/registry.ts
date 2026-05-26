@@ -144,7 +144,8 @@ export const layer: Layer.Layer<
           // Normalize missing args to `{}` once — pre-1.14.49 the code was
           // `z.object(def.args)` and Zod silently tolerated undefined (#27451, #27630).
           const args = def.args ?? {}
-          const entries = Object.entries(args)
+          const safeArgs = typeof args === "object" && args !== null ? args : {}
+          const entries = Object.entries(safeArgs)
           const allZod = entries.every((entry) => isZodType(entry[1]))
           const zodParams = allZod ? z.object(args) : undefined
           const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
@@ -206,6 +207,7 @@ export const layer: Layer.Layer<
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+          if (mod == null || typeof mod !== "object") continue
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
