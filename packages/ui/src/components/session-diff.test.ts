@@ -1,7 +1,24 @@
 import { describe, expect, test } from "bun:test"
-import { normalize, resolveFileDiff, text } from "./session-diff"
+import { normalize, resolveFileDiff, summary, text } from "./session-diff"
 
 describe("session diff", () => {
+  test("summarizes diff headers without resolving patch content", () => {
+    expect(
+      summary({
+        file: "a.ts",
+        patch: "@@ -1 +1 @@\n-old\n+new\n",
+        additions: 1,
+        deletions: 1,
+        status: "modified" as const,
+      }),
+    ).toEqual({
+      file: "a.ts",
+      additions: 1,
+      deletions: 1,
+      status: "modified",
+    })
+  })
+
   test("keeps unified patch content", () => {
     const diff = {
       file: "a.ts",

@@ -133,6 +133,91 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function migrateLayout(value: unknown) {
+  if (!isRecord(value)) return value
+
+  const sidebar = value.sidebar
+  const migratedSidebar = (() => {
+    if (!isRecord(sidebar)) return sidebar
+    if (typeof sidebar.workspaces !== "boolean") return sidebar
+    return {
+      ...sidebar,
+      workspaces: {},
+      workspacesDefault: sidebar.workspaces,
+    }
+  })()
+
+  const review = value.review
+  const migratedReview = (() => {
+    if (!isRecord(review)) return review
+    if (review.panelOpened === false) return review
+    return {
+      ...review,
+      panelOpened: false,
+    }
+  })()
+
+  const fileTree = value.fileTree
+  const migratedFileTree = (() => {
+    if (!isRecord(fileTree)) return fileTree
+    if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+
+    const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
+    return {
+      ...fileTree,
+      opened: true,
+      width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
+      tab: "changes",
+    }
+  })()
+
+  const sessionTabs = value.sessionTabs
+  const migratedSessionTabs = (() => {
+    if (!isRecord(sessionTabs)) return sessionTabs
+
+    let changed = false
+    const next = Object.fromEntries(
+      Object.entries(sessionTabs).map(([key, tabs]) => {
+        if (!isRecord(tabs) || !Array.isArray(tabs.all)) return [key, tabs]
+
+        const current = {
+          all: tabs.all.filter((tab): tab is string => typeof tab === "string"),
+          active: typeof tabs.active === "string" ? tabs.active : undefined,
+        }
+        const normalized = normalizeStoredSessionTabs(key, current)
+        if (current.all.length !== tabs.all.length) changed = true
+        if (!same(current.all, normalized.all) || current.active !== normalized.active) changed = true
+        if (tabs.active !== undefined && typeof tabs.active !== "string") changed = true
+        return [key, normalized]
+      }),
+    )
+
+    if (!changed) return sessionTabs
+    return next
+  })()
+
+  if (
+    migratedSidebar === sidebar &&
+    migratedReview === review &&
+    migratedFileTree === fileTree &&
+    migratedSessionTabs === sessionTabs
+  ) {
+    return value
+  }
+
+  return {
+    ...value,
+    sidebar: migratedSidebar,
+    review: migratedReview,
+    fileTree: migratedFileTree,
+    sessionTabs: migratedSessionTabs,
+  }
+}
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -141,95 +226,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const server = useServer()
     const platform = usePlatform()
 
-    const isRecord = (value: unknown): value is Record<string, unknown> =>
-      typeof value === "object" && value !== null && !Array.isArray(value)
-
-    const migrate = (value: unknown) => {
-      if (!isRecord(value)) return value
-
-      const sidebar = value.sidebar
-      const migratedSidebar = (() => {
-        if (!isRecord(sidebar)) return sidebar
-        if (typeof sidebar.workspaces !== "boolean") return sidebar
-        return {
-          ...sidebar,
-          workspaces: {},
-          workspacesDefault: sidebar.workspaces,
-        }
-      })()
-
-      const review = value.review
-      const fileTree = value.fileTree
-      const migratedFileTree = (() => {
-        if (!isRecord(fileTree)) return fileTree
-        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
-
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
-        return {
-          ...fileTree,
-          opened: true,
-          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
-          tab: "changes",
-        }
-      })()
-
-      const migratedReview = (() => {
-        if (!isRecord(review)) return review
-        if (typeof review.panelOpened === "boolean") return review
-
-        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
-        return {
-          ...review,
-          panelOpened: opened,
-        }
-      })()
-
-      const sessionTabs = value.sessionTabs
-      const migratedSessionTabs = (() => {
-        if (!isRecord(sessionTabs)) return sessionTabs
-
-        let changed = false
-        const next = Object.fromEntries(
-          Object.entries(sessionTabs).map(([key, tabs]) => {
-            if (!isRecord(tabs) || !Array.isArray(tabs.all)) return [key, tabs]
-
-            const current = {
-              all: tabs.all.filter((tab): tab is string => typeof tab === "string"),
-              active: typeof tabs.active === "string" ? tabs.active : undefined,
-            }
-            const normalized = normalizeStoredSessionTabs(key, current)
-            if (current.all.length !== tabs.all.length) changed = true
-            if (!same(current.all, normalized.all) || current.active !== normalized.active) changed = true
-            if (tabs.active !== undefined && typeof tabs.active !== "string") changed = true
-            return [key, normalized]
-          }),
-        )
-
-        if (!changed) return sessionTabs
-        return next
-      })()
-
-      if (
-        migratedSidebar === sidebar &&
-        migratedReview === review &&
-        migratedFileTree === fileTree &&
-        migratedSessionTabs === sessionTabs
-      ) {
-        return value
-      }
-
-      return {
-        ...value,
-        sidebar: migratedSidebar,
-        review: migratedReview,
-        fileTree: migratedFileTree,
-        sessionTabs: migratedSessionTabs,
-      }
-    }
-
     const target = Persist.global("layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
-      { ...target, migrate },
+      { ...target, migrate: migrateLayout },
       createStore({
         sidebar: {
           opened: false,
@@ -243,7 +242,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+          panelOpened: false,
         },
         fileTree: {
           opened: false,
@@ -727,7 +726,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -748,7 +747,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
 
-          const value = current.panelOpened ?? true
+          const value = current.panelOpened ?? false
           if (value === next) return
           setStore("review", "panelOpened", next)
         }

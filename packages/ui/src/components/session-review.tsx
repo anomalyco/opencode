@@ -23,7 +23,7 @@ import { mediaKindFromPath } from "../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
 import type { LineCommentEditorProps } from "./line-comment"
-import { normalize, text, type ViewDiff } from "./session-diff"
+import { normalize, summary, text, type ViewDiff, type ViewDiffSummary } from "./session-diff"
 
 const MAX_DIFF_CHANGED_LINES = 500
 const REVIEW_MOUNT_MARGIN = 300
@@ -68,7 +68,7 @@ type RawReviewDiff = (SnapshotFileDiff | VcsFileDiff) & {
 type ReviewDiff = ((SnapshotFileDiff & { file: string }) | VcsFileDiff) & {
   preloaded?: PreloadMultiFileDiffResult<any>
 }
-type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
+type Item = ViewDiffSummary & { raw: ReviewDiff; preloaded?: PreloadMultiFileDiffResult<any> }
 
 function diff(value: unknown): value is ReviewDiff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
@@ -183,7 +183,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const open = () => props.open ?? store.open
   const items = createMemo<Item[]>(() =>
-    list(props.diffs).map((diff) => ({ ...normalize(diff), preloaded: diff.preloaded })),
+    list(props.diffs).map((diff) => ({ ...summary(diff), raw: diff, preloaded: diff.preloaded })),
   )
   const files = createMemo(() => items().map((diff) => diff.file))
   const grouped = createMemo(() => {
@@ -402,8 +402,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                     const comments = createMemo(() => grouped().get(file) ?? [])
                     const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
-                    const beforeText = () => text(diff, "deletions")
-                    const afterText = () => text(diff, "additions")
+                    const resolved = createMemo(() => normalize(diff.raw))
                     const changedLines = () => diff.additions + diff.deletions
                     const mediaKind = createMemo(() => mediaKindFromPath(file))
 
@@ -415,9 +414,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                     })
 
                     const isAdded = () =>
-                      diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
+                      diff.status === "added" ||
+                      (diff.status === undefined && diff.deletions === 0 && diff.additions > 0)
                     const isDeleted = () =>
-                      diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
+                      diff.status === "deleted" ||
+                      (diff.status === undefined && diff.additions === 0 && diff.deletions > 0)
 
                     const selectedLines = createMemo(() => {
                       const current = selection()
@@ -455,7 +456,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           file,
                           selection,
                           comment,
-                          preview: selectionPreview(diff, selection),
+                          preview: selectionPreview(resolved(), selection),
                         })
                       },
                       onUpdate: ({ id, comment, selection }) => {
@@ -464,7 +465,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           file,
                           selection,
                           comment,
-                          preview: selectionPreview(diff, selection),
+                          preview: selectionPreview(resolved(), selection),
                         })
                       },
                       onDelete: (comment) => {
@@ -613,7 +614,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Dynamic
                                     component={fileComponent}
                                     mode="diff"
-                                    fileDiff={diff.fileDiff}
+                                    fileDiff={resolved().fileDiff}
                                     preloadedDiff={diff.preloaded}
                                     diffStyle={diffStyle()}
                                     onRendered={() => {

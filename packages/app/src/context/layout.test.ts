@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
+import { createSessionKeyReader, ensureSessionKey, migrateLayout, pruneSessionKeys } from "./layout"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {
@@ -65,5 +65,23 @@ describe("pruneSessionKeys", () => {
     })
 
     expect(drop).toEqual([])
+  })
+})
+
+describe("migrateLayout", () => {
+  test("closes persisted review panel state on startup", () => {
+    expect(
+      migrateLayout({
+        review: {
+          diffStyle: "split",
+          panelOpened: true,
+        },
+      }),
+    ).toEqual({
+      review: {
+        diffStyle: "split",
+        panelOpened: false,
+      },
+    })
   })
 })

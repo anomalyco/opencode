@@ -23,6 +23,7 @@ export type ViewDiff = {
   status?: "added" | "deleted" | "modified"
   fileDiff: FileDiffMetadata
 }
+export type ViewDiffSummary = Omit<ViewDiff, "fileDiff">
 
 const diffCacheLimit = 16
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
@@ -36,12 +37,18 @@ export function resolveFileDiff(diff: DiffSource) {
   )
 }
 
-export function normalize(diff: ReviewDiff): ViewDiff {
+export function summary(diff: ReviewDiff): ViewDiffSummary {
   return {
     file: diff.file,
     additions: diff.additions,
     deletions: diff.deletions,
     status: diff.status,
+  }
+}
+
+export function normalize(diff: ReviewDiff): ViewDiff {
+  return {
+    ...summary(diff),
     fileDiff: resolveFileDiff(diff),
   }
 }
