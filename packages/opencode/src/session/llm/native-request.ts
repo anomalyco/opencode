@@ -1,4 +1,5 @@
 import type { JsonSchema, LLMRequest, ProviderMetadata } from "@opencode-ai/llm"
+import type { AuthShape } from "@opencode-ai/llm/route"
 import { LLM, Message, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
 import {
   AmazonBedrock,
@@ -32,6 +33,8 @@ export type RequestInput = {
   readonly maxOutputTokens?: number
   readonly providerOptions?: LLMRequest["providerOptions"]
   readonly headers?: Record<string, string>
+  readonly routeAuth?: AuthShape
+  readonly useOpenAIWebSocket?: boolean
 }
 
 const providerMetadata = (value: unknown): ProviderMetadata | undefined => {
@@ -153,8 +156,7 @@ const requireBaseURL = (model: Provider.Model, url: string | undefined) => {
 export const model = (input: Provider.Model | RequestInput, headers?: Record<string, string>) => {
   const model = "model" in input ? input.model : input
   const url = baseURL(input)
-  const options = {
-    ...("model" in input && input.apiKey ? { apiKey: input.apiKey } : {}),
+  const baseOptions = {
     ...(url ? { baseURL: url } : {}),
     headers: Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
     limits: {
@@ -162,7 +164,14 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
       output: model.limit.output,
     },
   }
-  if (model.api.npm === "@ai-sdk/openai") return OpenAI.configure(options).responses(model.api.id)
+  const options =
+    "model" in input && input.routeAuth
+      ? { ...baseOptions, auth: input.routeAuth }
+      : { ...baseOptions, ...("model" in input && input.apiKey ? { apiKey: input.apiKey } : {}) }
+  if (model.api.npm === "@ai-sdk/openai")
+    return "model" in input && input.useOpenAIWebSocket
+      ? OpenAI.configure(options).responsesWebSocket(model.api.id)
+      : OpenAI.configure(options).responses(model.api.id)
   if (model.api.npm === "@ai-sdk/azure")
     return Azure.configure({ ...options, baseURL: requireBaseURL(model, url) }).responses(model.api.id)
   if (model.api.npm === "@ai-sdk/anthropic") return Anthropic.configure(options).model(model.api.id)

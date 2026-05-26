@@ -233,6 +233,7 @@ const live: Layer.Layer<
           providerOptions: prepared.params.options,
           headers: prepared.headers,
           abort: input.abort,
+          experimentalOpenAIWebSocket: flags.experimentalOpenAIWebSocket,
         })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected").pipe(
