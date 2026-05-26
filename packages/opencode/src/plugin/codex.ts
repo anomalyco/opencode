@@ -11,6 +11,8 @@ const log = Log.create({ service: "plugin.codex" })
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+const CODEX_REQUEST_TIMEOUT = 30_000
+const CODEX_CHUNK_TIMEOUT = 120_000
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 const ALLOWED_MODELS = new Set([
@@ -141,19 +143,33 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: Pk
 }
 
 async function refreshAccessToken(refreshToken: string, issuer = ISSUER): Promise<TokenResponse> {
+  const timeout = timeoutController(CODEX_REQUEST_TIMEOUT)
   const response = await fetch(`${issuer}/oauth/token`, {
     method: "POST",
+    signal: timeout.signal,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
       client_id: CLIENT_ID,
     }).toString(),
-  })
+  }).finally(() => timeout.clear())
   if (!response.ok) {
     throw new Error(`Token refresh failed: ${response.status}`)
   }
   return response.json()
+}
+
+function timeoutController(ms: number) {
+  const ctl = new AbortController()
+  const id = setTimeout(
+    () => ctl.abort(new DOMException(`Codex request timed out after ${ms}ms`, "TimeoutError")),
+    ms,
+  )
+  return {
+    signal: ctl.signal,
+    clear: () => clearTimeout(id),
+  }
 }
 
 const HTML_SUCCESS = `<!doctype html>
@@ -421,6 +437,8 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
         return {
           apiKey: OAUTH_DUMMY_KEY,
+          timeout: CODEX_REQUEST_TIMEOUT,
+          chunkTimeout: CODEX_CHUNK_TIMEOUT,
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
             // Remove dummy API key authorization header
             if (init?.headers) {

@@ -125,6 +125,9 @@ export function retryable(error: Err, provider: string) {
   const msg = isRecord(error.data) ? error.data.message : undefined
   if (typeof msg === "string") {
     const lower = msg.toLowerCase()
+    if (lower.includes("sse read timed out") || lower.includes("provider request timed out")) {
+      return { message: msg }
+    }
     if (
       lower.includes("rate increased too quickly") ||
       lower.includes("rate limit") ||
