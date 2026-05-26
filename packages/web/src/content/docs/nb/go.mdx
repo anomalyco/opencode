@@ -66,9 +66,10 @@ Den nåværende listen over modeller inkluderer:
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
-- **MiniMax M2.7**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -98,6 +99,7 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | MiMo-V2.5-Pro      | 1,290                    | 3,225                | 6,450                  |
 | MiniMax M2.7       | 3,400                    | 8,500                | 17,000                 |
 | MiniMax M2.5       | 6,300                    | 15,900               | 31,800                 |
+| Qwen3.7 Max        | 950                      | 2,390                | 4,770                  |
 | Qwen3.6 Plus       | 3,300                    | 8,200                | 16,300                 |
 | Qwen3.5 Plus       | 10,200                   | 25,200               | 50,500                 |
 | DeepSeek V4 Pro    | 3,450                    | 8,550                | 17,150                 |
@@ -110,8 +112,9 @@ Estimatene er basert på observerte gjennomsnittlige forespørselsmønstre:
 - DeepSeek V4 Pro — 750 input, 82 000 bufret, 290 output-tokens per forespørsel
 - DeepSeek V4 Flash — 790 input, 68 000 bufret, 280 output-tokens per forespørsel
 - MiniMax M2.7/M2.5 — 300 input, 55 000 bufret, 125 output-tokens per forespørsel
-- Qwen3.5 Plus — 410 input, 47 000 bufret, 140 output-tokens per forespørsel
+- Qwen3.7 Max — 420 input, 66 000 bufret, 200 output-tokens per forespørsel
 - Qwen3.6 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
+- Qwen3.5 Plus — 410 input, 47 000 bufret, 140 output-tokens per forespørsel
 - MiMo-V2.5 — 1000 input, 60 000 bufret, 140 output-tokens per forespørsel
 - MiMo-V2.5-Pro — 350 input, 41 000 bufret, 250 output-tokens per forespørsel
 
@@ -149,6 +152,7 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
