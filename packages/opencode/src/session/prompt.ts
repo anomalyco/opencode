@@ -40,6 +40,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
+import { sniffAttachmentMime } from "@/util/media"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
@@ -206,11 +207,17 @@ export const layer = Layer.effect(
               return
             }
 
+            const refMime =
+              info.value.type === "Directory"
+                ? "application/x-directory"
+                : yield* Effect.promise(async () =>
+                    sniffAttachmentMime(await Bun.file(targetPath).slice(0, 16).bytes(), "text/plain"),
+                  )
             parts.push({
               type: "file",
               url: pathToFileURL(targetPath).href,
               filename: name,
-              mime: info.value.type === "Directory" ? "application/x-directory" : "text/plain",
+              mime: refMime,
             })
             return
           }
@@ -226,11 +233,17 @@ export const layer = Layer.effect(
             return
           }
           const stat = info.value
+          const fileMime =
+            stat.type === "Directory"
+              ? "application/x-directory"
+              : yield* Effect.promise(async () =>
+                  sniffAttachmentMime(await Bun.file(filepath).slice(0, 16).bytes(), "text/plain"),
+                )
           parts.push({
             type: "file",
             url: pathToFileURL(filepath).href,
             filename: name,
-            mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
+            mime: fileMime,
           })
         }),
         { concurrency: "unbounded", discard: true },

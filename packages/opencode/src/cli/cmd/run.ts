@@ -20,6 +20,7 @@ import { effectCmd } from "../effect-cmd"
 import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
+import { sniffAttachmentMime } from "@/util/media"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -342,7 +343,13 @@ export const RunCommand = effectCmd({
             process.exit(1)
           }
 
-          const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
+          let mime: string
+          if (await Filesystem.isDir(resolvedPath)) {
+            mime = "application/x-directory"
+          } else {
+            const head = await Bun.file(resolvedPath).slice(0, 16).bytes()
+            mime = sniffAttachmentMime(head, "text/plain")
+          }
 
           files.push({
             type: "file",
