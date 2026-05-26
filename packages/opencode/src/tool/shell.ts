@@ -142,7 +142,6 @@ function home(text: string) {
 }
 
 function envValue(key: string) {
-  if (process.platform !== "win32") return process.env[key]
   const name = Object.keys(process.env).find((item) => item.toLowerCase() === key.toLowerCase())
   return name ? process.env[name] : undefined
 }
