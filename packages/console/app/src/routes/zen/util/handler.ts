@@ -249,8 +249,9 @@ export async function handler(
     if (!isStream || [400, 404, 429].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
-      if (json.usage) {
-        const usageInfo = providerInfo.normalizeUsage(json.usage)
+      const usage = providerInfo.extractUsage(json)
+      if (usage) {
+        const usageInfo = providerInfo.normalizeUsage(usage)
         const costInfo = calculateCost(modelInfo, usageInfo)
         await trialLimiter?.track(usageInfo)
         await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
