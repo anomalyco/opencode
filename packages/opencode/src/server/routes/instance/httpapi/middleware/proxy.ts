@@ -4,17 +4,10 @@ import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerR
 import * as Socket from "effect/unstable/socket/Socket"
 import { WebSocketTracker } from "../websocket-tracker"
 
-function webSource(request: HttpServerRequest.HttpServerRequest): Request | undefined {
-  return request.source instanceof Request ? request.source : undefined
-}
-
 function requestBody(request: HttpServerRequest.HttpServerRequest) {
   if (request.method === "GET" || request.method === "HEAD") return HttpBody.empty
   const len = request.headers["content-length"]
-  return HttpBody.raw(webSource(request)?.body ?? null, {
-    contentType: request.headers["content-type"],
-    contentLength: len ? Number(len) : undefined,
-  })
+  return HttpBody.stream(request.stream, request.headers["content-type"], len ? Number(len) : undefined)
 }
 
 export function websocket(

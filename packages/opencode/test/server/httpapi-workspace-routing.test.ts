@@ -60,6 +60,7 @@ type ProxiedRequest = {
   url: string
   method: string
   headers: Record<string, string>
+  body: string
 }
 
 type TestHandler<E, R> = (
@@ -177,7 +178,12 @@ const startRemoteWorkspaceHttpServer = <E, R>(
       // everything else is the request being proxied by the middleware.
       const sync = syncResponse(request)
       if (sync) return yield* sync
-      return yield* handler({ url: request.url, method: request.method, headers: request.headers })
+      return yield* handler({
+        url: request.url,
+        method: request.method,
+        headers: request.headers,
+        body: yield* request.text,
+      })
     }),
   )
 
@@ -256,13 +262,15 @@ describe("HttpApi workspace routing middleware", () => {
         Layer.build,
       )
 
+      const body = '{"title":"Remote workspace request"}'
       const response = yield* HttpClientRequest.patch(`/probe?workspace=${workspace.id}&keep=yes`).pipe(
         HttpClientRequest.setHeaders({
-          "content-type": "application/json",
           "x-opencode-directory": "/secret/path",
           "x-opencode-workspace": "internal",
         }),
-        HttpClient.execute,
+        HttpClientRequest.bodyJson({ title: "Remote workspace request" }),
+        Effect.flatMap(HttpClient.execute),
+        Effect.timeout("2 seconds"),
       )
 
       expect(response.status).toBe(201)
@@ -275,6 +283,7 @@ describe("HttpApi workspace routing middleware", () => {
       expect(forwardedURL?.searchParams.get("keep")).toBe("yes")
       expect(forwardedURL?.searchParams.get("workspace")).toBeNull()
       expect(forwarded?.method).toBe("PATCH")
+      expect(forwarded?.body).toBe(body)
       expect(forwarded?.headers["content-type"]).toBe("application/json")
       expect(forwarded?.headers["x-target-auth"]).toBe("secret")
       expect(forwarded?.headers["x-opencode-directory"]).toBeUndefined()
