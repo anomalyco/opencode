@@ -51,7 +51,6 @@ export default $config({
       StatWorkerUrl: stat.url,
       // StatsUrl: stats.app.url,
       AwsStage: stage.awsStage,
-      ...(stage.githubActionsDeployRoleArn ? { GithubActionsDeployRoleArn: stage.githubActionsDeployRoleArn } : {}),
     }
   },
 })
