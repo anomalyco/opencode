@@ -5,8 +5,12 @@ import {
   type AuthenticateRequest,
   type CancelNotification,
   type InitializeRequest,
+  type LoadSessionRequest,
   type NewSessionRequest,
   type PromptRequest,
+  type SetSessionConfigOptionRequest,
+  type SetSessionModelRequest,
+  type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
@@ -15,8 +19,8 @@ import * as ACPNextService from "./service"
 
 export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {
-    create: (_connection: AgentSideConnection) => {
-      return new Agent(ACPNextService.make())
+    create: (connection: AgentSideConnection) => {
+      return new Agent(ACPNextService.make({ sdk: _sdk, connection }))
     },
   }
 }
@@ -34,6 +38,22 @@ export class Agent implements ACPAgent {
 
   newSession(params: NewSessionRequest) {
     return run(this.service.newSession(params))
+  }
+
+  loadSession(params: LoadSessionRequest) {
+    return run(this.service.loadSession(params))
+  }
+
+  setSessionConfigOption(params: SetSessionConfigOptionRequest) {
+    return run(this.service.setSessionConfigOption(params))
+  }
+
+  setSessionMode(params: SetSessionModeRequest) {
+    return run(this.service.setSessionMode(params))
+  }
+
+  unstable_setSessionModel(params: SetSessionModelRequest) {
+    return run(this.service.setSessionModel(params))
   }
 
   prompt(params: PromptRequest) {
