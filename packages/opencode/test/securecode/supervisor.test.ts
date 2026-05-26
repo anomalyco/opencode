@@ -92,14 +92,18 @@ describe("loadUserConfig", () => {
 })
 
 describe("resolveInnerCommand", () => {
-  test("引数なしなら process.cwd() を使う", () => {
-    const cmd = resolveInnerCommand([])
-    expect(cmd).toContain(JSON.stringify(process.cwd()))
+  test("引数なしならコマンドに引数を付与しない (opencode 側のデフォルト挙動に任せる)", () => {
+    const cmd = resolveInnerCommand([], { distBinPath: "/nonexistent/securecode-bin" })
+    expect(cmd).toContain("bun run --cwd packages/opencode --conditions=browser src/index.ts")
+    // 引数 0 個 = pass-through する追加トークンも 0
+    expect(cmd.trim().endsWith("src/index.ts")).toBe(true)
   })
 
-  test("引数を絶対パスに正規化", () => {
-    const cmd = resolveInnerCommand(["/tmp"])
-    expect(cmd).toContain('"/tmp"')
+  test("引数は加工せず opencode へ pass-through する (フラグも safe)", () => {
+    const cmd = resolveInnerCommand(["--version"], { distBinPath: "/nonexistent/securecode-bin" })
+    expect(cmd).toContain('"--version"')
+    // 「--version」を target dir として resolve しないこと
+    expect(cmd).not.toContain(`/--version"`)
   })
 
   test("配布バイナリ環境 (securecode-bin 存在) では opencode 単独バイナリを直接 spawn", () => {
@@ -109,6 +113,7 @@ describe("resolveInnerCommand", () => {
     try {
       const cmd = resolveInnerCommand(["/tmp"], { distBinPath: innerBin })
       expect(cmd).toContain(JSON.stringify(innerBin))
+      expect(cmd).toContain('"/tmp"')
       expect(cmd).not.toContain("bun run --cwd packages/opencode")
     } finally {
       rmSync(dir, { recursive: true, force: true })
@@ -118,5 +123,6 @@ describe("resolveInnerCommand", () => {
   test("開発ツリー環境 (securecode-bin 不在) では bun run --cwd packages/opencode にフォールバック", () => {
     const cmd = resolveInnerCommand(["/tmp"], { distBinPath: "/nonexistent/securecode-bin" })
     expect(cmd).toContain("bun run --cwd packages/opencode --conditions=browser src/index.ts")
+    expect(cmd).toContain('"/tmp"')
   })
 })

@@ -14,7 +14,7 @@ import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox
 import { spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 
 export const CONFIG_DIR = join(homedir(), ".config", "securecode")
 export const CONFIG_PATH = join(CONFIG_DIR, "sandbox.json")
@@ -113,21 +113,32 @@ export async function assertSandboxAvailable(): Promise<void> {
 export const INNER_BIN_NAME = "securecode-bin"
 
 export function resolveInnerCommand(args: string[], opts: { distBinPath?: string } = {}): string {
-  const supervisorDir = import.meta.dir
-  const targetDir = args[0] ? resolve(args[0]) : process.cwd()
-  const quotedTarget = JSON.stringify(targetDir)
+  // supervisor は args を加工せず opencode へ pass-through する。target dir の
+  // 解釈は opencode 側に任せる (フラグや subcommand を誤って resolve しない)。
+  const quotedArgs = args.map((a) => JSON.stringify(a)).join(" ")
+  const inner = (bin: string) => (quotedArgs ? `${JSON.stringify(bin)} ${quotedArgs}` : JSON.stringify(bin))
 
-  // 配布バイナリ環境: supervisor の隣に securecode-bin が居るのでそれを spawn。
-  const distBin = opts.distBinPath ?? join(supervisorDir, INNER_BIN_NAME)
-  if (existsSync(distBin)) {
-    const quotedBin = JSON.stringify(distBin)
-    return `${quotedBin} ${quotedTarget}`
+  // テスト用に distBinPath が明示指定されたらそれだけ確認する。
+  if (opts.distBinPath !== undefined) {
+    if (existsSync(opts.distBinPath)) return inner(opts.distBinPath)
+  } else {
+    // 実行時:
+    //   - bun compile された配布バイナリ → process.execPath が securecode 本体を指す
+    //   - bun runtime (bun run script/...) → process.execPath は bun 自身。supervisor.ts
+    //     の論理パスは import.meta.dir で取る。
+    // 両方の dir 隣に securecode-bin がいれば配布モードと判定する。
+    for (const dir of [dirname(process.execPath), import.meta.dir]) {
+      const distBin = join(dir, INNER_BIN_NAME)
+      if (existsSync(distBin)) return inner(distBin)
+    }
   }
 
-  // 開発ツリー環境 (script/ に居る): 親リポジトリの packages/opencode を bun で起動。
-  const repoRoot = resolve(supervisorDir, "..")
+  // 開発ツリーフォールバック (script/securecode-supervisor.ts に居る前提): 親リポジトリの
+  // packages/opencode を bun runtime で起動。
+  const repoRoot = resolve(import.meta.dir, "..")
   const quotedRoot = JSON.stringify(repoRoot)
-  return `cd ${quotedRoot} && bun run --cwd packages/opencode --conditions=browser src/index.ts ${quotedTarget}`
+  const tail = quotedArgs ? ` ${quotedArgs}` : ""
+  return `cd ${quotedRoot} && bun run --cwd packages/opencode --conditions=browser src/index.ts${tail}`
 }
 
 async function main(): Promise<void> {
