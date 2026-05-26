@@ -79,10 +79,8 @@ import {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
-const appBindingCommands = [
-  "command.palette.show",
+const appGlobalBindingCommands = [
   "session.list",
-  "session.new",
   "session.quick_switch.1",
   "session.quick_switch.2",
   "session.quick_switch.3",
@@ -92,6 +90,11 @@ const appBindingCommands = [
   "session.quick_switch.7",
   "session.quick_switch.8",
   "session.quick_switch.9",
+] as const
+
+const appBindingCommands = [
+  "command.palette.show",
+  "session.new",
   "model.list",
   "model.cycle_recent",
   "model.cycle_recent_reverse",
@@ -927,6 +930,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
+  }))
+
+  useBindings(() => ({
+    bindings: tuiConfig.keybinds.gather("app.global", appGlobalBindingCommands),
   }))
 
   useBindings(() => ({
