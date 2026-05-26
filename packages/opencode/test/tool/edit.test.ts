@@ -54,6 +54,12 @@ const run = Effect.fn("EditToolTest.run")(function* (
   return yield* tool.execute(args, next)
 })
 
+const runUnknown = Effect.fn("EditToolTest.runUnknown")(function* (args: unknown, next: Tool.Context = ctx) {
+  const tool = yield* init()
+  const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
+  return yield* execute(args, next)
+})
+
 const fail = Effect.fn("EditToolTest.fail")(function* (args: Tool.InferParameters<typeof EditTool>) {
   const exit = yield* run(args).pipe(Effect.exit)
   if (Exit.isFailure(exit)) {
@@ -154,6 +160,18 @@ describe("tool.edit", () => {
 
         expect(result.output).toContain("Edit applied successfully")
         expect(yield* load(filepath)).toBe("new content here")
+      }),
+    )
+
+    it.instance("normalizes common model argument aliases", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "alias.txt")
+        yield* put(filepath, "old content")
+
+        yield* runUnknown({ file_path: filepath, old_string: "old", new_string: "new" })
+
+        expect(yield* load(filepath)).toBe("new content")
       }),
     )
 

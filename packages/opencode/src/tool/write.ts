@@ -35,6 +35,11 @@ export const WriteTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
+      normalizeArguments: (args: unknown) =>
+        Tool.normalizeAliases(args, {
+          filePath: ["file_path", "path"],
+          content: ["fileContent", "contents"],
+        }),
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const instance = yield* InstanceState.context

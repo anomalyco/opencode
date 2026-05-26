@@ -58,6 +58,7 @@ export interface Def<
   description: string
   parameters: Parameters
   jsonSchema?: JSONSchema7
+  normalizeArguments?(args: unknown): unknown
   execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
   formatValidationError?(error: unknown): string
 }
@@ -94,6 +95,21 @@ export type InferDef<T> =
       ? Def<P, M>
       : never
 
+export function normalizeAliases(input: unknown, aliases: Record<string, string[]>): unknown {
+  if (!isRecord(input)) return input
+  const output = { ...input }
+  for (const [key, names] of Object.entries(aliases)) {
+    if (output[key] !== undefined) continue
+    const name = names.find((alias) => input[alias] !== undefined)
+    if (name) output[key] = input[name]
+  }
+  return output
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
 function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadata>(
   id: string,
   init: Init<Parameters, Result>,
@@ -116,7 +132,7 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
           ...(ctx.callID ? { "tool.call_id": ctx.callID } : {}),
         }
         return Effect.gen(function* () {
-          const decoded = yield* decode(args).pipe(
+          const decoded = yield* decode(toolInfo.normalizeArguments ? toolInfo.normalizeArguments(args) : args).pipe(
             Effect.mapError(
               (error) =>
                 new InvalidArgumentsError({

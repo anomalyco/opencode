@@ -66,6 +66,13 @@ export const EditTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
+      normalizeArguments: (args: unknown) =>
+        Tool.normalizeAliases(args, {
+          filePath: ["file_path", "path"],
+          oldString: ["old_string", "oldText"],
+          newString: ["new_string", "newText"],
+          replaceAll: ["replace_all"],
+        }),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           if (!params.filePath) {

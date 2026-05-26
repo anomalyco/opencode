@@ -55,6 +55,12 @@ const run = Effect.fn("WriteToolTest.run")(function* (
   return yield* tool.execute(args, next)
 })
 
+const runUnknown = Effect.fn("WriteToolTest.runUnknown")(function* (args: unknown, next: Tool.Context = ctx) {
+  const tool = yield* init()
+  const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
+  return yield* execute(args, next)
+})
+
 describe("tool.write", () => {
   describe("new file creation", () => {
     it.instance("writes content to new file", () =>
@@ -68,6 +74,18 @@ describe("tool.write", () => {
 
         const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
         expect(content).toBe("Hello, World!")
+      }),
+    )
+
+    it.instance("normalizes common model argument aliases", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "alias.txt")
+
+        yield* runUnknown({ path: filepath, fileContent: "alias content" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("alias content")
       }),
     )
 
