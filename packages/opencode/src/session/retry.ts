@@ -31,6 +31,10 @@ function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
+function isDelayHint(value: number) {
+  return Number.isFinite(value) && value >= 0
+}
+
 export function delay(attempt: number, error?: MessageV2.APIError) {
   if (error) {
     const headers = error.data.responseHeaders
@@ -38,15 +42,13 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
       const retryAfterMs = headers["retry-after-ms"]
       if (retryAfterMs) {
         const parsedMs = Number.parseFloat(retryAfterMs)
-        if (!Number.isNaN(parsedMs)) {
-          return cap(parsedMs)
-        }
+        if (isDelayHint(parsedMs)) return cap(parsedMs)
       }
 
       const retryAfter = headers["retry-after"]
       if (retryAfter) {
         const parsedSeconds = Number.parseFloat(retryAfter)
-        if (!Number.isNaN(parsedSeconds)) {
+        if (isDelayHint(parsedSeconds)) {
           // convert seconds to milliseconds
           return cap(Math.ceil(parsedSeconds * 1000))
         }
