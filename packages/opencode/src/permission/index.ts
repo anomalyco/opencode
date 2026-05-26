@@ -143,9 +143,9 @@ export function evaluate(permission: string, pattern: string | string[], ...rule
   return PermissionV2.evaluate(permission, pattern, ...rulesets)
 }
 
-function candidatesForPattern(pattern: string, worktree: string) {
-  const absPattern = path.isAbsolute(pattern) ? pattern : path.resolve(worktree, pattern)
-  return absPattern === pattern ? [pattern] : [pattern, absPattern]
+function candidatesForPattern(permission: string, pattern: string, worktree: string) {
+  if ((permission !== "read" && permission !== "edit") || path.isAbsolute(pattern)) return pattern
+  return [pattern, path.resolve(worktree, pattern)]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -184,7 +184,7 @@ export const layer = Layer.effect(
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, candidatesForPattern(pattern, worktree), ruleset, approved)
+        const rule = evaluate(request.permission, candidatesForPattern(request.permission, pattern, worktree), ruleset, approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new DeniedError({
@@ -266,7 +266,9 @@ export const layer = Layer.effect(
       for (const [id, item] of pending.entries()) {
         if (item.info.sessionID !== existing.info.sessionID) continue
         const ok = item.info.patterns.every(
-          (pattern) => evaluate(item.info.permission, candidatesForPattern(pattern, worktree), approved).action === "allow",
+          (pattern) =>
+            evaluate(item.info.permission, candidatesForPattern(item.info.permission, pattern, worktree), approved).action ===
+            "allow",
         )
         if (!ok) continue
         pending.delete(id)

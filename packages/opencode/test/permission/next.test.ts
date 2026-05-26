@@ -1215,3 +1215,26 @@ it.instance(
     }),
   { git: true },
 )
+
+it.instance(
+  "ask - command permissions do not resolve relative patterns against the worktree",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_command_absolute"),
+        permission: "bash",
+        patterns: ["ls"],
+        always: ["ls"],
+        metadata: {},
+        ruleset: [{ permission: "bash", pattern: path.join(test.directory, "ls"), action: "deny" }],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll()
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+    }),
+  { git: true },
+)
