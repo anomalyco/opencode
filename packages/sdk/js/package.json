@@ -6,7 +6,8 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "bun ./script/build.ts"
+    "build": "bun ./script/build.ts",
+    "prove:mcp-disconnect": "bun ./script/mcp-disconnect-proof.ts"
   },
   "exports": {
     ".": "./src/index.ts",
