@@ -218,8 +218,11 @@ function pathArgs(list: Part[], ps: boolean, cmd = false) {
 }
 
 function preview(text: string) {
-  if (text.length <= MAX_METADATA_LENGTH) return text
-  return "...\n\n" + text.slice(-MAX_METADATA_LENGTH)
+  if (Buffer.byteLength(text, "utf-8") <= MAX_METADATA_LENGTH) return text
+  let buf = Buffer.from(text, "utf-8")
+  buf = buf.subarray(-MAX_METADATA_LENGTH)
+  while (buf.length > 0 && (buf[0] & 0xc0) === 0x80) buf = buf.subarray(1)
+  return "...\n\n" + buf.toString("utf-8")
 }
 
 function tail(text: string, maxLines: number, maxBytes: number) {

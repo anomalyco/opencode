@@ -1235,4 +1235,21 @@ describe("tool.shell truncation", () => {
       }),
     ),
   )
+
+  it.live("preview keeps valid UTF-8 for multi-byte output", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const n = 12000
+        const result = yield* run({
+          command: `${bin} -e ${evalarg(`process.stdout.write('\\u4e2d'.repeat(${n}))`)} ${n}`,
+          description: "Generate Unicode output",
+        })
+        const meta = result.metadata as { output?: string }
+        if (meta.output) {
+          expect(meta.output.includes("\uFFFD")).toBe(false)
+        }
+      }),
+    ),
+  )
 })
