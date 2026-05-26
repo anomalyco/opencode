@@ -2,6 +2,7 @@
 // https://github.com/vercel-labs/ai-sdk-openai-websocket/blob/main/packages/ai-sdk-openai-websocket-fetch/src/index.ts
 
 import WebSocket from "ws"
+import { ProviderTransport } from "@/provider/transport"
 
 export interface CreateWebSocketFetchOptions {
   /**
@@ -75,23 +76,31 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
 
   async function websocketFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = input instanceof URL ? input.toString() : typeof input === "string" ? input : input.url
+    const internalHeaders = normalizeHeaders(init?.headers)
+    const httpInit = ProviderTransport.withoutInternalHeaders(init)
 
     if (init?.method !== "POST" || !url.endsWith("/responses")) {
-      return globalThis.fetch(input, init)
+      return globalThis.fetch(input, httpInit)
     }
 
     let body: Record<string, unknown>
     try {
       body = JSON.parse(typeof init.body === "string" ? init.body : "")
     } catch {
-      return globalThis.fetch(input, init)
+      return globalThis.fetch(input, httpInit)
+    }
+
+    // Temporary title-generation split: title requests share the conversation session ID today,
+    // so do not let them occupy or mutate the conversation WebSocket pool.
+    if (internalHeaders[ProviderTransport.INTERNAL_TRANSPORT_PURPOSE_HEADER] === ProviderTransport.PURPOSE.title) {
+      return globalThis.fetch(input, httpInit)
     }
 
     if (!body.stream) {
-      return globalThis.fetch(input, init)
+      return globalThis.fetch(input, httpInit)
     }
 
-    const headers = normalizeHeaders(init.headers)
+    const headers = normalizeHeaders(httpInit?.headers)
     delete headers["content-length"]
     headers["openai-beta"] ??= "responses_websockets=2026-02-06"
     const wsUrl = options?.url ?? url.replace(/^http/, "ws")
