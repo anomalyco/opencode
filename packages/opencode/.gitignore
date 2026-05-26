@@ -8,3 +8,12 @@ src/provider/models-snapshot.d.ts
 script/build-*.ts
 temporary-*.md
 .artifacts
+
+# Patent data assets (deployed at runtime)
+src/patent/data/*.db
+src/patent/data/*.db-shm
+src/patent/data/*.db-wal
+src/patent/data/cards/
+src/patent/data/审查指南/
+src/patent/data/复审无效/
+src/patent/data/legal-system/
