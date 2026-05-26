@@ -92,6 +92,7 @@
   },
   "devDependencies": {
     "@actions/artifact": "5.0.1",
+    "@anthropic-ai/sandbox-runtime": "0.0.50",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
     "@typescript/native-preview": "catalog:",

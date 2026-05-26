@@ -15,6 +15,12 @@ export OPENCODE_DISABLE_CLAUDE_CODE=1
 export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
 export OPENCODE_DISABLE_TERMINAL_TITLE=1
 
+BUN_BIN="$(command -v bun || true)"
+if [ -z "${BUN_BIN}" ]; then
+  echo "bun not found in PATH" >&2
+  exit 1
+fi
+
 printf '\033]0;%s\007' 'securecode'
 cd "${SCRIPT_DIR}"
-exec ~/.bun/bin/bun run dev -- "${TARGET_DIR}"
+exec "${BUN_BIN}" run script/securecode-supervisor.ts "${TARGET_DIR}"
