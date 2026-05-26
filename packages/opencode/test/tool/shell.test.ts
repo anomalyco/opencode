@@ -192,6 +192,18 @@ describe("tool.shell", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
+          const prevSHELL = process.env.SHELL
+          Shell.acceptable.reset()
+          Shell.preferred.reset()
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              if (prevSHELL === undefined) delete process.env.SHELL
+              else process.env.SHELL = prevSHELL
+              Shell.acceptable.reset()
+              Shell.preferred.reset()
+            }),
+          )
+
           const bash = yield* initBash()
           const fallback = Shell.name(Shell.acceptable("fish"))
           expect(fallback).not.toBe("fish")
