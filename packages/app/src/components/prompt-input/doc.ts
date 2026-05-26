@@ -283,6 +283,7 @@ export function createPromptDoc(input: PromptDocInput) {
   return {
     ready,
     docID,
+    sync: () => sync,
     actorID: () => actor()?.actorID,
     actorName: () => actor()?.name,
     actors,

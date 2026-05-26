@@ -11,6 +11,7 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/f
 import {
   ContentPart,
   DEFAULT_PROMPT,
+  isLineContextItem,
   isPromptEqual,
   Prompt,
   usePrompt,
@@ -65,6 +66,7 @@ import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
 import { PromptDrawingShell } from "./prompt-input/drawing-shell"
 import { createPromptDrawing } from "./prompt-input/drawing"
 import { createPromptDoc } from "./prompt-input/doc"
+import { createPromptContextSync } from "./prompt-input/context-sync"
 import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
 import { DialogDocSubmit } from "./dialog-doc-submit"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
@@ -421,6 +423,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     client: sdk.client,
     submit: () => void submit(false),
   })
+  createPromptContextSync({
+    sync: () => {
+      doc.docID()
+      return doc.sync()
+    },
+    comments: comments.all,
+    context: prompt.context,
+    replace: comments.replace,
+  })
   const [approval, setApproval] = createSignal<DocSubmitState | undefined>()
   let approvalID: string | undefined
   let approvalSession: string | undefined
@@ -557,7 +568,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const contextItems = createMemo(() => {
     const items = prompt.context.items()
     if (store.mode !== "shell") return items
-    return items.filter((item) => !item.comment?.trim())
+    return items.filter((item) => !isLineContextItem(item) && !item.comment?.trim())
   })
 
   const hasUserPrompt = createMemo(() => {
