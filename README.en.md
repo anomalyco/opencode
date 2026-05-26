@@ -188,8 +188,12 @@ This repository is a fork that tracks upstream release tags while layering Acomp
 ```bash
 bun install
 bun run guard:upstream
-./run-securecode.sh /path/to/your/repository
+bun run script/securecode-supervisor.ts /path/to/your/repository
 ```
+
+During development the supervisor wraps opencode in an OS sandbox (macOS Seatbelt / Linux bubblewrap) so the in-development binary runs under the same boundary as the released `securecode` command. See [.specs/20260526_securecode-sandbox-phase0.md](./.specs/20260526_securecode-sandbox-phase0.md) for details.
+
+To allow additional outbound domains, create `~/.config/securecode/sandbox.json` (template: [`script/securecode-config.example.json`](./script/securecode-config.example.json)). By default only the Acompany confidential AI endpoint is reachable; everything else over HTTPS / SOCKS5 is blocked. Restart SecureCode after editing the file.
 
 To inspect the UI separately:
 

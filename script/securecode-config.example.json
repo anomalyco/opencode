@@ -1,0 +1,11 @@
+{
+  "network": {
+    "allowedDomains": [],
+    "deniedDomains": []
+  },
+  "filesystem": {
+    "denyRead": [],
+    "allowWrite": ["/"],
+    "denyWrite": []
+  }
+}
