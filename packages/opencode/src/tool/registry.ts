@@ -12,6 +12,11 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { PatentConvertTool } from "./patent-convert"
+import { PatentResearchTool } from "./patent-research"
+import { PatentSearchTool } from "./patent-search"
+import { PatentAnalyzeTool } from "./patent-analyze"
+import { PatentCheckTool } from "./patent-check"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -46,6 +51,14 @@ import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import * as PatentDocument from "@/patent/document"
+import * as PatentDrawing from "@/patent/drawing"
+import * as PatentKG from "@/patent/kg"
+import * as PatentLaw from "@/patent/law"
+import * as PatentKnowledge from "@/patent/knowledge"
+import * as PatentIPC from "@/patent/ipc"
+import * as PatentSearch from "@/patent/search"
+import * as PatentQuality from "@/patent/quality"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -88,6 +101,14 @@ export const layer: Layer.Layer<
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
+  | PatentDocument.Service
+  | PatentDrawing.Service
+  | PatentKG.Service
+  | PatentLaw.Service
+  | PatentKnowledge.Service
+  | PatentIPC.Service
+  | PatentSearch.Service
+  | PatentQuality.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,6 +134,11 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const patentConvert = yield* PatentConvertTool
+    const patentResearch = yield* PatentResearchTool
+    const patentSearch = yield* PatentSearchTool
+    const patentAnalyze = yield* PatentAnalyzeTool
+    const patentCheck = yield* PatentCheckTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -210,6 +236,11 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          patentConvert: Tool.init(patentConvert),
+          patentResearch: Tool.init(patentResearch),
+          patentSearch: Tool.init(patentSearch),
+          patentAnalyze: Tool.init(patentAnalyze),
+          patentCheck: Tool.init(patentCheck),
         })
 
         return {
@@ -231,6 +262,11 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+            tool.patentConvert,
+            tool.patentResearch,
+            tool.patentSearch,
+            tool.patentAnalyze,
+            tool.patentCheck,
           ],
           task: tool.task,
           read: tool.read,
@@ -350,6 +386,14 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(PatentDocument.defaultLayer),
+    Layer.provide(PatentDrawing.defaultLayer),
+    Layer.provide(PatentKG.layer),
+    Layer.provide(PatentLaw.defaultLayer),
+    Layer.provide(PatentKnowledge.defaultLayer),
+    Layer.provide(PatentIPC.defaultLayer),
+    Layer.provide(PatentSearch.defaultLayer),
+    Layer.provide(PatentQuality.defaultLayer),
   ),
 )
 
