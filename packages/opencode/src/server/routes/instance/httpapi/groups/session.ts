@@ -74,6 +74,7 @@ export const PermissionResponsePayload = Schema.Struct({
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
+  getStatus: `${root}/:sessionID/status`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -123,6 +124,18 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.status",
             summary: "Get session status",
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+          }),
+        ),
+        HttpApiEndpoint.get("getStatus", SessionPaths.getStatus, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(SessionStatus.Info, "Get session status"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.getStatus",
+            summary: "Get session status",
+            description: "Retrieve the current runtime status for a specific OpenCode session.",
           }),
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {

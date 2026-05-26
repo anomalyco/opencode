@@ -6122,6 +6122,36 @@ export type SessionStatusResponses = {
 
 export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
+export type SessionGetStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/status"
+}
+
+export type SessionGetStatusErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SessionGetStatusError = SessionGetStatusErrors[keyof SessionGetStatusErrors]
+
+export type SessionGetStatusResponses = {
+  /**
+   * Get session status
+   */
+  200: SessionStatus
+}
+
+export type SessionGetStatusResponse = SessionGetStatusResponses[keyof SessionGetStatusResponses]
+
 export type SessionDeleteData = {
   body?: never
   path: {

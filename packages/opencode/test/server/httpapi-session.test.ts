@@ -313,6 +313,9 @@ describe("session HttpApi", () => {
         expect(Object.hasOwn(listed[0]!, "parentID")).toBe(false)
 
         expect(yield* requestJson<Record<string, unknown>>(SessionPaths.status, { headers })).toEqual({})
+        const sessionStatus = yield* request(`/session/${parent.id}/status`, { headers })
+        expect(sessionStatus.status).toBe(200)
+        expect(yield* json<Record<string, unknown>>(sessionStatus)).toEqual({ type: "idle" })
 
         expect(
           yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: parent.id }), { headers }),

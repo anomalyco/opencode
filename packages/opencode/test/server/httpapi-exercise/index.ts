@@ -732,6 +732,17 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.session({ title: "Status session" }))
     .json(200, object),
   http.protected
+    .get("/session/{sessionID}/status", "session.getStatus")
+    .seeded((ctx) => ctx.session({ title: "Single status session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/status", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(isRecord(body) && body.type === "idle", "single session status should default to idle")
+    }),
+  http.protected
     .post("/session", "session.create")
     .mutating()
     .at((ctx) => ({ path: "/session", headers: ctx.headers(), body: { title: "Created session" } }))
