@@ -21,6 +21,7 @@ export interface MockServerConfig {
   onPermissionReply?: (input: { requestID: string; body: unknown }) => void
   onDeprecatedPermissionRespond?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
+  events?: () => unknown[]
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -48,7 +49,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
 
     const path = url.pathname
-    if (path === "/global/event" || path === "/event") return sse(route)
+    if (path === "/global/event" || path === "/event") return sse(route, config.events?.())
+    if (path === "/global/health") return json(route, { healthy: true })
     if (path === "/permission") return json(route, config.permissions ?? [])
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
@@ -139,6 +141,10 @@ function postBody(route: Route) {
   return JSON.parse(text) as unknown
 }
 
-function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
+function sse(route: Route, events?: unknown[]) {
+  return route.fulfill({
+    status: 200,
+    contentType: "text/event-stream",
+    body: events?.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") || ": ok\n\n",
+  })
 }
