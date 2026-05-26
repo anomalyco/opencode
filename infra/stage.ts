@@ -7,7 +7,6 @@ export const domain = (() => {
 export const zoneID = "430ba34c138cfb5360826c4909f99be8"
 // Dev owns the shared AWS lake/stats infra for all non-production stages.
 export const awsStage = $app.stage === "production" ? "production" : "dev"
-export const prepareAwsDestroy = $app.stage === "production" || $app.stage === "dev"
 // Temporarily omit AWS infra so SST removes the lake/stats resources.
 export const deployAws = false
 
