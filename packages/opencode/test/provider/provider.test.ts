@@ -193,6 +193,7 @@ it.instance(
     expect(providers[ProviderID.make("custom-provider")]).toBeDefined()
     expect(providers[ProviderID.make("custom-provider")].name).toBe("Custom Provider")
     expect(providers[ProviderID.make("custom-provider")].models["custom-model"]).toBeDefined()
+    expect(providers[ProviderID.make("custom-provider")].models["custom-model"].capabilities.input.image).toBe(true)
   }),
   {
     config: {
