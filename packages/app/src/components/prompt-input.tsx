@@ -1173,7 +1173,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Clear the editor + history bookkeeping so the user can type the next.
     editor.innerHTML = ""
-    addToHistory(text)
+    // addToHistory expects a Prompt (ContentPart[]), not the raw extracted
+    // string.  Without this wrap the keydown-Up recall path hits
+    // `prompt.map is not a function` because prependHistoryEntry calls
+    // .map() on the value as if it were an array (history.ts:86).
+    addToHistory(
+      [{ type: "text", content: text, start: 0, end: text.length }],
+      "normal",
+    )
     resetHistoryNavigation(true)
     // Send a final "stopped typing" so the indicator clears immediately.
     stopEmbeddedTyping()
