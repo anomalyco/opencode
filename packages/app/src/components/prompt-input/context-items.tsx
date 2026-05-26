@@ -25,6 +25,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
             const filename = getFilename(item.path)
             const label = getFilenameTruncated(item.path, 14)
             const selected = props.active(item)
+            const note = () => item.comment?.trim() ?? ""
 
             return (
               <Tooltip
@@ -41,7 +42,8 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
               >
                 <div
                   classList={{
-                    "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 cursor-default transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                    "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] cursor-default transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                    "h-12": !!note(),
                     "hover:bg-surface-interactive-weak": !!item.commentID && !selected,
                     "bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover": selected,
                     "bg-background-stronger": !selected,
@@ -74,7 +76,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                       aria-label={props.t("prompt.context.removeFile")}
                     />
                   </div>
-                  <Show when={item.comment}>
+                  <Show when={note()}>
                     {(comment) => <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>}
                   </Show>
                 </div>

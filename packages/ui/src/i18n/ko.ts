@@ -26,12 +26,12 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}}은(는) 바이너리 파일이므로 표시할 수 없습니다.",
   "ui.fileMedia.binary.description.default": "바이너리 파일이므로 표시할 수 없습니다.",
 
-  "ui.lineComment.label.prefix": "",
-  "ui.lineComment.label.suffix": "에 댓글 달기",
-  "ui.lineComment.editorLabel.prefix": "",
-  "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
-  "ui.lineComment.placeholder": "댓글 추가",
-  "ui.lineComment.submit": "댓글",
+  "ui.lineComment.label.prefix": "컨텍스트에 ",
+  "ui.lineComment.label.suffix": " 추가됨",
+  "ui.lineComment.editorLabel.prefix": "컨텍스트에 ",
+  "ui.lineComment.editorLabel.suffix": " 추가 중",
+  "ui.lineComment.placeholder": "컨텍스트에 추가할 내용",
+  "ui.lineComment.submit": "추가",
 
   "ui.sessionTurn.steps.show": "단계 표시",
   "ui.sessionTurn.steps.hide": "단계 숨기기",
