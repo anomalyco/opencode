@@ -1116,6 +1116,7 @@ const scenarios: Scenario[] = [
     ),
   http.protected
     .post("/session/{sessionID}/summarize", "session.summarize")
+    .inProject({ git: true, config: { default_agent: "explore" } })
     .preserveDatabase()
     .withLlm()
     .seeded((ctx) =>
