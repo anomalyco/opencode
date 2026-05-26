@@ -1236,3 +1236,42 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+for (const item of ps) {
+  it.live(`resolves $env: references case-insensitively [${item.label}]`, () =>
+    withShell(
+      item,
+      runIn(
+        projectRoot,
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const prev = process.env.TestEnvVarMixedCase
+            process.env.TestEnvVarMixedCase = os.tmpdir()
+            return prev
+          }),
+          () =>
+            Effect.gen(function* () {
+              const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+              const err = new Error("stop after permission")
+              expect(
+                yield* fail(
+                  {
+                    command: `Get-Content $env:TESTENVVARMIXEDCASE/file.txt`,
+                    description: "Test case-insensitive env var in path",
+                  },
+                  capture(requests, err),
+                ),
+              ).toMatchObject({ message: err.message })
+              const extDirReq = requests.find((r) => r.permission === "external_directory")
+              expect(extDirReq).toBeDefined()
+            }),
+          (prev) =>
+            Effect.sync(() => {
+              if (prev === undefined) delete process.env.TestEnvVarMixedCase
+              else process.env.TestEnvVarMixedCase = prev
+            }),
+        ),
+      ),
+    ),
+  )
+}
