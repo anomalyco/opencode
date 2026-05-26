@@ -526,6 +526,38 @@ it.instance("preserves env variables when adding $schema to config", () =>
   ),
 )
 
+it.instance("handles ${env:VAR} dollar-brace environment variable substitution", () =>
+  withProcessEnv(
+    "DOLLAR_VAR",
+    "dollar-user",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        username: "${env:DOLLAR_VAR}",
+      })
+      const config = yield* Config.use.get()
+      expect(config.username).toBe("dollar-user")
+    }),
+  ),
+)
+
+it.instance("substitutes ${env:VAR} in provider apiKey option", () =>
+  withProcessEnv(
+    "OPENCODE_CONSOLE_TOKEN",
+    "secret-token-123",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        provider: { opencode: { options: { apiKey: "${env:OPENCODE_CONSOLE_TOKEN}" } } },
+      })
+      const config = yield* Config.use.get()
+      expect(config.provider?.opencode?.options?.apiKey).toBe("secret-token-123")
+    }),
+  ),
+)
+
 it.instance("handles file inclusion substitution", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

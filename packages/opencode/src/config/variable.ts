@@ -30,10 +30,10 @@ function dir(input: ParseSource) {
   return input.type === "path" ? path.dirname(input.path) : input.dir
 }
 
-/** Apply {env:VAR} and {file:path} substitutions to config text. */
+/** Apply {env:VAR}, ${env:VAR}, and {file:path} substitutions to config text. */
 export async function substitute(input: SubstituteInput) {
   const missing = input.missing ?? "error"
-  let text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+  let text = input.text.replace(/\$?\{env:([^}]+)\}/g, (_, varName) => {
     return (input.env?.[varName] ?? process.env[varName]) || ""
   })
 

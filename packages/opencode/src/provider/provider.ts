@@ -1560,9 +1560,21 @@ export const layer = Layer.effect(
           options["includeUsage"] = true
         }
 
+        const envReplace = (value: string) =>
+          value.replace(/\$\{env:([^}]+)\}/g, (_, name) => {
+            return envs[String(name)] ?? ""
+          })
+
+        const userBaseURL = typeof options["baseURL"] === "string" && options["baseURL"] !== "" ? options["baseURL"] : undefined
+        if (userBaseURL && model.api.url && userBaseURL !== model.api.url) {
+          log.warn(
+            `baseURL "${userBaseURL}" overrides model catalog URL "${model.api.url}" for ${model.providerID}. ` +
+              `Remove the baseURL option from opencode.json to use the default endpoint.`,
+          )
+        }
+
         const baseURL = iife(() => {
-          let url =
-            typeof options["baseURL"] === "string" && options["baseURL"] !== "" ? options["baseURL"] : model.api.url
+          let url = userBaseURL ?? model.api.url
           if (!url) return
 
           const loader = s.varsLoaders[model.providerID]
@@ -1583,6 +1595,9 @@ export const layer = Layer.effect(
 
         if (baseURL !== undefined) options["baseURL"] = baseURL
         if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+        if (typeof options["apiKey"] === "string") {
+          options["apiKey"] = envReplace(options["apiKey"])
+        }
         if (model.headers)
           options["headers"] = {
             ...options["headers"],
