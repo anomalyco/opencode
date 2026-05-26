@@ -44,7 +44,8 @@ export const layer = Layer.effect(
     const { db } = yield* Database.Service
     const decode = Schema.decodeUnknownSync(Info)
 
-    const query = <A, E>(effect: Effect.Effect<A, E>) => effect.pipe(Effect.orDie)
+    const query = <A, E>(effect: Effect.Effect<A, E>) =>
+      effect.pipe(Effect.mapError((cause) => new AccountRepoError({ message: "Database operation failed", cause })))
 
     const current = Effect.fnUntraced(function* () {
       const state = yield* db
@@ -52,14 +53,12 @@ export const layer = Layer.effect(
         .from(AccountStateTable)
         .where(eq(AccountStateTable.id, ACCOUNT_STATE_ID))
         .get()
-        .pipe(Effect.orDie)
       if (!state?.active_account_id) return
       const account = yield* db
         .select()
         .from(AccountTable)
         .where(eq(AccountTable.id, state.active_account_id))
         .get()
-        .pipe(Effect.orDie)
       if (!account) return
       return { ...account, active_org_id: state.active_org_id ?? null }
     })
