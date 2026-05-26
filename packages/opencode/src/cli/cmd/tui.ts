@@ -3,6 +3,7 @@ import { Rpc } from "@/util/rpc"
 import { type rpc } from "../tui/worker"
 import path from "path"
 import { fileURLToPath } from "url"
+import { spawn } from "child_process"
 import { UI } from "@/cli/ui"
 import { errorMessage } from "@opencode-ai/tui/util/error"
 import { withTimeout } from "@/util/timeout"
@@ -180,7 +181,17 @@ export const TuiThreadCommand = cmd({
       }
 
       setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        client.call("checkUpgrade", { directory: cwd }).then((upgraded: unknown) => {
+          if (upgraded) {
+            console.log("Update installed. Restarting...")
+            const child = spawn(process.execPath, process.argv.slice(1), {
+              stdio: "inherit",
+              env: process.env,
+            })
+            child.unref()
+            process.exit(0)
+          }
+        }).catch(() => {})
       }, 1000).unref?.()
 
       try {

@@ -5,12 +5,12 @@ import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { GlobalBus } from "@/bus/global"
 
-export async function upgrade() {
+export async function upgrade(): Promise<boolean> {
   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
-  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
+  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return false
   const method = await Installation.method()
-  const latest = await Installation.latest(method).catch(() => {})
-  if (!latest) return
+  const latest = await Installation.latest(method).catch(() => undefined)
+  if (!latest) return false
 
   if (Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) {
     GlobalBus.emit("event", {
@@ -20,10 +20,10 @@ export async function upgrade() {
         properties: { version: latest },
       },
     })
-    return
+    return false
   }
 
-  if (InstallationVersion === latest) return
+  if (InstallationVersion === latest) return false
 
   const kind = Installation.getReleaseType(InstallationVersion, latest)
 
@@ -35,19 +35,21 @@ export async function upgrade() {
         properties: { version: latest },
       },
     })
-    return
+    return false
   }
 
-  if (method === "unknown") return
-  await Installation.upgrade(method, latest)
-    .then(() =>
+  if (method === "unknown") return false
+  const upgraded = await Installation.upgrade(method, latest)
+    .then(() => {
       GlobalBus.emit("event", {
         directory: "global",
         payload: {
           type: Installation.Event.Updated.type,
           properties: { version: latest },
         },
-      }),
-    )
-    .catch(() => {})
+      })
+      return true
+    })
+    .catch(() => false)
+  return upgraded
 }
