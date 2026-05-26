@@ -343,10 +343,17 @@ export const ShellTool = Tool.define(
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
-      const lines = yield* spawner
-        .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
-        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-      const file = lines[0]?.trim()
+      const file = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const handle = yield* spawner.spawn(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
+          const [exitCode, stdout] = yield* Effect.all([
+            handle.exitCode,
+            Stream.runFold(Stream.decodeText(handle.stdout), () => "", (acc, chunk) => acc + chunk),
+          ])
+          if (exitCode !== 0) return
+          return stdout.split("\n")[0]?.trim()
+        }),
+      ).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (!file) return
       return AppFileSystem.normalizePath(file)
     })
