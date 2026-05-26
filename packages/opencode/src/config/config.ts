@@ -301,6 +301,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      llm_stream_idle_timeout: Schema.optional(PositiveInt).annotate({
+        description:
+          "Idle timeout in milliseconds for the LLM streaming response. Fails the stream if no event arrives within this window. Set to 0 to disable. Default: 120000 (2 minutes).",
+      }),
     }),
   ),
 }).annotate({ identifier: "Config" })

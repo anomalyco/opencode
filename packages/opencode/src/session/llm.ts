@@ -30,6 +30,27 @@ import { LLMRequestPrep } from "./llm/request"
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+/** Default idle-timeout for LLM streaming responses (ms). Overridable via
+ *  `experimental.llm_stream_idle_timeout` in opencode config; 0 disables. */
+export const DEFAULT_LLM_STREAM_IDLE_TIMEOUT_MS = 120_000
+
+export class LLMStreamIdleTimeout extends Error {
+  readonly _tag = "LLMStreamIdleTimeout"
+  constructor(public readonly idleMs: number) {
+    super(`LLM stream idle timeout: no events received for ${idleMs}ms`)
+  }
+}
+
+export function withIdleTimeout<A, E, R>(
+  source: Stream.Stream<A, E, R>,
+  idleMs: number,
+): Stream.Stream<A, E | LLMStreamIdleTimeout, R> {
+  return Stream.timeoutOrElse(source, {
+    duration: `${idleMs} millis`,
+    orElse: () => Stream.fail(new LLMStreamIdleTimeout(idleMs)),
+  })
+}
+
 export type StreamInput = {
   user: MessageV2.User
   sessionID: string
@@ -349,19 +370,30 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
 
+            const cfg = yield* config.get()
+            const idleMs = cfg.experimental?.llm_stream_idle_timeout ?? DEFAULT_LLM_STREAM_IDLE_TIMEOUT_MS
+
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            if (result.type === "native") return result.stream
+            const base =
+              result.type === "native"
+                ? result.stream
+                : // Adapter seam: both runtimes expose the same LLMEvent stream. Native
+                  // already returns one; AI SDK streams are converted here.
+                  (() => {
+                    const state = LLMAISDK.adapterState()
+                    return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
+                      e instanceof Error ? e : new Error(String(e)),
+                    ).pipe(
+                      Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
+                      Stream.flatMap((events) => Stream.fromIterable(events)),
+                    )
+                  })()
 
-            // Adapter seam: both runtimes expose the same LLMEvent stream. Native
-            // already returns one; AI SDK streams are converted here.
-            const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
-              e instanceof Error ? e : new Error(String(e)),
-            ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
-              Stream.flatMap((events) => Stream.fromIterable(events)),
-            )
+            // Idle-timeout guard. Without this an upstream that silently stalls
+            // (proxy/relay drop, provider hang, transport half-open) leaves the
+            // session loop blocked on the next chunk indefinitely.
+            return idleMs > 0 ? withIdleTimeout(base, idleMs) : base
           }),
         ),
       )
