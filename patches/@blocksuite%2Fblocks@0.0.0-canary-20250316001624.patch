@@ -1,0 +1,165 @@
+diff --git a/src/root-block/widgets/format-bar/format-bar.ts b/src/root-block/widgets/format-bar/format-bar.ts
+--- a/src/root-block/widgets/format-bar/format-bar.ts
++++ b/src/root-block/widgets/format-bar/format-bar.ts
+@@ -236,9 +236,22 @@ export class AffineFormatBarWidget extends WidgetComponent {
+     });
+   }
+ 
++  private _hide() {
++    const bar = this.formatBarElement;
++    if (!bar || !('hidePopover' in bar)) return;
++    if (!bar.matches(':popover-open')) return;
++    bar.hidePopover();
++  }
++
+   private _listenFloatingElement() {
+     const formatQuickBarElement = this.formatBarElement;
+     assertExists(formatQuickBarElement, 'format quick bar should exist');
++    if (
++      'showPopover' in formatQuickBarElement &&
++      !formatQuickBarElement.matches(':popover-open')
++    ) {
++      formatQuickBarElement.showPopover();
++    }
+ 
+     const listenFloatingElement = (
+       getElement: () => ReferenceElement | void
+@@ -259,6 +272,7 @@ export class AffineFormatBarWidget extends WidgetComponent {
+             if (!element) return;
+ 
+             computePosition(element, formatQuickBarElement, {
++              strategy: 'fixed',
+               placement: this._placement,
+               middleware: [
+                 offset(10),
+@@ -541,6 +555,7 @@ export class AffineFormatBarWidget extends WidgetComponent {
+   override disconnectedCallback() {
+     super.disconnectedCallback();
+     this._abortController.abort();
++    this._hide();
+     this.reset();
+     this._lastCursor = undefined;
+   }
+@@ -553,7 +568,7 @@ export class AffineFormatBarWidget extends WidgetComponent {
+     const items = ConfigRenderer(this);
+ 
+     return html`
+-      <editor-toolbar class="${AFFINE_FORMAT_BAR_WIDGET}">
++      <editor-toolbar popover="manual" class="${AFFINE_FORMAT_BAR_WIDGET}">
+         ${items}
+         <editor-toolbar-separator></editor-toolbar-separator>
+         ${toolbarMoreButton(this)}
+@@ -568,6 +583,7 @@ export class AffineFormatBarWidget extends WidgetComponent {
+ 
+   override updated() {
+     if (!this._shouldDisplay()) {
++      this._hide();
+       if (this._floatDisposables) {
+         this._floatDisposables.dispose();
+       }
+diff --git a/src/root-block/widgets/format-bar/styles.ts b/src/root-block/widgets/format-bar/styles.ts
+--- a/src/root-block/widgets/format-bar/styles.ts
++++ b/src/root-block/widgets/format-bar/styles.ts
+@@ -46,11 +46,19 @@ const paragraphButtonStyle = css`
+ 
+ export const formatBarStyle = css`
+   .affine-format-bar-widget {
+-    position: absolute;
++    position: fixed;
+     display: none;
++    inset: auto;
++    margin: 0;
++    padding: 0;
++    overflow: visible;
+     z-index: var(--affine-z-index-popover);
+     user-select: none;
+   }
+ 
++  .affine-format-bar-widget:popover-open {
++    display: flex;
++  }
++
+   ${paragraphButtonStyle}
+ `;
+diff --git a/dist/root-block/widgets/format-bar/format-bar.js b/dist/root-block/widgets/format-bar/format-bar.js
+--- a/dist/root-block/widgets/format-bar/format-bar.js
++++ b/dist/root-block/widgets/format-bar/format-bar.js
+@@ -226,9 +226,21 @@ let AffineFormatBarWidget = (() => {
+                 this.requestUpdate();
+             });
+         }
++        _hide() {
++            const bar = this.formatBarElement;
++            if (!bar || !('hidePopover' in bar))
++                return;
++            if (!bar.matches(':popover-open'))
++                return;
++            bar.hidePopover();
++        }
+         _listenFloatingElement() {
+             const formatQuickBarElement = this.formatBarElement;
+             assertExists(formatQuickBarElement, 'format quick bar should exist');
++            if ('showPopover' in formatQuickBarElement &&
++                !formatQuickBarElement.matches(':popover-open')) {
++                formatQuickBarElement.showPopover();
++            }
+             const listenFloatingElement = (getElement) => {
+                 const initialElement = getElement();
+                 if (!initialElement) {
+@@ -241,6 +253,7 @@ let AffineFormatBarWidget = (() => {
+                     if (!element)
+                         return;
+                     computePosition(element, formatQuickBarElement, {
++                        strategy: 'fixed',
+                         placement: this._placement,
+                         middleware: [
+                             offset(10),
+@@ -465,6 +478,7 @@ let AffineFormatBarWidget = (() => {
+         disconnectedCallback() {
+             super.disconnectedCallback();
+             this._abortController.abort();
++            this._hide();
+             this.reset();
+             this._lastCursor = undefined;
+         }
+@@ -474,7 +488,7 @@ let AffineFormatBarWidget = (() => {
+             }
+             const items = ConfigRenderer(this);
+             return html `
+-      <editor-toolbar class="${AFFINE_FORMAT_BAR_WIDGET}">
++      <editor-toolbar popover="manual" class="${AFFINE_FORMAT_BAR_WIDGET}">
+         ${items}
+         <editor-toolbar-separator></editor-toolbar-separator>
+         ${toolbarMoreButton(this)}
+@@ -487,6 +501,7 @@ let AffineFormatBarWidget = (() => {
+         }
+         updated() {
+             if (!this._shouldDisplay()) {
++                this._hide();
+                 if (this._floatDisposables) {
+                     this._floatDisposables.dispose();
+                 }
+diff --git a/dist/root-block/widgets/format-bar/styles.js b/dist/root-block/widgets/format-bar/styles.js
+--- a/dist/root-block/widgets/format-bar/styles.js
++++ b/dist/root-block/widgets/format-bar/styles.js
+@@ -43,11 +43,19 @@ const paragraphButtonStyle = css `
+ `;
+ export const formatBarStyle = css `
+   .affine-format-bar-widget {
+-    position: absolute;
++    position: fixed;
+     display: none;
++    inset: auto;
++    margin: 0;
++    padding: 0;
++    overflow: visible;
+     z-index: var(--affine-z-index-popover);
+     user-select: none;
+   }
+ 
++  .affine-format-bar-widget:popover-open {
++    display: flex;
++  }
++
+   ${paragraphButtonStyle}
+ `;

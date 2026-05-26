@@ -115,6 +115,7 @@
     "ghostty-web": "github:anomalyco/ghostty-web#4af877d52b523754f113b87084b69835b752fb2c"
   },
   "patchedDependencies": {
+    "@blocksuite/blocks@0.0.0-canary-20250316001624": "patches/@blocksuite%2Fblocks@0.0.0-canary-20250316001624.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@ai-sdk/provider-utils@4.0.21": "patches/@ai-sdk%2Fprovider-utils@4.0.21.patch",
