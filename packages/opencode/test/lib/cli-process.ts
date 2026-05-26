@@ -95,6 +95,14 @@ export type RunOpts = SpawnOpts & {
   readonly extraArgs?: string[]
 }
 
+export type PingOpts = SpawnOpts & {
+  readonly model?: string
+  readonly agent?: string
+  readonly variant?: string
+  readonly message?: string
+  readonly extraArgs?: string[]
+}
+
 // `opencode serve` is a long-lived process — it never exits on its own.
 // `serve(opts)` therefore returns a handle inside the caller's Scope: the
 // subprocess is killed when the scope closes (test end), and the URL the
@@ -147,6 +155,7 @@ export type AcpHandle = {
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  readonly ping: (opts?: PingOpts) => Effect.Effect<RunResult>
   // Spawn `opencode serve` and wait until it's listening. Long-lived: the
   // returned handle is killed when the caller's Scope closes. Fails if the
   // listening line doesn't appear within `readyTimeoutMs`.
@@ -245,6 +254,16 @@ export function withCliFixture<A, E>(
       if (opts?.command) argv.push("--command", opts.command)
       if (opts?.extraArgs) argv.push(...opts.extraArgs)
       argv.push(message)
+      return spawn(argv, opts)
+    }
+
+    const ping = (opts?: PingOpts): Effect.Effect<RunResult> => {
+      const argv: string[] = ["ping"]
+      argv.push("--model", opts?.model ?? testModelID)
+      if (opts?.agent) argv.push("--agent", opts.agent)
+      if (opts?.variant) argv.push("--variant", opts.variant)
+      if (opts?.message) argv.push("--message", opts.message)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
       return spawn(argv, opts)
     }
 
@@ -401,7 +420,7 @@ export function withCliFixture<A, E>(
       } satisfies AcpHandle
     })
 
-    const opencode: OpencodeCli = { run, serve, acp, spawn, expectExit, parseJsonEvents }
+    const opencode: OpencodeCli = { run, ping, serve, acp, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
     // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
