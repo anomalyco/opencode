@@ -1,4 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -16,7 +18,7 @@ import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { disposeAllInstances } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
@@ -201,6 +203,38 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance("description includes markdown-defined subagent frontmatter descriptions", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const agentFile = path.join(test.directory, ".opencode", "agents", "test.md")
+      yield* Effect.promise(() => fs.mkdir(path.dirname(agentFile), { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          agentFile,
+          [
+            "---",
+            'description: "Test agent — does X and Y"',
+            "mode: subagent",
+            "---",
+            "You are a test agent.",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const agent = yield* Agent.Service
+      const custom = (yield* agent.list()).find((item) => item.name === "test")
+      expect(custom?.description).toBe("Test agent — does X and Y")
+
+      const build = yield* agent.get("build")
+      const registry = yield* ToolRegistry.Service
+      const description =
+        (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
+
+      expect(description).toContain("- test: Test agent — does X and Y")
+    }),
   )
 
   it.instance("execute resumes an existing task session from task_id", () =>
