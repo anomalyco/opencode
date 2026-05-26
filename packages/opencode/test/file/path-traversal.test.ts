@@ -10,8 +10,8 @@ import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(File.defaultLayer)
-const read = (file: string) => File.Service.use((svc) => svc.read(file))
-const list = (dir?: string) => File.Service.use((svc) => svc.list(dir))
+const read = (file: string) => File.use.read(file)
+const list = (dir?: string) => File.use.list(dir)
 const expectAccessDenied = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const exit = yield* effect.pipe(Effect.exit)

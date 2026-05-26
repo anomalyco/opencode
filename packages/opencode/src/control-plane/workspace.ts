@@ -1,4 +1,5 @@
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@/storage/db"
 import { asc } from "drizzle-orm"
@@ -160,11 +161,14 @@ export interface Interface {
     workspaceID: WorkspaceID,
     state: Record<string, number>,
     signal?: AbortSignal,
+    timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
   readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
@@ -946,12 +950,13 @@ export const layer = Layer.effect(
       workspaceID: WorkspaceID,
       state: Record<string, number>,
       signal?: AbortSignal,
+      timeout = TIMEOUT,
     ) {
       if (synced(state)) return
 
       yield* Effect.catch(
         waitEvent({
-          timeout: TIMEOUT,
+          timeout,
           signal,
           fn(event) {
             if (event.workspace !== workspaceID && event.payload.type !== "sync") {
