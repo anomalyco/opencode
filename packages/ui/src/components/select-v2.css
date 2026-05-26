@@ -1,0 +1,33 @@
+@import "../v2/components/button-v2.css";
+
+[data-component="select"][data-trigger-style="settings-v2"] [data-slot="select-select-trigger-icon"] {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-component="select"][data-trigger-style="settings-v2"]
+  [data-slot="select-select-trigger-icon"]
+  [data-slot="icon-svg"] {
+  margin-inline: -5px;
+}
+
+[data-component="select-content"][data-trigger-style="settings-v2"] {
+  min-width: 160px;
+  border-radius: 8px;
+  padding: 0;
+
+  [data-slot="select-select-content-list"] {
+    padding: 4px;
+  }
+
+  [data-slot="select-select-item"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+  }
+}

@@ -1,3 +1,6 @@
+@import "@opencode-ai/ui/v2/components/text-input-v2.css";
+@import "@opencode-ai/ui/v2/components/button-v2.css";
+
 [data-component="settings-v2"] {
   height: 100%;
 }
@@ -23,7 +26,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 24px 40px 32px;
+  padding: 40px 40px 32px;
   background: linear-gradient(to bottom, var(--v2-background-bg-base) calc(100% - 24px), transparent);
 }
 
@@ -37,7 +40,7 @@
 .settings-v2-tab-body {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 36px;
   width: 100%;
   padding: 0 40px 40px;
 }
@@ -55,7 +58,7 @@
 .settings-v2-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 16px;
 }
 
 .settings-v2-section-title {
@@ -64,6 +67,11 @@
   font-weight: 640;
   line-height: 1;
   color: var(--v2-text-text-base);
+}
+
+.settings-v2-section-title + [data-component="settings-v2-list"] {
+  margin-top: -4px;
+  margin-bottom: 0;
 }
 
 [data-component="settings-v2-list"] {
@@ -105,10 +113,14 @@
 }
 
 [data-slot="settings-v2-row-title"] {
+  font-family: var(--font-family-sans);
+  font-style: normal;
   font-size: 13px;
   font-weight: 530;
   line-height: 1;
+  letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
+  font-variation-settings: "slnt" 0;
 }
 
 [data-slot="settings-v2-row-description"] {
@@ -128,7 +140,7 @@
 [data-slot="settings-v2-row-control"] > [data-component="switch"] {
   display: inline-flex;
   align-items: center;
-  margin: 4px;
+  padding: 4px;
 }
 
 @media (min-width: 640px) {
@@ -136,6 +148,18 @@
     width: auto;
     flex-shrink: 0;
   }
+}
+
+[data-component="settings-v2-dialog"] [data-component="select"][data-trigger-style="settings-v2"] {
+  width: fit-content;
+  max-width: 100%;
+}
+
+[data-component="settings-v2-dialog"]
+  [data-component="select"][data-trigger-style="settings-v2"]
+  [data-component="button-v2"] {
+  width: fit-content;
+  max-width: 100%;
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-list"] {
@@ -289,4 +313,200 @@
 
 .settings-v2-providers .settings-v2-section-title + [data-component="settings-v2-list"] {
   margin-top: 16px;
+}
+
+.settings-v2-tab-header.settings-v2-tab-header--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding-bottom: 32px;
+}
+
+.settings-v2-tab-header--stacked > .settings-v2-tab-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-v2-tab-search {
+  position: relative;
+  width: 100%;
+}
+
+.settings-v2-tab-search [data-component="text-input-v2"] {
+  width: 100%;
+}
+
+.settings-v2-tab-search [data-slot="text-input-v2-input"] {
+  padding-right: 28px;
+}
+
+.settings-v2-tab-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
+.settings-v2-tab-body.settings-v2-models {
+  gap: 24px;
+}
+
+.settings-v2-models-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.settings-v2-models .settings-v2-section-title {
+  padding-bottom: 0;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: 16px;
+}
+
+.settings-v2-models [data-component="provider-icon"] {
+  color: var(--v2-icon-icon-base);
+}
+
+.settings-v2-models .settings-v2-section-title + [data-component="settings-v2-list"] {
+  margin-top: 0;
+}
+
+.settings-v2-models [data-slot="settings-v2-row-description"]:empty {
+  display: none;
+}
+
+.settings-v2-models [data-slot="settings-v2-row-copy"] {
+  gap: 0;
+}
+
+.settings-v2-models [data-slot="settings-v2-row-title"] {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-v2-models-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-block: 48px;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 1;
+  color: var(--v2-text-text-muted);
+  text-align: center;
+}
+
+.settings-v2-models-status-filter {
+  color: var(--v2-text-text-base);
+}
+
+.settings-v2-shortcuts .settings-v2-section {
+  gap: 16px;
+}
+
+.settings-v2-shortcuts .settings-v2-section-title {
+  padding-bottom: 0;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: 1;
+}
+
+.settings-v2-shortcuts [data-component="settings-v2-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 20px;
+  border-radius: 6px;
+}
+
+.settings-v2-shortcuts [data-component="settings-v2-list"] > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settings-v2-shortcuts [data-component="settings-v2-list"] > div:not(:last-child) {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+.settings-v2-shortcuts [data-component="settings-v2-list"] > div > span {
+  font-family: var(--font-family-sans);
+  font-weight: 440;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
+  font-variation-settings: "slnt" 0;
+}
+
+.settings-v2-keybind-button {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+  font-style: normal;
+  font-weight: 530;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.05px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+  font-variation-settings: "slnt" 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-v2-keybind-button:hover {
+  background-color: var(--v2-background-bg-layer-02);
+}
+
+.settings-v2-keybind-button:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+.settings-v2-keybind-button--active {
+  color: var(--v2-text-text-faint);
+  border-radius: 2px;
+  background-color: var(--v2-background-bg-layer-02);
+}
+
+.settings-v2-shortcuts-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-block: 48px;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 1;
+  color: var(--v2-text-text-muted);
+  text-align: center;
+}
+
+.settings-v2-shortcuts-status-filter {
+  color: var(--v2-text-text-base);
 }

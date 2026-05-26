@@ -2,7 +2,7 @@ import { Component, Show, createMemo, createResource, onMount, type JSX } from "
 import { createStore } from "solid-js/store"
 import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Select } from "@opencode-ai/ui/select"
+import { SelectV2 } from "@opencode-ai/ui/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/components/switch-v2.jsx"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -298,9 +298,6 @@ export const SettingsGeneralV2: Component = () => {
       set(option.id)
       playDemoSound(option.id)
     },
-    variant: "secondary" as const,
-    size: "small" as const,
-    triggerVariant: "settings" as const,
   })
 
   const GeneralSection = () => (
@@ -310,16 +307,13 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.general.row.language.title")}
           description={language.t("settings.general.row.language.description")}
         >
-          <Select
+          <SelectV2
             data-action="settings-language"
             options={languageOptions()}
             current={languageOptions().find((o) => o.value === language.locale())}
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => option && language.setLocale(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
           />
         </SettingsRowV2>
 
@@ -336,7 +330,7 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.general.row.shell.title")}
           description={language.t("settings.general.row.shell.description")}
         >
-          <Select
+          <SelectV2
             data-action="settings-shell"
             options={shellOptions()}
             current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
@@ -347,10 +341,6 @@ export const SettingsGeneralV2: Component = () => {
               if (option.value === currentShell()) return
               globalSync.updateConfig({ shell: option.value })
             }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
           />
         </SettingsRowV2>
 
@@ -482,7 +472,7 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.general.row.colorScheme.title")}
           description={language.t("settings.general.row.colorScheme.description")}
         >
-          <Select
+          <SelectV2
             data-action="settings-color-scheme"
             options={colorSchemeOptions()}
             current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
@@ -494,10 +484,6 @@ export const SettingsGeneralV2: Component = () => {
               theme.previewColorScheme(option.value)
               return () => theme.cancelPreview()
             }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "220px" }}
           />
         </SettingsRowV2>
 
@@ -512,7 +498,7 @@ export const SettingsGeneralV2: Component = () => {
             </>
           }
         >
-          <Select
+          <SelectV2
             data-action="settings-theme"
             options={themeOptions()}
             current={themeOptions().find((o) => o.id === theme.themeId())}
@@ -527,9 +513,6 @@ export const SettingsGeneralV2: Component = () => {
               theme.previewTheme(option.id)
               return () => theme.cancelPreview()
             }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
           />
         </SettingsRowV2>
 
@@ -658,7 +641,7 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
         >
-          <Select
+          <SelectV2
             data-action="settings-sounds-agent"
             {...soundSelectProps(
               () => settings.sounds.agentEnabled(),
@@ -673,7 +656,7 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.general.sounds.permissions.title")}
           description={language.t("settings.general.sounds.permissions.description")}
         >
-          <Select
+          <SelectV2
             data-action="settings-sounds-permissions"
             {...soundSelectProps(
               () => settings.sounds.permissionsEnabled(),
@@ -688,7 +671,7 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >
-          <Select
+          <SelectV2
             data-action="settings-sounds-errors"
             {...soundSelectProps(
               () => settings.sounds.errorsEnabled(),

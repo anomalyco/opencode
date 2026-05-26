@@ -7,7 +7,7 @@ import { usePlatform } from "@/context/platform"
 import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
-import { SettingsModels } from "../settings-models"
+import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
 
 export const DialogSettings: Component = () => {
@@ -25,7 +25,7 @@ export const DialogSettings: Component = () => {
       >
         <TabsV2.List>
           <div class="flex flex-col justify-between h-full w-full">
-            <div class="flex flex-col gap-3 w-full pt-3">
+            <div class="flex flex-col gap-3 w-full">
               <div class="flex flex-col gap-3">
                 <div class="flex flex-col gap-1.5">
                   <TabsV2.SectionTitle>{language.t("settings.section.desktop")}</TabsV2.SectionTitle>
@@ -65,14 +65,14 @@ export const DialogSettings: Component = () => {
         <TabsV2.Content value="general" class="settings-v2-panel">
           <SettingsGeneralV2 />
         </TabsV2.Content>
-        <TabsV2.Content value="shortcuts" class="settings-v2-panel settings-v2-legacy-panel">
-          <SettingsKeybinds />
+        <TabsV2.Content value="shortcuts" class="settings-v2-panel">
+          <SettingsKeybinds v2 />
         </TabsV2.Content>
         <TabsV2.Content value="providers" class="settings-v2-panel">
           <SettingsProvidersV2 />
         </TabsV2.Content>
-        <TabsV2.Content value="models" class="settings-v2-panel settings-v2-legacy-panel">
-          <SettingsModels />
+        <TabsV2.Content value="models" class="settings-v2-panel">
+          <SettingsModelsV2 />
         </TabsV2.Content>
       </TabsV2>
     </Dialog>
