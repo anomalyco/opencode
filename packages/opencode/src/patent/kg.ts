@@ -1,28 +1,8 @@
 import path from "path"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Exit } from "effect"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
-
-interface KGNode {
-  readonly id: string
-  readonly node_type: string
-  readonly name: string
-  readonly title: string | null
-  readonly content: string | null
-  readonly law_refs_count: number | null
-  readonly source: string | null
-  readonly full_ref: string | null
-  readonly chapter: string | null
-  readonly article_number: string | null
-  readonly version: string | null
-}
-
-interface KGEdge {
-  readonly id: number
-  readonly source: string
-  readonly target: string
-  readonly relation: string
-}
+import type Database from "bun:sqlite"
 
 export interface Interface {
   readonly queryNode: (name: string) => Effect.Effect<KGNode | null>
@@ -61,7 +41,7 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
 
-    const state = yield* InstanceState.make<{ db: unknown | null }>(
+    const state = yield* InstanceState.make<{ db: Database | null }>(
       Effect.fn("PatentKG.state")(() =>
         Effect.gen(function* () {
           const cfg = yield* config.get()
@@ -95,7 +75,8 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
         .get(name) as Record<string, unknown> | null
 
       if (!row) return null
-      return Schema.decodeUnknown(KGNodeSchema)(row).pipe(Effect.orElseSucceed(() => null))
+      const decoded = Schema.decodeUnknownExit(KGNodeSchema)(row, { errors: "all" })
+      return Exit.isSuccess(decoded) ? decoded.value : null
     })
 
     const queryRelated = Effect.fn("PatentKG.queryRelated")(
@@ -108,9 +89,10 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
           : db.query("SELECT * FROM edges WHERE source = ?").all(nodeId)
 
         return query
-          .map((row: Record<string, unknown>) =>
-            Schema.decodeUnknown(KGEdgeSchema)(row).pipe(Effect.orElseSucceed(() => null)),
-          )
+          .map((row: unknown) => {
+            const decoded = Schema.decodeUnknownExit(KGEdgeSchema)(row, { errors: "all" })
+            return Exit.isSuccess(decoded) ? decoded.value : null
+          })
           .filter((v): v is KGEdge => v !== null)
       },
     )
@@ -125,7 +107,10 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
       >[]
 
       return rows
-        .map((row) => Schema.decodeUnknown(KGNodeSchema)(row).pipe(Effect.orElseSucceed(() => null)))
+        .map((row) => {
+          const decoded = Schema.decodeUnknownExit(KGNodeSchema)(row, { errors: "all" })
+          return Exit.isSuccess(decoded) ? decoded.value : null
+        })
         .filter((v): v is KGNode => v !== null)
     })
 
@@ -138,7 +123,10 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
         .all(query) as Record<string, unknown>[]
 
       return rows
-        .map((row) => Schema.decodeUnknown(KGNodeSchema)(row).pipe(Effect.orElseSucceed(() => null)))
+        .map((row) => {
+          const decoded = Schema.decodeUnknownExit(KGNodeSchema)(row, { errors: "all" })
+          return Exit.isSuccess(decoded) ? decoded.value : null
+        })
         .filter((v): v is KGNode => v !== null)
     })
 

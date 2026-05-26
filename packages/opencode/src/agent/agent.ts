@@ -10,6 +10,8 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_PATENT_DRAFT from "./prompt/patent-draft.txt"
+import PROMPT_PATENT_OA from "./prompt/patent-oa.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -183,6 +185,50 @@ export const layer = Layer.effect(
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "patent-draft": {
+            name: "patent-draft",
+            description: "专利申请文件撰写。从技术交底书出发，5步骤产出完整申请文件。",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                patent_convert: "allow",
+                patent_research: "allow",
+                patent_search: "allow",
+                patent_analyze: "allow",
+                patent_check: "allow",
+                read: "allow",
+                write: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_PATENT_DRAFT,
+            steps: 5,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "patent-oa": {
+            name: "patent-oa",
+            description: "审查意见答复。5步骤产出完整答复文件包。",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                patent_convert: "allow",
+                patent_research: "allow",
+                patent_search: "allow",
+                patent_analyze: "allow",
+                patent_check: "allow",
+                read: "allow",
+                write: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_PATENT_OA,
+            steps: 5,
             options: {},
             mode: "subagent",
             native: true,

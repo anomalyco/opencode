@@ -27,8 +27,8 @@ export const make = (dataDir: string) =>
 
         const db = new Database(dbPath, { readonly: true })
         const results = db
-          .query(`SELECT title, content FROM chunks WHERE content LIKE ? LIMIT ?`, [`%${query}%`, opts.limit])
-          .all()
+          .query(`SELECT title, content FROM chunks WHERE content LIKE ? LIMIT ?`)
+          .all(`%${query}%`, opts.limit)
           .map((row: any) => ({
             title: row.title,
             content: row.content,
@@ -44,14 +44,15 @@ export const make = (dataDir: string) =>
       const exists = yield* fs.existsSafe(cardsDir)
       if (!exists) return []
 
-      const files = yield* fs.readDirectorySafe(cardsDir).pipe(Effect.orElseSucceed(() => [] as string[]))
+      const entries = yield* fs.readDirectoryEntries(cardsDir).pipe(Effect.orElseSucceed(() => []))
       const results: Array<{ title: string; content: string }> = []
 
-      for (const file of files) {
+      for (const entry of entries) {
+        const file = entry.name
         if (!file.includes(keyword)) continue
         const filePath = path.join(cardsDir, file)
         const content = yield* fs.readFileStringSafe(filePath).pipe(Effect.orElseSucceed(() => ""))
-        if (content.toLowerCase().includes(keyword.toLowerCase())) {
+        if (content !== undefined && content.toLowerCase().includes(keyword.toLowerCase())) {
           const title = file.replace(/\.md$/, "")
           results.push({ title, content })
         }
@@ -65,15 +66,15 @@ export const make = (dataDir: string) =>
       const exists = yield* fs.existsSafe(guidelinesDir)
       if (!exists) return ""
 
-      const files = yield* fs.readDirectorySafe(guidelinesDir).pipe(Effect.orElseSucceed(() => [] as string[]))
-      const matchedFiles = files.filter((f) => f.toLowerCase().includes(topic.toLowerCase()))
+      const entries = yield* fs.readDirectoryEntries(guidelinesDir).pipe(Effect.orElseSucceed(() => []))
+      const matchedFiles = entries.filter((f: { name: string }) => f.name.toLowerCase().includes(topic.toLowerCase()))
 
       if (matchedFiles.length === 0) return ""
 
-      const content = yield* fs.readFileStringSafe(path.join(guidelinesDir, matchedFiles[0])).pipe(
+      const content = yield* fs.readFileStringSafe(path.join(guidelinesDir, matchedFiles[0].name)).pipe(
         Effect.orElseSucceed(() => ""),
       )
-      return content
+      return content ?? ""
     })
 
     const searchInvalidation = Effect.fn("PatentKnowledge.searchInvalidation")(function* (topic: string) {
@@ -81,15 +82,15 @@ export const make = (dataDir: string) =>
       const exists = yield* fs.existsSafe(invalidationDir)
       if (!exists) return ""
 
-      const files = yield* fs.readDirectorySafe(invalidationDir).pipe(Effect.orElseSucceed(() => [] as string[]))
-      const matchedFiles = files.filter((f) => f.toLowerCase().includes(topic.toLowerCase()))
+      const entries = yield* fs.readDirectoryEntries(invalidationDir).pipe(Effect.orElseSucceed(() => []))
+      const matchedFiles = entries.filter((f: { name: string }) => f.name.toLowerCase().includes(topic.toLowerCase()))
 
       if (matchedFiles.length === 0) return ""
 
-      const content = yield* fs.readFileStringSafe(path.join(invalidationDir, matchedFiles[0])).pipe(
+      const content = yield* fs.readFileStringSafe(path.join(invalidationDir, matchedFiles[0].name)).pipe(
         Effect.orElseSucceed(() => ""),
       )
-      return content
+      return content ?? ""
     })
 
     return Service.of({ searchSemantic, searchCards, searchGuidelines, searchInvalidation })
