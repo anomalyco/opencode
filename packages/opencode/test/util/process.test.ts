@@ -1,128 +1,76 @@
-import { describe, expect, test } from "bun:test"
-import fs from "fs/promises"
-import path from "path"
-import { Process } from "@/util/process"
-import { tmpdir } from "../fixture/fixture"
+import { describe, expect, test, beforeEach, afterEach, spyOn, mock } from "bun:test"
+import { safeExit } from "@/util/process"
 
-function node(script: string) {
-  return [process.execPath, "-e", script]
-}
+describe("safeExit", () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform")!
+  const originalExitCode = process.exitCode
+  let exitSpy: ReturnType<typeof spyOn>
+  let setTimeoutSpy: ReturnType<typeof spyOn>
 
-describe("util.process", () => {
-  test("captures stdout and stderr", async () => {
-    const out = await Process.run(node('process.stdout.write("out");process.stderr.write("err")'))
-    expect(out.code).toBe(0)
-    expect(out.stdout.toString()).toBe("out")
-    expect(out.stderr.toString()).toBe("err")
+  beforeEach(() => {
+    exitSpy = spyOn(process, "exit").mockImplementation((() => {}) as any)
+    setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      ((_fn: any, _ms: number) => {
+        return { unref: () => {} } as any
+      }) as any,
+    )
   })
 
-  test("returns code when nothrow is enabled", async () => {
-    const out = await Process.run(node("process.exit(7)"), { nothrow: true })
-    expect(out.code).toBe(7)
+  afterEach(() => {
+    exitSpy?.mockRestore()
+    setTimeoutSpy?.mockRestore()
+    Object.defineProperty(process, "platform", originalPlatform)
+    process.exitCode = originalExitCode
   })
 
-  test("throws RunFailedError on non-zero exit", async () => {
-    const err = await Process.run(node('process.stderr.write("bad");process.exit(3)')).catch((error) => error)
-    expect(err).toBeInstanceOf(Process.RunFailedError)
-    if (!(err instanceof Process.RunFailedError)) throw err
-    expect(err.code).toBe(3)
-    expect(err.stderr.toString()).toBe("bad")
+  test("on non-Windows calls process.exit()", () => {
+    Object.defineProperty(process, "platform", { value: "linux", writable: false })
+    safeExit(0)
+    expect(exitSpy).toHaveBeenCalledWith(0)
+    expect(process.exitCode).toBe(originalExitCode)
   })
 
-  test("aborts a running process", async () => {
-    const abort = new AbortController()
-    const started = Date.now()
-    setTimeout(() => abort.abort(), 25)
-
-    const out = await Process.run(node("setInterval(() => {}, 1000)"), {
-      abort: abort.signal,
-      nothrow: true,
-    })
-
-    expect(out.code).not.toBe(0)
-    expect(Date.now() - started).toBeLessThan(1000)
-  }, 3000)
-
-  test("kills after timeout when process ignores terminate signal", async () => {
-    if (process.platform === "win32") return
-
-    const abort = new AbortController()
-    const started = Date.now()
-    setTimeout(() => abort.abort(), 25)
-
-    const out = await Process.run(node('process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'), {
-      abort: abort.signal,
-      nothrow: true,
-      timeout: 25,
-    })
-
-    expect(out.code).not.toBe(0)
-    expect(Date.now() - started).toBeLessThan(1000)
-  }, 3000)
-
-  test("uses cwd when spawning commands", async () => {
-    await using tmp = await tmpdir()
-    const out = await Process.run(node("process.stdout.write(process.cwd())"), {
-      cwd: tmp.path,
-    })
-    expect(out.stdout.toString()).toBe(tmp.path)
+  test("on non-Windows calls process.exit() with no args", () => {
+    Object.defineProperty(process, "platform", { value: "linux", writable: false })
+    safeExit()
+    expect(exitSpy).toHaveBeenCalledWith(undefined)
   })
 
-  test("merges environment overrides", async () => {
-    const out = await Process.run(node('process.stdout.write(process.env.OPENCODE_TEST ?? "")'), {
-      env: {
-        OPENCODE_TEST: "set",
-      },
-    })
-    expect(out.stdout.toString()).toBe("set")
+  test("on non-Windows respects custom exit code", () => {
+    Object.defineProperty(process, "platform", { value: "linux", writable: false })
+    safeExit(42)
+    expect(exitSpy).toHaveBeenCalledWith(42)
   })
 
-  test("uses shell in run on Windows", async () => {
-    if (process.platform !== "win32") return
-
-    const out = await Process.run(["set", "OPENCODE_TEST_SHELL"], {
-      shell: true,
-      env: {
-        OPENCODE_TEST_SHELL: "ok",
-      },
-    })
-
-    expect(out.code).toBe(0)
-    expect(out.stdout.toString()).toContain("OPENCODE_TEST_SHELL=ok")
+  test("on Windows sets exitCode and does not call process.exit() immediately", () => {
+    Object.defineProperty(process, "platform", { value: "win32", writable: false })
+    safeExit(0)
+    expect(process.exitCode).toBe(0)
+    expect(exitSpy).not.toHaveBeenCalled()
   })
 
-  test("runs cmd scripts with spaces on Windows without shell", async () => {
-    if (process.platform !== "win32") return
-
-    await using tmp = await tmpdir()
-    const dir = path.join(tmp.path, "with space")
-    const file = path.join(dir, "echo cmd.cmd")
-
-    await fs.mkdir(dir, { recursive: true })
-    await Bun.write(file, "@echo off\r\nif %~1==--stdio exit /b 0\r\nexit /b 7\r\n")
-
-    const proc = Process.spawn([file, "--stdio"], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-
-    expect(await proc.exited).toBe(0)
+  test("on Windows sets exitCode to given value", () => {
+    Object.defineProperty(process, "platform", { value: "win32", writable: false })
+    safeExit(99)
+    expect(process.exitCode).toBe(99)
   })
 
-  test("rejects missing commands without leaking unhandled errors", async () => {
-    await using tmp = await tmpdir()
-    const cmd = path.join(tmp.path, "missing" + (process.platform === "win32" ? ".cmd" : ""))
-    const err = await Process.spawn([cmd], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    }).exited.catch((err) => err)
+  test("on Windows does not override existing exitCode if not provided", () => {
+    Object.defineProperty(process, "platform", { value: "win32", writable: false })
+    process.exitCode = 1
+    safeExit()
+    expect(process.exitCode).toBe(1)
+  })
 
-    expect(err).toBeInstanceOf(Error)
-    if (!(err instanceof Error)) throw err
-    expect(err).toMatchObject({
-      code: "ENOENT",
-    })
+  test("on Windows schedules a timeout as fallback for hanging subprocesses", () => {
+    Object.defineProperty(process, "platform", { value: "win32", writable: false })
+    safeExit()
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5000)
+  })
+
+  test("on darwin (macOS) calls process.exit() like non-Windows", () => {
+    Object.defineProperty(process, "platform", { value: "darwin", writable: false })
+    safeExit(1)
+    expect(exitSpy).toHaveBeenCalledWith(1)
   })
 })

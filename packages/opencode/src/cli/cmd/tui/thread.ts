@@ -6,6 +6,7 @@ import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import * as Log from "@opencode-ai/core/util/log"
 import { errorMessage } from "@/util/error"
+import { safeExit } from "@/util/process"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
@@ -255,7 +256,7 @@ export const TuiThreadCommand = cmd({
     } finally {
       unguard?.()
     }
-    process.exit(0)
+    safeExit(0)
   },
 })
 // scratch

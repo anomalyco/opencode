@@ -143,6 +143,22 @@ export async function run(cmd: string[], opts: RunOptions = {}): Promise<Result>
   throw new RunFailedError(cmd, out.code, out.stdout, out.stderr)
 }
 
+export function safeExit(code?: number) {
+  // On Windows, process.exit() can kill the parent terminal process group,
+  // causing the shell (pwsh/cmd) to exit unexpectedly. Use exitCode instead
+  // and let the event loop drain naturally with a timeout fallback.
+  // On non-Windows, force exit to avoid hanging subprocesses (e.g. docker MCP
+  // servers that don't handle SIGTERM).
+  if (process.platform === "win32") {
+    process.exitCode = code ?? process.exitCode
+    setTimeout(() => {
+      process.exit()
+    }, 5000).unref()
+  } else {
+    process.exit(code)
+  }
+}
+
 // Duplicated in `packages/sdk/js/src/process.ts` because the SDK cannot import
 // `opencode` without creating a cycle. Keep both copies in sync.
 export async function stop(proc: ChildProcess) {
