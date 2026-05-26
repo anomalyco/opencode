@@ -39,7 +39,7 @@ export default defineConfig({
       rollupOptions: {
         input: { index: "src/main/index.ts" },
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      externalizeDeps: { include: [nodePtyPkg], exclude: ["@opencode-ai/telemetry"] },
     },
     plugins: [
       {
