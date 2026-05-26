@@ -36,24 +36,30 @@ export function resolveServerList(input: {
   props?: Array<ServerConnection.Any>
   stored: StoredServer[]
 }): Array<ServerConnection.Any> {
-  const servers = [
-    ...(input.props ?? []),
-    ...input.stored.map((value) =>
+  const deduped = new Map<ServerConnection.Key, ServerConnection.Any>(
+    input.props?.map((v) => [ServerConnection.key(v), v]) ?? [],
+  )
+
+  for (const value of input.stored) {
+    const conn: ServerConnection.Http =
       typeof value === "string"
         ? {
             type: "http" as const,
             http: { url: value },
           }
-        : value,
-    ),
-  ]
-
-  const deduped = new Map<ServerConnection.Key, ServerConnection.Any>()
-  for (const value of servers) {
-    const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
+        : "http" in value
+          ? value
+          : { type: "http", http: value }
     const key = ServerConnection.key(conn)
-    if (deduped.has(key) && conn.type === "http" && !conn.authToken) continue
-    deduped.set(key, conn)
+
+    const existing = deduped.get(key)
+    if (existing)
+      deduped.set(key, {
+        ...existing,
+        ...conn,
+        http: { ...existing.http, ...conn.http },
+      })
+    else deduped.set(key, conn)
   }
 
   return [...deduped.values()]
