@@ -321,6 +321,9 @@ export const dict = {
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
   "prompt.editor.title": "Edit prompt",
+  "prompt.editor.preview": "Preview",
+  "prompt.editor.showPreview": "Show preview",
+  "prompt.editor.hidePreview": "Hide preview",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",

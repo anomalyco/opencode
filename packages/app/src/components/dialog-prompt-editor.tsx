@@ -4,6 +4,8 @@ import { createStore } from "solid-js/store"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { monoFontFamily, useSettings } from "@/context/settings"
@@ -29,6 +31,7 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
   const [state, setState] = createStore({
     text: props.text,
     h: 280,
+    preview: false,
   })
   const html = createMemo(() => paint(state.text))
   const font = createMemo(() => monoFontFamily(settings.appearance.font()))
@@ -64,6 +67,15 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
   const save = () => {
     props.save(state.text)
     dialog.close()
+  }
+
+  const togglePreview = () => {
+    setState("preview", (value) => !value)
+    requestAnimationFrame(() => {
+      fit()
+      sync()
+      refreshAt()
+    })
   }
 
   const place = () => {
@@ -202,163 +214,187 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
   })
 
   return (
-    <Dialog title={<div class="pl-3">{language.t("prompt.editor.title")}</div>} size="x-large" transition>
+    <Dialog
+      title={<div class="pl-3">{language.t("prompt.editor.title")}</div>}
+      size="x-large"
+      transition
+      containerStyle={{
+        width: state.preview ? "min(calc(100vw - 32px), 1240px)" : "min(calc(100vw - 32px), 960px)",
+        transition: "width 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
+    >
       <div class="flex min-h-0 flex-1 flex-col gap-4 px-1 pb-1">
         <div
           class="relative overflow-hidden rounded-xl border border-border-weak-base bg-surface-raised-base shadow-xs-border-base"
+          classList={{
+            "grid grid-rows-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:grid-rows-none":
+              state.preview,
+          }}
           style={{
             height: `${state.h}px`,
             "max-height": "min(620px, calc(100dvh - 230px))",
           }}
         >
-          <div
-            ref={(el) => {
-              ref.menu = el
-            }}
-            class="absolute z-20 min-h-10 w-[min(560px,calc(100%-16px))] overflow-auto no-scrollbar rounded-[12px] border border-white/10 p-2 shadow-[var(--shadow-lg-border-base)]"
-            classList={{ hidden: popover() !== "at" }}
-            style={{
-              top: `${menu.top}px`,
-              left: `${menu.left}px`,
-              "max-height": `${menu.max}px`,
-              "background-color":
-                platform.platform === "desktop" && platform.os === "windows"
-                  ? "var(--surface-raised-stronger-non-alpha)"
-                  : "rgb(12 12 14 / 0.34)",
-              "backdrop-filter":
-                platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
-              "-webkit-backdrop-filter":
-                platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
-            }}
-            onMouseDown={(event) => event.preventDefault()}
-          >
-            <div classList={{ hidden: atFlat().length > 0 }} class="px-2 py-1 text-text-weak">
-              {language.t("prompt.popover.emptyResults")}
-            </div>
-            <For each={shown()}>
-              {(item) => {
-                if (item.type !== "file") return null
-                const key = atKey(item)
-                const dir = item.path.endsWith("/") ? item.path : getDirectory(item.path)
-                const file = item.path.endsWith("/") ? "" : getFilename(item.path)
-                return (
-                  <button
-                    data-key={key}
-                    class="flex w-full items-center gap-x-2 rounded-md px-2 py-0.5"
-                    classList={{ "bg-surface-raised-base-active": atActive() === key }}
-                    onClick={() => handleAtSelect(item)}
-                    onMouseEnter={() => setAtActive(key)}
-                  >
-                    <FileIcon
-                      node={{ path: item.path, type: item.path.endsWith("/") ? "directory" : "file" }}
-                      class="size-4 shrink-0"
-                    />
-                    <div class="min-w-0 flex items-center text-14-regular">
-                      <span class="min-w-0 truncate whitespace-nowrap text-text-weak">{dir}</span>
-                      <span class="whitespace-nowrap text-text-strong">{file}</span>
-                    </div>
-                  </button>
-                )
+          <div class="relative h-full min-h-0 min-w-0 overflow-hidden">
+            <div
+              ref={(el) => {
+                ref.menu = el
               }}
-            </For>
-          </div>
-          <div
-            ref={(el) => {
-              ref.back = el
-            }}
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-0 overflow-auto px-4 py-3 text-14-mono whitespace-pre-wrap break-words"
-            style={{ "font-family": font() }}
-          >
-            <div class="min-h-full w-full" innerHTML={html()} />
-          </div>
-          <textarea
-            ref={(el) => {
-              ref.box = el
-            }}
-            autofocus
-            rows={14}
-            spellcheck={false}
-            value={state.text}
-            placeholder=""
-            onInput={(event) => {
-              setState("text", event.currentTarget.value)
-              refreshAt()
-            }}
-            onScroll={() => {
-              sync()
-              if (popover() === "at") requestAnimationFrame(place)
-            }}
-            onClick={refreshAt}
-            onKeyUp={refreshAt}
-            onKeyDown={(event) => {
-              if (popover()) {
-                if (event.key === "Tab") {
-                  const item = atFlat().find((entry) => atKey(entry) === atActive()) ?? atFlat()[0]
-                  if (item) handleAtSelect(item)
-                  event.preventDefault()
-                  return
-                }
-
-                const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
-                const ctrl =
-                  event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && (event.key === "n" || event.key === "p")
-                if (nav || ctrl) {
-                  atOnKeyDown(event)
-                  event.preventDefault()
-                  return
-                }
-
-                if (event.key === "Escape") {
-                  setPopover(null)
-                  event.preventDefault()
-                  return
-                }
-              }
-
-              if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === "Enter") {
-                event.preventDefault()
-                save()
-                return
-              }
-
-              const next = pair({
-                text: state.text,
-                start: event.currentTarget.selectionStart ?? 0,
-                end: event.currentTarget.selectionEnd ?? 0,
-                key: event.key,
-              })
-              if (!next) return
-              event.preventDefault()
-              setState("text", next.text)
-              setPopover(null)
-              requestAnimationFrame(() => {
-                if (!ref.box) return
-                ref.box.setSelectionRange(next.start, next.end)
-                sync()
+              class="absolute z-20 min-h-10 w-[min(560px,calc(100%-16px))] overflow-auto no-scrollbar rounded-[12px] border border-white/10 p-2 shadow-[var(--shadow-lg-border-base)]"
+              classList={{ hidden: popover() !== "at" }}
+              style={{
+                top: `${menu.top}px`,
+                left: `${menu.left}px`,
+                "max-height": `${menu.max}px`,
+                "background-color":
+                  platform.platform === "desktop" && platform.os === "windows"
+                    ? "var(--surface-raised-stronger-non-alpha)"
+                    : "rgb(12 12 14 / 0.34)",
+                "backdrop-filter":
+                  platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
+                "-webkit-backdrop-filter":
+                  platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              <div classList={{ hidden: atFlat().length > 0 }} class="px-2 py-1 text-text-weak">
+                {language.t("prompt.popover.emptyResults")}
+              </div>
+              <For each={shown()}>
+                {(item) => {
+                  if (item.type !== "file") return null
+                  const key = atKey(item)
+                  const dir = item.path.endsWith("/") ? item.path : getDirectory(item.path)
+                  const file = item.path.endsWith("/") ? "" : getFilename(item.path)
+                  return (
+                    <button
+                      data-key={key}
+                      class="flex w-full items-center gap-x-2 rounded-md px-2 py-0.5"
+                      classList={{ "bg-surface-raised-base-active": atActive() === key }}
+                      onClick={() => handleAtSelect(item)}
+                      onMouseEnter={() => setAtActive(key)}
+                    >
+                      <FileIcon
+                        node={{ path: item.path, type: item.path.endsWith("/") ? "directory" : "file" }}
+                        class="size-4 shrink-0"
+                      />
+                      <div class="min-w-0 flex items-center text-14-regular">
+                        <span class="min-w-0 truncate whitespace-nowrap text-text-weak">{dir}</span>
+                        <span class="whitespace-nowrap text-text-strong">{file}</span>
+                      </div>
+                    </button>
+                  )
+                }}
+              </For>
+            </div>
+            <div
+              ref={(el) => {
+                ref.back = el
+              }}
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-0 overflow-auto px-4 py-3 text-14-mono whitespace-pre-wrap break-words"
+              style={{ "font-family": font() }}
+            >
+              <div class="min-h-full w-full" innerHTML={html()} />
+            </div>
+            <textarea
+              ref={(el) => {
+                ref.box = el
+              }}
+              autofocus
+              rows={14}
+              spellcheck={false}
+              value={state.text}
+              placeholder=""
+              onInput={(event) => {
+                setState("text", event.currentTarget.value)
                 refreshAt()
-              })
-            }}
-            onBlur={() => {
-              window.setTimeout(() => setPopover(null), 120)
-            }}
-            onFocus={() => {
-              refreshAt()
-            }}
-            class="absolute inset-0 resize-none overflow-auto px-4 py-3 text-14-mono whitespace-pre-wrap bg-transparent focus:outline-none"
-            style={{
-              color: "transparent",
-              "-webkit-text-fill-color": "transparent",
-              "caret-color": "var(--text-strong)",
-              "font-family": font(),
-            }}
-          />
+              }}
+              onScroll={() => {
+                sync()
+                if (popover() === "at") requestAnimationFrame(place)
+              }}
+              onClick={refreshAt}
+              onKeyUp={refreshAt}
+              onKeyDown={(event) => {
+                if (popover()) {
+                  if (event.key === "Tab") {
+                    const item = atFlat().find((entry) => atKey(entry) === atActive()) ?? atFlat()[0]
+                    if (item) handleAtSelect(item)
+                    event.preventDefault()
+                    return
+                  }
+
+                  const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+                  const ctrl =
+                    event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && (event.key === "n" || event.key === "p")
+                  if (nav || ctrl) {
+                    atOnKeyDown(event)
+                    event.preventDefault()
+                    return
+                  }
+
+                  if (event.key === "Escape") {
+                    setPopover(null)
+                    event.preventDefault()
+                    return
+                  }
+                }
+
+                if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === "Enter") {
+                  event.preventDefault()
+                  save()
+                  return
+                }
+
+                const next = pair({
+                  text: state.text,
+                  start: event.currentTarget.selectionStart ?? 0,
+                  end: event.currentTarget.selectionEnd ?? 0,
+                  key: event.key,
+                })
+                if (!next) return
+                event.preventDefault()
+                setState("text", next.text)
+                setPopover(null)
+                requestAnimationFrame(() => {
+                  if (!ref.box) return
+                  ref.box.setSelectionRange(next.start, next.end)
+                  sync()
+                  refreshAt()
+                })
+              }}
+              onBlur={() => {
+                window.setTimeout(() => setPopover(null), 120)
+              }}
+              onFocus={() => {
+                refreshAt()
+              }}
+              class="absolute inset-0 resize-none overflow-auto px-4 py-3 text-14-mono whitespace-pre-wrap bg-transparent focus:outline-none"
+              style={{
+                color: "transparent",
+                "-webkit-text-fill-color": "transparent",
+                "caret-color": "var(--text-strong)",
+                "font-family": font(),
+              }}
+            />
+            <div
+              class="pointer-events-none absolute inset-x-0 top-0 px-4 py-3 text-14-mono text-text-weak whitespace-pre-wrap"
+              classList={{ hidden: state.text.length > 0 }}
+              style={{ "font-family": font() }}
+            >
+              {props.placeholder}
+            </div>
+          </div>
           <div
-            class="pointer-events-none absolute inset-x-0 top-0 px-4 py-3 text-14-mono text-text-weak whitespace-pre-wrap"
-            classList={{ hidden: state.text.length > 0 }}
-            style={{ "font-family": font() }}
+            class="min-h-0 min-w-0 overflow-auto border-t border-border-weak-base bg-background-base/35 px-5 py-4 md:border-l md:border-t-0"
+            classList={{ hidden: !state.preview }}
           >
-            {props.placeholder}
+            <div class="mb-3 flex items-center gap-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">
+              <Icon name="eye" size="small" class="text-icon-weak" />
+              <span>{language.t("prompt.editor.preview")}</span>
+            </div>
+            <Markdown text={state.text} math="full" highlight="defer" class="text-14-regular" />
           </div>
         </div>
         <div class="flex items-center justify-between gap-3 rounded-xl border border-border-weak-base bg-surface-raised-base px-3 py-2.5 shadow-xs-border-base">
@@ -371,6 +407,15 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
             <span>{language.t("common.save")}</span>
           </div>
           <div class="flex items-center gap-2">
+            <Button
+              size="large"
+              variant={state.preview ? "secondary" : "ghost"}
+              class="min-w-20"
+              icon={state.preview ? "layout-right-full" : "layout-right-partial"}
+              onClick={togglePreview}
+            >
+              {language.t(state.preview ? "prompt.editor.hidePreview" : "prompt.editor.showPreview")}
+            </Button>
             <Button size="large" variant="ghost" class="min-w-20" onClick={() => dialog.close()}>
               {language.t("common.cancel")}
             </Button>
