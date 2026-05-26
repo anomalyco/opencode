@@ -4,7 +4,7 @@ import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
 import * as TuiAudio from "@tui/util/audio"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
-import { RouteProvider, useRoute } from "@tui/context/route"
+import { RouteProvider, useRoute, type Route } from "@tui/context/route"
 import {
   Switch,
   Match,
@@ -146,6 +146,11 @@ function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   }
 }
 
+export function initialRouteForArgs(args: Args): Route | undefined {
+  if (args.sessionID && !args.fork) return { type: "session", sessionID: args.sessionID }
+  return undefined
+}
+
 function errorMessage(error: unknown) {
   const formatted = FormatError(error)
   if (formatted !== undefined) return formatted
@@ -210,14 +215,7 @@ export function tui(input: {
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider
-                      initialRoute={
-                        input.args.continue
-                          ? {
-                              type: "session",
-                              sessionID: "dummy",
-                            }
-                          : undefined
-                      }
+                      initialRoute={initialRouteForArgs(input.args)}
                     >
                       <TuiConfigProvider config={input.config}>
                         <SDKProvider
