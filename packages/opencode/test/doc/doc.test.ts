@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import * as Y from "yjs"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Session } from "../../src/session"
+import { SessionPrompt } from "../../src/session/prompt"
 import { Doc } from "../../src/doc"
 import * as Room from "../../src/doc/room"
 import { AssetID, DocID } from "../../src/doc/schema"
@@ -15,8 +16,17 @@ const prompt = {
   parts: [{ type: "text" as const, text: "hi" }],
 }
 
+function defer<T>() {
+  let done!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolve) => {
+    done = resolve
+  })
+  return { promise, done }
+}
+
 describe("doc", () => {
   afterEach(() => {
+    mock.restore()
     Server.basePath = "/"
   })
 
@@ -402,6 +412,64 @@ describe("doc", () => {
           action: "cancel",
         })
         expect(next.status).toBe("sent")
+        stop()
+      },
+    })
+  })
+
+  test("submit approval rotates prompt doc after sent before assistant finishes", async () => {
+    const ready = defer<void>()
+    spyOn(SessionPrompt, "prompt").mockImplementation((input) => {
+      if (input.noReply === true) return Promise.resolve(undefined as never)
+      ready.done()
+      return new Promise<never>(() => {})
+    })
+    spyOn(SessionPrompt, "loop").mockImplementation(() => {
+      ready.done()
+      return new Promise<never>(() => {})
+    })
+
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt: {
+            parts: [{ type: "text", text: "hi" }],
+          },
+        })
+
+        const sent = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "approve",
+        })
+        expect(sent.status).toBe("sent")
+
+        await Promise.race([
+          ready.promise,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timed out waiting for assistant")), 1000),
+          ),
+        ])
+        expect(Doc.prompt(session.id).docID).not.toBe(docID)
         stop()
       },
     })

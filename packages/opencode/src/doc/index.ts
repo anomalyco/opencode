@@ -403,11 +403,17 @@ export namespace Doc {
   }
 
   function send(row: SubmitRow) {
+    const body = SubmitPrompt.parse(JSON.parse(row.prompt))
     SessionPrompt.prompt({
-      ...SubmitPrompt.parse(JSON.parse(row.prompt)),
+      ...body,
+      noReply: true,
       sessionID: row.session_id,
     })
-      .then(() => rotate(row))
+      .then(() => {
+        rotate(row)
+        if (body.noReply === true) return
+        return SessionPrompt.loop({ sessionID: row.session_id })
+      })
       .catch((err) => fail(row, err))
   }
 
