@@ -422,7 +422,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 
       return {
         type: "text" as const,
-        text: `[Attached ${modality}${filename ? `: "${filename}" (${mime})` : ` (${mime})`}]`,
+        text: `[User provided ${modality}${filename ? `: "${filename}" (${mime})` : ` (${mime})`}. Direct processing unsupported — available via tools and filesystem.]`,
       }
     })
 
