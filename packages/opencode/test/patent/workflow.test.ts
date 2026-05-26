@@ -122,4 +122,75 @@ describe("PatentWorkflow", () => {
       expect(state).toBeNull()
     }),
   )
+
+  it.instance("creates a creativity workflow", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentWorkflow.Service
+      const state = yield* svc.create("creativity", "session-creativity")
+      expect(state.workflowType).toBe("creativity")
+      expect(state.totalSteps).toBe(5)
+      expect(state.status).toBe("running")
+    }),
+  )
+
+  it.instance("completes creativity workflow", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentWorkflow.Service
+      const sessionId = "session-creativity-complete"
+      const steps = ["understand", "search", "three_step", "effects", "conclude"]
+      yield* svc.create("creativity", sessionId)
+      let state: PatentWorkflow.WorkflowState | null = null
+      for (const action of steps) {
+        state = yield* svc.advance(sessionId, action, `${action}-output`)
+      }
+      expect(state!.status).toBe("completed")
+      expect(state!.currentStep).toBe(5)
+    }),
+  )
+
+  it.instance("creates a reexam workflow", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentWorkflow.Service
+      const state = yield* svc.create("reexam", "session-reexam")
+      expect(state.workflowType).toBe("reexam")
+      expect(state.totalSteps).toBe(5)
+    }),
+  )
+
+  it.instance("completes reexam workflow", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentWorkflow.Service
+      const sessionId = "session-reexam-complete"
+      const steps = ["confirm_rejection", "analyze", "evidence", "draft", "validate"]
+      yield* svc.create("reexam", sessionId)
+      let state: PatentWorkflow.WorkflowState | null = null
+      for (const action of steps) {
+        state = yield* svc.advance(sessionId, action, `${action}-output`)
+      }
+      expect(state!.status).toBe("completed")
+    }),
+  )
+
+  it.instance("creates an invalidation workflow", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentWorkflow.Service
+      const state = yield* svc.create("invalidation", "session-invalidation")
+      expect(state.workflowType).toBe("invalidation")
+      expect(state.totalSteps).toBe(5)
+    }),
+  )
+
+  it.instance("completes invalidation workflow", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentWorkflow.Service
+      const sessionId = "session-invalidation-complete"
+      const steps = ["analyze_target", "search", "build_grounds", "strategy", "draft"]
+      yield* svc.create("invalidation", sessionId)
+      let state: PatentWorkflow.WorkflowState | null = null
+      for (const action of steps) {
+        state = yield* svc.advance(sessionId, action, `${action}-output`)
+      }
+      expect(state!.status).toBe("completed")
+    }),
+  )
 })

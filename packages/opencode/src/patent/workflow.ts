@@ -11,7 +11,7 @@ class ActionMismatchError extends Schema.TaggedErrorClass<ActionMismatchError>()
   actual: Schema.String,
 }) {}
 
-type WorkflowType = "draft" | "oa" | "reexam" | "invalidation"
+type WorkflowType = "draft" | "oa" | "reexam" | "invalidation" | "creativity"
 type WorkflowStatus = "running" | "paused" | "completed" | "failed"
 
 interface Step {
@@ -20,7 +20,7 @@ interface Step {
   description: string
 }
 
-interface WorkflowState {
+export interface WorkflowState {
   sessionId: string
   caseId: string | null
   workflowType: WorkflowType
@@ -47,8 +47,27 @@ const WORKFLOW_STEPS: Record<WorkflowType, Step[]> = {
     { name: "答复文本撰写", action: "respond", description: "撰写答复" },
     { name: "验证与打包", action: "validate", description: "最终验证" },
   ],
-  reexam: [],
-  invalidation: [],
+  reexam: [
+    { name: "驳回理由确认", action: "confirm_rejection", description: "确认驳回理由和依据" },
+    { name: "复审理由深度分析", action: "analyze", description: "法条适用性与事实分析" },
+    { name: "证据收集与准备", action: "evidence", description: "收集支持复审的证据" },
+    { name: "复审请求书撰写", action: "draft", description: "撰写复审请求书" },
+    { name: "验证与打包", action: "validate", description: "最终验证" },
+  ],
+  invalidation: [
+    { name: "目标专利分析", action: "analyze_target", description: "分析权利要求和说明书" },
+    { name: "现有技术检索", action: "search", description: "检索对比文件" },
+    { name: "无效理由构建", action: "build_grounds", description: "构建新颖性/创造性/充分性等理由" },
+    { name: "证据组合策略", action: "strategy", description: "制定证据组合方案" },
+    { name: "无效宣告请求书撰写", action: "draft", description: "撰写请求书" },
+  ],
+  creativity: [
+    { name: "技术方案理解", action: "understand", description: "提取三元组" },
+    { name: "现有技术检索与对比", action: "search", description: "检索对比文件" },
+    { name: "创造性三步法分析", action: "three_step", description: "最接近现有技术→区别特征→技术启示" },
+    { name: "技术效果论证", action: "effects", description: "论证显著进步" },
+    { name: "创造性结论报告", action: "conclude", description: "输出结论报告" },
+  ],
 }
 
 export interface Interface {

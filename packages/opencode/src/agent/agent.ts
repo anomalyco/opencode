@@ -12,6 +12,9 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_PATENT_DRAFT from "./prompt/patent-draft.txt"
 import PROMPT_PATENT_OA from "./prompt/patent-oa.txt"
+import PROMPT_PATENT_CREATIVITY from "./prompt/patent-creativity.txt"
+import PROMPT_PATENT_REEXAM from "./prompt/patent-reexam.txt"
+import PROMPT_PATENT_INVALIDATION from "./prompt/patent-invalidation.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -228,6 +231,72 @@ export const layer = Layer.effect(
               user,
             ),
             prompt: PROMPT_PATENT_OA,
+            steps: 5,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "patent-creativity": {
+            name: "patent-creativity",
+            description: "创造性判断分析。运用三步法评估技术方案的创造性，产出结构化分析报告。",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                patent_convert: "allow",
+                patent_research: "allow",
+                patent_search: "allow",
+                patent_analyze: "allow",
+                patent_check: "allow",
+                read: "allow",
+                write: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_PATENT_CREATIVITY,
+            steps: 5,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "patent-reexam": {
+            name: "patent-reexam",
+            description: "复审请求分析与撰写。5步骤产出完整复审请求文件。",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                patent_convert: "allow",
+                patent_research: "allow",
+                patent_search: "allow",
+                patent_analyze: "allow",
+                patent_check: "allow",
+                read: "allow",
+                write: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_PATENT_REEXAM,
+            steps: 5,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "patent-invalidation": {
+            name: "patent-invalidation",
+            description: "无效宣告请求。5步骤产出完整无效宣告请求书草案。",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                patent_convert: "allow",
+                patent_research: "allow",
+                patent_search: "allow",
+                patent_analyze: "allow",
+                patent_check: "allow",
+                read: "allow",
+                write: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_PATENT_INVALIDATION,
             steps: 5,
             options: {},
             mode: "subagent",
