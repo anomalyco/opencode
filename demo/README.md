@@ -144,6 +144,43 @@ images: { unoptimized: true }  // next/image の最適化サーバーを無効�
 3. 伝播後 GitHub Pages が Let's Encrypt 証明書を自動発行 (数分〜数時間)。
    `curl -I https://securecode.acompany.tech/` が 200 を返せば完了。
 
+### アクセス計測 (Google Tag Manager)
+
+`app/layout.tsx` で `@next/third-parties/google` の `GoogleTagManager`
+を使ってる。container ID は build 時の env `NEXT_PUBLIC_GTM_ID` で
+差し込む形にしてあるので、リポに ID を埋め込まない。
+
+#### GTM を有効化する手順
+
+1. GTM (`tagmanager.google.com`) で demo 用 container を新規作成
+   (もしくは既存 `service.acompany.tech` の container を流用)
+2. 発行された container ID (`GTM-XXXXXXX` 形式) を取得
+3. リポジトリ Settings → Secrets and variables → Actions → **Variables** タブ:
+   - 名前: `DEMO_GTM_ID`
+   - 値: `GTM-XXXXXXX`
+4. `dev` ブランチへの push (or `Deploy demo to GitHub Pages` workflow を
+   手動 dispatch) で Pages が再 build されると、`<head>` に GTM の
+   snippet が注入され、`<body>` 直後に noscript iframe が入る
+5. GTM 側で **GA4 設定タグ** を作って GA4 プロパティに接続する
+   (これをしないと GTM だけ入って GA4 にデータが流れない)
+
+#### ローカル動作確認時
+
+ローカル `bun run dev` では env を渡さないので `NEXT_PUBLIC_GTM_ID` が
+undefined → `<GoogleTagManager>` をレンダリングしない → 本番計測を
+汚さない。GTM 動作確認を local でも見たい時は環境変数を上書きする:
+
+```bash
+NEXT_PUBLIC_GTM_ID=GTM-XXXXXXX bun run dev
+```
+
+#### Cookie / 同意バナーについて
+
+GA4 が自動で永続 Cookie (`_ga` 等、13 か月) を発行する。EU 訪問者向けに
+consent banner が必要なら別途実装 (Consent Mode v2 を `@next/third-parties`
+の `sendGTMEvent` で連動させるパターンが一般的)。今のところ日本向け
+public-beta 段階なら未実装でも実害は無い。
+
 #### なぜ `next start` ではなく `bun x serve` でプレビューするのか
 
 `output: "export"` を有効にすると `next start` は使えなくなる

@@ -36,6 +36,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build (static export, root path)
+        # GTM container ID は repo Variables の DEMO_GTM_ID から差し込む。
+        # 未設定なら GTM タグは layout.tsx 側で no-op になり、本番でも
+        # アクセス計測が走らない安全側のデフォルト。
+        env:
+          NEXT_PUBLIC_GTM_ID: ${{ vars.DEMO_GTM_ID }}
         run: bun run build
 
       # out/ をそのまま Pages の DocumentRoot として置く。

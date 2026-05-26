@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@next/third-parties": "^15",
     "framer-motion": "^11.18.2",
     "next": "15.1.6",
     "react": "19.0.0",
