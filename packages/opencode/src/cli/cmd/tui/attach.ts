@@ -5,6 +5,46 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
 import { ServerAuth } from "@/server/auth"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import type { EventSource } from "./context/sdk"
+
+// Subscribe to the server's /global/event SSE stream so externally-triggered
+// session activity (e.g. wakes via POST /session/<id>/prompt_async from another
+// peer) renders in the attach client's TUI.
+//
+// Without this, attach passes `events: undefined` to the SDKProvider, which is
+// supposed to fall back to startSSE() internally. In practice the fallback is
+// silent on failure (the IIFE catches everything) — explicit wiring here makes
+// the subscription observable and lifts errors to the user.
+function createAttachEventSource(opts: {
+  url: string
+  directory?: string
+  headers?: RequestInit["headers"]
+}): EventSource {
+  const sdk = createOpencodeClient({
+    baseUrl: opts.url,
+    directory: opts.directory,
+    headers: opts.headers,
+  })
+  return {
+    subscribe: async (handler) => {
+      const ctrl = new AbortController()
+      ;(async () => {
+        // Single-pass — caller's onCleanup aborts; SDKProvider does retry
+        // internally if it owns the subscription, but here we deliberately
+        // keep it simple and one-shot. Reconnect on transient failures would
+        // be a follow-up.
+        const events = await sdk.global.event({ signal: ctrl.signal, sseMaxRetryAttempts: 0 })
+        for await (const event of events.stream as AsyncIterable<GlobalEvent>) {
+          if (ctrl.signal.aborted) break
+          handler(event)
+        }
+      })().catch(() => {})
+      return () => ctrl.abort()
+    },
+  }
+}
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -92,6 +132,7 @@ export const AttachCommand = cmd({
         },
         directory,
         headers,
+        events: createAttachEventSource({ url: args.url, directory, headers }),
       })
     } finally {
       unguard?.()
