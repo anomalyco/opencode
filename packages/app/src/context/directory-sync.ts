@@ -13,6 +13,7 @@ import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
+import { recoverSessionNotFound } from "./directory-sync-error"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -279,6 +280,18 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
     clearMeta(directory, sessionIDs)
   }
 
+  const forgetMissingSession = (directory: string, setStore: Setter, sessionID: string) => {
+    seenFor(directory).delete(sessionID)
+    evict(directory, setStore, [sessionID])
+    setStore(
+      "session",
+      produce((draft) => {
+        const match = Binary.search(draft, sessionID, (s) => s.id)
+        if (match.found) draft.splice(match.index, 1)
+      }),
+    )
+  }
+
   const touch = (directory: string, setStore: Setter, sessionID: string) => {
     const stale = pickSessionCacheEvictions({
       seen: seenFor(directory),
@@ -435,59 +448,62 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           })
         }
 
-        return runInflight(inflight, key, async () => {
-          const pending = getSessionPrefetchPromise(directory, sessionID)
-          if (pending) {
-            await pending
-            const seeded = getSessionPrefetch(directory, sessionID)
-            if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
-              batch(() => {
-                setMeta("limit", key, seeded.limit)
-                setMeta("cursor", key, seeded.cursor)
-                setMeta("complete", key, seeded.complete)
-                setMeta("loading", key, false)
-              })
+        return recoverSessionNotFound(
+          runInflight(inflight, key, async () => {
+            const pending = getSessionPrefetchPromise(directory, sessionID)
+            if (pending) {
+              await pending
+              const seeded = getSessionPrefetch(directory, sessionID)
+              if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
+                batch(() => {
+                  setMeta("limit", key, seeded.limit)
+                  setMeta("cursor", key, seeded.cursor)
+                  setMeta("complete", key, seeded.complete)
+                  setMeta("loading", key, false)
+                })
+              }
             }
-          }
 
-          const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
-          const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
-          if (cached && hasSession && !opts?.force) return
+            const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
+            const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
+            if (cached && hasSession && !opts?.force) return
 
-          const limit = meta.limit[key] ?? initialMessagePageSize
-          const sessionReq =
-            hasSession && !opts?.force
-              ? Promise.resolve()
-              : retry(() => client.session.get({ sessionID })).then((session) => {
-                  if (!tracked(directory, sessionID)) return
-                  const data = session.data
-                  if (!data) return
-                  setStore(
-                    "session",
-                    produce((draft) => {
-                      const match = Binary.search(draft, sessionID, (s) => s.id)
-                      if (match.found) {
-                        draft[match.index] = data
-                        return
-                      }
-                      draft.splice(match.index, 0, data)
-                    }),
-                  )
-                })
+            const limit = meta.limit[key] ?? initialMessagePageSize
+            const sessionReq =
+              hasSession && !opts?.force
+                ? Promise.resolve()
+                : retry(() => client.session.get({ sessionID })).then((session) => {
+                    if (!tracked(directory, sessionID)) return
+                    const data = session.data
+                    if (!data) return
+                    setStore(
+                      "session",
+                      produce((draft) => {
+                        const match = Binary.search(draft, sessionID, (s) => s.id)
+                        if (match.found) {
+                          draft[match.index] = data
+                          return
+                        }
+                        draft.splice(match.index, 0, data)
+                      }),
+                    )
+                  })
 
-          const messagesReq =
-            cached && !opts?.force
-              ? Promise.resolve()
-              : loadMessages({
-                  directory,
-                  client,
-                  setStore,
-                  sessionID,
-                  limit,
-                })
+            const messagesReq =
+              cached && !opts?.force
+                ? Promise.resolve()
+                : loadMessages({
+                    directory,
+                    client,
+                    setStore,
+                    sessionID,
+                    limit,
+                  })
 
-          await Promise.all([sessionReq, messagesReq])
-        })
+            await Promise.all([sessionReq, messagesReq])
+          }),
+          () => forgetMissingSession(directory, setStore, sessionID),
+        )
       },
       async diff(sessionID: string, opts?: { force?: boolean }) {
         const [store, setStore] = serverSync.child(directory)
@@ -495,11 +511,14 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         if (store.session_diff[sessionID] !== undefined && !opts?.force) return
 
         const key = keyFor(directory, sessionID)
-        return runInflight(inflightDiff, key, () =>
-          retry(() => client.session.diff({ sessionID })).then((diff) => {
-            if (!tracked(directory, sessionID)) return
-            setStore("session_diff", sessionID, reconcile(list(diff.data), { key: "file" }))
-          }),
+        return recoverSessionNotFound(
+          runInflight(inflightDiff, key, () =>
+            retry(() => client.session.diff({ sessionID })).then((diff) => {
+              if (!tracked(directory, sessionID)) return
+              setStore("session_diff", sessionID, reconcile(list(diff.data), { key: "file" }))
+            }),
+          ),
+          () => forgetMissingSession(directory, setStore, sessionID),
         )
       },
       async todo(sessionID: string, opts?: { force?: boolean }) {
@@ -519,13 +538,16 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         }
 
         const key = keyFor(directory, sessionID)
-        return runInflight(inflightTodo, key, () =>
-          retry(() => client.session.todo({ sessionID })).then((todo) => {
-            if (!tracked(directory, sessionID)) return
-            const list = todo.data ?? []
-            setStore("todo", sessionID, reconcile(list, { key: "id" }))
-            serverSync.todo.set(sessionID, list)
-          }),
+        return recoverSessionNotFound(
+          runInflight(inflightTodo, key, () =>
+            retry(() => client.session.todo({ sessionID })).then((todo) => {
+              if (!tracked(directory, sessionID)) return
+              const list = todo.data ?? []
+              setStore("todo", sessionID, reconcile(list, { key: "id" }))
+              serverSync.todo.set(sessionID, list)
+            }),
+          ),
+          () => forgetMissingSession(directory, setStore, sessionID),
         )
       },
       history: {
@@ -551,15 +573,18 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           const before = meta.cursor[key]
           if (!before) return
 
-          await loadMessages({
-            directory,
-            client,
-            setStore,
-            sessionID,
-            limit: step,
-            before,
-            mode: "prepend",
-          })
+          await recoverSessionNotFound(
+            loadMessages({
+              directory,
+              client,
+              setStore,
+              sessionID,
+              limit: step,
+              before,
+              mode: "prepend",
+            }),
+            () => forgetMissingSession(directory, setStore, sessionID),
+          )
         },
       },
       evict(sessionID: string, _directory = directory) {
