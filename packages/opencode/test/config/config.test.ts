@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach, beforeEach } from "bun:test"
+import { test, expect, describe, afterEach, beforeEach, beforeAll, afterAll, spyOn } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
@@ -26,6 +26,7 @@ import {
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
+import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
@@ -1970,4 +1971,25 @@ test("parseManagedPlist handles empty config", async () => {
     "test:mobileconfig",
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
+})
+
+describe("os.userInfo fallback", () => {
+  let userInfoSpy: ReturnType<typeof spyOn>
+
+  beforeAll(() => {
+    userInfoSpy = spyOn(os, "userInfo").mockImplementation(() => {
+      throw new Error("ENOENT")
+    })
+  })
+
+  afterAll(() => {
+    userInfoSpy.mockRestore()
+  })
+
+  it.instance("falls back to 'user' when os.userInfo() fails", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.use.get()
+      expect(config.username).toBe("user")
+    }),
+  )
 })
