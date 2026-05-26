@@ -271,6 +271,35 @@
     background-color: var(--toast-progress);
     transition: width 250ms linear;
   }
+
+  [data-slot="toast-countdown"] {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background-color: rgb(255 255 255 / 0.08);
+    color: var(--toast-progress);
+  }
+
+  [data-slot="toast-countdown-fill"] {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: conic-gradient(currentColor var(--kb-toast-progress-fill-width, 100%), transparent 0);
+    transform: rotate(-90deg);
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border-radius: inherit;
+      background-color: var(--toast-bg);
+      backdrop-filter: blur(40px) saturate(150%);
+      -webkit-backdrop-filter: blur(40px) saturate(150%);
+    }
+  }
 }
 
 html[data-platform="desktop"][data-os="windows"] [data-component="toast"] {

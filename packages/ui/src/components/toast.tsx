@@ -84,6 +84,14 @@ function ToastProgressFill(props: ComponentProps<typeof Kobalte.ProgressFill>) {
   return <Kobalte.ProgressFill data-slot="toast-progress-fill" {...props} />
 }
 
+function ToastCountdown() {
+  return (
+    <ToastProgressTrack data-slot="toast-countdown">
+      <ToastProgressFill data-slot="toast-countdown-fill" />
+    </ToastProgressTrack>
+  )
+}
+
 export const Toast = Object.assign(ToastRoot, {
   Region: ToastRegion,
   Icon: ToastIcon,
@@ -92,6 +100,7 @@ export const Toast = Object.assign(ToastRoot, {
   Description: ToastDescription,
   Actions: ToastActions,
   CloseButton: ToastCloseButton,
+  Countdown: ToastCountdown,
   ProgressTrack: ToastProgressTrack,
   ProgressFill: ToastProgressFill,
 })
@@ -117,6 +126,7 @@ export interface ToastOptions {
 
 export function showToast(options: ToastOptions | string) {
   const opts = typeof options === "string" ? { description: options } : options
+  const hasCountdown = opts.persistent !== true && opts.duration !== 0
   return toaster.show((props) => (
     <Toast
       toastId={props.toastId}
@@ -152,6 +162,9 @@ export function showToast(options: ToastOptions | string) {
           </Toast.Actions>
         </Show>
       </Toast.Content>
+      <Show when={hasCountdown}>
+        <Toast.Countdown />
+      </Show>
       <Toast.CloseButton />
     </Toast>
   ))
@@ -179,6 +192,9 @@ export function showPromiseToast<T, U = unknown>(
           {props.state === "rejected" && options.error?.(props.error)}
         </Toast.Description>
       </Toast.Content>
+      <Show when={props.state !== "pending"}>
+        <Toast.Countdown />
+      </Show>
       <Toast.CloseButton />
     </Toast>
   ))
