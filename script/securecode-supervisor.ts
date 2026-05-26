@@ -175,8 +175,9 @@ export function shellQuote(s: string): string {
  *    ルートに移動して `bun run --cwd packages/opencode --conditions=browser src/index.ts`
  *    を組み立てる (= `bun run script/securecode-supervisor.ts` で起動した想定)。
  *
- * 引数 `args` は加工せず `JSON.stringify` でクオートして pass-through する。
- * これは `--version` 等のフラグを target dir として誤解釈しないため。
+ * 引数 `args` は加工せず `shellQuote` (POSIX single-quote escape) でクオートして
+ * pass-through する。これは `--version` 等のフラグを target dir として誤解釈
+ * しないため、かつパス中の `$HOME` 等を shell が誤って展開しないため。
  *
  * @param args - opencode へそのまま渡す引数列。通常は `process.argv.slice(2)`。
  * @param opts.distBinPath - テスト用に inner binary の絶対パスを明示指定する。

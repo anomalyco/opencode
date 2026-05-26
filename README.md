@@ -49,6 +49,8 @@ bun run script/securecode-supervisor.ts /path/to/your/repository
 
 開発時も supervisor 経由で起動するため、opencode は OS sandbox (macOS Seatbelt / Linux bubblewrap) の中で動きます。詳細は [.specs/20260526_securecode-sandbox-phase0.md](./.specs/20260526_securecode-sandbox-phase0.md) を参照。
 
+許可ドメインを追加したい場合は `~/.config/securecode/sandbox.json` を作成してください (テンプレ: [`script/securecode-config.example.json`](./script/securecode-config.example.json))。デフォルトでは Acompany の confidential AI endpoint のみ通り、それ以外への HTTPS / SOCKS5 outbound はすべて block されます。設定変更後は SecureCode を再起動してください。
+
 UI を個別に確認する場合:
 
 ```bash
