@@ -416,7 +416,7 @@ export function RunQuestionBody(props: {
                               </text>
                             </box>
                             <Show when={!info()?.multiple}>
-                              <text fg={props.theme.success}>{hit() ? "✓" : ""}</text>
+                              <text fg={props.theme.success}>{hit() ? " ✓" : ""}</text>
                             </Show>
                           </box>
                           <box paddingLeft={3}>
@@ -466,7 +466,7 @@ export function RunQuestionBody(props: {
                           </text>
                         </box>
                         <Show when={!info()?.multiple}>
-                          <text fg={props.theme.success}>{picked() ? "✓" : ""}</text>
+                          <text fg={props.theme.success}>{picked() ? " ✓" : ""}</text>
                         </Show>
                       </box>
                       <Show

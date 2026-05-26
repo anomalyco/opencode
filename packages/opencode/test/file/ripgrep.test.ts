@@ -85,7 +85,7 @@ describe("file.ripgrep", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdir((dir) => write(path.join(dir, "match.ts"), "const value = 'other'\n"))
 
-      const result = yield* Ripgrep.Service.use((rg) => rg.search({ cwd: dir, pattern: "needle" }))
+      const result = yield* Ripgrep.use.search({ cwd: dir, pattern: "needle" })
       expect(result.partial).toBe(false)
       expect(result.items).toEqual([])
     }),
@@ -100,7 +100,7 @@ describe("file.ripgrep", () => {
         }),
       )
 
-      const result = yield* Ripgrep.Service.use((rg) => rg.search({ cwd: dir, pattern: "needle" }))
+      const result = yield* Ripgrep.use.search({ cwd: dir, pattern: "needle" })
       expect(result.partial).toBe(false)
       expect(result.items).toHaveLength(1)
       expect(result.items[0]?.path.text).toBe(path.join("src", "match.ts"))
@@ -118,7 +118,7 @@ describe("file.ripgrep", () => {
         }),
       )
 
-      const result = yield* Ripgrep.Service.use((rg) => rg.search({ cwd: dir, pattern: "needle", glob: ["*.ts"] }))
+      const result = yield* Ripgrep.use.search({ cwd: dir, pattern: "needle", glob: ["*.ts"] })
       expect(result.partial).toBe(false)
       expect(result.items).toHaveLength(1)
       expect(result.items[0]?.path.text).toContain("match.ts")
@@ -136,7 +136,7 @@ describe("file.ripgrep", () => {
       )
 
       const file = path.join(dir, "match.ts")
-      const result = yield* Ripgrep.Service.use((rg) => rg.search({ cwd: dir, pattern: "needle", file: [file] }))
+      const result = yield* Ripgrep.use.search({ cwd: dir, pattern: "needle", file: [file] })
       expect(result.partial).toBe(false)
       expect(result.items).toHaveLength(1)
       expect(result.items[0]?.path.text).toBe(file)
@@ -200,7 +200,7 @@ describe("file.ripgrep", () => {
 
       const result = yield* withRipgrepConfig(
         path.join(dir, "missing-ripgreprc"),
-        Ripgrep.Service.use((rg) => rg.search({ cwd: dir, pattern: "needle" })),
+        Ripgrep.use.search({ cwd: dir, pattern: "needle" }),
       )
       expect(result.items).toHaveLength(1)
     }),
@@ -212,7 +212,7 @@ describe("file.ripgrep", () => {
 
       const result = yield* withRipgrepConfig(
         path.join(dir, "missing-ripgreprc"),
-        Ripgrep.Service.use((rg) => rg.search({ cwd: dir, pattern: "needle" })),
+        Ripgrep.use.search({ cwd: dir, pattern: "needle" }),
       )
       expect(result.items).toHaveLength(1)
     }),

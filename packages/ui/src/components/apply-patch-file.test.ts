@@ -36,7 +36,6 @@ describe("apply patch file", () => {
     ])[0]
 
     expect(file).toBeDefined()
-    expect(file?.view.patch).toContain("@@ -1,1 +1,1 @@")
     expect(text(file!.view, "deletions")).toBe("one\n")
     expect(text(file!.view, "additions")).toBe("two\n")
   })

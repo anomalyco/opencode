@@ -1,12 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Account } from "../../src/account/account"
 import { Auth } from "../../src/auth"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
@@ -15,31 +14,27 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Workspace } from "../../src/control-plane/workspace"
 import { Plugin } from "../../src/plugin/index"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
-import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Vcs } from "../../src/project/vcs"
+import { InstanceState } from "../../src/effect/instance-state"
 import { Session } from "../../src/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SyncEvent } from "../../src/sync"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { AccountTest } from "../fake/account"
+import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 
-const emptyAccount = Layer.mock(Account.Service)({
-  active: () => Effect.succeed(Option.none()),
-  activeOrg: () => Effect.succeed(Option.none()),
-})
-const emptyAuth = Layer.mock(Auth.Service)({
-  all: () => Effect.succeed({}),
-})
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(emptyAuth),
-  Layer.provide(emptyAccount),
+  Layer.provide(AuthTest.empty),
+  Layer.provide(AccountTest.empty),
   Layer.provide(NpmTest.noop),
+  Layer.provide(FetchHttpClient.layer),
 )
 const pluginLayer = Plugin.layer.pipe(
   Layer.provide(Bus.layer),
@@ -116,11 +111,12 @@ describe("plugin.workspace", () => {
         const plugin = yield* Plugin.Service
         yield* plugin.init()
         const workspace = yield* Workspace.Service
+        const ctx = yield* InstanceState.context
         const info = yield* workspace.create({
           type,
           branch: null,
           extra: { key: "value" },
-          projectID: Instance.project.id,
+          projectID: ctx.project.id,
         })
 
         expect(info.type).toBe(type)

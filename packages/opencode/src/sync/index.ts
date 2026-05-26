@@ -7,16 +7,15 @@ import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import type { InstanceContext } from "@/project/instance"
 import { EventSequenceTable, EventTable } from "./event.sql"
-import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
 import type { DeepMutable } from "@opencode-ai/core/schema"
 import { EventV2 } from "@opencode-ai/core/event"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EffectBridge } from "@/effect/bridge"
 
 // Keep `Event["data"]` mutable because projectors mutate the persisted shape
 // when writing to the database. Bus payloads (`Properties`) stay readonly —
@@ -50,10 +49,6 @@ export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & 
 
 type ProjectorFunc = (db: Database.TxOrDb, data: unknown, event: Event) => void
 type ConvertEvent = (type: string, data: Event["data"]) => unknown | Promise<unknown>
-type PublishContext = {
-  instance?: InstanceContext
-  workspace?: WorkspaceID
-}
 
 export interface Interface {
   readonly run: <Def extends Definition>(
@@ -75,6 +70,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sy
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const flags = yield* RuntimeFlags.Service
+    const bus = yield* ProjectBus.Service
 
     const replay: Interface["replay"] = Effect.fn("SyncEvent.replay")(function* (event, options) {
       const def = registry.get(event.type)
@@ -105,15 +101,14 @@ export const layer = Layer.effect(Service)(
       }
 
       const publish = !!options?.publish
-      const context = publish
-        ? {
-            instance: yield* InstanceState.context,
-            workspace: yield* InstanceState.workspaceID,
-          }
-        : undefined
+      // Bridge captures handler-fiber refs (InstanceRef/WorkspaceRef) and the
+      // full Effect context, so the forked publish + GlobalBus emit run with
+      // the right state without a per-call attachWith.
+      const bridge = yield* EffectBridge.make()
       process(def, event, {
+        bus,
+        bridge,
         publish,
-        context,
         ownerID: options?.ownerID,
         experimentalWorkspaces: flags.experimentalWorkspaces,
       })
@@ -151,12 +146,7 @@ export const layer = Layer.effect(Service)(
       }
 
       const { publish = true } = options || {}
-      const context = publish
-        ? {
-            instance: yield* InstanceState.context,
-            workspace: yield* InstanceState.workspaceID,
-          }
-        : undefined
+      const bridge = yield* EffectBridge.make()
 
       // Note that this is an "immediate" transaction which is critical.
       // We need to make sure we can safely read and write with nothing
@@ -172,7 +162,7 @@ export const layer = Layer.effect(Service)(
           const seq = row?.seq != null ? row.seq + 1 : 0
 
           const event = { id, seq, aggregateID: agg, data }
-          process(def, event, { publish, context, experimentalWorkspaces: flags.experimentalWorkspaces })
+          process(def, event, { bus, bridge, publish, experimentalWorkspaces: flags.experimentalWorkspaces })
         },
         {
           behavior: "immediate",
@@ -209,7 +199,7 @@ export const layer = Layer.effect(Service)(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(RuntimeFlags.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide([ProjectBus.defaultLayer, RuntimeFlags.defaultLayer]))
 
 export const use = serviceUse(Service)
 
@@ -303,7 +293,13 @@ function register(def: Definition) {
 function process<Def extends Definition>(
   def: Def,
   event: Event<Def>,
-  options: { publish: boolean; context?: PublishContext; ownerID?: string; experimentalWorkspaces: boolean },
+  options: {
+    bus: ProjectBus.Interface
+    bridge: EffectBridge.Shape
+    publish: boolean
+    ownerID?: string
+    experimentalWorkspaces: boolean
+  },
 ) {
   if (projectors == null) {
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
@@ -342,31 +338,36 @@ function process<Def extends Definition>(
     }
 
     Database.effect(() => {
-      if (options?.publish) {
-        if (!options.context?.instance) {
-          throw new Error("SyncEvent.process: publish requires instance context")
-        }
-
-        const result = convertEvent(def.type, event.data)
-        const publish = (data: unknown) => ProjectBus.publish(def, data as Properties<Def>, { id: event.id })
-        if (result instanceof Promise) {
-          void result.then(publish)
-        } else {
-          void publish(result)
-        }
-
-        GlobalBus.emit("event", {
-          directory: options.context.instance.directory,
-          project: options.context.instance.project.id,
-          workspace: options.context.workspace,
-          payload: {
-            type: "sync",
-            syncEvent: {
-              type: versionedType(def.type, def.version),
-              ...event,
-            },
-          },
-        })
+      if (!options.publish) return
+      const result = convertEvent(def.type, event.data)
+      // The bridge was built inside the caller's fiber so it already carries
+      // InstanceRef/WorkspaceRef and the full Effect context. Both the bus
+      // publish and the GlobalBus emit run inside the forked Effect so they
+      // share the same instance/workspace lookup.
+      const publish = (data: unknown) =>
+        options.bridge.fork(
+          Effect.gen(function* () {
+            yield* options.bus.publish(def, data as Properties<Def>, { id: event.id })
+            const instance = yield* InstanceState.context
+            const workspace = yield* InstanceState.workspaceID
+            GlobalBus.emit("event", {
+              directory: instance.directory,
+              project: instance.project.id,
+              workspace,
+              payload: {
+                type: "sync",
+                syncEvent: {
+                  type: versionedType(def.type, def.version),
+                  ...event,
+                },
+              },
+            })
+          }),
+        )
+      if (result instanceof Promise) {
+        void result.then(publish)
+      } else {
+        publish(result)
       }
     })
   })
