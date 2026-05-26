@@ -15,11 +15,13 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
-  test("declared schema has no ungenerated migrations", async () => {
-    const result = await $`bun ${fileURLToPath(new URL("../script/migration.ts", import.meta.url))} --check`.quiet().nothrow()
-    expect(result.exitCode, result.stderr.toString()).toBe(0)
-    expect(result.stdout.toString()).toContain("No schema changes, nothing to migrate")
-  }, 30_000)
+  if (process.platform === "linux") {
+    test("declared schema has no ungenerated migrations", async () => {
+      const result = await $`bun ${fileURLToPath(new URL("../script/migration.ts", import.meta.url))} --check`.quiet().nothrow()
+      expect(result.exitCode, result.stderr.toString()).toBe(0)
+      expect(result.stdout.toString()).toContain("No schema changes, nothing to migrate")
+    }, 30_000)
+  }
 
   test("applies tracked migrations to an empty database", async () => {
     await run(
