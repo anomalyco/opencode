@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach, beforeEach } from "bun:test"
+import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
@@ -28,6 +28,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
+import os from "os"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectID } from "../../src/project/schema"
@@ -288,6 +289,20 @@ it.instance("loads config with defaults when no files exist", () =>
   Effect.gen(function* () {
     const config = yield* Config.use.get()
     expect(config.username).toBeDefined()
+  }),
+)
+
+it.instance("falls back to generic username when system user info is unavailable", () =>
+  Effect.gen(function* () {
+    const userInfo = spyOn(os, "userInfo").mockImplementation(() => {
+      throw Object.assign(new Error("missing passwd entry"), { code: "ENOENT" })
+    })
+    try {
+      const config = yield* Config.use.get()
+      expect(config.username).toBe("user")
+    } finally {
+      userInfo.mockRestore()
+    }
   }),
 )
 

@@ -1,4 +1,5 @@
 import type { McpServer } from "@agentclientprotocol/sdk"
+import type { Message, Part } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, Ref } from "effect"
 import type { ModelID, ProviderID } from "../provider/schema"
 import * as ACPNextError from "./error"
@@ -11,6 +12,9 @@ export type SelectedModel = {
 export type KnownMessagePartMetadata = {
   messageId: string
   partId: string
+  partType?: Part["type"]
+  role?: Message["role"]
+  ignored?: boolean
   toolCallId?: string
   metadata?: unknown
 }
@@ -40,6 +44,9 @@ export type RecordPartMetadataInput = {
   sessionId: string
   messageId: string
   partId: string
+  partType?: Part["type"]
+  role?: Message["role"]
+  ignored?: boolean
   toolCallId?: string
   metadata?: unknown
 }
@@ -146,6 +153,9 @@ export const layer = Layer.effect(
       const metadata = {
         messageId: input.messageId,
         partId: input.partId,
+        partType: input.partType,
+        role: input.role,
+        ignored: input.ignored,
         toolCallId: input.toolCallId,
         metadata: input.metadata,
       }

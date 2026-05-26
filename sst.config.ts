@@ -2,28 +2,21 @@
 
 export default $config({
   app(input) {
-    // Dev owns the shared AWS lake/stats infra for all non-production stages.
-    const awsStage = input.stage === "production" ? "production" : "dev"
-    const deployAws = input.stage === awsStage
     return {
       name: "opencode",
       removal: input?.stage === "production" ? "retain" : "remove",
       protect: ["production"].includes(input?.stage),
       home: "cloudflare",
       providers: {
-        ...(deployAws
-          ? {
-              aws: {
-                version: "7.30.0",
-                region: "us-east-1",
-                profile: process.env.GITHUB_ACTIONS
-                  ? undefined
-                  : input.stage === "production"
-                    ? "opencode-production"
-                    : "opencode-dev",
-              },
-            }
-          : {}),
+        aws: {
+          version: "7.30.0",
+          region: "us-east-1",
+          profile: process.env.GITHUB_ACTIONS
+            ? undefined
+            : input.stage === "production"
+              ? "opencode-production"
+              : "opencode-dev",
+        },
         stripe: {
           version: "0.0.28",
           apiKey: process.env.STRIPE_SECRET_KEY!,

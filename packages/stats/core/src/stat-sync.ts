@@ -52,8 +52,8 @@ export const syncStats: () => Effect.Effect<
     discard: true,
   })
 
-  yield* Effect.logInfo("stats sync complete").pipe(
-    Effect.annotateLogs({
+  yield* Effect.logInfo(
+    `stats sync complete ${JSON.stringify({
       startedAt: startedAt.toISOString(),
       periodStart: periodStart.toISOString(),
       periodEnd: periodEnd.toISOString(),
@@ -61,7 +61,7 @@ export const syncStats: () => Effect.Effect<
       providerRows: providerRows.length,
       geoRows: geoRows.length,
       stage: Resource.App.stage,
-    }),
+    })}`,
   )
 
   return {
@@ -74,8 +74,8 @@ export const syncStats: () => Effect.Effect<
 })
 
 function logRuntimeCheck() {
-  return Effect.logInfo("athena stats runtime check").pipe(
-    Effect.annotateLogs({
+  return Effect.logInfo(
+    `athena stats runtime check ${JSON.stringify({
       catalog: Resource.InferenceEvent.catalog,
       database: Resource.InferenceEvent.database,
       dataset: Resource.StatsSyncConfig.dataset,
@@ -83,6 +83,6 @@ function logRuntimeCheck() {
       workgroup: Resource.InferenceEvent.workgroup,
       region: Resource.InferenceEvent.region,
       stage: Resource.App.stage,
-    }),
+    })}`,
   )
 }
