@@ -2,20 +2,12 @@ import { Context, Effect, Layer, Schema } from "effect"
 
 class UnsupportedFormatError extends Schema.TaggedErrorClass<UnsupportedFormatError>()("UnsupportedFormatError", {
   message: Schema.String,
-}) {
-  override get message(): string {
-    return this.message
-  }
-}
+}) {}
 
 class ConversionError extends Schema.TaggedErrorClass<ConversionError>()("ConversionError", {
   message: Schema.String,
   cause: Schema.Unknown,
-}) {
-  override get message(): string {
-    return this.message
-  }
-}
+}) {}
 
 export interface Interface {
   readonly convertToMarkdown: (

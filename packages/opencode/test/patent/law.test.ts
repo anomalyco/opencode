@@ -13,7 +13,7 @@ const layer = PatentLaw.defaultLayer.pipe(
 const it = testEffect(layer)
 
 describe("PatentLaw", () => {
-  it.live("searchLaw returns empty array when database not found", () =>
+  it.instance("searchLaw returns empty array when database not found", () =>
     Effect.gen(function* () {
       const svc = yield* PatentLaw.Service
       const result = yield* svc.searchLaw("专利")
@@ -21,7 +21,7 @@ describe("PatentLaw", () => {
     }),
   )
 
-  it.live("getByCategory returns empty array when database not found", () =>
+  it.instance("getByCategory returns empty array when database not found", () =>
     Effect.gen(function* () {
       const svc = yield* PatentLaw.Service
       const result = yield* svc.getByCategory("法律")
@@ -29,7 +29,7 @@ describe("PatentLaw", () => {
     }),
   )
 
-  it.live("getLawContent returns empty string when database not found", () =>
+  it.instance("getLawContent returns empty string when database not found", () =>
     Effect.gen(function* () {
       const svc = yield* PatentLaw.Service
       const result = yield* svc.getLawContent("test-id")

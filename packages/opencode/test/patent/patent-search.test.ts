@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit, Schema } from "effect"
+import { Schema } from "effect"
 
 describe("PatentSearchTool", () => {
   test("tool module exports correctly", async () => {
@@ -11,7 +11,7 @@ describe("PatentSearchTool", () => {
 
   test("Parameters schema decodes valid input", async () => {
     const mod = await import("@/tool/patent-search")
-    const Parameters = mod.Parameters as Schema.Schema<any>
+    const Parameters = mod.Parameters
 
     const validInput = {
       query: "人工智能",
@@ -21,17 +21,17 @@ describe("PatentSearchTool", () => {
       limit: 20,
     }
 
-    const result = await Schema.decodeUnknownEffect(Parameters)(validInput).pipe(Effect.runPromise)
+    const result = Schema.decodeUnknownSync(Parameters)(validInput)
     expect(result).toEqual(validInput)
   })
 
   test("Parameters schema decodes minimal input", async () => {
     const mod = await import("@/tool/patent-search")
-    const Parameters = mod.Parameters as Schema.Schema<any>
+    const Parameters = mod.Parameters
 
     const minimalInput = { query: "人工智能" }
 
-    const result = await Schema.decodeUnknownEffect(Parameters)(minimalInput).pipe(Effect.runPromise)
+    const result = Schema.decodeUnknownSync(Parameters)(minimalInput)
     expect(result.query).toBe("人工智能")
     expect(result.field).toBeUndefined()
     expect(result.ipc).toBeUndefined()
@@ -41,13 +41,13 @@ describe("PatentSearchTool", () => {
 
   test("Parameters schema requires query field", async () => {
     const mod = await import("@/tool/patent-search")
-    const Parameters = mod.Parameters as Schema.Schema<any>
+    const Parameters = mod.Parameters
 
-    const result = await Schema.decodeUnknownEffect(Parameters)({ field: "title" }).pipe(Effect.exit)
-    if (Exit.isSuccess(result)) {
+    const result = Schema.decodeUnknownOption(Parameters)({ field: "title" })
+    if (result._tag === "Some") {
       expect(result.value.query).toBeUndefined()
     } else {
-      expect(Exit.isFailure(result)).toBe(true)
+      expect(result._tag).toBe("None")
     }
   })
 })

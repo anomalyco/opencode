@@ -2,27 +2,27 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
 import { PatentKnowledge } from "@/patent/knowledge"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Config } from "@/config/config"
 
-const it = testEffect(PatentKnowledge.defaultLayer)
+const layer = PatentKnowledge.defaultLayer.pipe(
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Config.defaultLayer),
+)
+
+const it = testEffect(layer)
 
 describe("PatentKnowledge", () => {
-  it.effect("searchSemantic returns results for existing query", () =>
+  it.instance("searchSemantic returns empty for non-existent db", () =>
     Effect.gen(function* () {
       const svc = yield* PatentKnowledge.Service
       const results = yield* svc.searchSemantic("三步法", { limit: 5, threshold: 0.5 })
       expect(Array.isArray(results)).toBe(true)
+      expect(results).toEqual([])
     }),
   )
 
-  it.effect("searchSemantic returns empty for non-existent query", () =>
-    Effect.gen(function* () {
-      const svc = yield* PatentKnowledge.Service
-      const results = yield* svc.searchSemantic("不存在xyz123", { limit: 5, threshold: 0.5 })
-      expect(Array.isArray(results)).toBe(true)
-    }),
-  )
-
-  it.effect("searchCards returns results for existing keyword", () =>
+  it.instance("searchCards returns empty for non-existent dir", () =>
     Effect.gen(function* () {
       const svc = yield* PatentKnowledge.Service
       const results = yield* svc.searchCards("创造性")
@@ -30,11 +30,21 @@ describe("PatentKnowledge", () => {
     }),
   )
 
-  it.effect("searchGuidelines returns non-empty string for existing topic", () =>
+  it.instance("searchGuidelines returns empty string for non-existent dir", () =>
     Effect.gen(function* () {
       const svc = yield* PatentKnowledge.Service
       const result = yield* svc.searchGuidelines("新颖性")
       expect(typeof result).toBe("string")
+      expect(result).toEqual("")
+    }),
+  )
+
+  it.instance("searchInvalidation returns empty string for non-existent dir", () =>
+    Effect.gen(function* () {
+      const svc = yield* PatentKnowledge.Service
+      const result = yield* svc.searchInvalidation("无效")
+      expect(typeof result).toBe("string")
+      expect(result).toEqual("")
     }),
   )
 })

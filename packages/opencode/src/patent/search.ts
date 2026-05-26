@@ -15,11 +15,7 @@ export type PatentRecord = Schema.Schema.Type<typeof PatentRecord>
 class PatentSearchUnavailableError extends Schema.TaggedErrorClass<PatentSearchUnavailableError>()(
   "PatentSearchUnavailableError",
   { message: Schema.String },
-) {
-  override get message(): string {
-    return this.message
-  }
-}
+) {}
 
 export interface Interface {
   readonly search: (query: {
@@ -65,34 +61,34 @@ export const layer = Layer.effect(
             })
           }
 
-          const rows = yield* Effect.suspend(() => {
-            const { Database } = require("bun:sqlite")
-            const db = new Database(dbPath, { readonly: true }) as Database
-            try {
-              const conditions: string[] = []
-              const params: string[] = []
-              if (query.keyword) {
-                conditions.push("(title LIKE ? OR abstract LIKE ?)")
-                params.push(`%${query.keyword}%`, `%${query.keyword}%`)
-              }
-              if (query.ipc) {
-                conditions.push("ipc LIKE ?")
-                params.push(`${query.ipc}%`)
-              }
-              if (query.applicant) {
-                conditions.push("applicant LIKE ?")
-                params.push(`%${query.applicant}%`)
-              }
+          const rows = yield* Effect.gen(function* () {
+            const { Database } = yield* Effect.promise(() => import("bun:sqlite"))
+            const db = yield* Effect.acquireRelease(
+              Effect.succeed(new Database(dbPath, { readonly: true }) as Database),
+              (db) => Effect.sync(() => db.close()),
+            )
 
-              const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
-              const limit = Math.min(query.limit ?? 10, 100)
-              const sql = `SELECT patentId, title, abstract, applicant, ipc FROM patents ${where} LIMIT ${limit}`
-
-              return Effect.succeed(db.query(sql).all(...params) as Record<string, unknown>[])
-            } finally {
-              db.close()
+            const conditions: string[] = []
+            const params: string[] = []
+            if (query.keyword) {
+              conditions.push("(title LIKE ? OR abstract LIKE ?)")
+              params.push(`%${query.keyword}%`, `%${query.keyword}%`)
             }
-          })
+            if (query.ipc) {
+              conditions.push("ipc LIKE ?")
+              params.push(`${query.ipc}%`)
+            }
+            if (query.applicant) {
+              conditions.push("applicant LIKE ?")
+              params.push(`%${query.applicant}%`)
+            }
+
+            const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+            const limit = Math.min(query.limit ?? 10, 100)
+            const sql = `SELECT patentId, title, abstract, applicant, ipc FROM patents ${where} LIMIT ${limit}`
+
+            return Effect.succeed(db.query(sql).all(...params) as Record<string, unknown>[])
+          }).pipe(Effect.scoped)
 
           const decoded = yield* Effect.forEach(rows, (row) =>
             Effect.gen(function* () {

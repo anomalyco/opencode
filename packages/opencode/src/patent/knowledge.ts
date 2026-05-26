@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Config } from "@/config/config"
 import path from "path"
@@ -16,36 +16,44 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PatentKnowledge") {}
 
-export const make = (dataDir: string) =>
+export const layer = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
+    const config = yield* Config.Service
+
+    const getDataDir = Effect.fnUntraced(function* () {
+      const cfg = yield* config.get()
+      return cfg.patent?.dataDir ?? path.join(process.env.HOME ?? "", ".opencode", "patent")
+    })
 
     const searchSemantic = Effect.fn("PatentKnowledge.searchSemantic")(
       function* (query: string, opts: { limit: number; threshold: number }) {
+        const dataDir = yield* getDataDir()
         const dbPath = path.join(dataDir, "semantic-index.db")
         const exists = yield* fs.existsSafe(dbPath)
         if (!exists) return []
 
-        const results = yield* Effect.sync(() => {
-          const db = new Database(dbPath, { readonly: true })
-          try {
-            return (db
-              .query(`SELECT title, content FROM chunks WHERE content LIKE ? LIMIT ?`)
-              .all(`%${query}%`, opts.limit) as Array<{ title: string; content: string }>)
-              .map((row) => ({
-                title: row.title,
-                content: row.content,
-                score: 1.0,
-              }))
-          } finally {
-            db.close()
-          }
-        })
+        const results = yield* Effect.gen(function* () {
+          const db = yield* Effect.acquireRelease(
+            Effect.sync(() => new Database(dbPath, { readonly: true })),
+            (db) => Effect.sync(() => db.close()),
+          )
+          return (db
+            .query(`SELECT title, content FROM chunks WHERE content LIKE ? LIMIT ?`)
+            .all(`%${query}%`, opts.limit) as Array<{ title: string; content: string }>)
+            .map((row) => ({
+              title: row.title,
+              content: row.content,
+              score: 1.0,
+            }))
+        }).pipe(Effect.scoped)
         return results
       },
     )
 
     const searchCards = Effect.fn("PatentKnowledge.searchCards")(function* (keyword: string) {
+      const dataDir = yield* getDataDir()
       const cardsDir = path.join(dataDir, "cards")
       const exists = yield* fs.existsSafe(cardsDir)
       if (!exists) return []
@@ -73,6 +81,7 @@ export const make = (dataDir: string) =>
     })
 
     const searchGuidelines = Effect.fn("PatentKnowledge.searchGuidelines")(function* (topic: string) {
+      const dataDir = yield* getDataDir()
       const guidelinesDir = path.join(dataDir, "审查指南")
       const exists = yield* fs.existsSafe(guidelinesDir)
       if (!exists) return ""
@@ -91,6 +100,7 @@ export const make = (dataDir: string) =>
     })
 
     const searchInvalidation = Effect.fn("PatentKnowledge.searchInvalidation")(function* (topic: string) {
+      const dataDir = yield* getDataDir()
       const invalidationDir = path.join(dataDir, "复审无效")
       const exists = yield* fs.existsSafe(invalidationDir)
       if (!exists) return ""
@@ -109,15 +119,6 @@ export const make = (dataDir: string) =>
     })
 
     return Service.of({ searchSemantic, searchCards, searchGuidelines, searchInvalidation })
-  })
-
-export const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const config = yield* Config.Service
-    const cfg = yield* config.get()
-    const dataDir = cfg.patent?.dataDir ?? path.join(process.env.HOME ?? "", ".opencode", "patent")
-    return yield* make(dataDir)
   }),
 )
 
