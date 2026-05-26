@@ -266,8 +266,24 @@ export const Info = Schema.Struct({
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
         description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
       }),
+      preserve_recent_tokens_max: Schema.optional(NonNegativeInt).annotate({
+        description:
+          "Upper bound on tokens preserved verbatim from recent turns (default: 32000). Only used when preserve_recent_tokens is not set.",
+      }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+      }),
+      tool_output_max_chars: Schema.optional(PositiveInt).annotate({
+        description:
+          "Max characters of tool output text to include when building compaction context (default: 2000). Increase for more detailed summaries.",
+      }),
+      summary_template: Schema.optional(Schema.String).annotate({
+        description:
+          "Custom Markdown template for compaction summaries. Replaces the built-in template. Should include sections like Goal, Progress, Key Decisions, etc.",
+      }),
+      model: Schema.optional(Schema.String).annotate({
+        description:
+          "Model ID override for compaction, e.g. 'anthropic/claude-opus-4'. Defaults to the session model.",
       }),
     }),
   ),

@@ -36,11 +36,11 @@ export const Event = {
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
-const TOOL_OUTPUT_MAX_CHARS = 2_000
+const DEFAULT_TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
-const MAX_PRESERVE_RECENT_TOKENS = 8_000
+const DEFAULT_MAX_PRESERVE_RECENT_TOKENS = 32_000
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Goal
@@ -70,6 +70,12 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 
 ## Relevant Files
 - [file or directory path: why it matters, or "(none)"]
+
+## Active Skills & Workflow
+- [skill name: why loaded, current workflow phase and mode, or "(none)"]
+
+## Active Todos
+- [status] content (priority) — e.g. "[in_progress] Create API endpoints (high)"
 </template>
 
 Rules:
@@ -122,7 +128,7 @@ function completedCompactions(messages: MessageV2.WithParts[]) {
   })
 }
 
-function buildPrompt(input: { previousSummary?: string; context: string[] }) {
+function buildPrompt(input: { previousSummary?: string; context: string[]; template?: string }) {
   const anchor = input.previousSummary
     ? [
         "Update the anchored summary below using the conversation history above.",
@@ -132,13 +138,16 @@ function buildPrompt(input: { previousSummary?: string; context: string[] }) {
         "</previous-summary>",
       ].join("\n")
     : "Create a new anchored summary from the conversation history above."
-  return [anchor, SUMMARY_TEMPLATE, ...input.context].join("\n\n")
+  return [anchor, input.template ?? SUMMARY_TEMPLATE, ...input.context].join("\n\n")
 }
 
 function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
   return (
     input.cfg.compaction?.preserve_recent_tokens ??
-    Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
+    Math.min(
+      input.cfg.compaction?.preserve_recent_tokens_max ?? DEFAULT_MAX_PRESERVE_RECENT_TOKENS,
+      Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)),
+    )
   )
 }
 
@@ -383,10 +392,16 @@ export const layer = Layer.effect(
       }
 
       const agent = yield* agents.get("compaction")
-      const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
-        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const cfg = yield* config.get()
+      const model =
+        cfg.compaction?.model
+          ? yield* (() => {
+              const p = Provider.parseModel(cfg.compaction.model!)
+              return provider.getModel(p.providerID, p.modelID).pipe(Effect.orDie)
+            })()
+          : agent.model
+            ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
+            : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
@@ -402,12 +417,15 @@ export const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      const nextPrompt =
+        compacting.prompt ??
+        buildPrompt({ previousSummary, context: compacting.context, template: cfg.compaction?.summary_template })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+      const toolOutputMaxChars = cfg.compaction?.tool_output_max_chars ?? DEFAULT_TOOL_OUTPUT_MAX_CHARS
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
         stripMedia: true,
-        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+        toolOutputMaxChars,
       })
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {
@@ -539,7 +557,7 @@ export const layer = Layer.effect(
               (input.overflow
                 ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
                 : "") +
-              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.\n\nIf the Active Skills & Workflow section above lists any loaded skills or workflow modes, re-load them with the skill tool before continuing."
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: continueMsg.id,

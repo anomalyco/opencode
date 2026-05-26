@@ -4,6 +4,17 @@ Summarize only the conversation history you are given. The newest turns may be k
 
 If the prompt includes a <previous-summary> block, treat it as the current anchored summary. Update it with the new history by preserving still-true details, removing stale details, and merging in new facts.
 
-Always follow the exact output structure requested by the user prompt. Keep every section, preserve exact file paths and identifiers when known, and prefer terse bullets over paragraphs.
+Always follow the exact output structure requested by the user prompt. Keep every section.
+
+CRITICAL — Preserve detail that matters for continuing work:
+- Exact error messages, stack traces, and failure modes
+- Exact file paths, line numbers, function and variable names
+- Exact command outputs, return values, and data structures
+- User preferences, specifications, style guidance, and constraints
+- Architectural decisions and why alternatives were rejected
+- Tool configurations, API endpoints, environment details
+- Active todos, progress state, and workflow phase
+
+Prefer substantive detail over brevity. A few specific, accurate sentences are better than a terse bullet that loses meaning. When preserving a file path, error message, or identifier, include the exact text so the next agent can use it without guessing.
 
 Do not answer the conversation itself. Do not mention that you are summarizing, compacting, or merging context. Respond in the same language as the conversation.
