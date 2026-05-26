@@ -4,8 +4,14 @@ import {
   type AuthenticateResponse,
   type AuthMethod,
   type CancelNotification,
+  type CloseSessionRequest,
+  type CloseSessionResponse,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
   type McpServer,
@@ -13,19 +19,31 @@ import {
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type SessionInfo,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
+  type SetSessionModelRequest,
+  type SetSessionModelResponse,
+  type SetSessionModeRequest,
+  type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import * as Log from "@opencode-ai/core/util/log"
+import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPNextError from "./error"
-import { buildConfigOptions } from "./config-option"
+import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { Directory } from "./directory"
+import { ACPNextEvent } from "./event"
 import { ACPNextSession } from "./session"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
 export const AuthMethodID = "opencode-login"
+const log = Log.create({ service: "acp-next-service" })
 
 export type Error = ACPNextError.Error
 
@@ -34,6 +52,15 @@ export type Interface = {
   readonly authenticate: (input: AuthenticateRequest) => Effect.Effect<AuthenticateResponse, Error>
   readonly newSession: (input: NewSessionRequest) => Effect.Effect<NewSessionResponse, Error>
   readonly loadSession: (input: LoadSessionRequest) => Effect.Effect<LoadSessionResponse, Error>
+  readonly listSessions: (input: ListSessionsRequest) => Effect.Effect<ListSessionsResponse, Error>
+  readonly resumeSession: (input: ResumeSessionRequest) => Effect.Effect<ResumeSessionResponse, Error>
+  readonly closeSession: (input: CloseSessionRequest) => Effect.Effect<CloseSessionResponse, Error>
+  readonly forkSession: (input: ForkSessionRequest) => Effect.Effect<ForkSessionResponse, Error>
+  readonly setSessionConfigOption: (
+    input: SetSessionConfigOptionRequest,
+  ) => Effect.Effect<SetSessionConfigOptionResponse, Error>
+  readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Error>
+  readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
 }
@@ -45,10 +72,15 @@ export function make(input: {
   connection?: Pick<AgentSideConnection, "sessionUpdate">
   directory?: Directory.Interface
   session?: ACPNextSession.Interface
+  eventSubscription?: (subscription: ACPNextEvent.Subscription) => void
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
+  const events = input.connection
+    ? ACPNextEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    : undefined
+  if (events) input.eventSubscription?.(events)
 
   const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
     const authMethod: AuthMethod = {
@@ -78,6 +110,12 @@ export function make(input: {
         promptCapabilities: {
           embeddedContext: true,
           image: true,
+        },
+        sessionCapabilities: {
+          close: {},
+          fork: {},
+          list: {},
+          resume: {},
         },
       },
       authMethods: [authMethod],
@@ -169,6 +207,137 @@ export function make(input: {
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
+    yield* replayMessages(events, messages)
+
+    return {
+      configOptions: configOptions(snapshot, {
+        model: state.model ?? model,
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    }
+  })
+
+  const listSessions = Effect.fn("ACPNext.listSessions")(function* (params: ListSessionsRequest) {
+    const cursor = params.cursor ? Number(params.cursor) : undefined
+    const limit = 100
+    const sessions = yield* request(
+      () =>
+        input.sdk.session.list(
+          {
+            ...(params.cwd ? { directory: params.cwd } : {}),
+            roots: true,
+          },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+    const filtered =
+      cursor === undefined || !Number.isFinite(cursor) ? sorted : sorted.filter((item) => item.time.updated < cursor)
+    const page = filtered.slice(0, limit)
+    const last = page.at(-1)
+    return {
+      sessions: page.map(
+        (item): SessionInfo => ({
+          sessionId: item.id,
+          cwd: item.directory,
+          title: item.title,
+          updatedAt: new Date(item.time.updated).toISOString(),
+        }),
+      ),
+      ...(filtered.length > limit && last ? { nextCursor: String(last.time.updated) } : {}),
+    }
+  })
+
+  const resumeSession = Effect.fn("ACPNext.resumeSession")(function* (params: ResumeSessionRequest) {
+    const snapshot = yield* directorySnapshot(params.cwd)
+    yield* request(
+      () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
+      "session",
+    )
+    const messages = yield* request(
+      () =>
+        input.sdk.session.messages(
+          { directory: params.cwd, sessionID: params.sessionId, limit: 20 },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const model = restored.model ?? selectDefaultModel(snapshot)
+    const state = yield* session.load({
+      id: params.sessionId,
+      cwd: params.cwd,
+      mcpServers: params.mcpServers ?? [],
+      model,
+      variant: restored.variant ?? selectVariant(snapshot, model),
+      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+    })
+
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
+    yield* sendAvailableCommands(input.connection, state.id, snapshot)
+    yield* replayMessages(events, messages)
+
+    return {
+      configOptions: configOptions(snapshot, {
+        model: state.model ?? model,
+        variant: state.variant,
+        modeId: state.modeId,
+      }),
+    }
+  })
+
+  const closeSession = Effect.fn("ACPNext.closeSession")(function* (params: CloseSessionRequest) {
+    const removed = yield* session.remove(params.sessionId)
+    registeredMcp.delete(params.sessionId)
+    if (!removed) return {}
+
+    yield* request(
+      () => input.sdk.session.abort({ directory: removed.cwd, sessionID: params.sessionId }, { throwOnError: true }),
+      "session",
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          log.error("failed to abort session while closing ACP session", { error, sessionID: params.sessionId })
+        }),
+      ),
+    )
+    return {}
+  })
+
+  const forkSession = Effect.fn("ACPNext.forkSession")(function* (params: ForkSessionRequest) {
+    const snapshot = yield* directorySnapshot(params.cwd)
+    const forked = yield* request(
+      () =>
+        input.sdk.session.fork(
+          {
+            directory: params.cwd,
+            sessionID: params.sessionId,
+          },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+    const messages = yield* request(
+      () =>
+        input.sdk.session.messages({ directory: params.cwd, sessionID: forked.id, limit: 20 }, { throwOnError: true }),
+      "session",
+    )
+    const restored = restoreFromMessages(messages.map((item) => item.info))
+    const model = restored.model ?? selectDefaultModel(snapshot)
+    const state = yield* session.load({
+      id: forked.id,
+      cwd: params.cwd,
+      mcpServers: params.mcpServers ?? [],
+      model,
+      variant: restored.variant ?? selectVariant(snapshot, model),
+      modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
+    })
+
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
+    yield* sendAvailableCommands(input.connection, state.id, snapshot)
+    yield* replayMessages(events, messages)
 
     return {
       sessionId: state.id,
@@ -180,11 +349,100 @@ export function make(input: {
     }
   })
 
+  const setSessionConfigOption = Effect.fn("ACPNext.setSessionConfigOption")(function* (
+    params: SetSessionConfigOptionRequest,
+  ) {
+    const current = yield* session.get(params.sessionId)
+    const snapshot = yield* directorySnapshot(current.cwd)
+    if (typeof params.value !== "string") {
+      return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
+    }
+
+    if (params.configId === "model") {
+      const selected = yield* parseSelectedModel(snapshot, params.value)
+      const variant = selected.variant ?? selectVariant(snapshot, selected.model)
+      const state = yield* session
+        .setVariant(params.sessionId, Directory.variants(snapshot, selected.model) ? variant : undefined)
+        .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
+      return {
+        configOptions: configOptions(snapshot, {
+          model: state.model ?? selected.model,
+          variant: state.variant,
+          modeId: state.modeId,
+        }),
+      }
+    }
+
+    if (params.configId === "effort") {
+      const model = current.model ?? selectDefaultModel(snapshot)
+      const variants = Directory.variants(snapshot, model)
+      if (!variants || !Object.keys(variants).includes(params.value)) {
+        return yield* new ACPNextError.InvalidEffortError({ effort: params.value })
+      }
+      const state = yield* session.setVariant(params.sessionId, params.value)
+      return {
+        configOptions: configOptions(snapshot, {
+          model: state.model ?? model,
+          variant: state.variant,
+          modeId: state.modeId,
+        }),
+      }
+    }
+
+    if (params.configId === "mode") {
+      if (!snapshot.availableModes.some((mode) => mode.id === params.value)) {
+        return yield* new ACPNextError.InvalidModeError({ mode: params.value })
+      }
+      const state = yield* session.setMode(params.sessionId, params.value)
+      return {
+        configOptions: configOptions(snapshot, {
+          model: state.model ?? selectDefaultModel(snapshot),
+          variant: state.variant,
+          modeId: state.modeId,
+        }),
+      }
+    }
+
+    return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
+  })
+
+  const setSessionMode = Effect.fn("ACPNext.setSessionMode")(function* (params: SetSessionModeRequest) {
+    const current = yield* session.get(params.sessionId)
+    const snapshot = yield* directorySnapshot(current.cwd)
+    if (!snapshot.availableModes.some((mode) => mode.id === params.modeId)) {
+      return yield* new ACPNextError.InvalidModeError({ mode: params.modeId })
+    }
+    yield* session.setMode(params.sessionId, params.modeId)
+    return {}
+  })
+
+  const setSessionModel = Effect.fn("ACPNext.setSessionModel")(function* (params: SetSessionModelRequest) {
+    const current = yield* session.get(params.sessionId)
+    const snapshot = yield* directorySnapshot(current.cwd)
+    const selected = yield* parseSelectedModel(snapshot, params.modelId)
+    yield* session
+      .setVariant(
+        params.sessionId,
+        Directory.variants(snapshot, selected.model)
+          ? (selected.variant ?? selectVariant(snapshot, selected.model))
+          : undefined,
+      )
+      .pipe(Effect.andThen(session.setModel(params.sessionId, selected.model)))
+    return {}
+  })
+
   return {
     initialize,
     authenticate,
     newSession,
     loadSession,
+    listSessions,
+    resumeSession,
+    closeSession,
+    forkSession,
+    setSessionConfigOption,
+    setSessionMode,
+    setSessionModel,
     prompt: Effect.fn("ACPNext.prompt")(function* (_input: PromptRequest) {
       return yield* new ACPNextError.UnsupportedOperationError({ method: "session/prompt" })
     }),
@@ -215,6 +473,17 @@ function makeDirectoryService(sdk: OpencodeClient) {
   ).runSync(Directory.Service.use((service) => Effect.succeed(service)))
 }
 
+function replayMessages(subscription: ACPNextEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
+  if (!subscription) return Effect.void
+  return Effect.promise(async () => {
+    for (const message of messages) {
+      await subscription.replayMessage(message).catch((error: unknown) => {
+        log.error("failed to replay ACP message", { error, messageID: message.info.id })
+      })
+    }
+  })
+}
+
 type ConfigState = {
   readonly model: Directory.DefaultModel
   readonly variant?: string
@@ -227,17 +496,13 @@ type SdkResponse<T> = {
 }
 
 type MessageInfo = {
-  readonly role?: string
-  readonly model?: {
-    readonly providerID?: string
-    readonly modelID?: string
-    readonly variant?: string
-  }
-  readonly providerID?: string
-  readonly modelID?: string
-  readonly variant?: string
-  readonly mode?: string
-  readonly agent?: string
+  readonly role?: Message["role"]
+  readonly model?: Extract<Message, { role: "user" }>["model"]
+  readonly providerID?: Extract<Message, { role: "assistant" }>["providerID"]
+  readonly modelID?: Extract<Message, { role: "assistant" }>["modelID"]
+  readonly variant?: Extract<Message, { role: "assistant" }>["variant"]
+  readonly mode?: Extract<Message, { role: "assistant" }>["mode"]
+  readonly agent?: Message["agent"]
 }
 
 function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
@@ -368,6 +633,30 @@ function configOptions(snapshot: Directory.Snapshot, session: ConfigState) {
     currentVariant: session.variant,
     modes: snapshot.availableModes,
     currentModeId: session.modeId,
+  })
+}
+
+function parseSelectedModel(snapshot: Directory.Snapshot, modelId: string) {
+  const selected = parseModelSelection(modelId, Object.values(snapshot.providers))
+  const provider = snapshot.providers[ProviderID.make(selected.model.providerID)]
+  const model = provider?.models[ModelID.make(selected.model.modelID)]
+  if (!model) {
+    return Effect.fail(
+      new ACPNextError.InvalidModelError({
+        providerId: selected.model.providerID,
+        modelId,
+      }),
+    )
+  }
+  if (selected.variant && !model.variants?.[selected.variant]) {
+    return Effect.fail(new ACPNextError.InvalidEffortError({ effort: selected.variant }))
+  }
+  return Effect.succeed({
+    model: {
+      providerID: provider.id,
+      modelID: model.id,
+    },
+    variant: selected.variant,
   })
 }
 

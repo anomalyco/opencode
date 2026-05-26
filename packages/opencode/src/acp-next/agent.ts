@@ -4,10 +4,17 @@ import {
   type AgentSideConnection,
   type AuthenticateRequest,
   type CancelNotification,
+  type CloseSessionRequest,
+  type ForkSessionRequest,
   type InitializeRequest,
+  type ListSessionsRequest,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PromptRequest,
+  type ResumeSessionRequest,
+  type SetSessionConfigOptionRequest,
+  type SetSessionModelRequest,
+  type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
@@ -39,6 +46,34 @@ export class Agent implements ACPAgent {
 
   loadSession(params: LoadSessionRequest) {
     return run(this.service.loadSession(params))
+  }
+
+  listSessions(params: ListSessionsRequest) {
+    return run(this.service.listSessions(params))
+  }
+
+  resumeSession(params: ResumeSessionRequest) {
+    return run(this.service.resumeSession(params))
+  }
+
+  closeSession(params: CloseSessionRequest) {
+    return run(this.service.closeSession(params))
+  }
+
+  unstable_forkSession(params: ForkSessionRequest) {
+    return run(this.service.forkSession(params))
+  }
+
+  setSessionConfigOption(params: SetSessionConfigOptionRequest) {
+    return run(this.service.setSessionConfigOption(params))
+  }
+
+  setSessionMode(params: SetSessionModeRequest) {
+    return run(this.service.setSessionMode(params))
+  }
+
+  unstable_setSessionModel(params: SetSessionModelRequest) {
+    return run(this.service.setSessionModel(params))
   }
 
   prompt(params: PromptRequest) {
