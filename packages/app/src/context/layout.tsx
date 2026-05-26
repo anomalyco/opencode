@@ -521,26 +521,35 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
-    let sessionFrame: number | undefined
-    let sessionTimer: number | undefined
+    createEffect(() => {
+      if (!server.ready()) return
+      if (!serverSync.ready) return
 
-    onMount(() => {
+      const projects = server.projects.list()
+      if (projects.length === 0) return
+
+      let sessionFrame: number | undefined
+      let sessionTimer: number | undefined
+      let disposed = false
+
       sessionFrame = requestAnimationFrame(() => {
         sessionFrame = undefined
         sessionTimer = window.setTimeout(() => {
           sessionTimer = undefined
+          if (disposed) return
           void Promise.all(
-            server.projects.list().map((project) => {
+            projects.map((project) => {
               return serverSync.project.loadSessions(project.worktree)
             }),
           )
         }, 0)
       })
-    })
 
-    onCleanup(() => {
-      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
-      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
+      onCleanup(() => {
+        disposed = true
+        if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
+        if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
+      })
     })
 
     return {
