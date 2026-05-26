@@ -3,8 +3,10 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  CodexAuthPlugin,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
+import type { PluginInput } from "@opencode-ai/plugin"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -118,6 +120,77 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("oauth fetch", () => {
+    test("preserves caller signal through token refresh and Codex rewrite", async () => {
+      const signal = new AbortController().signal
+      const urls: string[] = []
+      const signals: (AbortSignal | undefined)[] = []
+      const original = globalThis.fetch
+
+      const next = Object.assign(
+        async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
+          const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+          urls.push(url)
+          signals.push(init?.signal ?? undefined)
+          if (url.includes("/oauth/token")) {
+            return new Response(
+              JSON.stringify({
+                id_token: "",
+                access_token: "access-new",
+                refresh_token: "refresh-new",
+                expires_in: 3600,
+              }),
+              { status: 200 },
+            )
+          }
+          return new Response("{}", { status: 200 })
+        },
+        { preconnect: original.preconnect },
+      ) satisfies typeof fetch
+      globalThis.fetch = next
+
+      try {
+        const sets: unknown[] = []
+        const hooks = await CodexAuthPlugin({
+          client: {
+            auth: {
+              set: async (input: unknown) => {
+                sets.push(input)
+              },
+            },
+          },
+        } as unknown as PluginInput)
+        if (!hooks.auth?.loader) throw new Error("missing auth loader")
+        const loaded = await hooks.auth.loader(
+          async () => ({
+            type: "oauth",
+            refresh: "refresh-old",
+            access: "",
+            expires: 0,
+            accountId: "account",
+          }),
+          {
+            models: {
+              "gpt-5.3-codex": {
+                cost: { input: 1, output: 1, cache: { read: 1, write: 1 } },
+              },
+            },
+          } as unknown as Parameters<typeof hooks.auth.loader>[1],
+        )
+
+        if (!loaded.fetch) throw new Error("missing fetch")
+        await loaded.fetch("https://api.openai.com/v1/responses", { signal })
+
+        expect(urls[0]).toBe("https://auth.openai.com/oauth/token")
+        expect(urls[1]).toBe("https://chatgpt.com/backend-api/codex/responses")
+        expect(signals).toEqual([signal, signal])
+        expect(sets.length).toBe(1)
+      } finally {
+        globalThis.fetch = original
+      }
     })
   })
 })

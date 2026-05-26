@@ -8,9 +8,12 @@
  * @param ms Timeout in milliseconds
  * @returns Object with controller, signal, and clearTimeout function
  */
-export function abortAfter(ms: number) {
+export function abortAfter(ms: number, reason?: unknown) {
   const controller = new AbortController()
-  const id = setTimeout(controller.abort.bind(controller), ms)
+  const id = setTimeout(
+    reason === undefined ? controller.abort.bind(controller) : controller.abort.bind(controller, reason),
+    ms,
+  )
   return {
     controller,
     signal: controller.signal,

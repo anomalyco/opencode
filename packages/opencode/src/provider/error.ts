@@ -25,7 +25,7 @@ export namespace ProviderError {
     const status = e.statusCode
     if (!status) return e.isRetryable
     // openai sometimes returns 404 for models that are actually available
-    return status === 404 || e.isRetryable
+    return status === 404 || status === 429 || status === 502 || status === 503 || status === 504 || e.isRetryable
   }
 
   // Providers not reliably handled in this function:

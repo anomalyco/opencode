@@ -105,8 +105,10 @@ type Capture = {
   body: Record<string, unknown>
 }
 
+const origin = "https://opencode.test"
+
 const state = {
-  server: null as ReturnType<typeof Bun.serve> | null,
+  fetch: globalThis.fetch,
   queue: [] as Array<{ path: string; response: Response; resolve: (value: Capture) => void }>,
 }
 
@@ -125,14 +127,14 @@ function waitRequest(pathname: string, response: Response) {
 }
 
 beforeAll(() => {
-  state.server = Bun.serve({
-    port: 0,
-    async fetch(req) {
+  const fetch = Object.assign(
+    async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
       const next = state.queue.shift()
       if (!next) {
         return new Response("unexpected request", { status: 500 })
       }
 
+      const req = new Request(input, init)
       const url = new URL(req.url)
       const body = (await req.json()) as Record<string, unknown>
       next.resolve({ url, headers: req.headers, body })
@@ -143,7 +145,10 @@ beforeAll(() => {
 
       return next.response
     },
-  })
+    { preconnect: state.fetch.preconnect },
+  ) satisfies typeof globalThis.fetch
+
+  globalThis.fetch = fetch
 })
 
 beforeEach(() => {
@@ -151,7 +156,7 @@ beforeEach(() => {
 })
 
 afterAll(() => {
-  state.server?.stop()
+  globalThis.fetch = state.fetch
 })
 
 function createChatStream(text: string) {
@@ -221,12 +226,11 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 }
 
 describe("session.llm.stream", () => {
-  test("sends temperature, tokens, and reasoning options for openai-compatible models", async () => {
-    const server = state.server
-    if (!server) {
-      throw new Error("Server not initialized")
-    }
+  test("provider request timeout default matches documented config", () => {
+    expect(Provider.REQUEST_TIMEOUT).toBe(300_000)
+  })
 
+  test("sends temperature, tokens, and reasoning options for openai-compatible models", async () => {
     const providerID = "alibaba"
     const modelID = "qwen-plus"
     const fixture = await loadFixture(providerID, modelID)
@@ -252,7 +256,7 @@ describe("session.llm.stream", () => {
               [providerID]: {
                 options: {
                   apiKey: "test-key",
-                  baseURL: `${server.url.origin}/v1`,
+                  baseURL: `${origin}/v1`,
                 },
               },
             },
@@ -324,11 +328,6 @@ describe("session.llm.stream", () => {
   })
 
   test("sends responses API payload for OpenAI models", async () => {
-    const server = state.server
-    if (!server) {
-      throw new Error("Server not initialized")
-    }
-
     const source = await loadFixture("openai", "gpt-5.2")
     const model = source.model
 
@@ -382,7 +381,7 @@ describe("session.llm.stream", () => {
                 },
                 options: {
                   apiKey: "test-openai-key",
-                  baseURL: `${server.url.origin}/v1`,
+                  baseURL: `${origin}/v1`,
                 },
               },
             },
@@ -444,11 +443,6 @@ describe("session.llm.stream", () => {
   })
 
   test("sends messages API payload for Anthropic models", async () => {
-    const server = state.server
-    if (!server) {
-      throw new Error("Server not initialized")
-    }
-
     const providerID = "anthropic"
     const modelID = "claude-3-5-sonnet-20241022"
     const fixture = await loadFixture(providerID, modelID)
@@ -504,7 +498,7 @@ describe("session.llm.stream", () => {
               [providerID]: {
                 options: {
                   apiKey: "test-anthropic-key",
-                  baseURL: `${server.url.origin}/v1`,
+                  baseURL: `${origin}/v1`,
                 },
               },
             },
@@ -563,11 +557,6 @@ describe("session.llm.stream", () => {
   })
 
   test("sends Google API payload for Gemini models", async () => {
-    const server = state.server
-    if (!server) {
-      throw new Error("Server not initialized")
-    }
-
     const providerID = "google"
     const modelID = "gemini-2.5-flash"
     const fixture = await loadFixture(providerID, modelID)
@@ -605,7 +594,7 @@ describe("session.llm.stream", () => {
               [providerID]: {
                 options: {
                   apiKey: "test-google-key",
-                  baseURL: `${server.url.origin}/v1beta`,
+                  baseURL: `${origin}/v1beta`,
                 },
               },
             },

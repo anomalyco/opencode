@@ -44,8 +44,10 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { abortAfter } from "@/util/abort"
 
 export namespace Provider {
+  export const REQUEST_TIMEOUT = 300_000
   const log = Log.create({ service: "provider" })
 
   function isGpt5OrLater(modelID: string): boolean {
@@ -1070,20 +1072,18 @@ export namespace Provider {
 
       const customFetch = options["fetch"]
 
-      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+      options["fetch"] = async (input: URL | RequestInfo, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
-        const fetchFn = customFetch ?? fetch
-        const opts = init ?? {}
+        const fetchFn = (customFetch ?? fetch) as typeof fetch
+        const opts = { ...(init ?? {}) }
+        const signal = opts.signal
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
-
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
-          opts.signal = combined
-        }
+        const timeout = options["timeout"] === false ? undefined : (options["timeout"] ?? REQUEST_TIMEOUT)
+        const abort =
+          timeout === undefined
+            ? undefined
+            : abortAfter(timeout, new DOMException(`Provider request timed out after ${timeout}ms`, "TimeoutError"))
+        if (abort) opts.signal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
@@ -1103,11 +1103,17 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
-        })
+        try {
+          return await fetchFn(input, {
+            ...opts,
+            timeout: false,
+          } as BunFetchRequestInit & { timeout: false })
+        } catch (e) {
+          if (signal?.aborted) throw signal.reason ?? e
+          throw e
+        } finally {
+          abort?.clearTimeout()
+        }
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]

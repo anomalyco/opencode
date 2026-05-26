@@ -212,7 +212,12 @@ describe("session.processor stream watchdog", () => {
   test("closes provider stream when compaction exits stream early", async () => {
     let canceled = 0
     const overflow = spyOn(SessionCompaction, "isOverflow").mockImplementation(async () => true)
-    const summary = spyOn(SessionSummary, "summarize").mockImplementation(async () => {})
+    const summary = spyOn(SessionSummary, "summarize").mockImplementation(
+      Object.assign(async () => {}, {
+        force: SessionSummary.summarize.force,
+        schema: SessionSummary.summarize.schema,
+      }),
+    )
     try {
       const output = await process(
         stalled(
