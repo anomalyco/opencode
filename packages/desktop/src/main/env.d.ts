@@ -5,6 +5,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
 declare module "virtual:opencode-server" {
   export namespace Server {
     export const listen: typeof import("../../../opencode/dist/types/src/node").Server.listen
@@ -18,7 +19,7 @@ declare module "virtual:opencode-server" {
     export const init: typeof import("../../../opencode/dist/types/src/node").Log.init
   }
   export namespace Database {
-    export const Path: typeof import("../../../opencode/dist/types/src/node").Database.Path
+    export const getPath: typeof import("../../../opencode/dist/types/src/node").Database.getPath
     export const Client: typeof import("../../../opencode/dist/types/src/node").Database.Client
   }
   export namespace JsonMigration {

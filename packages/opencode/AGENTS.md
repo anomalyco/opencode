@@ -9,6 +9,13 @@
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
 
+## Development server
+
+- Running `bun dev` from `packages/opencode` starts the live interactive TUI. Do not run it as a blocking foreground command when you need to inspect the result.
+- Start it in `tmux` instead: `tmux new-session -d -s opencode-dev 'bun dev'`.
+- Capture the current TUI output with: `tmux capture-pane -pt opencode-dev`.
+- Stop the session explicitly when done: `tmux kill-session -t opencode-dev`.
+
 # Module shape
 
 Do not use `export namespace Foo { ... }` for module organization. It is not
@@ -121,17 +128,8 @@ See `specs/effect/migration.md` for the compact pattern reference and examples.
 
 Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect/migration.md` for the full pattern.
 
-## Instance.bind — ALS for native callbacks
+## Callback boundaries
 
-`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
+Use `EffectBridge` for native or external callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, plugin callbacks, etc.) that need to re-enter Effect services with instance/workspace context.
 
-Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish` or anything that reads `Instance.directory`.
-
-You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
-
-```typescript
-const cb = Instance.bind((err, evts) => {
-  Bus.publish(MyEvent, { ... })
-})
-nativeAddon.subscribe(dir, cb)
-```
+Plain async code should pass explicit context or stay inside an Effect fiber; do not add ambient instance context shims.

@@ -102,9 +102,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id: PartID.make(id),
+    id: PartID.make(id.startsWith("prt") ? id : `prt_${id}`),
     sessionID,
-    messageID: MessageID.make(messageID),
+    messageID: MessageID.make(messageID.startsWith("msg") ? messageID : `msg_${messageID}`),
   }
 }
 
@@ -153,6 +153,54 @@ describe("session.message-v2.toModelMessage", () => {
     ]
 
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("filters out user messages with only empty text parts", async () => {
+    const messageID = "m-user"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("filters empty user text parts while keeping non-empty parts", async () => {
+    const messageID = "m-user"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "",
+          },
+          {
+            ...basePart(messageID, "p2"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ])
   })
 
   test("includes synthetic text parts", async () => {
@@ -441,6 +489,113 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     })
+  })
+
+  test("moves bedrock pdf tool-result media into a separate user message", async () => {
+    const bedrockModel: Provider.Model = {
+      ...model,
+      id: ModelID.make("amazon-bedrock/anthropic.claude-sonnet-4-6"),
+      providerID: ProviderID.make("amazon-bedrock"),
+      api: {
+        id: "anthropic.claude-sonnet-4-6",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+          pdf: true,
+        },
+      },
+    }
+    const pdf = Buffer.from("%PDF-1.4\n").toString("base64")
+    const userID = "m-user-bedrock-pdf"
+    const assistantID = "m-assistant-bedrock-pdf"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-bedrock-pdf"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-bedrock-pdf"),
+            type: "tool",
+            callID: "call-bedrock-pdf-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.pdf" },
+              output: "PDF read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-bedrock-pdf-1"),
+                  type: "file",
+                  mime: "application/pdf",
+                  filename: "example.pdf",
+                  url: `data:application/pdf;base64,${pdf}`,
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, bedrockModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-bedrock-pdf-1",
+            toolName: "read",
+            input: { filePath: "/tmp/example.pdf" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-bedrock-pdf-1",
+            toolName: "read",
+            output: { type: "text", value: "PDF read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "example.pdf",
+            data: `data:application/pdf;base64,${pdf}`,
+          },
+        ],
+      },
+    ])
   })
 
   test("omits provider metadata when assistant model differs", async () => {
@@ -1134,8 +1289,9 @@ describe("session.message-v2.toModelMessage", () => {
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
   })
 
-  test("substitutes space for empty text when reasoning signature is under 'bedrock' namespace", async () => {
-    // AWS Bedrock hosts Anthropic Claude but stores signatures under metadata.bedrock
+  test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {
+    // Bedrock signed reasoning is preserved as reasoning metadata, but unlike the
+    // direct Anthropic path we do not preserve empty text separators for Bedrock.
     const assistantID = "m-assistant-bedrock"
     const input: MessageV2.WithParts[] = [
       {
@@ -1157,7 +1313,7 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual([" ", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
   })
 
   test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
@@ -1389,5 +1545,112 @@ describe("session.message-v2.fromError", () => {
     const result = MessageV2.fromError(zlibError, { providerID, aborted: true })
 
     expect(result.name).toBe("MessageAbortedError")
+  })
+})
+
+describe("session.message-v2.latest", () => {
+  const TAIL_USER = MessageID.make("msg_001")
+  const OVERFLOW_ASSISTANT = MessageID.make("msg_002")
+  const COMPACTION_USER = MessageID.make("msg_003")
+  const SUMMARY_ASSISTANT = MessageID.make("msg_004")
+  const CONTINUE_USER = MessageID.make("msg_005")
+  const NEW_COMPACTION_USER = MessageID.make("msg_006")
+
+  const tailUser: MessageV2.WithParts = {
+    info: userInfo(TAIL_USER),
+    parts: [{ ...basePart(TAIL_USER, "p1"), type: "text", text: "original prompt" }] as MessageV2.Part[],
+  }
+
+  const overflowAssistant: MessageV2.WithParts = {
+    info: {
+      ...assistantInfo(OVERFLOW_ASSISTANT, TAIL_USER),
+      finish: "tool-calls",
+      tokens: { input: 280_000, output: 200, reasoning: 0, cache: { read: 0, write: 0 }, total: 280_200 },
+    } as MessageV2.Assistant,
+    parts: [],
+  }
+
+  const compactionUser: MessageV2.WithParts = {
+    info: userInfo(COMPACTION_USER),
+    parts: [
+      {
+        ...basePart(COMPACTION_USER, "p1"),
+        type: "compaction",
+        auto: true,
+        tail_start_id: TAIL_USER,
+      },
+    ] as MessageV2.Part[],
+  }
+
+  const summaryAssistant: MessageV2.WithParts = {
+    info: {
+      ...assistantInfo(SUMMARY_ASSISTANT, COMPACTION_USER),
+      summary: true,
+      finish: "stop",
+      tokens: { input: 150_000, output: 1_500, reasoning: 0, cache: { read: 0, write: 0 }, total: 151_500 },
+    } as MessageV2.Assistant,
+    parts: [],
+  }
+
+  const continueUser: MessageV2.WithParts = {
+    info: userInfo(CONTINUE_USER),
+    parts: [
+      {
+        ...basePart(CONTINUE_USER, "p1"),
+        type: "text",
+        text: "Continue if you have next steps...",
+        synthetic: true,
+        metadata: { compaction_continue: true },
+      },
+    ] as MessageV2.Part[],
+  }
+
+  // Regression for double auto-compaction. The reorder in filterCompacted
+  // (#27145) returns [compaction-user, summary, ...tail..., continue-user],
+  // so picking lastFinished by array position landed on the pre-compaction
+  // overflow assistant and bypassed the `summary !== true` overflow guard
+  // in SessionPrompt.runLoop, firing a second compaction.create immediately.
+  test("finished is the chronologically-latest finished assistant, not the array-latest", () => {
+    const filtered = MessageV2.filterCompacted([
+      continueUser,
+      summaryAssistant,
+      compactionUser,
+      overflowAssistant,
+      tailUser,
+    ])
+
+    const state = MessageV2.latest(filtered)
+
+    expect(state.finished?.id).toBe(SUMMARY_ASSISTANT)
+    expect(state.finished?.summary).toBe(true)
+    expect(state.user?.id).toBe(CONTINUE_USER)
+    expect(state.tasks).toEqual([])
+  })
+
+  test("a fresh compaction-user newer than the latest summary surfaces in tasks", () => {
+    const newCompactionUser: MessageV2.WithParts = {
+      info: userInfo(NEW_COMPACTION_USER),
+      parts: [
+        {
+          ...basePart(NEW_COMPACTION_USER, "p1"),
+          type: "compaction",
+          auto: true,
+        },
+      ] as MessageV2.Part[],
+    }
+
+    const state = MessageV2.latest([
+      tailUser,
+      overflowAssistant,
+      compactionUser,
+      summaryAssistant,
+      continueUser,
+      newCompactionUser,
+    ])
+
+    expect(state.finished?.id).toBe(SUMMARY_ASSISTANT)
+    expect(state.user?.id).toBe(NEW_COMPACTION_USER)
+    expect(state.tasks).toHaveLength(1)
+    expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
   })
 })

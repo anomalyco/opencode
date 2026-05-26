@@ -8,27 +8,42 @@ export default $config({
       protect: ["production"].includes(input?.stage),
       home: "cloudflare",
       providers: {
+        aws: {
+          version: "7.30.0",
+          region: "us-east-1",
+          profile: process.env.GITHUB_ACTIONS
+            ? undefined
+            : input.stage === "production"
+              ? "opencode-production"
+              : "opencode-dev",
+        },
         stripe: {
+          version: "0.0.28",
           apiKey: process.env.STRIPE_SECRET_KEY!,
         },
+        random: "4.19.2",
         planetscale: "0.4.1",
-        honeycomb: {
-          version: "0.49.0",
-          apiKey: process.env.HONEYCOMB_API_KEY!,
-        },
-        incident: {
-          version: "5.35.0",
-          apiKey: process.env.INCIDENT_API_KEY!,
-        },
+        honeycomb: "0.49.0",
       },
     }
   },
   async run() {
+    const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    await import("./infra/console.js")
+    if (stage.deployAws) {
+      await import("./infra/lake.js")
+      await import("./infra/stats.js")
+    }
+    const { stat } = await import("./infra/console.js")
     await import("./infra/enterprise.js")
-    if ($app.stage === "production") {
+    if ($app.stage === "production" || $app.stage === "vimtor") {
       await import("./infra/monitoring.js")
+    }
+
+    return {
+      StatWorkerUrl: stat.url,
+      // StatsUrl: stats.app.url,
+      AwsStage: stage.awsStage,
     }
   },
 })

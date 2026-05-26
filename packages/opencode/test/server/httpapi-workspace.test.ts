@@ -5,6 +5,7 @@ import path from "node:path"
 import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
@@ -13,7 +14,8 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { WorkspaceRef } from "../../src/effect/instance-ref"
@@ -22,14 +24,14 @@ import { testEffect } from "../lib/effect"
 void Log.init({ print: false })
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const it = testEffect(
-  Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, Workspace.defaultLayer),
+const workspaceLayer = Workspace.defaultLayer.pipe(
+  Layer.provide(InstanceStore.defaultLayer),
+  Layer.provide(InstanceBootstrap.defaultLayer),
 )
+const it = testEffect(Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, workspaceLayer))
 
-function request(path: string, directory: string, init: RequestInit = {}, httpApi = true) {
+function request(path: string, directory: string, init: RequestInit = {}) {
   return Effect.promise(() => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpApi
     const headers = new Headers(init.headers)
     headers.set("x-opencode-directory", directory)
     return Promise.resolve(Server.Default().app.request(path, { ...init, headers }))
@@ -58,6 +60,40 @@ function localAdapter(directory: string): WorkspaceAdapter {
       }
     },
   }
+}
+
+function listedAdapter(directory: string, type: string): WorkspaceAdapter {
+  return {
+    name: "Listed Test",
+    description: "List a local test workspace",
+    configure(info) {
+      return { ...info, name: "unused", directory }
+    },
+    async create() {},
+    async remove() {},
+    list(context) {
+      return [
+        {
+          type,
+          name: "listed-test",
+          branch: "listed/main",
+          directory,
+          extra: { listed: true },
+          projectID: context?.instance?.project.id ?? missingAdapterContext(),
+        },
+      ]
+    },
+    target() {
+      return {
+        type: "local" as const,
+        directory,
+      }
+    },
+  }
+}
+
+function missingAdapterContext(): never {
+  throw new Error("missing workspace adapter context")
 }
 
 function remoteAdapter(directory: string, url: string, headers?: HeadersInit): WorkspaceAdapter {
@@ -127,7 +163,6 @@ function eventStreamResponse() {
 afterEach(async () => {
   mock.restore()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -174,7 +209,7 @@ describe("workspace HttpApi", () => {
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
       expect(workspace).toMatchObject({ type: "local-test", name: "local-test" })
 
-      const session = yield* Session.Service.use((svc) => svc.create({})).pipe(provideInstance(dir))
+      const session = yield* Session.use.create({}).pipe(provideInstance(dir))
       const warped = yield* request(WorkspacePaths.warp, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -189,6 +224,50 @@ describe("workspace HttpApi", () => {
       const listed = yield* request(WorkspacePaths.list, dir)
       expect(listed.status).toBe(200)
       expect(yield* Effect.promise(() => listed.json())).toEqual([])
+    }),
+  )
+
+  it.live("serves list sync endpoint", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const type = `listed-${Math.random().toString(36).slice(2)}`
+      registerAdapter(project.project.id, type, listedAdapter(path.join(dir, ".listed"), type))
+
+      const response = yield* request(WorkspacePaths.syncList, dir, { method: "POST" })
+
+      expect(response.status).toBe(204)
+      const listed = yield* request(WorkspacePaths.list, dir)
+      expect(yield* Effect.promise(() => listed.json())).toMatchObject([
+        {
+          type,
+          name: "listed-test",
+          branch: "listed/main",
+          directory: path.join(dir, ".listed"),
+          extra: { listed: true },
+        },
+      ])
+    }),
+  )
+
+  it.live("returns a declared not found error when warping into a missing workspace", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const session = yield* Session.use.create({}).pipe(provideInstance(dir))
+      const workspaceID = WorkspaceID.ascending("wrk_missing_warp")
+
+      const response = yield* request(WorkspacePaths.warp, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: workspaceID, sessionID: session.id }),
+      })
+
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        name: "NotFoundError",
+        data: { message: `Workspace not found: ${workspaceID}` },
+      })
     }),
   )
 
@@ -228,32 +307,6 @@ describe("workspace HttpApi", () => {
       expect({ status: created.status, body }).toMatchObject({ status: 200 })
       const workspace = JSON.parse(body) as Workspace.Info
       expect(workspace).toMatchObject({ type: "worktree" })
-    }),
-  )
-
-  it.live("documents legacy Hono accepting the TUI payload shape", () =>
-    Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
-      const dir = yield* tmpdirScoped({ git: true })
-      const project = yield* Project.use.fromDirectory(dir)
-      registerAdapter(project.project.id, "local-test", localAdapter(path.join(dir, ".workspace")))
-
-      const created = yield* request(
-        WorkspacePaths.list,
-        dir,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ type: "local-test", branch: null }),
-        },
-        false,
-      )
-
-      expect(created.status).toBe(200)
-      expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
-        type: "local-test",
-        name: "local-test",
-      })
     }),
   )
 
@@ -392,10 +445,9 @@ describe("workspace HttpApi", () => {
         body: JSON.stringify({ type: "remote-session-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
-      const session = yield* Session.Service.use((svc) => svc.create()).pipe(
-        Effect.provideService(WorkspaceRef, workspace.id),
-        provideInstance(dir),
-      )
+      const session = yield* Session.use
+        .create()
+        .pipe(Effect.provideService(WorkspaceRef, workspace.id), provideInstance(dir))
 
       try {
         const response = yield* request(`http://localhost/session/${session.id}/message`, dir, {

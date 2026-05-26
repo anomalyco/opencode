@@ -18,22 +18,18 @@ export function getAdapter(projectID: ProjectID, type: string): WorkspaceAdapter
   throw new Error(`Unknown workspace adapter: ${type}`)
 }
 
-export async function listAdapters(projectID: ProjectID): Promise<WorkspaceAdapterEntry[]> {
-  const builtin = await Promise.all(
-    Object.entries(BUILTIN).map(async ([type, adapter]) => {
-      return {
-        type,
-        name: adapter.name,
-        description: adapter.description,
-      }
-    }),
-  )
-  const custom = [...(state.get(projectID)?.entries() ?? [])].map(([type, adapter]) => ({
+export function listAdapters(projectID: ProjectID): WorkspaceAdapterEntry[] {
+  return registeredAdapters(projectID).map(([type, adapter]) => ({
     type,
     name: adapter.name,
     description: adapter.description,
   }))
-  return [...builtin, ...custom]
+}
+
+export function registeredAdapters(projectID: ProjectID): [string, WorkspaceAdapter][] {
+  const adapters = new Map(Object.entries(BUILTIN))
+  for (const [type, adapter] of state.get(projectID)?.entries() ?? []) adapters.set(type, adapter)
+  return [...adapters.entries()]
 }
 
 // Plugins can be loaded per-project so we need to scope them. If you

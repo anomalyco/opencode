@@ -36,13 +36,13 @@ ver isso abaixo.
 
 Subagentes são assistentes especializados que agentes primários podem invocar para tarefas específicas. Você também pode invocá-los manualmente mencionando-os com **@** em suas mensagens.
 
-opencode vem com dois subagentes integrados, **General** e **Explore**. Vamos ver isso abaixo.
+OpenCode vem com três subagentes integrados, **General**, **Explore** e **Scout**. Vamos ver isso abaixo.
 
 ---
 
 ## Integrados
 
-opencode vem com dois agentes primários integrados e dois subagentes integrados.
+OpenCode vem com dois agentes primários integrados e três subagentes integrados.
 
 ---
 
@@ -81,6 +81,14 @@ Um agente de propósito geral para pesquisar questões complexas e executar tare
 _Modo_: `subagent`
 
 Um agente rápido e somente leitura para explorar bases de código. Não pode modificar arquivos. Use isso quando você precisar encontrar rapidamente arquivos por padrões, pesquisar código por palavras-chave ou responder perguntas sobre a base de código.
+
+---
+
+### Scout
+
+_Modo_: `subagent`
+
+Um agente somente leitura para pesquisa em documentação externa e dependências. Use-o quando você precisar clonar o repositório de uma dependência para o cache gerenciado do OpenCode, inspecionar o código-fonte de uma biblioteca ou cruzar o código local com implementações upstream sem modificar seu workspace.
 
 ---
 
