@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+type PromptApprovalInput = import("./submit").PromptApprovalInput
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -387,5 +388,54 @@ describe("prompt submit worktree selection", () => {
 
     expect(sentPrompts[0]?.sessionID).toBe("session-1")
     expect(sentPrompts[0]?.parts[0]?.metadata?.docID).toBe("doc-session-1")
+  })
+
+  test("approval gate intercepts prepared prompt before sending", async () => {
+    params = { id: "session-1" }
+    const approvals: PromptApprovalInput[] = []
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "doc",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+      approve: (input) => {
+        approvals.push(input)
+        return true
+      },
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event, {
+      prompt: [{ type: "text", content: "hello", start: 0, end: 5 }],
+      prepare: async (sessionID) => [
+        {
+          type: "text",
+          content: "hello",
+          start: 0,
+          end: 5,
+          format: "markdown",
+          source: "doc",
+          docID: `doc-${sessionID}`,
+        },
+      ],
+    })
+    await Bun.sleep(0)
+
+    expect(approvals).toHaveLength(1)
+    const part = approvals[0]?.parts[0]
+    expect(part && "metadata" in part ? part.metadata?.docID : undefined).toBe("doc-session-1")
+    expect(sentPrompts).toHaveLength(0)
+    expect(optimistic).toHaveLength(0)
   })
 })

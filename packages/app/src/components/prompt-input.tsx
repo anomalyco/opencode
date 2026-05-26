@@ -65,6 +65,8 @@ import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
 import { PromptDrawingShell } from "./prompt-input/drawing-shell"
 import { createPromptDrawing } from "./prompt-input/drawing"
 import { createPromptDoc } from "./prompt-input/doc"
+import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
+import { DialogDocSubmit } from "./dialog-doc-submit"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
 interface PromptInputProps {
@@ -419,6 +421,88 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     client: sdk.client,
     submit: () => void submit(false),
   })
+  const [approval, setApproval] = createSignal<DocSubmitState | undefined>()
+  let approvalID: string | undefined
+  let approvalSession: string | undefined
+
+  const approvalActor = () => doc.actorID()
+  const closeApproval = () => {
+    dialog.close()
+    approvalID = undefined
+    setApproval(undefined)
+  }
+  const showApproval = (state: DocSubmitState) => {
+    const actorID = approvalActor()
+    if (!actorID) return
+    if (!state.actors.some((item) => item.actorID === actorID)) return
+    if (state.status === "sent") {
+      if (approvalID === state.submitID) closeApproval()
+      return
+    }
+    setApproval(state)
+    if (approvalID === state.submitID) return
+    approvalID = state.submitID
+    dialog.show(
+      () => (
+        <DialogDocSubmit
+          state={approval}
+          actorID={actorID}
+          approve={() => {
+            const current = approval()
+            if (!current) return
+            void respondSubmit({
+              baseUrl: sdk.url,
+              directory: sdk.directory,
+              sessionID: current.sessionID,
+              submitID: current.submitID,
+              actorID,
+              action: "approve",
+            })
+              .then(setApproval)
+              .catch(() =>
+                showToast({
+                  title: "전송 동의 실패",
+                  description: language.t("common.requestFailed"),
+                }),
+              )
+          }}
+          cancel={() => {
+            const current = approval()
+            if (!current) return
+            void respondSubmit({
+              baseUrl: sdk.url,
+              directory: sdk.directory,
+              sessionID: current.sessionID,
+              submitID: current.submitID,
+              actorID,
+              action: "cancel",
+            })
+              .then(setApproval)
+              .catch(() =>
+                showToast({
+                  title: "전송 동의 취소 실패",
+                  description: language.t("common.requestFailed"),
+                }),
+              )
+          }}
+          close={closeApproval}
+        />
+      ),
+      () => {
+        const current = approval()
+        if (current?.status === "pending") {
+          approvalID = undefined
+          window.setTimeout(() => {
+            const next = approval()
+            if (next?.status === "pending") showApproval(next)
+          }, 120)
+          return
+        }
+        approvalID = undefined
+        setApproval(undefined)
+      },
+    )
+  }
 
   createEffect((prev) => {
     const id = params.id
@@ -434,16 +518,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   createEffect(() => {
+    const sessionID = params.id
+    const docID = doc.docID()
+    const actorID = doc.actorID()
+    if (store.mode !== "doc" || !sessionID || !docID || !actorID) return
+    const stop = connectSubmit({
+      baseUrl: sdk.url,
+      directory: sdk.directory,
+      sessionID,
+      docID,
+      actorID,
+      event: (event) => showApproval(event.state),
+    })
+    onCleanup(stop)
+  })
+
+  createEffect(() => {
     const id = params.id
     if (!id) return
     void globalSDK.event.start()
     const unsub = globalSDK.event.on(sdk.directory, (event) => {
-      const item = event as { type: string; properties: { sessionID: string; docID: string; clientID?: string } }
+      const item = event as {
+        type: string
+        properties: { sessionID: string; docID: string; clientID?: string; init?: boolean }
+      }
       if (item.type !== "doc.prompt.rotated") return
       const props = item.properties
       if (props.sessionID !== id) return
       if (props.clientID === doc.clientID) return
-      void doc.pivot(props.sessionID, props.docID, { init: false }).then(() => {
+      void doc.pivot(props.sessionID, props.docID, { init: props.init ?? false }).then(() => {
         if (store.mode === "doc") return
         setStore("mode", "doc")
       })
@@ -1326,6 +1429,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
+    approve: async (input) => {
+      if (store.mode !== "doc") return false
+      const docID = doc.docID()
+      const actorID = doc.actorID()
+      if (!docID || !actorID) return false
+      const ids = Array.from(new Set([actorID, ...doc.actors().map((item) => item.actorID)]))
+      if (ids.length <= 1) return false
+      try {
+        const state = await startSubmit({
+          baseUrl: sdk.url,
+          directory: input.sessionDirectory,
+          sessionID: input.sessionID,
+          docID,
+          actorID,
+          actorIDs: ids,
+          prompt: {
+            messageID: input.messageID,
+            agent: input.agent,
+            model: input.model,
+            variant: input.variant,
+            parts: input.parts,
+          },
+        })
+        approvalSession = input.sessionID
+        showApproval(state)
+        return true
+      } catch {
+        approvalSession = input.sessionID
+        showToast({
+          title: "전송 동의 요청 실패",
+          description: language.t("common.requestFailed"),
+        })
+        return true
+      }
+    },
   })
 
   const exitDoc = () => {
@@ -1381,6 +1519,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           dataUrl: asset.dataUrl,
         })) ?? []),
       ]
+      approvalSession = undefined
       const sessionID = await handleSubmit(undefined, {
         prompt: base,
         prepare: async (id) => [
@@ -1389,6 +1528,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ],
       })
       if (!sessionID) return
+      if (approvalSession === sessionID) return
       try {
         await doc.advance(sessionID)
       } catch {

@@ -10,6 +10,11 @@ import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
 
+const prompt = {
+  noReply: true,
+  parts: [{ type: "text" as const, text: "hi" }],
+}
+
 describe("doc", () => {
   afterEach(() => {
     Server.basePath = "/"
@@ -243,5 +248,242 @@ describe("doc", () => {
 
     stopTwo()
     stopOne()
+  })
+
+  test("submit approval broadcasts created and reconnect receives pending state", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const events: Doc.SubmitEvent[] = []
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: (data) => events.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(state.status).toBe("pending")
+        expect(events[0]?.type).toBe("created")
+        expect(events[0]?.state.submitID).toBe(state.submitID)
+
+        const current: Doc.SubmitEvent[] = []
+        const close = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: (data) => current.push(JSON.parse(data) as Doc.SubmitEvent) },
+        })
+        expect(current[0]?.type).toBe("created")
+        expect(current[0]?.state.submitID).toBe(state.submitID)
+
+        close()
+        stop()
+      },
+    })
+  })
+
+  test("submit approval clamps timeout and auto-approves initiator", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+
+        const min = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+          timeoutMs: 1,
+        })
+        expect(min.timeoutMs).toBe(10_000)
+        expect(min.actors.find((actor) => actor.actorID === alice.actorID)?.status).toBe("approved")
+
+        Doc.submitRespond({
+          sessionID: session.id,
+          submitID: min.submitID,
+          actorID: bob.actorID,
+          action: "cancel",
+        })
+
+        const max = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+          timeoutMs: 900_000,
+        })
+        expect(max.timeoutMs).toBe(600_000)
+
+        Doc.submitRespond({
+          sessionID: session.id,
+          submitID: max.submitID,
+          actorID: bob.actorID,
+          action: "cancel",
+        })
+
+        const base = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+        expect(base.timeoutMs).toBe(120_000)
+        stop()
+      },
+    })
+  })
+
+  test("submit approval sends on last approval and ignores later cancel", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+
+        const sent = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "approve",
+        })
+        expect(sent.status).toBe("sent")
+
+        const next = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "cancel",
+        })
+        expect(next.status).toBe("sent")
+        stop()
+      },
+    })
+  })
+
+  test("submit approval cancels for everyone and ignores later approval", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID],
+          prompt,
+        })
+
+        const cancelled = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: bob.actorID,
+          action: "cancel",
+        })
+        expect(cancelled.status).toBe("cancelled")
+        expect(cancelled.cancelledBy?.actorID).toBe(bob.actorID)
+
+        const next = Doc.submitRespond({
+          sessionID: session.id,
+          submitID: state.submitID,
+          actorID: alice.actorID,
+          action: "approve",
+        })
+        expect(next.status).toBe("cancelled")
+        stop()
+      },
+    })
+  })
+
+  test("submit approval ignores disconnected actors from stale client snapshots", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const charlie = Doc.actorUpsert({ sessionID: session.id, name: "Charlie" })
+        const stop = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => undefined },
+        })
+
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID, charlie.actorID],
+          prompt,
+        })
+
+        expect(state.status).toBe("pending")
+        expect(state.actors.map((actor) => actor.actorID).sort()).toEqual([alice.actorID, bob.actorID].sort())
+        stop()
+      },
+    })
   })
 })

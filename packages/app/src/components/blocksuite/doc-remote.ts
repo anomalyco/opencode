@@ -1,4 +1,4 @@
-import type { Doc } from "@blocksuite/store"
+import type { Doc, Query } from "@blocksuite/store"
 import { DocCollection } from "@blocksuite/store"
 import type { OpencodeDocSource } from "./opencode-doc-source"
 
@@ -8,8 +8,8 @@ function subdoc(collection: DocCollection, page: string) {
   return collection.doc.spaces.get(page)
 }
 
-function bind(collection: DocCollection, page: string, readonly?: boolean) {
-  const doc = collection.getDoc(page, { readonly })
+function bind(collection: DocCollection, page: string, readonly?: boolean, query?: Query) {
+  const doc = collection.getDoc(page, { readonly, query })
   if (doc) return doc
   if (!subdoc(collection, page)) return null
   if (!collection.meta.getDocMeta(page)) {
@@ -20,7 +20,7 @@ function bind(collection: DocCollection, page: string, readonly?: boolean) {
       tags: [],
     })
   }
-  return collection.getDoc(page, { readonly })
+  return collection.getDoc(page, { readonly, query })
 }
 
 export async function load(source: OpencodeDocSource, id: string, doc: YDoc) {
@@ -56,9 +56,10 @@ export async function remote(
   root: string,
   page: string,
   readonly?: boolean,
+  query?: Query,
 ) {
   await load(source, root, collection.doc)
-  const doc = bind(collection, page, readonly)
+  const doc = bind(collection, page, readonly, query)
   if (!doc) return
   if (!doc.loaded) doc.load()
   await load(source, page, doc.spaceDoc)

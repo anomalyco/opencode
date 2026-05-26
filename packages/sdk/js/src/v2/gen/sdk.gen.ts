@@ -155,6 +155,12 @@ import type {
   SessionPromptDocReadyErrors,
   SessionPromptDocReadyResponses,
   SessionPromptDocResponses,
+  SessionPromptDocSubmitConnectErrors,
+  SessionPromptDocSubmitConnectResponses,
+  SessionPromptDocSubmitErrors,
+  SessionPromptDocSubmitRespondErrors,
+  SessionPromptDocSubmitRespondResponses,
+  SessionPromptDocSubmitResponses,
   SessionPromptErrors,
   SessionPromptResponses,
   SessionRevertErrors,
@@ -1499,6 +1505,95 @@ export class ProjectSummary extends HeyApiClient {
   }
 }
 
+export class Submit extends HeyApiClient {
+  /**
+   * Respond to prompt doc submit approval
+   *
+   * Approve or cancel a collaborative prompt doc submit approval request.
+   */
+  public respond<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      submitID: string
+      directory?: string
+      workspace?: string
+      actorID?: string
+      action?: "approve" | "cancel"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "submitID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "actorID" },
+            { in: "body", key: "action" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPromptDocSubmitRespondResponses,
+      SessionPromptDocSubmitRespondErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/prompt-doc/submit/{submitID}/respond",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Connect to prompt doc submit approvals
+   *
+   * WebSocket connection for prompt doc submit approval lifecycle events.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      docID: string
+      actorID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "docID" },
+            { in: "query", key: "actorID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionPromptDocSubmitConnectResponses,
+      SessionPromptDocSubmitConnectErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/prompt-doc/submit/connect",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class PromptDoc extends HeyApiClient {
   /**
    * Advance session prompt doc
@@ -1555,6 +1650,7 @@ export class PromptDoc extends HeyApiClient {
       workspace?: string
       docID?: string
       clientID?: string
+      init?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1568,6 +1664,7 @@ export class PromptDoc extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "docID" },
             { in: "body", key: "clientID" },
+            { in: "body", key: "init" },
           ],
         },
       ],
@@ -1586,6 +1683,80 @@ export class PromptDoc extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * Create prompt doc submit approval
+   *
+   * Create a collaborative prompt doc submit approval request.
+   */
+  public submit<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      docID?: string
+      actorID?: string
+      actorIDs?: Array<string>
+      prompt?: {
+        messageID?: string
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        noReply?: boolean
+        /**
+         * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
+         */
+        tools?: {
+          [key: string]: boolean
+        }
+        format?: OutputFormat
+        system?: string
+        variant?: string
+        parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      }
+      timeoutMs?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "docID" },
+            { in: "body", key: "actorID" },
+            { in: "body", key: "actorIDs" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "timeoutMs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPromptDocSubmitResponses,
+      SessionPromptDocSubmitErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/prompt-doc/submit",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _submit?: Submit
+  get submit2(): Submit {
+    return (this._submit ??= new Submit({ client: this.client }))
   }
 }
 

@@ -34,6 +34,16 @@ export const AssetID = Schema.String.pipe(
 )
 export type AssetID = Schema.Schema.Type<typeof AssetID>
 
+export const SubmitID = Schema.String.pipe(
+  Schema.brand("SubmitID"),
+  withStatics((s) => ({
+    make: (id: string) => s.makeUnsafe(id),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("submit", id)),
+    zod: Identifier.schema("submit").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+  })),
+)
+export type SubmitID = Schema.Schema.Type<typeof SubmitID>
+
 export const SessionIDParam = z.object({
   sessionID: SessionID.zod,
 })

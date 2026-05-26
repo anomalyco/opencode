@@ -63,6 +63,11 @@ export class OpencodeDocSource implements DocSource {
   }
 
   async push(docId: string, data: Uint8Array) {
+    const ws = this.ws
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(pack(MSG_DOC, docId, data))
+      return
+    }
     await this.opts.client.doc.sync.push({
       docID: this.opts.docID,
       directory: this.opts.directory,

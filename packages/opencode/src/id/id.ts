@@ -16,6 +16,7 @@ export namespace Identifier {
     doc: "doc",
     actor: "act",
     asset: "ast",
+    submit: "sub",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {

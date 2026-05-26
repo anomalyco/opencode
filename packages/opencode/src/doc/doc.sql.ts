@@ -1,7 +1,7 @@
 import { sqliteTable, text, integer, index, primaryKey, blob } from "drizzle-orm/sqlite-core"
 import { SessionTable } from "../session/session.sql"
 import type { SessionID } from "../session/schema"
-import type { DocID, ActorID, AssetID } from "./schema"
+import type { DocID, ActorID, AssetID, SubmitID } from "./schema"
 import { Timestamps } from "../storage/schema.sql"
 
 export const DocTable = sqliteTable("doc", {
@@ -75,4 +75,48 @@ export const DocAssetTable = sqliteTable(
     ...Timestamps,
   },
   (table) => [primaryKey({ columns: [table.doc_id, table.id] }), index("doc_asset_doc_idx").on(table.doc_id)],
+)
+
+export const DocSubmitTable = sqliteTable(
+  "doc_submit",
+  {
+    id: text().$type<SubmitID>().primaryKey(),
+    session_id: text()
+      .$type<SessionID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    doc_id: text()
+      .$type<DocID>()
+      .notNull()
+      .references(() => DocTable.id, { onDelete: "cascade" }),
+    actor_id: text().$type<ActorID>().notNull(),
+    status: text().notNull(),
+    prompt: text().notNull(),
+    timeout_ms: integer().notNull(),
+    expires_at: integer().notNull(),
+    cancelled_by: text().$type<ActorID>(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("doc_submit_session_doc_status_idx").on(table.session_id, table.doc_id, table.status),
+    index("doc_submit_expires_idx").on(table.expires_at),
+  ],
+)
+
+export const DocSubmitActorTable = sqliteTable(
+  "doc_submit_actor",
+  {
+    submit_id: text()
+      .$type<SubmitID>()
+      .notNull()
+      .references(() => DocSubmitTable.id, { onDelete: "cascade" }),
+    actor_id: text().$type<ActorID>().notNull(),
+    name: text().notNull(),
+    status: text().notNull(),
+    time_responded: integer(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.submit_id, table.actor_id] }),
+    index("doc_submit_actor_actor_idx").on(table.actor_id),
+  ],
 )

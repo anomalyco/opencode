@@ -46,6 +46,19 @@ type FollowupSendInput = {
   before?: () => Promise<boolean> | boolean
 }
 
+type RequestParts = ReturnType<typeof buildRequestParts>["requestParts"]
+
+export type PromptApprovalInput = {
+  client: ReturnType<typeof useSDK>["client"]
+  sessionID: string
+  sessionDirectory: string
+  messageID: string
+  agent: string
+  model: { providerID: string; modelID: string }
+  variant?: string
+  parts: RequestParts
+}
+
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
@@ -185,6 +198,7 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  approve?: (input: PromptApprovalInput) => Promise<boolean> | boolean
 }
 
 type CommentItem = {
@@ -498,6 +512,31 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
     const messageID = Identifier.ascending("message")
+
+    const { requestParts } = buildRequestParts({
+      prompt: draft.prompt,
+      context: draft.context,
+      images: files,
+      text: body,
+      sessionID: session.id,
+      messageID,
+      sessionDirectory,
+    })
+
+    if (
+      await input.approve?.({
+        client,
+        sessionID: session.id,
+        sessionDirectory,
+        messageID,
+        agent,
+        model,
+        variant,
+        parts: requestParts,
+      })
+    ) {
+      return session.id
+    }
 
     const removeOptimisticMessage = () => {
       sync.session.optimistic.remove({

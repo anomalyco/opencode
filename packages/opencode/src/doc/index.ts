@@ -5,12 +5,22 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
+import { SessionPrompt } from "@/session/prompt"
 import { Database, NotFoundError } from "@/storage/db"
 import { fn } from "@/util/fn"
+import { NamedError } from "@opencode-ai/util/error"
 import * as Room from "./room"
 import { MSG_DOC, pack, unpack } from "./wire"
-import { DocAssetTable, DocTable, DocUpdateTable, SessionActorTable, SessionPromptDocTable } from "./doc.sql"
-import { ActorID, AssetID, DocID } from "./schema"
+import {
+  DocAssetTable,
+  DocSubmitActorTable,
+  DocSubmitTable,
+  DocTable,
+  DocUpdateTable,
+  SessionActorTable,
+  SessionPromptDocTable,
+} from "./doc.sql"
+import { ActorID, AssetID, DocID, SubmitID } from "./schema"
 
 export namespace Doc {
   const COLORS = [
@@ -70,6 +80,7 @@ export namespace Doc {
       sessionID: SessionID.zod,
       docID: DocID.zod,
       clientID: z.string().optional(),
+      init: z.boolean().optional(),
     }),
   )
 
@@ -132,6 +143,7 @@ export namespace Doc {
       sessionID: SessionID.zod,
       docID: DocID.zod,
       clientID: z.string().optional(),
+      init: z.boolean().optional(),
     }),
     (input) => {
       Session.get(input.sessionID)
@@ -150,6 +162,7 @@ export namespace Doc {
         sessionID: input.sessionID,
         docID: input.docID,
         clientID: input.clientID,
+        init: input.init,
       })
       return { docID: input.docID, sessionID: input.sessionID }
     },
@@ -261,6 +274,363 @@ export namespace Doc {
         mime: row.mime,
         data: raw instanceof Uint8Array ? new Uint8Array(raw) : new Uint8Array(Buffer.from(raw as Buffer)),
         size: row.size,
+      }
+    },
+  )
+
+  const DEFAULT = 120_000
+  const MIN = 10_000
+  const MAX = 600_000
+  const SubmitPrompt = SessionPrompt.PromptInput.omit({ sessionID: true })
+  const SubmitActorStatus = z.enum(["pending", "approved"])
+  export const SubmitStatus = z.enum(["pending", "sent", "cancelled", "expired"]).meta({ ref: "DocSubmitStatus" })
+  export type SubmitStatus = z.infer<typeof SubmitStatus>
+
+  export const SubmitActorInfo = z
+    .object({
+      actorID: ActorID.zod,
+      name: z.string(),
+      status: SubmitActorStatus,
+    })
+    .meta({ ref: "DocSubmitActor" })
+  export type SubmitActorInfo = z.infer<typeof SubmitActorInfo>
+
+  export const SubmitState = z
+    .object({
+      submitID: SubmitID.zod,
+      sessionID: SessionID.zod,
+      docID: DocID.zod,
+      actorID: ActorID.zod,
+      status: SubmitStatus,
+      actors: SubmitActorInfo.array(),
+      cancelledBy: SubmitActorInfo.optional(),
+      timeoutMs: z.number(),
+      expiresAt: z.number(),
+    })
+    .meta({ ref: "DocSubmit" })
+  export type SubmitState = z.infer<typeof SubmitState>
+
+  export const SubmitEvent = z
+    .object({
+      type: z.enum(["created", "updated", "sent", "cancelled", "expired"]),
+      state: SubmitState,
+    })
+    .meta({ ref: "DocSubmitEvent" })
+  export type SubmitEvent = z.infer<typeof SubmitEvent>
+
+  export const SubmitCreateInput = z.object({
+    sessionID: SessionID.zod,
+    docID: DocID.zod,
+    actorID: ActorID.zod,
+    actorIDs: ActorID.zod.array(),
+    prompt: SubmitPrompt,
+    timeoutMs: z.number().optional(),
+  })
+
+  export const SubmitRespondInput = z.object({
+    sessionID: SessionID.zod,
+    submitID: SubmitID.zod,
+    actorID: ActorID.zod,
+    action: z.enum(["approve", "cancel"]),
+  })
+
+  type SubmitRow = typeof DocSubmitTable.$inferSelect
+  type SubmitPeer = {
+    actorID: ActorID
+    send: (data: string) => void
+  }
+
+  const peers = new Map<DocID, Set<SubmitPeer>>()
+  const timers = new Map<SubmitID, ReturnType<typeof setTimeout>>()
+
+  function clamp(input?: number) {
+    if (input === undefined) return DEFAULT
+    return Math.min(MAX, Math.max(MIN, input))
+  }
+
+  function fallback(id: ActorID) {
+    return `Guest-${id.slice(-4)}`
+  }
+
+  function read(row: SubmitRow) {
+    const actors = Database.use((db) =>
+      db.select().from(DocSubmitActorTable).where(eq(DocSubmitActorTable.submit_id, row.id)).all(),
+    ).map((item) => ({
+      actorID: item.actor_id,
+      name: item.name,
+      status: SubmitActorStatus.parse(item.status),
+    }))
+    return {
+      submitID: row.id,
+      sessionID: row.session_id,
+      docID: row.doc_id,
+      actorID: row.actor_id,
+      status: SubmitStatus.parse(row.status),
+      actors,
+      cancelledBy: row.cancelled_by ? actors.find((item) => item.actorID === row.cancelled_by) : undefined,
+      timeoutMs: row.timeout_ms,
+      expiresAt: row.expires_at,
+    }
+  }
+
+  function cast(type: SubmitEvent["type"], state: SubmitState) {
+    const set = peers.get(state.docID)
+    if (!set) return
+    const ids = new Set(state.actors.map((actor) => actor.actorID))
+    const data = JSON.stringify({ type, state } satisfies SubmitEvent)
+    set.forEach((peer) => {
+      if (ids.has(peer.actorID)) peer.send(data)
+    })
+  }
+
+  function done(id: SubmitID) {
+    const timer = timers.get(id)
+    if (!timer) return
+    clearTimeout(timer)
+    timers.delete(id)
+  }
+
+  function fail(row: SubmitRow, err: unknown) {
+    Bus.publish(Session.Event.Error, {
+      sessionID: row.session_id,
+      error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+    })
+  }
+
+  function rotate(row: SubmitRow) {
+    const next = promptAdvance({ sessionID: row.session_id })
+    promptReady({ sessionID: row.session_id, docID: next.docID, init: true })
+  }
+
+  function send(row: SubmitRow) {
+    SessionPrompt.prompt({
+      ...SubmitPrompt.parse(JSON.parse(row.prompt)),
+      sessionID: row.session_id,
+    })
+      .then(() => rotate(row))
+      .catch((err) => fail(row, err))
+  }
+
+  function expire(row: SubmitRow, now = Date.now()) {
+    if (row.status !== "pending") return row
+    if (row.expires_at > now) return row
+    const next = Database.use((db) =>
+      db
+        .update(DocSubmitTable)
+        .set({ status: "expired", time_updated: now })
+        .where(eq(DocSubmitTable.id, row.id))
+        .returning()
+        .get(),
+    )
+    done(row.id)
+    if (!next) return row
+    cast("expired", read(next))
+    return next
+  }
+
+  function active(sessionID: SessionID, docID: DocID, actorID?: ActorID) {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(DocSubmitTable)
+        .where(
+          and(
+            eq(DocSubmitTable.session_id, sessionID),
+            eq(DocSubmitTable.doc_id, docID),
+            eq(DocSubmitTable.status, "pending"),
+          ),
+        )
+        .all(),
+    )
+    const state = rows
+      .map((row) => {
+        const next = expire(row)
+        if (next.status === "pending" && !timers.has(next.id)) schedule(next)
+        return read(next)
+      })
+      .find((item) => item.status === "pending" && (!actorID || item.actors.some((actor) => actor.actorID === actorID)))
+    return state
+  }
+
+  function schedule(row: SubmitRow) {
+    done(row.id)
+    if (row.status !== "pending") return
+    const wait = row.expires_at - Date.now()
+    if (wait <= 0) {
+      expire(row)
+      return
+    }
+    timers.set(
+      row.id,
+      setTimeout(() => {
+        const next = Database.use((db) => db.select().from(DocSubmitTable).where(eq(DocSubmitTable.id, row.id)).get())
+        if (next) expire(next)
+      }, wait),
+    )
+  }
+
+  function actorNames(sessionID: SessionID, ids: ActorID[]) {
+    const actors = Database.use((db) =>
+      db.select().from(SessionActorTable).where(eq(SessionActorTable.session_id, sessionID)).all(),
+    )
+    return ids.map((id) => ({
+      actorID: id,
+      name: actors.find((actor) => actor.actor_id === id)?.name ?? fallback(id),
+    }))
+  }
+
+  function targets(docID: DocID, actorID: ActorID, actorIDs: ActorID[]) {
+    const online = new Set(Array.from(peers.get(docID) ?? []).map((peer) => peer.actorID))
+    return Array.from(new Set([actorID, ...actorIDs.filter((id) => online.has(id))]))
+  }
+
+  export const submitCreate = fn(SubmitCreateInput, (input) => {
+    Session.get(input.sessionID)
+    get(input.docID)
+
+    const found = active(input.sessionID, input.docID)
+    if (found) return found
+
+    const ids = targets(input.docID, input.actorID, input.actorIDs)
+    const timeout = clamp(input.timeoutMs)
+    const now = Date.now()
+    const row = Database.transaction((db) => {
+      const submit = {
+        id: SubmitID.ascending(),
+        session_id: input.sessionID,
+        doc_id: input.docID,
+        actor_id: input.actorID,
+        status: ids.length <= 1 ? "sent" : "pending",
+        prompt: JSON.stringify(input.prompt),
+        timeout_ms: timeout,
+        expires_at: now + timeout,
+        cancelled_by: null,
+        time_created: now,
+        time_updated: now,
+      }
+      db.insert(DocSubmitTable).values(submit).run()
+      db.insert(DocSubmitActorTable)
+        .values(
+          actorNames(input.sessionID, ids).map((actor) => ({
+            submit_id: submit.id,
+            actor_id: actor.actorID,
+            name: actor.name,
+            status: actor.actorID === input.actorID ? "approved" : "pending",
+            time_responded: actor.actorID === input.actorID ? now : null,
+          })),
+        )
+        .run()
+      return submit
+    })
+
+    const state = read(row)
+    if (state.status === "sent") {
+      cast("sent", state)
+      send(row)
+      return state
+    }
+    schedule(row)
+    cast("created", state)
+    return state
+  })
+
+  export const submitRespond = fn(SubmitRespondInput, (input) => {
+    const row = Database.use((db) =>
+      db
+        .select()
+        .from(DocSubmitTable)
+        .where(and(eq(DocSubmitTable.session_id, input.sessionID), eq(DocSubmitTable.id, input.submitID)))
+        .get(),
+    )
+    if (!row) throw new NotFoundError({ message: "Doc submit not found" })
+    const next = expire(row)
+    if (next.status !== "pending") return read(next)
+
+    const actor = Database.use((db) =>
+      db
+        .select()
+        .from(DocSubmitActorTable)
+        .where(and(eq(DocSubmitActorTable.submit_id, input.submitID), eq(DocSubmitActorTable.actor_id, input.actorID)))
+        .get(),
+    )
+    if (!actor) throw new NotFoundError({ message: "Doc submit actor not found" })
+
+    if (input.action === "cancel") {
+      const item = Database.use((db) =>
+        db
+          .update(DocSubmitTable)
+          .set({ status: "cancelled", cancelled_by: input.actorID, time_updated: Date.now() })
+          .where(eq(DocSubmitTable.id, input.submitID))
+          .returning()
+          .get(),
+      )
+      if (!item) throw new NotFoundError({ message: "Doc submit not found" })
+      done(input.submitID)
+      const state = read(item)
+      cast("cancelled", state)
+      return state
+    }
+
+    if (actor.status !== "approved") {
+      Database.use((db) =>
+        db
+          .update(DocSubmitActorTable)
+          .set({ status: "approved", time_responded: Date.now() })
+          .where(and(eq(DocSubmitActorTable.submit_id, input.submitID), eq(DocSubmitActorTable.actor_id, input.actorID)))
+          .run(),
+      )
+    }
+
+    const state = read(next)
+    if (state.actors.some((item) => item.status !== "approved")) {
+      cast("updated", state)
+      return state
+    }
+
+    const sent = Database.use((db) =>
+      db
+        .update(DocSubmitTable)
+        .set({ status: "sent", time_updated: Date.now() })
+        .where(eq(DocSubmitTable.id, input.submitID))
+        .returning()
+        .get(),
+    )
+    if (!sent) throw new NotFoundError({ message: "Doc submit not found" })
+    done(input.submitID)
+    const finished = read(sent)
+    cast("sent", finished)
+    send(sent)
+    return finished
+  })
+
+  export const submitActive = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      docID: DocID.zod,
+      actorID: ActorID.zod,
+    }),
+    (input) => active(input.sessionID, input.docID, input.actorID),
+  )
+
+  export const submitConnect = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      docID: DocID.zod,
+      actorID: ActorID.zod,
+      peer: z.custom<{ send: (data: string) => void }>(),
+    }),
+    (input) => {
+      Session.get(input.sessionID)
+      get(input.docID)
+      const peer = { actorID: input.actorID, send: input.peer.send }
+      const set = peers.get(input.docID) ?? new Set<SubmitPeer>()
+      set.add(peer)
+      peers.set(input.docID, set)
+      const state = active(input.sessionID, input.docID, input.actorID)
+      if (state) peer.send(JSON.stringify({ type: "created", state } satisfies SubmitEvent))
+      return () => {
+        set.delete(peer)
+        if (set.size === 0) peers.delete(input.docID)
       }
     },
   )

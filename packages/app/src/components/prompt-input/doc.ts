@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpencodeClient, SessionActor } from "@opencode-ai/sdk/v2/client"
-import { createPage, type DocMountInput } from "@/components/blocksuite/blocksuite-doc"
+import { createPage, type DocActor, type DocMountInput } from "@/components/blocksuite/blocksuite-doc"
 import type { DocSyncOpts } from "@/components/blocksuite/opencode-doc-source"
 import { clearActor, loadActor, saveActor } from "./doc-actor"
 
@@ -50,6 +50,7 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const [ready, setReady] = createSignal(false)
   const [docID, setDocID] = createSignal<string | undefined>()
+  const [actor, setActor] = createSignal<SessionActor | undefined>()
   const [history, setHistory] = createStore({ undo: false, redo: false })
 
   const syncHistory = () => {
@@ -80,6 +81,7 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const ensure = async (sessionID: string) => {
     const actor = await register(input, sessionID)
+    setActor(actor)
     const doc = await promptDoc(input, sessionID)
     setDocID(doc.docID)
     sync = {
@@ -220,6 +222,7 @@ export function createPromptDoc(input: PromptDocInput) {
     init = true
     session = undefined
     live = undefined
+    setActor(undefined)
     setDocID(undefined)
     if (sessionID) clearActor(sessionID)
     setHistory({ undo: false, redo: false })
@@ -248,6 +251,14 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const empty = () => (handle ? handle.empty() : true)
 
+  const actors = () => {
+    const list: DocActor[] = handle?.actors() ?? []
+    const own = actor()
+    if (!own) return list
+    if (list.some((item) => item.actorID === own.actorID)) return list
+    return [...list, { actorID: own.actorID, name: own.name }]
+  }
+
   const advance = async (id?: string) => {
     const sessionID = id ?? input.sessionID()
     if (!sessionID) return
@@ -272,6 +283,9 @@ export function createPromptDoc(input: PromptDocInput) {
   return {
     ready,
     docID,
+    actorID: () => actor()?.actorID,
+    actorName: () => actor()?.name,
+    actors,
     history,
     mount,
     detach,
