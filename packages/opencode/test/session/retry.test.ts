@@ -60,6 +60,11 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error)).toBe(2000)
   })
 
+  test("ignores negative retry hints", () => {
+    expect(SessionRetry.delay(1, apiError({ "retry-after-ms": "-1" }))).toBe(2000)
+    expect(SessionRetry.delay(2, apiError({ "retry-after": "-1" }))).toBe(4000)
+  })
+
   test("ignores malformed date retry hints", () => {
     const error = apiError({ "retry-after": "Invalid Date String" })
     expect(SessionRetry.delay(1, error)).toBe(2000)
