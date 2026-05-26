@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { Wildcard } from "../../src/util"
+import { Wildcard } from "@/util/wildcard"
 
 test("match handles glob tokens", () => {
   expect(Wildcard.match("file1.txt", "file?.txt")).toBe(true)

@@ -1,16 +1,21 @@
-import z from "zod"
-import { Database, eq } from "@/storage"
+// Legacy sync event system. It should stay unaware of core EventV2 execution;
+// the only temporary V2 coupling here is exposing versioned core event schemas
+// in effectPayloads() so existing HTTP/SDK schema generation remains stable.
+// Remove that registry read when event schemas are generated from core directly.
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { Instance } from "@/project/instance"
 import { EventSequenceTable, EventTable } from "./event.sql"
-import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { EventID } from "./schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Schema as EffectSchema } from "effect"
-import { zodObject } from "@/util/effect-zod"
-import type { DeepMutable } from "@/util/schema"
+import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
+import type { DeepMutable } from "@opencode-ai/core/schema"
+import { EventV2 } from "@opencode-ai/core/event"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EffectBridge } from "@/effect/bridge"
 
 // Keep `Event["data"]` mutable because projectors mutate the persisted shape
 // when writing to the database. Bus payloads (`Properties`) stay readonly —
@@ -42,11 +47,164 @@ export type Properties<Def extends Definition = Definition> = EffectSchema.Schem
 
 export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
-type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
+type ProjectorFunc = (db: Database.TxOrDb, data: unknown, event: Event) => void
 type ConvertEvent = (type: string, data: Event["data"]) => unknown | Promise<unknown>
 
+export interface Interface {
+  readonly run: <Def extends Definition>(
+    def: Def,
+    data: Event<Def>["data"],
+    options?: { publish?: boolean },
+  ) => Effect.Effect<void>
+  readonly replay: (event: SerializedEvent, options?: { publish: boolean; ownerID?: string }) => Effect.Effect<void>
+  readonly replayAll: (
+    events: SerializedEvent[],
+    options?: { publish: boolean; ownerID?: string },
+  ) => Effect.Effect<string | undefined>
+  readonly remove: (aggregateID: string) => Effect.Effect<void>
+  readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/SyncEvent") {}
+
+export const layer = Layer.effect(Service)(
+  Effect.gen(function* () {
+    const flags = yield* RuntimeFlags.Service
+    const bus = yield* ProjectBus.Service
+
+    const replay: Interface["replay"] = Effect.fn("SyncEvent.replay")(function* (event, options) {
+      const def = registry.get(event.type)
+      if (!def) {
+        throw new Error(`Unknown event type: ${event.type}`)
+      }
+
+      const row = Database.use((db) =>
+        db
+          .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, event.aggregateID))
+          .get(),
+      )
+
+      const latest = row?.seq ?? -1
+      if (event.seq <= latest) return
+
+      if (row?.ownerID && row.ownerID !== options?.ownerID) {
+        return
+      }
+
+      const expected = latest + 1
+      if (event.seq !== expected) {
+        throw new Error(
+          `Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`,
+        )
+      }
+
+      const publish = !!options?.publish
+      // Bridge captures handler-fiber refs (InstanceRef/WorkspaceRef) and the
+      // full Effect context, so the forked publish + GlobalBus emit run with
+      // the right state without a per-call attachWith.
+      const bridge = yield* EffectBridge.make()
+      process(def, event, {
+        bus,
+        bridge,
+        publish,
+        ownerID: options?.ownerID,
+        experimentalWorkspaces: flags.experimentalWorkspaces,
+      })
+    })
+
+    const replayAll: Interface["replayAll"] = Effect.fn("SyncEvent.replayAll")(function* (events, options) {
+      const source = events[0]?.aggregateID
+      if (!source) return undefined
+      if (events.some((item) => item.aggregateID !== source)) {
+        throw new Error("Replay events must belong to the same session")
+      }
+      const start = events[0].seq
+      for (const [i, item] of events.entries()) {
+        const seq = start + i
+        if (item.seq !== seq) {
+          throw new Error(`Replay sequence mismatch at index ${i}: expected ${seq}, got ${item.seq}`)
+        }
+      }
+      for (const item of events) {
+        yield* replay(item, options)
+      }
+      return source
+    })
+
+    const run: Interface["run"] = Effect.fn("SyncEvent.run")(function* (def, data, options) {
+      const agg = (data as Record<string, string>)[def.aggregate]
+      // This should never happen: we've enforced it via typescript in
+      // the definition
+      if (agg == null) {
+        throw new Error(`SyncEvent.run: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
+      }
+
+      if (def.version !== versions.get(def.type)) {
+        throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
+      }
+
+      const { publish = true } = options || {}
+      const bridge = yield* EffectBridge.make()
+
+      // Note that this is an "immediate" transaction which is critical.
+      // We need to make sure we can safely read and write with nothing
+      // else changing the data from under us
+      Database.transaction(
+        (tx) => {
+          const id = EventID.ascending()
+          const row = tx
+            .select({ seq: EventSequenceTable.seq })
+            .from(EventSequenceTable)
+            .where(eq(EventSequenceTable.aggregate_id, agg))
+            .get()
+          const seq = row?.seq != null ? row.seq + 1 : 0
+
+          const event = { id, seq, aggregateID: agg, data }
+          process(def, event, { bus, bridge, publish, experimentalWorkspaces: flags.experimentalWorkspaces })
+        },
+        {
+          behavior: "immediate",
+        },
+      )
+    })
+
+    const remove: Interface["remove"] = Effect.fn("SyncEvent.remove")(function* (aggregateID) {
+      Database.transaction((tx) => {
+        tx.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).run()
+        tx.delete(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).run()
+      })
+    })
+
+    const claim: Interface["claim"] = Effect.fn("SyncEvent.claim")((aggregateID, ownerID) =>
+      Effect.sync(() =>
+        Database.use((db) =>
+          db
+            .update(EventSequenceTable)
+            .set({ owner_id: ownerID })
+            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+            .run(),
+        ),
+      ),
+    )
+
+    return Service.of({
+      run,
+      replay,
+      replayAll,
+      remove,
+      claim,
+    })
+  }),
+)
+
+export const defaultLayer = layer.pipe(Layer.provide([ProjectBus.defaultLayer, RuntimeFlags.defaultLayer]))
+
+export const use = serviceUse(Service)
+
 export const registry = new Map<string, Definition>()
-let projectors: Map<Definition, ProjectorFunc> | undefined
+let projectors: Map<string, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
 let convertEvent: ConvertEvent
@@ -58,7 +216,17 @@ export function reset() {
 }
 
 export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
-  projectors = new Map(input.projectors)
+  projectors = new Map(input.projectors.map(([def, func]) => [versionedType(def.type, def.version), func]))
+  for (let entry of EventV2.registry.values()) {
+    if (!entry.version || !entry.aggregate) continue
+    register({
+      type: entry.type,
+      version: entry.version,
+      aggregate: entry.aggregate,
+      properties: entry.data,
+      schema: entry.data,
+    })
+  }
 
   // Install all the latest event defs to the bus. We only ever emit
   // latest versions from code, and keep around old versions for
@@ -66,7 +234,6 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   // simplifies the bus to only use unversioned latest events
   for (let [type, version] of versions.entries()) {
     let def = registry.get(versionedType(type, version))!
-
     BusEvent.define(def.type, def.properties)
   }
 
@@ -106,40 +273,53 @@ export function define<
     properties: (input.busSchema ?? input.schema) as BusSchema,
   }
 
-  versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
-
-  registry.set(versionedType(def.type, def.version), def)
+  register(def)
 
   return def
 }
 
 export function project<Def extends Definition>(
   def: Def,
-  func: (db: Database.TxOrDb, data: Event<Def>["data"]) => void,
+  func: (db: Database.TxOrDb, data: Event<Def>["data"], event: Event<Def>) => void,
 ): [Definition, ProjectorFunc] {
   return [def, func as ProjectorFunc]
 }
 
-function process<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
+function register(def: Definition) {
+  versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
+  registry.set(versionedType(def.type, def.version), def)
+}
+
+function process<Def extends Definition>(
+  def: Def,
+  event: Event<Def>,
+  options: {
+    bus: ProjectBus.Interface
+    bridge: EffectBridge.Shape
+    publish: boolean
+    ownerID?: string
+    experimentalWorkspaces: boolean
+  },
+) {
   if (projectors == null) {
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
   }
 
-  const projector = projectors.get(def)
+  const projector = projectors.get(versionedType(def.type, def.version))
   if (!projector) {
-    throw new Error(`Projector not found for event: ${def.type}`)
+    if (!def.type.includes("next")) throw new Error(`Projector not found for event: ${def.type}`)
+    return
   }
 
-  // idempotent: need to ignore any events already logged
-
   Database.transaction((tx) => {
-    projector(tx, event.data)
+    projector(tx, event.data, event)
 
-    if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+    if (options.experimentalWorkspaces) {
       tx.insert(EventSequenceTable)
         .values({
           aggregate_id: event.aggregateID,
           seq: event.seq,
+          owner_id: options?.ownerID,
         })
         .onConflictDoUpdate({
           target: EventSequenceTable.aggregate_id,
@@ -158,139 +338,74 @@ function process<Def extends Definition>(def: Def, event: Event<Def>, options: {
     }
 
     Database.effect(() => {
-      if (options?.publish) {
-        const result = convertEvent(def.type, event.data)
-        const publish = (data: unknown) => ProjectBus.publish(def, data as Properties<Def>)
-        if (result instanceof Promise) {
-          void result.then(publish)
-        } else {
-          void publish(result)
-        }
-
-        GlobalBus.emit("event", {
-          directory: Instance.directory,
-          project: Instance.project.id,
-          workspace: WorkspaceContext.workspaceID,
-          payload: {
-            type: "sync",
-            syncEvent: {
-              type: versionedType(def.type, def.version),
-              ...event,
-            },
-          },
-        })
+      if (!options.publish) return
+      const result = convertEvent(def.type, event.data)
+      // The bridge was built inside the caller's fiber so it already carries
+      // InstanceRef/WorkspaceRef and the full Effect context. Both the bus
+      // publish and the GlobalBus emit run inside the forked Effect so they
+      // share the same instance/workspace lookup.
+      const publish = (data: unknown) =>
+        options.bridge.fork(
+          Effect.gen(function* () {
+            yield* options.bus.publish(def, data as Properties<Def>, { id: event.id })
+            const instance = yield* InstanceState.context
+            const workspace = yield* InstanceState.workspaceID
+            GlobalBus.emit("event", {
+              directory: instance.directory,
+              project: instance.project.id,
+              workspace,
+              payload: {
+                type: "sync",
+                syncEvent: {
+                  type: versionedType(def.type, def.version),
+                  ...event,
+                },
+              },
+            })
+          }),
+        )
+      if (result instanceof Promise) {
+        void result.then(publish)
+      } else {
+        publish(result)
       }
     })
   })
 }
 
-export function replay(event: SerializedEvent, options?: { publish: boolean }) {
-  const def = registry.get(event.type)
-  if (!def) {
-    throw new Error(`Unknown event type: ${event.type}`)
-  }
-
-  const row = Database.use((db) =>
-    db
-      .select({ seq: EventSequenceTable.seq })
-      .from(EventSequenceTable)
-      .where(eq(EventSequenceTable.aggregate_id, event.aggregateID))
-      .get(),
-  )
-
-  const latest = row?.seq ?? -1
-  if (event.seq <= latest) {
-    return
-  }
-
-  const expected = latest + 1
-  if (event.seq !== expected) {
-    throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
-  }
-
-  process(def, event, { publish: !!options?.publish })
-}
-
-export function replayAll(events: SerializedEvent[], options?: { publish: boolean }) {
-  const source = events[0]?.aggregateID
-  if (!source) return
-  if (events.some((item) => item.aggregateID !== source)) {
-    throw new Error("Replay events must belong to the same session")
-  }
-  const start = events[0].seq
-  for (const [i, item] of events.entries()) {
-    const seq = start + i
-    if (item.seq !== seq) {
-      throw new Error(`Replay sequence mismatch at index ${i}: expected ${seq}, got ${item.seq}`)
-    }
-  }
-  for (const item of events) {
-    replay(item, options)
-  }
-  return source
-}
-
-export function run<Def extends Definition>(def: Def, data: Event<Def>["data"], options?: { publish?: boolean }) {
-  const agg = (data as Record<string, string>)[def.aggregate]
-  // This should never happen: we've enforced it via typescript in
-  // the definition
-  if (agg == null) {
-    throw new Error(`SyncEvent.run: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
-  }
-
-  if (def.version !== versions.get(def.type)) {
-    throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
-  }
-
-  const { publish = true } = options || {}
-
-  // Note that this is an "immediate" transaction which is critical.
-  // We need to make sure we can safely read and write with nothing
-  // else changing the data from under us
-  Database.transaction(
-    (tx) => {
-      const id = EventID.ascending()
-      const row = tx
-        .select({ seq: EventSequenceTable.seq })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, agg))
-        .get()
-      const seq = row?.seq != null ? row.seq + 1 : 0
-
-      const event = { id, seq, aggregateID: agg, data }
-      process(def, event, { publish })
-    },
-    {
-      behavior: "immediate",
-    },
-  )
-}
-
-export function remove(aggregateID: string) {
-  Database.transaction((tx) => {
-    tx.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).run()
-    tx.delete(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).run()
-  })
-}
-
-export function payloads() {
-  return registry
-    .entries()
-    .map(([type, def]) => {
-      return z
-        .object({
-          type: z.literal("sync"),
-          name: z.literal(type),
-          id: z.string(),
-          seq: z.number(),
-          aggregateID: z.literal(def.aggregate),
-          data: zodObject(def.schema),
-        })
-        .meta({
-          ref: `SyncEvent.${def.type}`,
-        })
-    })
-    .toArray()
+export function effectPayloads() {
+  return [
+    ...registry
+      .entries()
+      .map(([type, def]) =>
+        EffectSchema.Struct({
+          type: EffectSchema.Literal("sync"),
+          name: EffectSchema.Literal(type),
+          id: EffectSchema.String,
+          seq: EffectSchema.Finite,
+          aggregateID: EffectSchema.Literal(def.aggregate),
+          data: def.schema,
+        }).annotate({ identifier: `SyncEvent.${type}` }),
+      )
+      .toArray(),
+    ...EventV2.registry
+      .values()
+      .filter(
+        (definition) =>
+          definition.version !== undefined && !registry.has(versionedType(definition.type, definition.version)),
+      )
+      .map((definition) =>
+        EffectSchema.Struct({
+          type: EffectSchema.Literal("sync"),
+          name: EffectSchema.Literal(versionedType(definition.type, definition.version!)),
+          id: EffectSchema.String,
+          seq: EffectSchema.Finite,
+          aggregateID: EffectSchema.Literal(definition.aggregate!),
+          data: definition.data,
+        }).annotate({ identifier: `SyncEvent.${definition.type}` }),
+      )
+      .toArray(),
+  ]
 }
 
 export * as SyncEvent from "."

@@ -3,10 +3,10 @@ import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CliRenderer } from "@opentui/core"
-import { Filesystem } from "@/util"
-import { Process } from "@/util"
+import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
 
-export async function open(opts: { value: string; renderer: CliRenderer }): Promise<string | undefined> {
+export async function open(opts: { value: string; renderer: CliRenderer; cwd?: string }): Promise<string | undefined> {
   const editor = process.env["VISUAL"] || process.env["EDITOR"]
   if (!editor) return
 
@@ -19,6 +19,7 @@ export async function open(opts: { value: string; renderer: CliRenderer }): Prom
   try {
     const parts = editor.split(" ")
     const proc = Process.spawn([...parts, filepath], {
+      cwd: opts.cwd,
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",
@@ -33,3 +34,5 @@ export async function open(opts: { value: string; renderer: CliRenderer }): Prom
     opts.renderer.requestRender()
   }
 }
+
+export * as Editor from "./editor"

@@ -9,10 +9,6 @@ export const email = `mailto:${config.email}`
 
 OpenCode Go는 인기 있는 오픈 코딩 모델에 안정적으로 액세스할 수 있게 해주는 저비용 구독 서비스입니다. **첫 달은 $5**, 이후에는 **월 $10**입니다.
 
-:::note
-OpenCode Go는 현재 베타입니다.
-:::
-
 Go는 OpenCode의 다른 제공자와 똑같이 작동합니다. OpenCode Go를 구독하고 API 키를 발급받으면 됩니다. 이는 **완전히 선택 사항**이며, OpenCode를 사용하기 위해 꼭 필요하지는 않습니다.
 
 주로 해외 사용자를 위해 설계되었으며, 안정적인 전 세계 액세스를 위해 모델은 미국, EU, 싱가포르에 호스팅됩니다.
@@ -57,10 +53,8 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **GLM-5.1**
 - **Kimi K2.5**
 - **Kimi K2.6**
-- **MiMo-V2-Pro**
-- **MiMo-V2-Omni**
-- **MiMo-V2.5-Pro**
 - **MiMo-V2.5**
+- **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
@@ -90,29 +84,26 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | GLM-5              | 1,150             | 2,880          | 5,750          |
 | Kimi K2.5          | 1,850             | 4,630          | 9,250          |
 | Kimi K2.6          | 1,150             | 2,880          | 5,750          |
-| MiMo-V2-Pro        | 1,290             | 3,225          | 6,450          |
-| MiMo-V2-Omni       | 2,150             | 5,450          | 10,900         |
-| MiMo-V2.5-Pro      | 1,290             | 3,225          | 6,450          |
 | MiMo-V2.5 (≤ 256K) | 2,150             | 5,450          | 10,900         |
+| MiMo-V2.5-Pro      | 1,290             | 3,225          | 6,450          |
 | MiniMax M2.7       | 3,400             | 8,500          | 17,000         |
 | MiniMax M2.5       | 6,300             | 15,900         | 31,800         |
 | Qwen3.6 Plus       | 3,300             | 8,200          | 16,300         |
 | Qwen3.5 Plus       | 10,200            | 25,200         | 50,500         |
-| DeepSeek V4 Pro    | 1,300             | 3,250          | 6,500          |
-| DeepSeek V4 Flash  | 7,450             | 18,600         | 37,300         |
+| DeepSeek V4 Pro    | 3,450             | 8,550          | 17,150         |
+| DeepSeek V4 Flash  | 31,650            | 79,050         | 158,150        |
 
 예상치는 관찰된 평균 요청 패턴을 기준으로 합니다.
 
 - GLM-5/5.1 — 요청당 입력 700, 캐시 52,000, 출력 토큰 150
 - Kimi K2.5/K2.6 — 요청당 입력 870, 캐시 55,000, 출력 토큰 200
-- DeepSeek V4 Pro/Flash — 700 input, 52,000 cached, 150 output tokens per request
+- DeepSeek V4 Pro — 요청당 입력 750, 캐시 82,000, 출력 토큰 290
+- DeepSeek V4 Flash — 요청당 입력 790, 캐시 68,000, 출력 토큰 280
 - MiniMax M2.7/M2.5 — 요청당 입력 300, 캐시 55,000, 출력 토큰 125
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
-- MiMo-V2-Pro — 요청당 입력 350, 캐시 41,000, 출력 토큰 250
-- MiMo-V2-Omni — 요청당 입력 1000, 캐시 60,000, 출력 토큰 140
-- MiMo-V2.5-Pro — 요청당 입력 350, 캐시 41,000, 출력 토큰 250
+- Qwen3.5 Plus — 요청당 입력 410, 캐시 47,000, 출력 토큰 140
+- Qwen3.6 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
 - MiMo-V2.5 — 요청당 입력 1000, 캐시 60,000, 출력 토큰 140
+- MiMo-V2.5-Pro — 요청당 입력 350, 캐시 41,000, 출력 토큰 250
 
 현재 사용량은 **<a href={console}>console</a>**에서 확인할 수 있습니다.
 
@@ -142,14 +133,12 @@ Zen 잔액에 크레딧도 있다면, console에서 **Use balance** 옵션을 �
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro       | mimo-v2-pro       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni      | mimo-v2-omni      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K2.6의 경우 config에서 `opencode-go/kimi-k2.6`를 사용하면 됩니다.
 

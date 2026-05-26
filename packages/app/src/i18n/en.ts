@@ -25,6 +25,7 @@ export const dict = {
   "command.project.open": "Open project",
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
+  "command.project.index": "Switch to project {{index}}",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -305,6 +306,7 @@ export const dict = {
   "mcp.status.failed": "failed",
   "mcp.status.needs_auth": "needs auth",
   "mcp.status.disabled": "disabled",
+  "mcp.auth.clickToAuthenticate": "Click to authenticate",
 
   "dialog.fork.empty": "No messages to fork from",
 
@@ -414,6 +416,7 @@ export const dict = {
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
   "language.bs": "Bosanski",
+  "language.uk": "Українська",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
 
@@ -465,6 +468,9 @@ export const dict = {
   "error.page.description": "An error occurred while loading the application.",
   "error.page.details.label": "Error Details",
   "error.page.action.restart": "Restart",
+  "error.page.action.report": "Report Error",
+  "error.page.action.reported": "Error Reported",
+  "error.page.action.exportLogs": "Export Logs",
   "error.page.action.checking": "Checking...",
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
@@ -476,9 +482,9 @@ export const dict = {
   "error.dev.rootNotFound":
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 
-  "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
-  "error.globalSDK.noServerAvailable": "No server available",
-  "error.globalSDK.serverNotAvailable": "Server not available",
+  "error.serverSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
+  "error.serverSDK.noServerAvailable": "No server available",
+  "error.serverSDK.serverNotAvailable": "Server not available",
   "error.childStore.persistedCacheCreateFailed": "Failed to create persisted cache",
   "error.childStore.persistedProjectMetadataCreateFailed": "Failed to create persisted project metadata",
   "error.childStore.persistedProjectIconCreateFailed": "Failed to create persisted project icon",
@@ -520,6 +526,14 @@ export const dict = {
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",
+  "home.title": "Home",
+  "home.projects": "Projects",
+  "home.project.add": "Add project",
+  "home.sessions.search.placeholder": "Search sessions",
+  "home.sessions.empty": "No sessions found",
+  "home.sessions.group.today": "Today",
+  "home.sessions.group.yesterday": "Yesterday",
+  "home.sessions.group.older": "Older",
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",
@@ -728,6 +742,11 @@ export const dict = {
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
+  "settings.general.row.shell.title": "Terminal Shell",
+  "settings.general.row.shell.description":
+    "Choose the shell used for your terminal. Compatible shells are also used for agent tool calls.",
+  "settings.general.row.shell.autoDefault": "Auto (Default)",
+  "settings.general.row.shell.terminalOnly": "terminal only",
   "settings.general.row.appearance.title": "Appearance",
   "settings.general.row.appearance.description": "Customise how OpenCode looks on your device",
   "settings.general.row.colorScheme.title": "Color scheme",
@@ -765,6 +784,8 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
+  "settings.general.row.pinchZoom.title": "Pinch to zoom",
+  "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
@@ -894,7 +915,7 @@ export const dict = {
   "settings.permissions.tool.read.title": "Read",
   "settings.permissions.tool.read.description": "Reading a file (matches the file path)",
   "settings.permissions.tool.edit.title": "Edit",
-  "settings.permissions.tool.edit.description": "Modify files, including edits, writes, patches, and multi-edits",
+  "settings.permissions.tool.edit.description": "Modify files, including edits, writes, and patches",
   "settings.permissions.tool.glob.title": "Glob",
   "settings.permissions.tool.glob.description": "Match files using glob patterns",
   "settings.permissions.tool.grep.title": "Grep",
@@ -915,8 +936,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Fetch content from a URL",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "Search the web",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "Search code on the web",
   "settings.permissions.tool.external_directory.title": "External Directory",
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

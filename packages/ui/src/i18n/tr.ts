@@ -52,6 +52,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "Ücretsiz kullanım aşıldı",
   "ui.sessionTurn.error.addCredits": "Kredi ekle",
 
+  "dialog.usageExceeded.freeTier.title": "Ücretsiz sınıra ulaşıldı",
+  "dialog.usageExceeded.freeTier.description":
+    "En iyi açık kaynak modellere güvenilir erişim için OpenCode Go'ya abone olun. Aylık $5'tan başlar.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Abone ol",
+  "dialog.usageExceeded.accountRateLimit.title": "Go sınırına ulaşıldı",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Kullanım sınırına ulaşıldı. Bu modeli şimdi kullanmaya devam etmek için mevcut bakiyenizden kullanımı etkinleştirin",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Ayarları aç",
+
   "ui.sessionTurn.status.delegating": "Görev devrediliyor",
   "ui.sessionTurn.status.planning": "Sonraki adımlar planlanıyor",
   "ui.sessionTurn.status.gatheringContext": "Keşfediliyor",
@@ -101,7 +110,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Web getir",
   "ui.tool.websearch": "Web Araması",
-  "ui.tool.codesearch": "Kod Araması",
   "ui.tool.shell": "Kabuk",
   "ui.tool.patch": "Yama",
   "ui.tool.todos": "Görevler",

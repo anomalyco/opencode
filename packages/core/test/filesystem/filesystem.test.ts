@@ -65,6 +65,34 @@ describe("AppFileSystem", () => {
     )
   })
 
+  describe("readFileStringSafe", () => {
+    it(
+      "returns file contents when file exists",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "exists.txt")
+        yield* filesys.writeFileString(file, "hello")
+
+        const result = yield* fs.readFileStringSafe(file)
+        expect(result).toBe("hello")
+      }),
+    )
+
+    it(
+      "returns undefined for missing file (NotFound)",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+
+        const result = yield* fs.readFileStringSafe(path.join(tmp, "does-not-exist.txt"))
+        expect(result).toBeUndefined()
+      }),
+    )
+  })
+
   describe("readJson / writeJson", () => {
     it(
       "round-trips JSON data",

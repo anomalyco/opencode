@@ -5,7 +5,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "../../src/git"
 import { Global } from "@opencode-ai/core/global"
-import { Storage } from "../../src/storage"
+import { Storage } from "@/storage/storage"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -74,20 +74,23 @@ describe("Storage", () => {
   it.live("maps missing reads to NotFoundError", () =>
     Effect.gen(function* () {
       const { root, svc } = yield* scope()
-      const exit = yield* svc.read([...root, "missing", "value"]).pipe(Effect.exit)
-      expect(Exit.isFailure(exit)).toBe(true)
+      const error = yield* Effect.flip(svc.read([...root, "missing", "value"]))
+      expect(error).toBeInstanceOf(Storage.NotFoundError)
+      expect(error._tag).toBe("NotFoundError")
+      expect(error.message).toContain(path.join(...root, "missing", "value") + ".json")
     }),
   )
 
   it.live("update on missing key throws NotFoundError", () =>
     Effect.gen(function* () {
       const { root, svc } = yield* scope()
-      const exit = yield* svc
-        .update<{ value: number }>([...root, "missing", "key"], (draft) => {
+      const error = yield* Effect.flip(
+        svc.update<{ value: number }>([...root, "missing", "key"], (draft) => {
           draft.value += 1
-        })
-        .pipe(Effect.exit)
-      expect(Exit.isFailure(exit)).toBe(true)
+        }),
+      )
+      expect(error).toBeInstanceOf(Storage.NotFoundError)
+      expect(error._tag).toBe("NotFoundError")
     }),
   )
 

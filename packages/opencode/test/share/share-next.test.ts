@@ -8,13 +8,14 @@ import { Account } from "../../src/account/account"
 import { AccountRepo } from "../../src/account/repo"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
-import { Config } from "../../src/config"
-import { Provider } from "../../src/provider"
-import { Session } from "../../src/session"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
+import { Session } from "@/session/session"
 import type { SessionID } from "../../src/session/schema"
-import { ShareNext } from "../../src/share"
+import { ShareNext } from "@/share/share-next"
 import { SessionShareTable } from "../../src/share/share.sql"
-import { Database, eq } from "../../src/storage"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { testEffect } from "../lib/effect"
@@ -127,7 +128,7 @@ describe("ShareNext", () => {
       Effect.gen(function* () {
         yield* seed("https://control.example.com", "org-1")
 
-        const req = yield* ShareNext.Service.use((svc) => svc.request()).pipe(Effect.provide(live(none)))
+        const req = yield* ShareNext.use.request().pipe(Effect.provide(live(none)))
 
         expect(req.api.create).toBe("/api/shares")
         expect(req.api.sync("shr_123")).toBe("/api/shares/shr_123/sync")
@@ -146,7 +147,7 @@ describe("ShareNext", () => {
     provideTmpdirInstance(
       () =>
         Effect.gen(function* () {
-          const session = yield* Session.Service.use((svc) => svc.create({ title: "test" }))
+          const session = yield* Session.use.create({ title: "test" })
           const seen: HttpClientRequest.HttpClientRequest[] = []
           const client = HttpClient.make((req) => {
             seen.push(req)
@@ -162,9 +163,7 @@ describe("ShareNext", () => {
             return Effect.succeed(json(req, { ok: true }))
           })
 
-          const result = yield* ShareNext.Service.use((svc) => svc.create(session.id)).pipe(
-            Effect.provide(live(client)),
-          )
+          const result = yield* ShareNext.use.create(session.id).pipe(Effect.provide(live(client)))
 
           expect(result.id).toBe("shr_abc")
           expect(result.url).toBe("https://legacy-share.example.com/share/abc")
@@ -187,7 +186,7 @@ describe("ShareNext", () => {
     provideTmpdirInstance(
       () =>
         Effect.gen(function* () {
-          const session = yield* Session.Service.use((svc) => svc.create({ title: "test" }))
+          const session = yield* Session.use.create({ title: "test" })
           const seen: HttpClientRequest.HttpClientRequest[] = []
           const client = HttpClient.make((req) => {
             seen.push(req)
@@ -204,8 +203,8 @@ describe("ShareNext", () => {
           })
 
           yield* Effect.gen(function* () {
-            yield* ShareNext.Service.use((svc) => svc.create(session.id))
-            yield* ShareNext.Service.use((svc) => svc.remove(session.id))
+            yield* ShareNext.use.create(session.id)
+            yield* ShareNext.use.remove(session.id)
           }).pipe(Effect.provide(live(client)))
 
           expect(share(session.id)).toBeUndefined()
@@ -221,7 +220,7 @@ describe("ShareNext", () => {
   it.live("create fails on a non-ok response and does not persist a share", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
-        const session = yield* Session.Service.use((svc) => svc.create({ title: "test" }))
+        const session = yield* Session.use.create({ title: "test" })
         const client = HttpClient.make((req) => Effect.succeed(json(req, { error: "bad" }, 500)))
 
         const exit = yield* ShareNext.Service.use((svc) => Effect.exit(svc.create(session.id))).pipe(

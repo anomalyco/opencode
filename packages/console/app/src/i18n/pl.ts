@@ -252,7 +252,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
   "go.meta.description":
-    "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi 5-godzinnymi limitami zapytań dla GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
+    "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi 5-godzinnymi limitami zapytań dla GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
   "go.hero.body":
     "Go udostępnia programowanie z agentami programistom na całym świecie. Oferuje hojne limity i niezawodny dostęp do najzdolniejszych modeli open source, dzięki czemu możesz budować za pomocą potężnych agentów, nie martwiąc się o koszty czy dostępność.",
@@ -264,8 +264,6 @@ export const dict = {
   "go.cta.promo": "$5 pierwszy miesiąc",
   "go.pricing.body":
     "Używaj z dowolnym agentem. $5 za pierwszy miesiąc, potem $10/miesiąc. Doładuj konto w razie potrzeby. Anuluj w dowolnym momencie.",
-  "go.banner.badge": "3x",
-  "go.banner.text": "Kimi K2.6: limit użycia zwiększony 3× do 27 kwietnia",
   "go.graph.free": "Darmowe",
   "go.graph.freePill": "Big Pickle i darmowe modele",
   "go.graph.go": "Go",
@@ -303,7 +301,7 @@ export const dict = {
   "go.problem.item2": "Hojne limity i niezawodny dostęp",
   "go.problem.item3": "Stworzony dla jak największej liczby programistów",
   "go.problem.item4":
-    "Zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash",
+    "Zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash",
   "go.how.title": "Jak działa Go",
   "go.how.body":
     "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc. Możesz go używać z OpenCode lub dowolnym agentem.",
@@ -329,7 +327,7 @@ export const dict = {
   "go.faq.a2": "Go obejmuje poniższe modele z wysokimi limitami i niezawodnym dostępem.",
   "go.faq.q3": "Czy Go to to samo co Zen?",
   "go.faq.a3":
-    "Nie. Zen to model płatności za użycie, podczas gdy Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi limitami i niezawodnym dostępem do modeli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
+    "Nie. Zen to model płatności za użycie, podczas gdy Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi limitami i niezawodnym dostępem do modeli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
   "go.faq.q4": "Ile kosztuje Go?",
   "go.faq.a4.p1.beforePricing": "Go kosztuje",
   "go.faq.a4.p1.pricingLink": "$5 za pierwszy miesiąc",
@@ -353,7 +351,7 @@ export const dict = {
 
   "go.faq.q9": "Jaka jest różnica między darmowymi modelami a Go?",
   "go.faq.a9":
-    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), w przybliżeniu równoważnymi $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
+    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), w przybliżeniu równoważnymi $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
 
   "zen.api.error.rateLimitExceeded": "Przekroczono limit zapytań. Spróbuj ponownie później.",
   "zen.api.error.modelNotSupported": "Model {{model}} nie jest obsługiwany",
@@ -363,8 +361,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Brak klucza API.",
   "zen.api.error.invalidApiKey": "Nieprawidłowy klucz API.",
   "zen.api.error.subscriptionQuotaExceeded": "Przekroczono limit subskrypcji. Spróbuj ponownie za {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Przekroczono limit subskrypcji. Możesz kontynuować korzystanie z darmowych modeli.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Osiągnięto 5-godzinny limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Osiągnięto tygodniowy limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Osiągnięto miesięczny limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Brak metody płatności. Dodaj metodę płatności tutaj: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Niewystarczające saldo. Zarządzaj swoimi płatnościami tutaj: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -665,6 +667,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "Przekierowywanie...",
   "workspace.lite.promo.otherMethods": "Inne metody płatności",
   "workspace.lite.promo.selectMethod": "Wybierz metodę płatności",
+
+  "workspace.referral.copyLink": "Kopiuj link",
+  "workspace.referral.copied": "Skopiowano",
+  "workspace.referral.overview.title": "Zaproś znajomych",
+  "workspace.referral.overview.subtitle": "Zdobądź $5, gdy znajomy się zasubskrybuje. On też dostanie $5.",
+  "workspace.referral.instructions.share": "Udostępnij swój link polecający",
+  "workspace.referral.instructions.subscribe": "Twój znajomy dołącza i subskrybuje Go",
+  "workspace.referral.instructions.claim": "Oboje otrzymujecie kredyt $5 do wykorzystania na limity użycia Go",
+  "workspace.referral.rewards.title": "Nagrody za polecenia",
+  "workspace.referral.rewards.description": "Wykorzystaj dostępne środki za polecenia na swoje użycie Go.",
+  "workspace.referral.rewards.subtitle": "Wykorzystano {{applied}} / {{total}} nagród.",
+  "workspace.referral.rewards.empty": "Brak nagród za polecenia.",
+  "workspace.referral.table.reward": "Nagroda",
+  "workspace.referral.table.referral": "Opis",
+  "workspace.referral.table.date": "Data",
+  "workspace.referral.reward.description.inviter": "Zaproszono {{email}}",
+  "workspace.referral.reward.description.invitee": "Zaproszony przez {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "Subskrybuj, aby odblokować",
+  "workspace.referral.reward.action.view": "Zobacz nagrodę",
+  "workspace.referral.reward.action.applied": "Nagroda wykorzystana",
+  "workspace.referral.reward.source.pendingInviter": "Oczekiwanie na jego subskrypcję",
+  "workspace.referral.reward.source.pendingInvitee": "Subskrybuj, aby odblokować nagrodę",
+  "workspace.referral.reward.source.available": "Nagroda gotowa do wykorzystania",
+  "workspace.referral.reward.source.applied": "Nagroda wykorzystana",
+  "workspace.referral.reward.status.applied": "Nagroda wykorzystana",
+  "workspace.referral.reward.status.pendingInviter": "Subskrybuj, aby odblokować",
+  "workspace.referral.reward.status.pendingInvitee": "Subskrybuj, aby odblokować",
+  "workspace.referral.apply.noGo": "Subskrybuj, aby odblokować",
+  "workspace.referral.apply.preview": "Zobacz nagrodę",
+  "workspace.referral.apply.action": "Wykorzystaj",
+  "workspace.referral.apply.confirmTitle": "Wykorzystaj nagrodę",
+  "workspace.referral.apply.confirmBody": "Wykorzystaj {{amount}}, aby zmniejszyć aktualne użycie w tym workspace.",
+  "workspace.referral.apply.confirmAction": "Wykorzystaj",
 
   "download.title": "OpenCode | Pobierz",
   "download.meta.description": "Pobierz OpenCode na macOS, Windows i Linux",

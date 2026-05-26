@@ -1,7 +1,8 @@
 import { TextField } from "@opencode-ai/ui/text-field"
+import * as Sentry from "@sentry/solid"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component, Show } from "solid-js"
+import { Component, createSignal, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
@@ -220,10 +221,28 @@ interface ErrorPageProps {
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
   const language = useLanguage()
+  const formattedError = () => formatError(props.error, language.t)
+  let recordedFatalError: Promise<void> | undefined
   const [store, setStore] = createStore({
     checking: false,
     version: undefined as string | undefined,
     actionError: undefined as string | undefined,
+  })
+
+  function ensureFatalErrorRecorded() {
+    recordedFatalError ??=
+      platform.recordFatalRendererError?.({
+        error: formattedError(),
+        url: location.href,
+        version: platform.version,
+        platform: platform.platform,
+        os: platform.os,
+      }) ?? Promise.resolve()
+    return recordedFatalError
+  }
+
+  onMount(() => {
+    void ensureFatalErrorRecorded().catch(() => undefined)
   })
 
   async function checkForUpdates() {
@@ -253,6 +272,17 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       })
   }
 
+  async function exportDebugLogs() {
+    const exportLogs = platform.exportDebugLogs
+    if (!exportLogs) return
+    await ensureFatalErrorRecorded()
+      .then(() => exportLogs())
+      .then(() => setStore("actionError", undefined))
+      .catch((err) => {
+        setStore("actionError", formatError(err, language.t))
+      })
+  }
+
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
@@ -262,7 +292,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <p class="text-sm text-text-weak">{language.t("error.page.description")}</p>
         </div>
         <TextField
-          value={formatError(props.error, language.t)}
+          value={formattedError()}
           readOnly
           copyable
           multiline
@@ -270,10 +300,32 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           label={language.t("error.page.details.label")}
           hideLabel
         />
-        <div class="flex items-center gap-3">
+        <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
           <Button size="large" onClick={platform.restart}>
             {language.t("error.page.action.restart")}
           </Button>
+          <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
+            <Button size="large" variant="ghost" onClick={exportDebugLogs}>
+              {language.t("error.page.action.exportLogs")}
+            </Button>
+          </Show>
+          <Show when={Sentry.isEnabled}>
+            {(_) => {
+              const [reported, setReported] = createSignal(false)
+              return (
+                <Button
+                  size="large"
+                  disabled={reported()}
+                  onClick={() => {
+                    Sentry.captureException(props.error)
+                    setReported(true)
+                  }}
+                >
+                  {language.t(reported() ? "error.page.action.reported" : "error.page.action.report")}
+                </Button>
+              )
+            }}
+          </Show>
           <Show when={platform.checkUpdate}>
             <Show
               when={store.version}

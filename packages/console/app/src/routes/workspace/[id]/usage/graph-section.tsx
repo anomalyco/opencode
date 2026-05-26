@@ -24,15 +24,23 @@ import { useI18n } from "~/context/i18n"
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
-async function getCosts(workspaceID: string, year: number, month: number) {
+async function getCosts(workspaceID: string, year: number, month: number, tzOffset: string) {
   "use server"
   return withActor(async () => {
-    const startDate = new Date(year, month, 1)
-    const endDate = new Date(year, month + 1, 1)
+    const timezoneOffset = (() => {
+      const m = /^([+-])(\d{2}):(\d{2})$/.exec(tzOffset)
+      if (!m) return 0
+      const sign = m[1] === "-" ? -1 : 1
+      return sign * (Number(m[2]) * 60 + Number(m[3])) * 60_000
+    })()
+
+    const monthStartUTC = new Date(Date.UTC(year, month, 1, 0, 0, 0) - timezoneOffset)
+    const monthEndUTC = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0) - timezoneOffset)
+    const dateExpr = sql<string>`DATE(CONVERT_TZ(${UsageTable.timeCreated}, '+00:00', ${tzOffset}))`
     const usageData = await Database.use((tx) =>
       tx
         .select({
-          date: sql<string>`DATE(${UsageTable.timeCreated})`,
+          date: dateExpr,
           model: UsageTable.model,
           totalCost: sum(UsageTable.cost),
           keyId: UsageTable.keyID,
@@ -42,16 +50,11 @@ async function getCosts(workspaceID: string, year: number, month: number) {
         .where(
           and(
             eq(UsageTable.workspaceID, workspaceID),
-            gte(UsageTable.timeCreated, startDate),
-            lt(UsageTable.timeCreated, endDate),
+            gte(UsageTable.timeCreated, monthStartUTC),
+            lt(UsageTable.timeCreated, monthEndUTC),
           ),
         )
-        .groupBy(
-          sql`DATE(${UsageTable.timeCreated})`,
-          UsageTable.model,
-          UsageTable.keyID,
-          sql`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan')`,
-        )
+        .groupBy(dateExpr, UsageTable.model, UsageTable.keyID, sql`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan')`)
         .then((x) =>
           x.map((r) => ({
             ...r,
@@ -125,15 +128,45 @@ function getModelColor(model: string): string {
 }
 
 function formatDateLabel(dateStr: string): string {
-  const date = new Date()
-  const [y, m, d] = dateStr.split("-").map(Number)
-  date.setFullYear(y)
-  date.setMonth(m - 1)
-  date.setDate(d)
-  date.setHours(0, 0, 0, 0)
-  const month = date.toLocaleDateString(undefined, { month: "short" })
-  const day = date.getUTCDate().toString().padStart(2, "0")
-  return `${month} ${day}`
+  const [, m, d] = dateStr.split("-").map(Number)
+  const month = new Date(2000, m - 1, 1).toLocaleDateString(undefined, { month: "short" })
+  return `${month} ${d.toString().padStart(2, "0")}`
+}
+
+// Compute the UTC offset (in MySQL CONVERT_TZ format like "+05:30") for the
+// given IANA timezone at the given instant. Honors DST.
+function getTimezoneOffset(timezone: string, at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+    .formatToParts(at)
+    .reduce<Record<string, string>>((acc, p) => {
+      if (p.type !== "literal") acc[p.type] = p.value
+      return acc
+    }, {})
+  const asUTC = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  )
+  const diffMinutes = Math.round((asUTC - at.getTime()) / 60_000)
+  const sign = diffMinutes < 0 ? "-" : "+"
+  const abs = Math.abs(diffMinutes)
+  const hh = Math.floor(abs / 60)
+    .toString()
+    .padStart(2, "0")
+  const mm = (abs % 60).toString().padStart(2, "0")
+  return `${sign}${hh}:${mm}`
 }
 
 function addOpacityToColor(color: string, opacity: number): string {
@@ -152,6 +185,7 @@ export function GraphSection() {
   let chartInstance: Chart | undefined
   const params = useParams()
   const i18n = useI18n()
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const now = new Date()
   const [store, setStore] = createStore({
     data: null as Awaited<ReturnType<typeof getCosts>> | null,
@@ -185,10 +219,13 @@ export function GraphSection() {
   })
 
   const getDates = createMemo(() => {
-    const daysInMonth = new Date(store.year, store.month + 1, 0).getDate()
+    // Number of days in the month is independent of timezone.
+    const daysInMonth = new Date(Date.UTC(store.year, store.month + 1, 0)).getUTCDate()
+    const yyyy = store.year.toString().padStart(4, "0")
+    const mm = (store.month + 1).toString().padStart(2, "0")
     return Array.from({ length: daysInMonth }, (_, i) => {
-      const date = new Date(store.year, store.month, i + 1)
-      return date.toISOString().split("T")[0]
+      const dd = (i + 1).toString().padStart(2, "0")
+      return `${yyyy}-${mm}-${dd}`
     })
   })
 
@@ -415,7 +452,11 @@ export function GraphSection() {
   })
 
   createEffect(async () => {
-    const data = await getCosts(params.id!, store.year, store.month)
+    // Compute the offset for mid-month so DST transitions don't bias to the
+    // wrong side.
+    const midMonth = new Date(Date.UTC(store.year, store.month, 15, 12, 0, 0))
+    const tzOffset = getTimezoneOffset(timezone, midMonth)
+    const data = await getCosts(params.id!, store.year, store.month, tzOffset)
     setStore({ data })
   })
 

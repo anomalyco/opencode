@@ -1,17 +1,19 @@
 import type * as SDK from "@opencode-ai/sdk/v2"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account/account"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect"
-import { Provider } from "@/provider"
+import { InstanceState } from "@/effect/instance-state"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import type { SessionID } from "@/session/schema"
-import { Database, eq } from "@/storage"
-import { Config } from "@/config"
-import { Log } from "@/util"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
+import { Config } from "@/config/config"
+import * as Log from "@opencode-ai/core/util/log"
 import { SessionShareTable } from "./share.sql"
 
 const log = Log.create({ service: "share-next" })
@@ -74,6 +76,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
+
+export const use = serviceUse(Service)
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))
@@ -167,16 +171,20 @@ export const layer = Layer.effect(
           fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
         ) =>
           bus.subscribe(def as never).pipe(
-            Stream.runForEach((evt) =>
-              fn(evt).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.sync(() => {
-                    log.error("share subscriber failed", { type: def.type, cause })
-                  }),
+            Effect.flatMap((stream) =>
+              stream.pipe(
+                Stream.runForEach((evt) =>
+                  fn(evt).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.sync(() => {
+                        log.error("share subscriber failed", { type: def.type, cause })
+                      }),
+                    ),
+                  ),
                 ),
+                Effect.forkScoped,
               ),
             ),
-            Effect.forkScoped,
           )
 
         yield* watch(Session.Event.Updated, (evt) =>
@@ -271,7 +279,7 @@ export const layer = Layer.effect(
       log.info("full sync", { sessionID })
       const info = yield* session.get(sessionID)
       const diffs = yield* session.diff(sessionID)
-      const messages = yield* Effect.sync(() => Array.from(MessageV2.stream(sessionID)))
+      const messages = yield* session.messages({ sessionID })
       const models = yield* Effect.forEach(
         Array.from(
           new Map(
@@ -371,3 +379,5 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Session.defaultLayer),
 )
+
+export * as ShareNext from "./share-next"

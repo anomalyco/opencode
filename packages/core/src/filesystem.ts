@@ -3,9 +3,10 @@ import { dirname, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
-import { Effect, FileSystem, Layer, Schema, Context } from "effect"
+import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./util/glob"
+import { serviceUse } from "./effect/service-use"
 
 export namespace AppFileSystem {
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
@@ -24,6 +25,7 @@ export namespace AppFileSystem {
     readonly isDir: (path: string) => Effect.Effect<boolean>
     readonly isFile: (path: string) => Effect.Effect<boolean>
     readonly existsSafe: (path: string) => Effect.Effect<boolean>
+    readonly readFileStringSafe: (path: string) => Effect.Effect<string | undefined, Error>
     readonly readJson: (path: string) => Effect.Effect<unknown, Error>
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
@@ -38,6 +40,8 @@ export namespace AppFileSystem {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
 
+  export const use = serviceUse(Service)
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -45,6 +49,12 @@ export namespace AppFileSystem {
 
       const existsSafe = Effect.fn("FileSystem.existsSafe")(function* (path: string) {
         return yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
+      })
+
+      const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
+        return yield* fs
+          .readFileString(path)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -163,6 +173,7 @@ export namespace AppFileSystem {
       return Service.of({
         ...fs,
         existsSafe,
+        readFileStringSafe,
         isDir,
         isFile,
         readDirectoryEntries,

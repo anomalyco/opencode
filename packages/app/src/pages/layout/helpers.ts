@@ -1,17 +1,10 @@
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
+import { pathKey } from "@/utils/path-key"
 
 type SessionStore = {
   session?: Session[]
   path: { directory: string }
-}
-
-export const workspaceKey = (directory: string) => {
-  const value = directory.replaceAll("\\", "/")
-  const drive = value.match(/^([A-Za-z]:)\/+$/)
-  if (drive) return `${drive[1]}/`
-  if (/^\/+$/i.test(value)) return "/"
-  return value.replace(/\/+$/, "")
 }
 
 function sortSessions(now: number) {
@@ -29,7 +22,7 @@ function sortSessions(now: number) {
 }
 
 const isRootVisibleSession = (session: Session, directory: string) =>
-  workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
+  pathKey(session.directory) === pathKey(directory) && !session.parentID && !session.time?.archived
 
 export const roots = (store: SessionStore) =>
   (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
@@ -62,6 +55,29 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 
+const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+
+export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
+  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+  if (icon?.override) return icon.override
+  if (icon?.color) return undefined
+  return icon?.url
+}
+
+export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
+  session: Session,
+  projects: T[],
+  byID: Map<string, T>,
+) {
+  const direct = byID.get(session.projectID)
+  if (direct) return direct
+  const directory = pathKey(session.directory)
+  return projects.find(
+    (project) =>
+      pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+  )
+}
+
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {
     const data = (err as { data?: { message?: string } }).data
@@ -72,11 +88,11 @@ export const errorMessage = (err: unknown, fallback: string) => {
 }
 
 export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted?: string[]) => {
-  const root = workspaceKey(local)
+  const root = pathKey(local)
   const live = new Map<string, string>()
 
   for (const dir of dirs) {
-    const key = workspaceKey(dir)
+    const key = pathKey(dir)
     if (key === root) continue
     if (!live.has(key)) live.set(key, dir)
   }
@@ -85,7 +101,7 @@ export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted
 
   const result = [local]
   for (const dir of persisted) {
-    const key = workspaceKey(dir)
+    const key = pathKey(dir)
     if (key === root) continue
     const match = live.get(key)
     if (!match) continue

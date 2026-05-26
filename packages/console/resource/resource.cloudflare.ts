@@ -5,6 +5,11 @@ export const Resource = new Proxy(
   {},
   {
     get(_target, prop: string) {
+      if (`SST_RESOURCE_${prop}` in env) {
+        // @ts-expect-error
+        const value = env[`SST_RESOURCE_${prop}`]
+        return typeof value === "string" ? JSON.parse(value) : value
+      }
       if (prop in env) {
         // @ts-expect-error
         const value = env[prop]

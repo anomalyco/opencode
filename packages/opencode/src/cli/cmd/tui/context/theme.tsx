@@ -40,7 +40,7 @@ import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@opencode-ai/core/global"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -49,6 +49,7 @@ type Theme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
 }
 type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
+type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
@@ -416,12 +417,16 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const values = createMemo(() => {
       const active = store.themes[store.active]
-      if (active) return resolveTheme(active, store.mode)
+      if (active) {
+        return resolveTheme(active, store.mode)
+      }
 
       const saved = kv.get("theme")
       if (typeof saved === "string") {
         const theme = store.themes[saved]
-        if (theme) return resolveTheme(theme, store.mode)
+        if (theme) {
+          return resolveTheme(theme, store.mode)
+        }
       }
 
       return resolveTheme(store.themes.opencode, store.mode)
@@ -500,7 +505,8 @@ async function getCustomThemes() {
       symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Filesystem.readJson(item)
+      const theme = await Filesystem.readJson(item)
+      if (isTheme(theme)) result[name] = theme
     }
   }
   return result
@@ -513,7 +519,7 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
+export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
   const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
@@ -709,20 +715,22 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean): RGBA {
   return RGBA.fromInts(grayValue, grayValue, grayValue)
 }
 
-function generateSyntax(theme: Theme) {
+export function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
 }
 
-function generateSubtleSyntax(theme: Theme) {
+export function generateSubtleSyntax(theme: Theme, overrides?: SyntaxStyleOverrides) {
   const rules = getSyntaxRules(theme)
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {
+      const override = rule.scope.reduce((acc, scope) => ({ ...acc, ...overrides?.[scope] }), {})
       if (rule.style.foreground) {
         const fg = rule.style.foreground
         return {
           ...rule,
           style: {
             ...rule.style,
+            ...override,
             foreground: RGBA.fromInts(
               Math.round(fg.r * 255),
               Math.round(fg.g * 255),
@@ -768,7 +776,7 @@ function getSyntaxRules(theme: Theme) {
     {
       scope: ["extmark.paste"],
       style: {
-        foreground: theme.background,
+        foreground: selectedForeground(theme, theme.warning),
         background: theme.warning,
         bold: true,
       },
@@ -957,6 +965,7 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.markdownHeading,
         bold: true,
+        underline: true,
       },
     },
     {

@@ -34,10 +34,11 @@ describe("acp.agent interface compliance", () => {
     "loadSession",
     "setSessionMode",
     "authenticate",
-    // Unstable - SDK checks these with unstable_ prefix
+    // Capability-gated methods checked by the SDK router
     "listSessions",
+    "resumeSession",
+    "closeSession",
     "unstable_forkSession",
-    "unstable_resumeSession",
     "unstable_setSessionModel",
   ]
 

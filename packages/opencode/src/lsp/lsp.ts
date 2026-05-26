@@ -1,20 +1,18 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import * as LSPClient from "./client"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
-import z from "zod"
-import { Config } from "../config"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Process } from "../util"
+import { Config } from "@/config/config"
+import { Process } from "@/util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
-import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { withStatics } from "@/util/schema"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { InstanceState } from "@/effect/instance-state"
+import { containsPath } from "@/project/instance-context"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "lsp" })
 
@@ -23,51 +21,41 @@ export const Event = {
 }
 
 const Position = Schema.Struct({
-  line: Schema.Number,
-  character: Schema.Number,
+  line: NonNegativeInt,
+  character: NonNegativeInt,
 })
 
 export const Range = Schema.Struct({
   start: Position,
   end: Position,
-})
-  .annotate({ identifier: "Range" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Range" })
 export type Range = typeof Range.Type
 
 export const Symbol = Schema.Struct({
   name: Schema.String,
-  kind: Schema.Number,
+  kind: NonNegativeInt,
   location: Schema.Struct({
     uri: Schema.String,
     range: Range,
   }),
-})
-  .annotate({ identifier: "Symbol" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Symbol" })
 export type Symbol = typeof Symbol.Type
 
 export const DocumentSymbol = Schema.Struct({
   name: Schema.String,
   detail: Schema.optional(Schema.String),
-  kind: Schema.Number,
+  kind: NonNegativeInt,
   range: Range,
   selectionRange: Range,
-})
-  .annotate({ identifier: "DocumentSymbol" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "DocumentSymbol" })
 export type DocumentSymbol = typeof DocumentSymbol.Type
 
 export const Status = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   root: Schema.String,
-  status: Schema.Literals(["connected", "error"]).annotate({
-    [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
-  }),
-})
-  .annotate({ identifier: "LSPStatus" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+  status: Schema.Literals(["connected", "error"]),
+}).annotate({ identifier: "LSPStatus" })
 export type Status = typeof Status.Type
 
 enum SymbolKind {
@@ -110,8 +98,8 @@ const kinds = [
   SymbolKind.Enum,
 ]
 
-const filterExperimentalServers = (servers: Record<string, LSPServer.Info>) => {
-  if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flags: RuntimeFlags.Info) => {
+  if (flags.experimentalLspTy) {
     if (servers["pyright"]) {
       log.info("LSP server pyright is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is enabled")
       delete servers["pyright"]
@@ -155,6 +143,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("LSP.state")(function* (ctx) {
@@ -169,7 +158,7 @@ export const layer = Layer.effect(
             servers[server.id] = server
           }
 
-          filterExperimentalServers(servers)
+          filterExperimentalServers(servers, flags)
 
           if (cfg.lsp !== true) {
             for (const [name, item] of Object.entries(cfg.lsp)) {
@@ -221,12 +210,7 @@ export const layer = Layer.effect(
 
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
-      if (
-        !AppFileSystem.contains(ctx.directory, file) &&
-        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
-      ) {
-        return [] as LSPClient.Info[]
-      }
+      if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
       return yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
@@ -234,7 +218,7 @@ export const layer = Layer.effect(
 
         async function schedule(server: LSPServer.Info, root: string, key: string) {
           const handle = await server
-            .spawn(root, ctx)
+            .spawn(root, ctx, flags)
             .then((value) => {
               if (!value) s.broken.add(key)
               return value
@@ -253,6 +237,7 @@ export const layer = Layer.effect(
             server: handle,
             root,
             directory: ctx.directory,
+            instance: ctx,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)
@@ -306,7 +291,7 @@ export const layer = Layer.effect(
           if (!client) continue
 
           result.push(client)
-          Bus.publish(Event.Updated, {})
+          await Bus.publish(ctx, Event.Updated, {})
         }
 
         return result
@@ -515,6 +500,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer))
 
 export * as Diagnostic from "./diagnostic"
+
+export * as LSP from "./lsp"

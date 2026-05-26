@@ -299,6 +299,7 @@ export const dict = {
   "mcp.status.connected": "已連線",
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "需要授權",
+  "mcp.auth.clickToAuthenticate": "點擊以進行授權",
   "mcp.status.disabled": "已停用",
 
   "dialog.fork.empty": "沒有可用於分支的訊息",
@@ -445,6 +446,8 @@ export const dict = {
   "error.page.description": "載入應用程式時發生錯誤。",
   "error.page.details.label": "錯誤詳情",
   "error.page.action.restart": "重新啟動",
+  "error.page.action.report": "回報錯誤",
+  "error.page.action.reported": "已回報錯誤",
   "error.page.action.checking": "檢查中...",
   "error.page.action.checkUpdates": "檢查更新",
   "error.page.action.updateTo": "更新到 {{version}}",
@@ -454,7 +457,7 @@ export const dict = {
 
   "error.dev.rootNotFound": "找不到根元素。你是不是忘了把它新增到 index.html? 或者 id 屬性拼錯了?",
 
-  "error.globalSync.connectFailed": "無法連線到伺服器。是否有伺服器正在 `{{url}}` 執行?",
+  "error.serverSync.connectFailed": "無法連線到伺服器。是否有伺服器正在 `{{url}}` 執行?",
   "directory.error.invalidUrl": "URL 中的目錄無效。",
 
   "error.chain.unknown": "未知錯誤",
@@ -789,8 +792,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "從 URL 取得內容",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "搜尋網頁",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "在網路上搜尋程式碼",
   "settings.permissions.tool.external_directory.title": "外部目錄",
   "settings.permissions.tool.external_directory.description": "存取專案目錄之外的檔案",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
@@ -906,8 +907,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "未知",
   "error.page.circular": "[循環]",
-  "error.globalSDK.noServerAvailable": "無可用的伺服器",
-  "error.globalSDK.serverNotAvailable": "伺服器無法使用",
+  "error.serverSDK.noServerAvailable": "無可用的伺服器",
+  "error.serverSDK.serverNotAvailable": "伺服器無法使用",
   "error.childStore.persistedCacheCreateFailed": "建立持續性快取失敗",
   "error.childStore.persistedProjectMetadataCreateFailed": "建立持續性專案中繼資料失敗",
   "error.childStore.persistedProjectIconCreateFailed": "建立持續性專案圖示失敗",

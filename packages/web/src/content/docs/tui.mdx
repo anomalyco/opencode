@@ -41,6 +41,12 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 The content of the file is added to the conversation automatically.
 
+Configured references also appear in `@` autocomplete. Type `@alias` to add the reference root as context, or type `@alias/` to autocomplete files inside that reference.
+
+```text "@docs/README.md"
+Compare our setup with @docs/README.md
+```
+
 ---
 
 ## Bash commands
@@ -63,7 +69,7 @@ When using the OpenCode TUI, you can type `/` followed by a command name to quic
 /help
 ```
 
-Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x` is the default leader key. [Learn more](/docs/keybinds).
+Most commands also have keyboard shortcuts using `ctrl+x` as the default leader key. [Learn more](/docs/keybinds).
 
 Here are all available slash commands:
 
@@ -98,8 +104,6 @@ Toggle tool execution details.
 ```bash frame="none"
 /details
 ```
-
-**Keybind:** `ctrl+x d`
 
 ---
 
@@ -147,8 +151,6 @@ Show the help dialog.
 /help
 ```
 
-**Keybind:** `ctrl+x h`
-
 ---
 
 ### init
@@ -158,8 +160,6 @@ Guided setup for creating or updating `AGENTS.md`. [Learn more](/docs/rules).
 ```bash frame="none"
 /init
 ```
-
-**Keybind:** `ctrl+x i`
 
 ---
 
@@ -225,8 +225,6 @@ Share current session. [Learn more](/docs/share).
 ```bash frame="none"
 /share
 ```
-
-**Keybind:** `ctrl+x s`
 
 ---
 
@@ -361,36 +359,63 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
   "diff_style": "auto",
-  "mouse": true
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 This is separate from `opencode.json`, which configures server/runtime behavior.
 
+`keybinds` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
+
 ### Options
 
 - `theme` - Sets your UI theme. [Learn more](/docs/themes).
 - `keybinds` - Customizes keyboard shortcuts. [Learn more](/docs/keybinds).
+- `leader_timeout` - Controls how long OpenCode waits after the leader key. Defaults to `2000`.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Attention
+
+The TUI can request attention for questions, permissions, session errors, and completed sessions. Enable it with `attention.enabled`; built-in events play sounds when triggered, and non-subagent events request desktop notifications only when the terminal is blurred.
+
+- `enabled` - Enable all attention notifications and sounds. Defaults to `false`.
+- `notifications` - Allow terminal-mediated desktop notifications when attention is enabled. Defaults to `true`.
+- `sound` - Allow attention sounds when attention is enabled. Defaults to `true`.
+- `volume` - Default sound volume from `0` to `1`. Defaults to `0.4`.
+- `sound_pack` - Sound pack ID to use. Defaults to `opencode.default`.
+- `sounds` - Override sound files for `default`, `question`, `permission`, `error`, `done`, or `subagent_done`. Paths can be absolute, `file://` URLs, or relative to `tui.json`.
 
 ---
 
 ## Customization
 
-You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
+You can customize various aspects of the TUI view using the command palette (`ctrl+p`). These settings persist across restarts.
 
 ---
 

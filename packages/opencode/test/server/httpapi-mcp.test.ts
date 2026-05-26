@@ -1,91 +1,81 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { Context } from "effect"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import { McpPaths } from "../../src/server/routes/instance/httpapi/mcp"
-import { Instance } from "../../src/project/instance"
-import { Log } from "../../src/util"
+import { describe, expect } from "bun:test"
+import { Context, Effect, Layer } from "effect"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
+import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
+import { Server } from "../../src/server/server"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
 const context = Context.empty() as Context.Context<unknown>
+const testStateLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    yield* Effect.promise(() => resetDatabase())
+    yield* Effect.addFinalizer(() => Effect.promise(() => resetDatabase()).pipe(Effect.ignore))
+  }),
+)
+const it = testEffect(testStateLayer)
 
-function request(route: string, directory: string, init?: RequestInit) {
+function app() {
+  return Server.Default().app
+}
+type TestApp = ReturnType<typeof app>
+type TestHandler = ReturnType<typeof HttpApiApp.webHandler>
+
+const handlerScoped = Effect.acquireRelease(
+  Effect.sync(() => HttpApiApp.webHandler()),
+  (handler) => Effect.promise(() => handler.dispose()).pipe(Effect.ignore),
+)
+
+const request = Effect.fnUntraced(function* (
+  handler: TestHandler,
+  route: string,
+  directory: string,
+  init?: RequestInit,
+) {
   const headers = new Headers(init?.headers)
   headers.set("x-opencode-directory", directory)
-  return ExperimentalHttpApiServer.webHandler().handler(
-    new Request(`http://localhost${route}`, {
-      ...init,
-      headers,
-    }),
-    context,
+  return yield* Effect.promise(() =>
+    Promise.resolve(
+      handler.handler(
+        new Request(`http://localhost${route}`, {
+          ...init,
+          headers,
+        }),
+        context,
+      ),
+    ),
   )
-}
+})
 
-afterEach(async () => {
-  await Instance.disposeAll()
-  await resetDatabase()
+const json = <A>(response: Response) => Effect.promise(() => response.json() as Promise<A>)
+
+const readResponse = Effect.fnUntraced(function* (input: { app: TestApp; path: string; headers: HeadersInit }) {
+  const response = yield* Effect.promise(() =>
+    Promise.resolve(input.app.request(input.path, { method: "POST", headers: input.headers })),
+  )
+  return {
+    status: response.status,
+    body: yield* Effect.promise(() => response.text()),
+  }
 })
 
 describe("mcp HttpApi", () => {
-  test("serves status endpoint", async () => {
-    await using tmp = await tmpdir({
-      config: {
-        mcp: {
-          demo: {
-            type: "local",
-            command: ["echo", "demo"],
-            enabled: false,
-          },
-        },
-      },
-    })
+  it.instance(
+    "serves status endpoint",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = yield* handlerScoped
+        const response = yield* request(handler, McpPaths.status, tmp.directory)
 
-    const response = await request(McpPaths.status, tmp.path)
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ demo: { status: "disabled" } })
-  })
-
-  test("serves add, connect, and disconnect endpoints", async () => {
-    await using tmp = await tmpdir({
-      config: {
-        mcp: {
-          demo: {
-            type: "local",
-            command: ["echo", "demo"],
-            enabled: false,
-          },
-        },
-      },
-    })
-
-    const added = await request(McpPaths.status, tmp.path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: "added",
-        config: {
-          type: "local",
-          command: ["echo", "added"],
-          enabled: false,
-        },
+        expect(response.status).toBe(200)
+        expect(yield* json(response)).toEqual({ demo: { status: "disabled" } })
       }),
-    })
-    expect(added.status).toBe(200)
-    expect(await added.json()).toMatchObject({ added: { status: "disabled" } })
-
-    const connected = await request("/mcp/demo/connect", tmp.path, { method: "POST" })
-    expect(connected.status).toBe(200)
-    expect(await connected.json()).toBe(true)
-
-    const disconnected = await request("/mcp/demo/disconnect", tmp.path, { method: "POST" })
-    expect(disconnected.status).toBe(200)
-    expect(await disconnected.json()).toBe(true)
-  })
-
-  test("serves deterministic OAuth endpoints", async () => {
-    await using tmp = await tmpdir({
+    {
       config: {
         mcp: {
           demo: {
@@ -95,16 +85,143 @@ describe("mcp HttpApi", () => {
           },
         },
       },
-    })
+    },
+  )
 
-    const start = await request("/mcp/demo/auth", tmp.path, { method: "POST" })
-    expect(start.status).toBe(400)
+  it.instance(
+    "serves add, connect, and disconnect endpoints",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = yield* handlerScoped
+        const added = yield* request(handler, McpPaths.status, tmp.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "added",
+            config: {
+              type: "local",
+              command: ["echo", "added"],
+              enabled: false,
+            },
+          }),
+        })
+        expect(added.status).toBe(200)
+        expect(yield* json(added)).toMatchObject({ added: { status: "disabled" } })
 
-    const authenticate = await request("/mcp/demo/auth/authenticate", tmp.path, { method: "POST" })
-    expect(authenticate.status).toBe(400)
+        const connected = yield* request(handler, "/mcp/demo/connect", tmp.directory, { method: "POST" })
+        expect(connected.status).toBe(200)
+        expect(yield* json(connected)).toBe(true)
 
-    const removed = await request("/mcp/demo/auth", tmp.path, { method: "DELETE" })
-    expect(removed.status).toBe(200)
-    expect(await removed.json()).toEqual({ success: true })
-  })
+        const disconnected = yield* request(handler, "/mcp/demo/disconnect", tmp.directory, { method: "POST" })
+        expect(disconnected.status).toBe(200)
+        expect(yield* json(disconnected)).toBe(true)
+      }),
+    {
+      config: {
+        mcp: {
+          demo: {
+            type: "local",
+            command: ["echo", "demo"],
+            enabled: false,
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "serves deterministic OAuth endpoints",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = yield* handlerScoped
+        const start = yield* request(handler, "/mcp/demo/auth", tmp.directory, { method: "POST" })
+        expect(start.status).toBe(400)
+
+        const authenticate = yield* request(handler, "/mcp/demo/auth/authenticate", tmp.directory, { method: "POST" })
+        expect(authenticate.status).toBe(400)
+
+        const removed = yield* request(handler, "/mcp/demo/auth", tmp.directory, { method: "DELETE" })
+        expect(removed.status).toBe(200)
+        expect(yield* json(removed)).toEqual({ success: true })
+      }),
+    {
+      config: {
+        mcp: {
+          demo: {
+            type: "local",
+            command: ["echo", "demo"],
+            enabled: false,
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "returns unsupported OAuth error responses",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const dir = tmp.directory
+        const headers = { "x-opencode-directory": dir }
+
+        yield* Effect.forEach(["/mcp/demo/auth", "/mcp/demo/auth/authenticate"], (path) =>
+          Effect.gen(function* () {
+            const response = yield* readResponse({ app: app(), path, headers })
+
+            expect(response).toEqual({
+              status: 400,
+              body: JSON.stringify({ error: "MCP server demo does not support OAuth" }),
+            })
+          }),
+        )
+      }),
+    {
+      config: {
+        formatter: false,
+        lsp: false,
+        mcp: {
+          demo: {
+            type: "local",
+            command: ["echo", "demo"],
+            enabled: false,
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "returns typed not found errors for missing MCP servers",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = yield* handlerScoped
+
+        for (const input of [
+          { method: "POST", route: "/mcp/missing/auth" },
+          { method: "POST", route: "/mcp/missing/auth/authenticate" },
+          { method: "POST", route: "/mcp/missing/auth/callback", body: JSON.stringify({ code: "code" }) },
+          { method: "DELETE", route: "/mcp/missing/auth" },
+          { method: "POST", route: "/mcp/missing/connect" },
+          { method: "POST", route: "/mcp/missing/disconnect" },
+        ]) {
+          const response = yield* request(handler, input.route, tmp.directory, {
+            method: input.method,
+            headers: input.body ? { "content-type": "application/json" } : undefined,
+            body: input.body,
+          })
+
+          expect(response.status).toBe(404)
+          expect(yield* json(response)).toEqual({
+            _tag: "McpServerNotFoundError",
+            name: "missing",
+            message: "MCP server not found: missing",
+          })
+        }
+      }),
+    { config: { mcp: {} } },
+  )
 })

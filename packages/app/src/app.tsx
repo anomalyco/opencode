@@ -1,4 +1,5 @@
 import "@/index.css"
+import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
@@ -29,8 +30,8 @@ import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { GlobalSDKProvider } from "@/context/global-sdk"
-import { GlobalSyncProvider } from "@/context/global-sync"
+import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSyncProvider } from "@/context/server-sync"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -47,21 +48,16 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
-const loadSession = () => import("@/pages/session")
-const Session = lazy(loadSession)
-const Loading = () => <div class="size-full" />
+const Session = lazy(() => import("@/pages/session"))
 
-if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
-  void loadSession()
-}
-
-const SessionRoute = () => (
-  <SessionProviders>
-    <Session />
-  </SessionProviders>
+const SessionRoute = Object.assign(
+  () => (
+    <SessionProviders>
+      <Session />
+    </SessionProviders>
+  ),
+  { preload: Session.preload },
 )
-
-const SessionIndexRoute = () => <Navigate href="session" />
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -77,12 +73,21 @@ declare global {
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
+      exportDebugLogs?: () => Promise<string>
     }
   }
 }
 
 function QueryProvider(props: ParentProps) {
-  const client = new QueryClient()
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchOnReconnect: false,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+      },
+    },
+  })
   return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
@@ -140,12 +145,19 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
       >
         <LanguageProvider locale={props.locale}>
           <UiI18nBridge>
-            <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-              <DialogProvider>
-                <MarkedProvider>
-                  <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                </MarkedProvider>
-              </DialogProvider>
+            <ErrorBoundary
+              fallback={(error) => {
+                Sentry.captureException(error)
+                return <ErrorPage error={error} />
+              }}
+            >
+              <QueryProvider>
+                <DialogProvider>
+                  <MarkedProvider>
+                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                  </MarkedProvider>
+                </DialogProvider>
+              </QueryProvider>
             </ErrorBoundary>
           </UiI18nBridge>
         </LanguageProvider>
@@ -292,20 +304,20 @@ export function AppInterface(props: {
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <QueryProvider>
-            <GlobalSDKProvider>
-              <GlobalSyncProvider>
+            <ServerSDKProvider>
+              <ServerSyncProvider>
                 <Dynamic
                   component={props.router ?? Router}
                   root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
                 >
                   <Route path="/" component={HomeRoute} />
                   <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={SessionIndexRoute} />
+                    <Route path="/" component={() => <Navigate href="session" />} />
                     <Route path="/session/:id?" component={SessionRoute} />
                   </Route>
                 </Dynamic>
-              </GlobalSyncProvider>
-            </GlobalSDKProvider>
+              </ServerSyncProvider>
+            </ServerSDKProvider>
           </QueryProvider>
         </ServerKey>
       </ConnectionGate>

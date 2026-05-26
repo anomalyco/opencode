@@ -1,13 +1,13 @@
 import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
 import { Global } from "@opencode-ai/core/global"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { ProjectTable } from "../project/project.sql"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../session/session.sql"
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
-import { Filesystem } from "../util"
+import { Filesystem } from "@/util/filesystem"
 import { Glob } from "@opencode-ai/core/util/glob"
 
 const log = Log.create({ service: "json-migration" })
@@ -208,6 +208,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         parent_id: data.parentID ?? null,
         slug: data.slug ?? "",
         directory: data.directory ?? "",
+        path: data.path ?? null,
         title: data.title ?? "",
         version: data.version ?? "",
         share_url: data.share?.url ?? null,
@@ -215,6 +216,12 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         summary_deletions: data.summary?.deletions ?? null,
         summary_files: data.summary?.files ?? null,
         summary_diffs: data.summary?.diffs ?? null,
+        cost: 0,
+        tokens_input: 0,
+        tokens_output: 0,
+        tokens_reasoning: 0,
+        tokens_cache_read: 0,
+        tokens_cache_write: 0,
         revert: data.revert ?? null,
         permission: data.permission ?? null,
         time_created: data.time?.created ?? now,
@@ -426,3 +433,5 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
 
   return stats
 }
+
+export * as JsonMigration from "./json-migration"
