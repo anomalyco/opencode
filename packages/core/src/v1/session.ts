@@ -96,6 +96,7 @@ export const TextPart = Schema.Struct({
   text: Schema.String,
   synthetic: Schema.optional(Schema.Boolean),
   ignored: Schema.optional(Schema.Boolean),
+  fallbackNotice: Schema.optional(Schema.Union([Schema.Literal("using"), Schema.Literal("switch"), Schema.Literal("resume")])),
   time: Schema.optional(
     Schema.Struct({
       start: NonNegativeInt,

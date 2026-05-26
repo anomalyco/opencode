@@ -1,0 +1,64 @@
+#!/bin/bash
+set -e
+cd "$(dirname "$0")"
+
+if [ "$(uname -n)" = "gravity" ] || [ "$(uname -n)" = "gravity.local" ]; then
+
+  echo
+  echo "# FETCH  #"
+  echo "##########"
+  git fetch origin
+  echo
+  echo "# REBASE #"
+  echo "##########"
+  git rebase origin/dev
+  echo
+  echo "# INSTALL #"
+  echo "###########"
+  bun upgrade && bun install
+  echo
+  echo "#  PUSH  #"
+  echo "##########"
+  git push -f
+
+else
+
+  echo
+  echo "# FETCH  #"
+  echo "##########"
+  git fetch
+  echo
+  echo "# RESET  #"
+  echo "##########"
+  git reset --hard origin/feat/llm-fallback
+  echo
+  echo "# INSTALL #"
+  echo "###########"
+  bun upgrade && bun install
+
+fi
+
+echo
+echo "# BUILD  #"
+echo "##########"
+./packages/opencode/script/build.ts --single
+echo
+echo "#  COPY  #"
+echo "##########"
+if test -e "$HOME/.opencode/bin/opencode.3"; then rm "$HOME/.opencode/bin/opencode.3"; fi
+if test -e "$HOME/.opencode/bin/opencode.2"; then cp "$HOME/.opencode/bin/opencode.2" "$HOME/.opencode/bin/opencode.3"; fi
+if test -e "$HOME/.opencode/bin/opencode.1"; then cp "$HOME/.opencode/bin/opencode.1" "$HOME/.opencode/bin/opencode.2"; fi
+if test -e "$HOME/.opencode/bin/opencode.0"; then cp "$HOME/.opencode/bin/opencode.0" "$HOME/.opencode/bin/opencode.1"; fi
+cp "$HOME/.opencode/bin/opencode" "$HOME/.opencode/bin/opencode.0"
+cp packages/opencode/dist/opencode-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed s/x86_64/x64/)/bin/opencode "$HOME/.opencode/bin/opencode"
+chmod +x "$HOME/.opencode/bin/opencode"
+
+if [ "$(uname -n)" = "gravity" ]; then
+  echo
+  echo "#  SIGN  #"
+  echo "##########"
+  codesign --force --deep -s - "$HOME/.opencode/bin/opencode"
+fi
+
+echo
+echo "done."

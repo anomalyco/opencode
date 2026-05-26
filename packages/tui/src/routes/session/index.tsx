@@ -1471,6 +1471,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const providerName = createMemo(() => {
+    const p = ctx.providers()?.get(props.message.providerID)
+    return p?.name ?? props.message.providerID
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1554,7 +1558,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
+              <span style={{ fg: theme.textMuted }}> · {model()} ({providerName()})</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
@@ -1680,18 +1684,22 @@ function ReasoningHeader(props: {
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, subtleSyntax } = useTheme()
+  const fallbackNotice = (props.part as any).fallbackNotice as "using" | "switch" | "resume" | undefined
+  const isFallback = fallbackNotice != null
+  const fg = fallbackNotice === "resume" ? theme.success : isFallback ? theme.error : (props.part as any).ignored ? theme.textMuted : theme.markdownText
+  const syntaxStyle = isFallback || (props.part as any).ignored ? subtleSyntax() : syntax()
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <markdown
-          syntaxStyle={syntax()}
+          syntaxStyle={syntaxStyle}
           streaming={true}
           internalBlockMode="top-level"
           content={props.part.text.trim()}
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
-          fg={theme.markdownText}
+          fg={fg}
           bg={theme.background}
         />
       </box>

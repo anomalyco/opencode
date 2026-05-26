@@ -1419,7 +1419,13 @@ export const layer = Layer.effect(
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            const result = yield* handle.process({
+            const cfg = yield* config.get()
+            const wasOnFallback = (() => {
+              const lastCompleted = msgs.findLast((m) => m.info.role === "assistant" && m.info.time?.completed)
+              if (!lastCompleted || lastCompleted.info.role !== "assistant") return false
+              return lastCompleted.info.providerID !== model.providerID || lastCompleted.info.modelID !== model.id
+            })()
+            const streamInput: LLM.StreamInput = {
               user: lastUser,
               agent,
               permission: session.permission,
@@ -1430,7 +1436,15 @@ export const layer = Layer.effect(
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
-            })
+              fallbacks: (agent.fallbacks?.length ? agent.fallbacks : undefined) ?? (cfg.fallbacks ? cfg.fallbacks.map((f: string) => Provider.parseModel(f)) : undefined),
+              wasOnFallback,
+            }
+            const result = yield* handle.process(streamInput)
+
+            if (streamInput.usedFallback) {
+              handle.message.modelID = ModelID.make(streamInput.usedFallback.modelID)
+              handle.message.providerID = ProviderID.make(streamInput.usedFallback.providerID)
+            }
 
             if (structured !== undefined) {
               handle.message.structured = structured

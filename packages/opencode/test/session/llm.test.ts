@@ -11,6 +11,7 @@ import z from "zod"
 import { LLM } from "../../src/session/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { Auth } from "@/auth"
+import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -78,6 +79,7 @@ const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
 function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, flags: Partial<RuntimeFlags.Info> = {}) {
   return LLM.layer.pipe(
     Layer.provide(Auth.defaultLayer),
+    Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
@@ -1131,6 +1133,7 @@ describe("session.llm.stream", () => {
         yield* drainWith(
           LLM.layer.pipe(
             Layer.provide(Auth.defaultLayer),
+            Layer.provide(Bus.layer),
             Layer.provide(Config.defaultLayer),
             Layer.provide(Provider.defaultLayer),
             Layer.provide(Plugin.defaultLayer),

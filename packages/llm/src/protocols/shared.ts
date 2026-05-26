@@ -115,7 +115,7 @@ export const subtractTokens = (total: number | undefined, subtrahend: number | u
  */
 export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
   if (values.every((value) => value === undefined)) return undefined
-  return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
+  return values.reduce<number>((acc, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
