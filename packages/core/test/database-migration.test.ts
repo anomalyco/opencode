@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { $ } from "bun"
+import { fileURLToPath } from "url"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect } from "effect"
@@ -13,6 +15,12 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("declared schema has no ungenerated migrations", async () => {
+    const result = await $`bun ${fileURLToPath(new URL("../script/migration.ts", import.meta.url))} --check`.quiet().nothrow()
+    expect(result.exitCode, result.stderr.toString()).toBe(0)
+    expect(result.stdout.toString()).toContain("No schema changes, nothing to migrate")
+  }, 30_000)
+
   test("applies tracked migrations to an empty database", async () => {
     await run(
       Effect.gen(function* () {
