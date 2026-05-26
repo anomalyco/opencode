@@ -1451,6 +1451,7 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const ctx = use()
   const local = useLocal()
+  const dialog = useDialog()
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
@@ -1469,8 +1470,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const childShortcut = useCommandShortcut("session.child.first")
+  const isGutter = createMemo(() => ctx.timestampsMode() === "gutter")
 
-  return (
+  // Assistant message body — rendered as-is when timestamps_mode != "gutter", or
+  // wrapped in a horizontal row alongside a gutter cell when "gutter" is active.
+  const body = () => (
     <>
       <For each={props.parts}>
         {(part, index) => {
@@ -1536,6 +1540,30 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </Match>
       </Switch>
     </>
+  )
+
+  return (
+    <Show when={isGutter()} fallback={body()}>
+      {/* In gutter mode, lay the message row out horizontally: HH:MM column on
+       * the left, message content on the right. The first part of an assistant
+       * message has marginTop=1 (TextPart/ReasoningPart/ToolPart all do), so
+       * the gutter uses the same paddingTop to align vertically with the first
+       * line of text. flexShrink=0 on the gutter keeps it from collapsing on
+       * narrow terminals; the body column gets flexGrow=1 to take the rest. */}
+      <box flexDirection="row" flexShrink={0}>
+        <box
+          width={TIMESTAMP_GUTTER_WIDTH}
+          paddingTop={1}
+          flexShrink={0}
+          onMouseUp={() => DialogTimestamp.show(dialog, props.message.time.created)}
+        >
+          <text fg={theme.textMuted}>{hourMinute(props.message.time.created)}</text>
+        </box>
+        <box flexDirection="column" flexGrow={1}>
+          {body()}
+        </box>
+      </box>
+    </Show>
   )
 }
 

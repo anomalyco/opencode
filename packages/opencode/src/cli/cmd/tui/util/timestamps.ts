@@ -31,3 +31,14 @@ export function hourMinute(input: number): string {
   const minutes = String(date.getMinutes()).padStart(2, "0")
   return `${hours}:${minutes}`
 }
+
+// "HH:MM:SS" 24-hour, locale-independent. Used by the message timestamp popup
+// — alignment doesn't matter there, but seconds-level precision does. Closes
+// the spirit of opencode#20406 (users want seconds for debugging / auditing).
+export function hourMinuteSecond(input: number): string {
+  const date = new Date(input)
+  const hours = String(date.getHours()).padStart(2, "0")
+  const minutes = String(date.getMinutes()).padStart(2, "0")
+  const seconds = String(date.getSeconds()).padStart(2, "0")
+  return `${hours}:${minutes}:${seconds}`
+}

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   getTimestampsMode,
   hourMinute,
+  hourMinuteSecond,
   nextTimestampsMode,
   normalizeTimestampsMode,
   TIMESTAMPS_MODES,
@@ -78,5 +79,22 @@ describe("hourMinute", () => {
   test("uses 24-hour clock", () => {
     const ms = new Date(2025, 0, 2, 23, 45, 0).getTime()
     expect(hourMinute(ms)).toBe("23:45")
+  })
+})
+
+describe("hourMinuteSecond", () => {
+  test("returns 8-cell HH:MM:SS, zero-padded, 24-hour", () => {
+    const ms = new Date(2025, 0, 2, 7, 5, 9).getTime()
+    expect(hourMinuteSecond(ms)).toBe("07:05:09")
+  })
+
+  test("23:59:59 boundary", () => {
+    const ms = new Date(2025, 0, 2, 23, 59, 59).getTime()
+    expect(hourMinuteSecond(ms)).toBe("23:59:59")
+  })
+
+  test("midnight", () => {
+    const ms = new Date(2025, 0, 2, 0, 0, 0).getTime()
+    expect(hourMinuteSecond(ms)).toBe("00:00:00")
   })
 })

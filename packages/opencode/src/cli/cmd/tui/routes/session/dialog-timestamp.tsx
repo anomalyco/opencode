@@ -2,10 +2,21 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../context/theme"
 import { useDialog, type DialogContext } from "../../ui/dialog"
 import { useBindings } from "../../keymap"
-import { Locale } from "@/util/locale"
+import { hourMinuteSecond } from "../../util/timestamps"
 
 export type DialogTimestampProps = {
   created: number
+}
+
+// Seconds-precision datetime for the popup. The gutter renders fixed HH:MM
+// because alignment matters there; the popup is where users come for precision
+// (debugging, auditing, distinguishing messages sent close together — see
+// opencode#20406). 24-hour formatting matches the gutter and side-steps
+// opencode#28804 (Bun ignoring system locale → spurious AM/PM on Linux).
+function preciseDateTime(input: number): string {
+  const date = new Date(input)
+  const localDate = date.toLocaleDateString()
+  return `${hourMinuteSecond(input)} · ${localDate}`
 }
 
 function relative(input: number, now: number): string {
@@ -49,7 +60,7 @@ export function DialogTimestamp(props: DialogTimestampProps) {
         </text>
       </box>
       <box paddingBottom={1} gap={1}>
-        <text fg={theme.text}>{Locale.datetime(props.created)}</text>
+        <text fg={theme.text}>{preciseDateTime(props.created)}</text>
         <text fg={theme.textMuted}>{relative(props.created, Date.now())}</text>
       </box>
     </box>
