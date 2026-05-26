@@ -23,8 +23,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { StatusPopover } from "./status-popover"
-import { SDKProvider } from "@/context/sdk"
+import { StatusPopoverV2 } from "@/components/status-popover"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -115,7 +114,23 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
-  const nav = createMemo(() => import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" || settings.general.showNavigation())
+  const nav = createMemo(() => (USE_V2_TITLEBAR ? settings.general.showNavigation() : true))
+  const updateState = createMemo<TitlebarUpdatePillState>(() => {
+    const version = props.update?.version()
+    return {
+      visible: version !== undefined,
+      installing: props.update?.installing() ?? false,
+      label: "Update",
+      ariaLabel: language.t("toast.update.action.installRestart"),
+      title: version ? `Update ${version}` : undefined,
+      onInstall: () => props.update?.install(),
+    }
+  })
+  const v2RightState = createMemo<TitlebarV2RightState>(() => ({
+    update: updateState(),
+    statusVisible: !params.dir && settings.general.showStatus(),
+    statusLabel: language.t("status.popover.trigger"),
+  }))
 
   const back = () => {
     const next = backPath(history)
@@ -465,16 +480,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   </Show>
                   <div class="min-w-0 flex-1" />
                 </div>
-                <Show when={currentSessionTab()?.dir} keyed>
-                  {(dir) => (
-                    <SDKProvider directory={dir}>
-                      <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
-                        <StatusPopover />
-                      </Tooltip>
-                    </SDKProvider>
-                  )}
-                </Show>
-                <TitlebarUpdatePill update={props.update} />
+                <TitlebarV2Right state={v2RightState()} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />
                 </Show>
@@ -641,28 +647,50 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   )
 }
 
-function TitlebarUpdatePill(props: { update?: TitlebarUpdate }) {
-  const language = useLanguage()
-  const version = () => props.update?.version()
+type TitlebarUpdatePillState = {
+  visible: boolean
+  installing: boolean
+  label: string
+  ariaLabel: string
+  title?: string
+  onInstall: () => void
+}
 
+type TitlebarV2RightState = {
+  update: TitlebarUpdatePillState
+  statusVisible: boolean
+  statusLabel: string
+}
+
+function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
   return (
-    <Show when={version() !== undefined}>
-      <button
-        type="button"
-        class="h-5 shrink-0 rounded-[27px] bg-[var(--v2-background-bg-accent)] px-2.5 text-[11px] font-[530] leading-[1.1] tracking-[-0.04px] text-[var(--v2-text-text-contrast)] disabled:opacity-60"
-        onClick={() => props.update?.install()}
-        disabled={props.update?.installing()}
-        aria-label={language.t("toast.update.action.installRestart")}
-        title={version() ? `Update ${version()}` : undefined}
-      >
-        Update
-      </button>
-    </Show>
+    <div class="flex shrink-0 items-center justify-end gap-0">
+      <TitlebarUpdatePill state={props.state.update} />
+      <Show when={props.state.statusVisible}>
+        <Tooltip placement="bottom" value={props.state.statusLabel}>
+          <StatusPopoverV2 scope="server" />
+        </Tooltip>
+      </Show>
+      <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
+    </div>
   )
 }
 
-function DesktopTitlebarIconButton(props: Parameters<typeof IconButtonV2>[0]) {
-  return
+function TitlebarUpdatePill(props: { state: TitlebarUpdatePillState }) {
+  return (
+    <Show when={props.state.visible}>
+      <button
+        type="button"
+        class="h-5 shrink-0 rounded-[27px] bg-[var(--v2-background-bg-layer-03)] px-2.5 text-[11px] font-[530] leading-4 tracking-[0.05px] text-[var(--v2-text-text-base)] disabled:opacity-60"
+        onClick={props.state.onInstall}
+        disabled={props.state.installing}
+        aria-label={props.state.ariaLabel}
+        title={props.state.title}
+      >
+        {props.state.label}
+      </button>
+    </Show>
+  )
 }
 
 function TabNavItem(props: {
@@ -682,10 +710,10 @@ function TabNavItem(props: {
     >
       <a
         href={props.href}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
         <ProjectTabAvatar project={props.project} directory={props.directory} />
-        <span class="text-clip">{props.title}</span>
+        <span class="text-clip leading-5">{props.title}</span>
       </a>
 
       <div class="absolute right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
@@ -727,12 +755,12 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
       <a
         href={props.href}
         aria-current="page"
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none text-[var(--v2-text-text-base)]"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-[var(--v2-text-text-base)]"
       >
         <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
           <IconV2 name="edit" />
         </span>
-        <span class="truncate">{props.title}</span>
+        <span class="truncate leading-5">{props.title}</span>
       </a>
       <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
         <IconButtonV2

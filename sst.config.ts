@@ -2,7 +2,9 @@
 
 export default $config({
   app(input) {
-    const deployAws = input.stage === "production" || input.stage === "dev" || input.stage === "adam"
+    // Dev owns the shared AWS lake/stats infra for all non-production stages.
+    const awsStage = input.stage === "production" ? "production" : "dev"
+    const deployAws = input.stage === awsStage
     return {
       name: "opencode",
       removal: input?.stage === "production" ? "retain" : "remove",
@@ -48,7 +50,7 @@ export default $config({
     return {
       StatWorkerUrl: stat.url,
       // StatsUrl: stats.app.url,
-      ...(stage.githubActionsDeployRoleArn ? { GithubActionsDeployRoleArn: stage.githubActionsDeployRoleArn } : {}),
+      AwsStage: stage.awsStage,
     }
   },
 })

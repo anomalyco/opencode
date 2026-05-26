@@ -6,7 +6,7 @@ export const logger = {
   },
   log: console.log,
   debug: (message: string) => {
-    if (Resource.App.stage === "production" || Resource.App.stage === "adam") return
+    if (Resource.App.stage === "production") return
     console.debug(message)
   },
 }

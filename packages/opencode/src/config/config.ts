@@ -762,7 +762,14 @@ export const layer = Layer.effect(
           result.permission = mergeDeep(perms, result.permission ?? {})
         }
 
-        if (!result.username) result.username = os.userInfo().username
+        if (!result.username) {
+          try {
+            result.username = os.userInfo().username || "user"
+          } catch (err) {
+            log.warn("failed to read system username, using fallback", { err })
+            result.username = "user"
+          }
+        }
 
         if (result.autoshare === true && !result.share) {
           result.share = "auto"
