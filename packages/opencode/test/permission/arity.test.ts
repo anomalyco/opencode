@@ -21,6 +21,22 @@ test("longest match wins - nested prefixes", () => {
   expect(BashArity.prefix(["consul", "kv", "get", "config"])).toEqual(["consul", "kv", "get"])
 })
 
+test("rtk commands scope always-allow patterns to the wrapped subcommand", () => {
+  expect(BashArity.prefix(["rtk", "env", "PATH"])).toEqual(["rtk", "env"])
+  expect(BashArity.prefix(["rtk", "git", "clone", "https://github.com/example/repo"])).toEqual([
+    "rtk",
+    "git",
+    "clone",
+  ])
+  expect(BashArity.prefix(["rtk", "docker", "compose", "logs", "api"])).toEqual([
+    "rtk",
+    "docker",
+    "compose",
+    "logs",
+  ])
+  expect(BashArity.prefix(["rtk", "telemetry", "status"])).toEqual(["rtk", "telemetry", "status"])
+})
+
 test("exact length matches", () => {
   expect(BashArity.prefix(["git", "checkout"])).toEqual(["git", "checkout"])
   expect(BashArity.prefix(["npm", "run", "dev"])).toEqual(["npm", "run", "dev"])

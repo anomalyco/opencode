@@ -136,6 +136,26 @@ const ARITY: Record<string, number> = {
   rake: 2, // rake db:migrate
   rbenv: 2, // rbenv install 3.2.0
   "redis-cli": 2, // redis-cli ping
+  rtk: 2, // rtk env PATH
+  "rtk aws": 3, // rtk aws s3 ls
+  "rtk cargo": 3, // rtk cargo test
+  "rtk docker": 3, // rtk docker logs api
+  "rtk docker compose": 4, // rtk docker compose logs api
+  "rtk dotnet": 3, // rtk dotnet test
+  "rtk gh": 3, // rtk gh pr list
+  "rtk git": 3, // rtk git status
+  "rtk glab": 3, // rtk glab mr list
+  "rtk go": 3, // rtk go test
+  "rtk gt": 3, // rtk gt submit
+  "rtk hook": 3, // rtk hook check git status
+  "rtk kubectl": 3, // rtk kubectl get pods
+  "rtk npm": 3, // rtk npm test
+  "rtk npx": 3, // rtk npx prisma generate
+  "rtk pip": 3, // rtk pip install requests
+  "rtk pnpm": 3, // rtk pnpm list
+  "rtk prisma": 3, // rtk prisma generate
+  "rtk prisma migrate": 4, // rtk prisma migrate status
+  "rtk telemetry": 3, // rtk telemetry status
   rustup: 2, // rustup update
   serverless: 2, // serverless invoke
   sfdx: 3, // sfdx force:org:list
