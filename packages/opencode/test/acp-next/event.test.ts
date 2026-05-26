@@ -8,6 +8,9 @@ import { Directory } from "@/acp-next/directory"
 import { ACPNextSession } from "@/acp-next/session"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
+type ToolSessionUpdateParams = SessionUpdateParams & {
+  update: Extract<SessionUpdateParams["update"], { sessionUpdate: "tool_call" | "tool_call_update" }>
+}
 type GlobalEventEnvelope = {
   payload?: Event
 }
@@ -287,9 +290,9 @@ function errorTool(sessionID: string, callID: string) {
 }
 
 function toolUpdates(updates: SessionUpdateParams[]) {
-  return updates.filter(
-    (item) => item.update.sessionUpdate === "tool_call" || item.update.sessionUpdate === "tool_call_update",
-  )
+  return updates.filter((item): item is ToolSessionUpdateParams => {
+    return item.update.sessionUpdate === "tool_call" || item.update.sessionUpdate === "tool_call_update"
+  })
 }
 
 async function createKnownSession(
@@ -412,6 +415,85 @@ describe("acp-next event routing", () => {
 
     expect(harness.calls.message).toBe(1)
     expect(harness.updates).toHaveLength(2)
+  })
+
+  it("replays loaded session messages sequentially and continues after update failures", async () => {
+    const events = createEventStream()
+    const updates: SessionUpdateParams[] = []
+    const connection = {
+      sessionUpdate: (params: SessionUpdateParams) => {
+        if (params.update.sessionUpdate === "tool_call" && params.update.toolCallId === "call_slow") {
+          return new Promise<void>((resolve) => {
+            setTimeout(() => {
+              updates.push(params)
+              resolve()
+            }, 20)
+          })
+        }
+
+        if (params.update.sessionUpdate === "tool_call_update" && params.update.toolCallId === "call_slow") {
+          return Promise.reject(new Error("replay send failed"))
+        }
+
+        updates.push(params)
+        return Promise.resolve()
+      },
+    } satisfies Pick<AgentSideConnection, "sessionUpdate">
+    let subscription: ACPNextEvent.Subscription | undefined
+    const service = ACPNextService.make({
+      sdk: {
+        global: {
+          event: (options?: { signal?: AbortSignal }) => Promise.resolve({ stream: events.stream(options?.signal) }),
+        },
+        session: {
+          get: () => Promise.resolve({ data: { id: "ses_loaded" } }),
+          messages: () =>
+            Promise.resolve({
+              data: [
+                assistantToolMessage(completedTool("ses_loaded", "call_slow", "slow")),
+                assistantToolMessage(completedTool("ses_loaded", "call_after", "after")),
+              ],
+            }),
+        },
+      } as unknown as OpencodeClient,
+      connection,
+      directory: {
+        get: () =>
+          Effect.succeed(
+            Directory.build({
+              directory: "/workspace",
+              providers: {},
+              modes: [],
+              defaultModeID: "build",
+              commands: [],
+            }),
+          ),
+        refresh: () =>
+          Effect.succeed(
+            Directory.build({
+              directory: "/workspace",
+              providers: {},
+              modes: [],
+              defaultModeID: "build",
+              commands: [],
+            }),
+          ),
+        variants: Directory.variants,
+      },
+      eventSubscription: (started) => {
+        subscription = started
+      },
+    })
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(toolUpdates(updates).map((item) => item.update.toolCallId)).toEqual([
+      "call_slow",
+      "call_after",
+      "call_after",
+    ])
+    subscription?.stop()
+    events.close()
   })
 
   it("ignores unknown sessions and live user parts without user_message_chunk duplication", async () => {

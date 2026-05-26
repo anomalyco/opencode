@@ -475,9 +475,12 @@ function makeDirectoryService(sdk: OpencodeClient) {
 
 function replayMessages(subscription: ACPNextEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
   if (!subscription) return Effect.void
-  return Effect.tryPromise({
-    try: () => Promise.all(messages.map((message) => subscription.replayMessage(message))).then(() => undefined),
-    catch: (error) => fromUnknownError(error, "event"),
+  return Effect.promise(async () => {
+    for (const message of messages) {
+      await subscription.replayMessage(message).catch((error: unknown) => {
+        log.error("failed to replay ACP message", { error, messageID: message.info.id })
+      })
+    }
   })
 }
 
