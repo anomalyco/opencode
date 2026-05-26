@@ -1,4 +1,4 @@
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -56,20 +56,20 @@ function truncateToolOutput(text: string, maxChars?: number) {
 }
 
 export const Event = {
-  Updated: BusEvent.define("message.updated", SessionLegacy.Event.MessageUpdated.data),
-  Removed: BusEvent.define("message.removed", SessionLegacy.Event.MessageRemoved.data),
-  PartUpdated: BusEvent.define("message.part.updated", SessionLegacy.Event.PartUpdated.data),
-  PartDelta: BusEvent.define(
-    "message.part.delta",
-    Schema.Struct({
+  Updated: SessionLegacy.Event.MessageUpdated,
+  Removed: SessionLegacy.Event.MessageRemoved,
+  PartUpdated: SessionLegacy.Event.PartUpdated,
+  PartDelta: EventV2.define({
+    type: "message.part.delta",
+    schema: {
       sessionID: SessionID,
       messageID: MessageID,
       partID: PartID,
       field: Schema.String,
       delta: Schema.String,
-    }),
-  ),
-  PartRemoved: BusEvent.define("message.part.removed", SessionLegacy.Event.PartRemoved.data),
+    },
+  }),
+  PartRemoved: SessionLegacy.Event.PartRemoved,
 }
 
 const Cursor = Schema.Struct({

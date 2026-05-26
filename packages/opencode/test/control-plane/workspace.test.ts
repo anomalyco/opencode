@@ -318,7 +318,12 @@ function insertProject(id: ProjectV2.ID, worktree: string) {
 
 function attachSessionToWorkspace(sessionID: SessionID, workspaceID: WorkspaceV2.ID) {
   return Database.Service.use(({ db }) =>
-    db.update(SessionTable).set({ workspace_id: workspaceID }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie),
+    db
+      .update(SessionTable)
+      .set({ workspace_id: workspaceID })
+      .where(eq(SessionTable.id, sessionID))
+      .run()
+      .pipe(Effect.orDie),
   )
 }
 
@@ -329,7 +334,10 @@ function sessionSequence(sessionID: SessionID) {
       .from(EventSequenceTable)
       .where(eq(EventSequenceTable.aggregate_id, sessionID))
       .get()
-      .pipe(Effect.orDie, Effect.map((row) => row?.seq)),
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row?.seq),
+      ),
   )
 }
 
@@ -340,7 +348,10 @@ function sessionSequenceOwner(sessionID: SessionID) {
       .from(EventSequenceTable)
       .where(eq(EventSequenceTable.aggregate_id, sessionID))
       .get()
-      .pipe(Effect.orDie, Effect.map((row) => row?.ownerID)),
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row?.ownerID),
+      ),
   )
 }
 
@@ -842,14 +853,12 @@ describe("workspace CRUD", () => {
 
         const { db } = yield* Database.Service
         expect(
-          (
-            yield* db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get()
-              .pipe(Effect.orDie)
-          )?.workspaceID,
+          (yield* db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get()
+            .pipe(Effect.orDie))?.workspaceID,
         ).toBe(target.id)
         expect(yield* sessionSequenceOwner(session.id)).toBe(target.id)
       })
@@ -911,14 +920,12 @@ describe("workspace CRUD", () => {
 
         const { db } = yield* Database.Service
         expect(
-          (
-            yield* db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get()
-              .pipe(Effect.orDie)
-          )?.workspaceID,
+          (yield* db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get()
+            .pipe(Effect.orDie))?.workspaceID,
         ).toBeNull()
         expect(yield* sessionSequenceOwner(session.id)).toBe(instance.project.id)
       })
@@ -955,14 +962,12 @@ describe("workspace CRUD", () => {
 
         const { db } = yield* Database.Service
         expect(
-          (
-            yield* db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get()
-              .pipe(Effect.orDie)
-          )?.workspaceID,
+          (yield* db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get()
+            .pipe(Effect.orDie))?.workspaceID,
         ).toBeNull()
         expect(yield* sessionSequenceOwner(session.id)).toBe(projectID)
         expect(yield* sessionSequenceOwner(session.id)).not.toBe(workspaceProjectID)
@@ -973,6 +978,7 @@ describe("workspace CRUD", () => {
   it.live("sessionWarp syncs previous remote history, replays it, steals, and claims the sequence", () => {
     const calls: FetchCall[] = []
     let historySessionID: SessionID | undefined
+    let historySession: SessionNs.Info | undefined
     let historyNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
@@ -994,7 +1000,7 @@ describe("workspace CRUD", () => {
                 aggregate_id: historySessionID!,
                 seq: historyNextSeq,
                 type: "session.updated.1",
-                data: { sessionID: historySessionID!, info: { title: "from source history" } },
+                data: { sessionID: historySessionID!, info: historySession! },
               },
             ])
           }
@@ -1025,6 +1031,7 @@ describe("workspace CRUD", () => {
             const session = yield* sessionSvc.create({})
             yield* attachSessionToWorkspace(session.id, previous.id)
             historySessionID = session.id
+            historySession = { ...session, workspaceID: previous.id, title: "from source history" }
             historyNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
 
             yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
@@ -1339,6 +1346,7 @@ describe("workspace sync state", () => {
   it.live("sync history sends the local sequence fence and replays returned events in workspace context", () => {
     const historyBodies: unknown[] = []
     let historySessionID: SessionID | undefined
+    let historySession: SessionNs.Info | undefined
     let historyNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
@@ -1356,7 +1364,7 @@ describe("workspace sync state", () => {
                   aggregate_id: historySessionID!,
                   seq: historyNextSeq,
                   type: "session.updated.1",
-                  data: { sessionID: historySessionID!, info: { title: "from history" } },
+                  data: { sessionID: historySessionID!, info: historySession! },
                 },
               ]),
             )
@@ -1380,6 +1388,7 @@ describe("workspace sync state", () => {
               const session = yield* sessionSvc.create({ title: "before history" })
               yield* attachSessionToWorkspace(session.id, info.id)
               historySessionID = session.id
+              historySession = { ...session, workspaceID: info.id, title: "from history" }
               historyNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
 
               yield* workspace.startWorkspaceSyncing(instance.project.id)
@@ -1394,8 +1403,9 @@ describe("workspace sync state", () => {
                 captured.events.some(
                   (event) =>
                     event.workspace === info.id &&
-                    event.payload.type === "sync" &&
-                    event.payload.syncEvent.seq === historyNextSeq,
+                    event.payload.type === "session.updated" &&
+                    event.payload.properties.sessionID === session.id &&
+                    event.payload.properties.info.title === "from history",
                 ),
               ).toBe(true)
               yield* workspace.remove(info.id)
@@ -1482,6 +1492,7 @@ describe("workspace sync state", () => {
 
   it.live("SSE sync events are replayed and forwarded", () => {
     let sseSessionID: SessionID | undefined
+    let sseSession: SessionNs.Info | undefined
     let sseNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
@@ -1502,7 +1513,7 @@ describe("workspace sync state", () => {
                         aggregateID: sseSessionID!,
                         seq: sseNextSeq,
                         type: "session.updated.1",
-                        data: { sessionID: sseSessionID!, info: { title: "from sse" } },
+                        data: { sessionID: sseSessionID!, info: sseSession! },
                       },
                     },
                   },
@@ -1530,6 +1541,7 @@ describe("workspace sync state", () => {
               const session = yield* sessionSvc.create({ title: "before sse" })
               yield* attachSessionToWorkspace(session.id, info.id)
               sseSessionID = session.id
+              sseSession = { ...session, workspaceID: info.id, title: "from sse" }
               sseNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
 
               yield* workspace.startWorkspaceSyncing(instance.project.id)
@@ -1578,7 +1590,9 @@ describe("workspace waitForSync", () => {
         const { db } = yield* Database.Service
         yield* db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run().pipe(Effect.orDie)
 
-        expect(yield* workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_done"), { [sessionID]: 4 })).toBeUndefined()
+        expect(
+          yield* workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
+        ).toBeUndefined()
         expect(
           yield* workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
         ).toBeUndefined()

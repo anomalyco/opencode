@@ -27,7 +27,7 @@ type Usage = {
   }
 }
 
-function usage(part: typeof SessionLegacy.Event.PartUpdated.Type["data"]["part"] | unknown): Usage | undefined {
+function usage(part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part"] | unknown): Usage | undefined {
   if (typeof part !== "object" || part === null) return undefined
   const value = part as Record<string, unknown>
   if (value.type !== "step-finish") return undefined
@@ -39,7 +39,7 @@ function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$infer
   return {
     id: info.id,
     project_id: info.projectID,
-    workspace_id: info.workspaceID,
+    workspace_id: info.workspaceID ?? null,
     parent_id: info.parentID,
     slug: info.slug,
     directory: info.directory,
@@ -68,19 +68,23 @@ function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$infer
   }
 }
 
-function messageData(info: typeof SessionLegacy.Event.MessageUpdated.Type["data"]["info"]): typeof MessageTable.$inferInsert.data {
+function messageData(
+  info: (typeof SessionLegacy.Event.MessageUpdated.Type)["data"]["info"],
+): typeof MessageTable.$inferInsert.data {
   const { id: _, sessionID: __, ...rest } = info
   return rest as DeepMutable<typeof rest>
 }
 
-function partData(part: typeof SessionLegacy.Event.PartUpdated.Type["data"]["part"]): typeof PartTable.$inferInsert.data {
+function partData(
+  part: (typeof SessionLegacy.Event.PartUpdated.Type)["data"]["part"],
+): typeof PartTable.$inferInsert.data {
   const { id: _, messageID: __, sessionID: ___, ...rest } = part
   return rest as DeepMutable<typeof rest>
 }
 
 function applyUsage(
   db: DatabaseService,
-  sessionID: typeof SessionLegacy.Event.MessageUpdated.Type["data"]["sessionID"],
+  sessionID: (typeof SessionLegacy.Event.MessageUpdated.Type)["data"]["sessionID"],
   value: Usage,
   sign = 1,
 ) {
@@ -108,7 +112,9 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
           const rows = yield* db
             .select()
             .from(SessionMessageTable)
-            .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")))
+            .where(
+              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
+            )
             .all()
             .pipe(Effect.orDie)
           return rows
@@ -123,7 +129,9 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
           const rows = yield* db
             .select()
             .from(SessionMessageTable)
-            .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")))
+            .where(
+              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")),
+            )
             .all()
             .pipe(Effect.orDie)
           return rows

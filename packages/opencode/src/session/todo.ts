@@ -1,11 +1,11 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import { SessionID } from "./schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
 import { TodoTable } from "@opencode-ai/core/session/sql"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),
@@ -17,13 +17,13 @@ export const Info = Schema.Struct({
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {
-  Updated: BusEvent.define(
-    "todo.updated",
-    Schema.Struct({
+  Updated: EventV2.define({
+    type: "todo.updated",
+    schema: {
       sessionID: SessionID,
       todos: Schema.Array(Info),
-    }),
-  ),
+    },
+  }),
 }
 
 export interface Interface {
@@ -36,7 +36,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const { db } = yield* Database.Service
 
     const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
@@ -60,7 +60,7 @@ export const layer = Layer.effect(
           }),
         )
         .pipe(Effect.orDie)
-      yield* bus.publish(Event.Updated, input)
+      yield* events.publish(Event.Updated, input)
     })
 
     const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
@@ -82,6 +82,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Database.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Database.defaultLayer))
 
 export * as Todo from "./todo"

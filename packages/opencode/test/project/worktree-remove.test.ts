@@ -5,17 +5,18 @@ import path from "path"
 import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Worktree } from "../../src/worktree"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Worktree.defaultLayer, CrossSpawnSpawner.defaultLayer))
-const wintest = process.platform === "win32" ? it.live : it.live.skip
+const wintest = process.platform === "win32" ? it.instance : it.instance.skip
 
 describe("Worktree.remove", () => {
-  it.live("continues when git remove exits non-zero after detaching", () =>
-    provideTmpdirInstance(
-      (root) =>
-        Effect.gen(function* () {
+  it.instance(
+    "continues when git remove exits non-zero after detaching",
+    () =>
+      Effect.gen(function* () {
+          const root = (yield* TestInstance).directory
           const svc = yield* Worktree.Service
           const name = `remove-regression-${Date.now().toString(36)}`
           const branch = `opencode/${name}`
@@ -79,15 +80,15 @@ describe("Worktree.remove", () => {
             $`git show-ref --verify --quiet refs/heads/${branch}`.cwd(root).quiet().nothrow(),
           )
           expect(ref.exitCode).not.toBe(0)
-        }),
-      { git: true },
-    ),
+      }),
+    { git: true },
   )
 
-  wintest("stops fsmonitor before removing a worktree", () =>
-    provideTmpdirInstance(
-      (root) =>
-        Effect.gen(function* () {
+  wintest(
+    "stops fsmonitor before removing a worktree",
+    () =>
+      Effect.gen(function* () {
+          const root = (yield* TestInstance).directory
           const svc = yield* Worktree.Service
           const name = `remove-fsmonitor-${Date.now().toString(36)}`
           const branch = `opencode/${name}`
@@ -119,8 +120,7 @@ describe("Worktree.remove", () => {
             $`git show-ref --verify --quiet refs/heads/${branch}`.cwd(root).quiet().nothrow(),
           )
           expect(ref.exitCode).not.toBe(0)
-        }),
-      { git: true },
-    ),
+      }),
+    { git: true },
   )
 })

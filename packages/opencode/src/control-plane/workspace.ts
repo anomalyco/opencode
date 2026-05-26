@@ -6,7 +6,6 @@ import { asc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { Project } from "@/project/project"
-import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -47,19 +46,19 @@ export const ConnectionStatus = Schema.Struct({
 export type ConnectionStatus = Schema.Schema.Type<typeof ConnectionStatus>
 
 export const Event = {
-  Ready: BusEvent.define(
-    "workspace.ready",
-    Schema.Struct({
+  Ready: EventV2.define({
+    type: "workspace.ready",
+    schema: {
       name: Schema.String,
-    }),
-  ),
-  Failed: BusEvent.define(
-    "workspace.failed",
-    Schema.Struct({
+    },
+  }),
+  Failed: EventV2.define({
+    type: "workspace.failed",
+    schema: {
       message: Schema.String,
-    }),
-  ),
-  Status: BusEvent.define("workspace.status", ConnectionStatus),
+    },
+  }),
+  Status: EventV2.define({ type: "workspace.status", schema: ConnectionStatus.fields }),
 }
 
 function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
@@ -340,14 +339,12 @@ export const layer = Layer.effect(
         .pipe(Effect.orDie)).map((row) => row.id)
       const state = sessionIDs.length
         ? Object.fromEntries(
-            (
-              yield* db
-                .select()
-                .from(EventSequenceTable)
-                .where(inArray(EventSequenceTable.aggregate_id, sessionIDs))
-                .all()
-                .pipe(Effect.orDie)
-            ).map((row) => [row.aggregate_id, row.seq]),
+            (yield* db
+              .select()
+              .from(EventSequenceTable)
+              .where(inArray(EventSequenceTable.aggregate_id, sessionIDs))
+              .all()
+              .pipe(Effect.orDie)).map((row) => [row.aggregate_id, row.seq]),
           )
         : {}
 
@@ -799,6 +796,8 @@ export const layer = Layer.effect(
             body,
           })
         }
+
+        yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
 
         log.info("session warp complete", {
           workspaceID: input.workspaceID,

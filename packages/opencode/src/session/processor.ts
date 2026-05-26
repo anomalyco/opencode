@@ -3,7 +3,6 @@ import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
-import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
@@ -91,7 +90,6 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const session = yield* Session.Service
     const config = yield* Config.Service
-    const bus = yield* Bus.Service
     const snapshot = yield* Snapshot.Service
     const agents = yield* Agent.Service
     const llm = yield* LLM.Service
@@ -758,7 +756,7 @@ export const layer = Layer.effect(
         const error = parse(e)
         if (SessionLegacy.ContextOverflowError.isInstance(error)) {
           ctx.needsCompaction = true
-          yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
         if (!ctx.assistantMessage.summary) {
@@ -775,7 +773,7 @@ export const layer = Layer.effect(
           }
         }
         ctx.assistantMessage.error = error
-        yield* bus.publish(Session.Event.Error, {
+        yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
         })
@@ -878,7 +876,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Image.defaultLayer),
-    Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(Database.defaultLayer),

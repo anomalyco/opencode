@@ -5,24 +5,21 @@ import { Workspace } from "@/control-plane/workspace"
 import type { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
-import { makeRuntime } from "@/effect/run-service"
 
 export const HEADER = "x-opencode-sync"
 export type State = Record<string, number>
 const log = Log.create({ service: "fence" })
-const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
-export function load(ids?: string[]) {
-  return runtime.runSync(({ db }) =>
-    Effect.gen(function* () {
-      const rows = yield* (ids?.length
+export function load(db: Database.Interface["db"], ids?: string[]) {
+  return Effect.gen(function* () {
+    const rows = yield* (
+      ids?.length
         ? db.select().from(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, ids)).all()
         : db.select().from(EventSequenceTable).all()
-      ).pipe(Effect.orDie)
+    ).pipe(Effect.orDie)
 
-      return Object.fromEntries(rows.map((row) => [row.aggregate_id, row.seq]))
-    }),
-  )
+    return Object.fromEntries(rows.map((row) => [row.aggregate_id, row.seq]))
+  })
 }
 
 export function diff(prev: State, next: State) {

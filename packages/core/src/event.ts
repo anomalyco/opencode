@@ -36,6 +36,8 @@ export type Payload<D extends Definition = Definition> = {
 
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
+export type Listener = (event: Payload) => Effect.Effect<void>
+export type Unsubscribe = Effect.Effect<void>
 
 export type SerializedEvent = {
   readonly id: ID
@@ -114,6 +116,7 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
+  readonly listen: (listener: Listener) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
   readonly replay: (
     event: SerializedEvent,
@@ -135,6 +138,7 @@ export const layer = Layer.effect(
     const all = yield* PubSub.unbounded<Payload>()
     const typed = new Map<string, PubSub.PubSub<Payload>>()
     const projectors = new Map<string, AnyProjector[]>()
+    const listeners = new Array<Listener>()
     const { db } = yield* Database.Service
 
     const getOrCreate = (definition: Definition) =>
@@ -247,6 +251,9 @@ export const layer = Layer.effect(
           data,
         } as Payload<D>
         yield* commitSyncEvent(event as Payload)
+        for (const listener of listeners) {
+          yield* listener(event as Payload)
+        }
         const pubsub = typed.get(event.type)
         if (pubsub) yield* PubSub.publish(pubsub, event as Payload)
         yield* PubSub.publish(all, event as Payload)
@@ -270,6 +277,9 @@ export const layer = Layer.effect(
           } as Payload
           yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
           if (options?.publish) {
+            for (const listener of listeners) {
+              yield* listener(payload)
+            }
             const pubsub = typed.get(payload.type)
             if (pubsub) yield* PubSub.publish(pubsub, payload)
             yield* PubSub.publish(all, payload)
@@ -336,6 +346,15 @@ export const layer = Layer.effect(
 
     const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(all)
 
+    const listen = (listener: Listener): Effect.Effect<Unsubscribe> =>
+      Effect.sync(() => {
+        listeners.push(listener)
+        return Effect.sync(() => {
+          const index = listeners.indexOf(listener)
+          if (index >= 0) listeners.splice(index, 1)
+        })
+      })
+
     const project = <D extends Definition>(definition: D, projector: Projector<D>): Effect.Effect<void> =>
       Effect.sync(() => {
         const list = projectors.get(definition.type) ?? []
@@ -343,7 +362,7 @@ export const layer = Layer.effect(
         projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, subscribe, all: streamAll, project, replay, replayAll, remove, claim })
+    return Service.of({ publish, subscribe, all: streamAll, listen, project, replay, replayAll, remove, claim })
   }),
 )
 

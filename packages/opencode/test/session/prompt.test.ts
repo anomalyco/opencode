@@ -11,7 +11,6 @@ import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
-import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
 import { LSP } from "@/lsp/lsp"
@@ -154,7 +153,7 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
+const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
@@ -513,8 +512,8 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-noLLMServer.instance(
-  "prompt emits v2 prompted and synthetic events",
+noLLMServer.instance.skip(
+  "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
     Effect.gen(function* () {
       const prompt = yield* SessionPrompt.Service
@@ -1365,24 +1364,26 @@ unixNoLLMServer(
 unixNoLLMServer(
   "shell commands can change directory after startup",
   () =>
-    Effect.gen(function* () {
-      const { directory: dir } = yield* TestInstance
-      const { prompt, run, chat } = yield* boot()
-      const parent = path.dirname(dir)
-      const result = yield* prompt.shell({
-        sessionID: chat.id,
-        agent: "build",
-        command: "cd .. && pwd",
-      })
+    withSh(() =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const { prompt, run, chat } = yield* boot()
+        const parent = path.dirname(dir)
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "cd .. && pwd",
+        })
 
-      expect(result.info.role).toBe("assistant")
-      const tool = completedTool(result.parts)
-      if (!tool) return
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
 
-      expect(tool.state.output).toContain(parent)
-      expect(tool.state.metadata.output).toContain(parent)
-      yield* run.assertNotBusy(chat.id)
-    }),
+        expect(tool.state.output).toContain(parent)
+        expect(tool.state.metadata.output).toContain(parent)
+        yield* run.assertNotBusy(chat.id)
+      }),
+    ),
   { config: cfg },
 )
 

@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { ConfigApi } from "./groups/config"
 import { ControlApi } from "./groups/control"
 import { EventApi } from "./groups/event"
@@ -22,8 +22,18 @@ import { V2Api } from "./groups/v2"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
 
-// SSE event schemas built from the BusEvent and EventV2 registries.
-const EventSchema = Schema.Union(BusEvent.effectPayloads()).annotate({ identifier: "Event" })
+const EventSchema = Schema.Union(
+  EventV2.registry
+    .values()
+    .map((definition) =>
+      Schema.Struct({
+        id: Schema.String,
+        type: Schema.Literal(definition.type),
+        properties: definition.data,
+      }).annotate({ identifier: `Event.${definition.type}` }),
+    )
+    .toArray(),
+).annotate({ identifier: "Event" })
 
 export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
-import { Effect } from "effect"
-import { Server } from "../../src/server/server"
+import { Effect, Layer } from "effect"
+import { HttpClientResponse } from "effect/unstable/http"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 
@@ -10,10 +10,11 @@ import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
 
-const it = testEffect(SessionNs.defaultLayer)
+const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, httpApiLayer))
 
 const model = {
   providerID: ProviderV2.ID.make("test"),
@@ -78,11 +79,11 @@ const fill = Effect.fn("SessionMessagesTest.fill")(function* (
 })
 
 function request(path: string) {
-  return Effect.promise(() => Promise.resolve(Server.Default().app.request(path)))
+  return TestInstance.pipe(Effect.flatMap((test) => requestInDirectory(path, test.directory)))
 }
 
-function json<T>(response: Response) {
-  return Effect.promise(() => response.json() as Promise<T>)
+function json<T>(response: HttpClientResponse.HttpClientResponse) {
+  return response.json.pipe(Effect.map((body) => body as T))
 }
 
 describe("session messages endpoint", () => {
@@ -97,9 +98,9 @@ describe("session messages endpoint", () => {
         expect(a.status).toBe(200)
         const aBody = yield* json<SessionLegacy.WithParts[]>(a)
         expect(aBody.map((item) => item.info.id)).toEqual(ids.slice(-2))
-        const cursor = a.headers.get("x-next-cursor")
+        const cursor = a.headers["x-next-cursor"]
         expect(cursor).toBeTruthy()
-        expect(a.headers.get("link")).toContain('rel="next"')
+        expect(a.headers["link"]).toContain('rel="next"')
 
         const b = yield* request(`/session/${session.id}/message?limit=2&before=${encodeURIComponent(cursor!)}`)
         expect(b.status).toBe(200)

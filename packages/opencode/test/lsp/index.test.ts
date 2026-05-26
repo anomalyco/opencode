@@ -1,36 +1,44 @@
 import { describe, expect, spyOn } from "bun:test"
 import path from "path"
 import { Deferred, Effect, Layer } from "effect"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(LSP.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const lspLayer = (flags: Parameters<typeof RuntimeFlags.layer>[0] = {}) =>
+  LSP.layer.pipe(
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+    Layer.provideMerge(EventV2Bridge.defaultLayer),
+  )
+
+const it = testEffect(Layer.mergeAll(lspLayer(), CrossSpawnSpawner.defaultLayer))
 const experimentalTyIt = testEffect(
   Layer.mergeAll(
-    LSP.layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.layer({ experimentalLspTy: true }))),
+    lspLayer({ experimentalLspTy: true }),
     CrossSpawnSpawner.defaultLayer,
   ),
 )
 const fakeServerPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
 const disabledDownloadIt = testEffect(
   Layer.mergeAll(
-    LSP.layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.layer({ disableLspDownload: true }))),
+    lspLayer({ disableLspDownload: true }),
     CrossSpawnSpawner.defaultLayer,
   ),
 )
 
 describe("lsp.spawn", () => {
-  it.live("does not spawn builtin LSP for files outside instance", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
+  it.instance(
+    "does not spawn builtin LSP for files outside instance",
+    () =>
+      LSP.Service.use((lsp) =>
           Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
             const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
 
             try {
@@ -46,14 +54,13 @@ describe("lsp.spawn", () => {
             }
           }),
         ),
-      { config: { lsp: true } },
-    ),
+    { config: { lsp: true } },
   )
 
-  it.live("does not spawn builtin LSP for files inside instance when LSP is unset", () =>
-    provideTmpdirInstance((dir) =>
+  it.instance("does not spawn builtin LSP for files inside instance when LSP is unset", () =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
           const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
 
           try {
@@ -68,14 +75,14 @@ describe("lsp.spawn", () => {
           }
         }),
       ),
-    ),
   )
 
-  it.live("would spawn builtin LSP for files inside instance when lsp is true", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
+  it.instance(
+    "would spawn builtin LSP for files inside instance when lsp is true",
+    () =>
+      LSP.Service.use((lsp) =>
           Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
             const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
 
             try {
@@ -90,44 +97,46 @@ describe("lsp.spawn", () => {
             }
           }),
         ),
-      { config: { lsp: true } },
-    ),
+    { config: { lsp: true } },
   )
 
-  it.live("publishes lsp.updated after custom LSP initialization", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
+  it.instance(
+    "publishes lsp.updated after custom LSP initialization",
+    () =>
+      Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
           const lsp = yield* LSP.Service
           const updated = yield* Deferred.make<void>()
-          const unsubscribe = Bus.subscribe(LSP.Event.Updated, () =>
-            Effect.runSync(Deferred.succeed(updated, undefined)),
-          )
-          yield* Effect.addFinalizer(() => Effect.sync(unsubscribe))
+          const events = yield* EventV2Bridge.Service
+          const unsubscribe = yield* events.listen((event) => {
+            if (event.type === LSP.Event.Updated.type) Deferred.doneUnsafe(updated, Effect.void)
+            return Effect.void
+          })
+          yield* Effect.addFinalizer(() => unsubscribe)
 
           const file = path.join(dir, "sample.repro")
           yield* Effect.promise(() => Bun.write(file, "sample\n"))
           yield* lsp.touchFile(file)
           yield* awaitWithTimeout(Deferred.await(updated), "lsp.updated event was not published")
         }),
-      {
-        config: {
-          lsp: {
-            fake: {
-              command: [process.execPath, fakeServerPath],
-              extensions: [".repro"],
-            },
+    {
+      config: {
+        lsp: {
+          fake: {
+            command: [process.execPath, fakeServerPath],
+            extensions: [".repro"],
           },
         },
       },
-    ),
+    },
   )
 
-  it.live("would spawn builtin LSP for files inside instance when config object is provided", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
+  it.instance(
+    "would spawn builtin LSP for files inside instance when config object is provided",
+    () =>
+      LSP.Service.use((lsp) =>
           Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
             const spy = spyOn(LSPServer.Typescript, "spawn").mockResolvedValue(undefined)
 
             try {
@@ -142,21 +151,21 @@ describe("lsp.spawn", () => {
             }
           }),
         ),
-      {
-        config: {
-          lsp: {
-            eslint: { disabled: true },
-          },
+    {
+      config: {
+        lsp: {
+          eslint: { disabled: true },
         },
       },
-    ),
+    },
   )
 
-  it.live("uses pyright instead of ty by default", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
+  it.instance(
+    "uses pyright instead of ty by default",
+    () =>
+      LSP.Service.use((lsp) =>
           Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
             const ty = spyOn(LSPServer.Ty, "spawn").mockResolvedValue(undefined)
             const pyright = spyOn(LSPServer.Pyright, "spawn").mockResolvedValue(undefined)
 
@@ -174,15 +183,15 @@ describe("lsp.spawn", () => {
             }
           }),
         ),
-      { config: { lsp: true } },
-    ),
+    { config: { lsp: true } },
   )
 
-  experimentalTyIt.live("uses ty instead of pyright when experimentalLspTy is enabled", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
+  experimentalTyIt.instance(
+    "uses ty instead of pyright when experimentalLspTy is enabled",
+    () =>
+      LSP.Service.use((lsp) =>
           Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
             const ty = spyOn(LSPServer.Ty, "spawn").mockResolvedValue(undefined)
             const pyright = spyOn(LSPServer.Pyright, "spawn").mockResolvedValue(undefined)
 
@@ -200,15 +209,15 @@ describe("lsp.spawn", () => {
             }
           }),
         ),
-      { config: { lsp: true } },
-    ),
+    { config: { lsp: true } },
   )
 
-  disabledDownloadIt.live("passes disableLspDownload to builtin LSP spawn", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
+  disabledDownloadIt.instance(
+    "passes disableLspDownload to builtin LSP spawn",
+    () =>
+      LSP.Service.use((lsp) =>
           Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
             const pyright = spyOn(LSPServer.Pyright, "spawn").mockResolvedValue(undefined)
 
             try {
@@ -224,7 +233,6 @@ describe("lsp.spawn", () => {
             }
           }),
         ),
-      { config: { lsp: true } },
-    ),
+    { config: { lsp: true } },
   )
 })

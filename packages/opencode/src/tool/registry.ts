@@ -46,7 +46,7 @@ import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Bus } from "../bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Git } from "@/git"
 import { Skill } from "../skill"
@@ -99,7 +99,7 @@ export const layer: Layer.Layer<
   | LSP.Service
   | Instruction.Service
   | AppFileSystem.Service
-  | Bus.Service
+  | EventV2Bridge.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
   | Ripgrep.Service
@@ -389,7 +389,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
-      Layer.provide(Bus.layer),
+      Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),

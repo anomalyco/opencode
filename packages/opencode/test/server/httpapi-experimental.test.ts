@@ -1,8 +1,8 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
-import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { Session } from "@/session/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -14,30 +14,23 @@ import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer))
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
 const testWorktreeMutations = process.platform === "win32" ? it.instance.skip : it.instance
 
-function app() {
-  return Server.Default().app
-}
-
 function request(path: string, directory: string, init: RequestInit = {}) {
-  return Effect.promise(() => {
-    const headers = new Headers(init.headers)
-    headers.set("x-opencode-directory", directory)
-    return Promise.resolve(app().request(path, { ...init, headers }))
-  })
+  return requestInDirectory(path, directory, init)
 }
 
 function createSession(input?: Session.CreateInput) {
   return Session.use.create(input)
 }
 
-function json<T>(response: Response) {
-  return Effect.promise(() => response.json() as Promise<T>)
+function json<T>(response: HttpClientResponse.HttpClientResponse) {
+  return response.json.pipe(Effect.map((value) => value as T))
 }
 
 function waitReady(input: { directory?: string; name?: string }) {
@@ -83,7 +76,11 @@ function insertAccount() {
     }),
     (id) =>
       Database.Service.use(({ db }) =>
-        db.delete(AccountTable).where(eq(AccountTable.id, AccountV2.ID.make(id))).run().pipe(Effect.orDie),
+        db
+          .delete(AccountTable)
+          .where(eq(AccountTable.id, AccountV2.ID.make(id)))
+          .run()
+          .pipe(Effect.orDie),
       ),
   )
 }
@@ -91,11 +88,19 @@ function insertAccount() {
 function setSessionUpdated(session: Session.Info, updated: number) {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
-    yield* db.update(SessionTable).set({ time_updated: updated }).where(eq(SessionTable.id, session.id)).run().pipe(Effect.orDie)
+    yield* db
+      .update(SessionTable)
+      .set({ time_updated: updated })
+      .where(eq(SessionTable.id, session.id))
+      .run()
+      .pipe(Effect.orDie)
   })
 }
 
-function withCreatedWorktree(directory: string, use: (info: Worktree.Info) => Effect.Effect<void, unknown, never>) {
+function withCreatedWorktree(
+  directory: string,
+  use: (info: Worktree.Info) => Effect.Effect<void, unknown, HttpClient.HttpClient>,
+) {
   const name = "api-test"
   const headers = { "content-type": "application/json" }
   return Effect.acquireUseRelease(
@@ -244,7 +249,7 @@ describe("experimental HttpApi", () => {
           tmp.directory,
         )
         expect(page.status).toBe(200)
-        expect(page.headers.get("x-next-cursor")).toBeTruthy()
+        expect(page.headers["x-next-cursor"]).toBeTruthy()
 
         const body = yield* json<Session.GlobalInfo[]>(page)
         expect(body.map((session) => session.id)).toEqual([second.id])

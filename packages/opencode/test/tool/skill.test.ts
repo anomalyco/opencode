@@ -7,7 +7,7 @@ import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "@/tool/registry"
-import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 
@@ -30,9 +30,9 @@ const node = CrossSpawnSpawner.defaultLayer
 const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
 
 describe("tool.skill", () => {
-  it.live("execute returns skill content block with files", () =>
-    provideTmpdirInstance((dir) =>
-      Effect.gen(function* () {
+  it.instance("execute returns skill content block with files", () =>
+    Effect.gen(function* () {
+        const dir = (yield* TestInstance).directory
         const skill = path.join(dir, ".opencode", "skill", "tool-skill")
         yield* Effect.promise(() =>
           Bun.write(
@@ -87,13 +87,12 @@ Use this skill.
         expect(result.output).toContain(`<skill_content name="tool-skill">`)
         expect(result.output).toContain(`Base directory for this skill: ${pathToFileURL(skill).href}`)
         expect(result.output).toContain(`<file>${file}</file>`)
-      }),
-    ),
+    }),
   )
 
-  it.live("execute preserves not found message", () =>
-    provideTmpdirInstance((dir) =>
-      Effect.gen(function* () {
+  it.instance("execute preserves not found message", () =>
+    Effect.gen(function* () {
+        const dir = (yield* TestInstance).directory
         const home = process.env.OPENCODE_TEST_HOME
         process.env.OPENCODE_TEST_HOME = dir
         yield* Effect.addFinalizer(() =>
@@ -127,7 +126,6 @@ Use this skill.
           expect(error).toBeInstanceOf(Error)
           if (error instanceof Error) expect(error.message).toContain('Skill "missing-skill" not found.')
         }
-      }),
-    ),
+    }),
   )
 })

@@ -8,7 +8,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Auth } from "../../src/auth"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
 import { Env } from "../../src/env"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -21,12 +21,11 @@ import { Vcs } from "../../src/project/vcs"
 import { InstanceState } from "../../src/effect/instance-state"
 import { Session } from "../../src/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
@@ -38,7 +37,7 @@ const configLayer = Config.layer.pipe(
   Layer.provide(FetchHttpClient.layer),
 )
 const pluginLayer = Plugin.layer.pipe(
-  Layer.provide(Bus.layer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(configLayer),
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
@@ -63,9 +62,9 @@ afterEach(async () => {
 })
 
 describe("plugin.workspace", () => {
-  it.live("plugin can install a workspace adapter", () =>
-    provideTmpdirInstance((dir) =>
-      Effect.gen(function* () {
+  it.instance("plugin can install a workspace adapter", () =>
+    Effect.gen(function* () {
+        const dir = (yield* TestInstance).directory
         const type = `plug-${Math.random().toString(36).slice(2)}`
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "created.json")
@@ -133,7 +132,6 @@ describe("plugin.workspace", () => {
           directory: space,
           extra: { key: "value" },
         })
-      }),
-    ),
+    }),
   )
 })

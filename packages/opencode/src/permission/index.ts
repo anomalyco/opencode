@@ -1,5 +1,3 @@
-import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
 import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -13,6 +11,8 @@ import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionID } from "./schema"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "permission" })
 
@@ -67,15 +67,15 @@ export const Approval = Schema.Struct({
 export type Approval = Schema.Schema.Type<typeof Approval>
 
 export const Event = {
-  Asked: BusEvent.define("permission.asked", Request),
-  Replied: BusEvent.define(
-    "permission.replied",
-    Schema.Struct({
+  Asked: EventV2.define({ type: "permission.asked", schema: Request.fields }),
+  Replied: EventV2.define({
+    type: "permission.replied",
+    schema: {
       sessionID: SessionID,
       requestID: PermissionID,
       reply: Reply,
-    }),
-  ),
+    },
+  }),
 }
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
@@ -144,7 +144,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const { db } = yield* Database.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
@@ -200,7 +200,7 @@ export const layer = Layer.effect(
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
-      yield* bus.publish(Event.Asked, info)
+      yield* events.publish(Event.Asked, info)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
@@ -215,7 +215,7 @@ export const layer = Layer.effect(
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
       pending.delete(input.requestID)
-      yield* bus.publish(Event.Replied, {
+      yield* events.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         reply: input.reply,
@@ -230,7 +230,7 @@ export const layer = Layer.effect(
         for (const [id, item] of pending.entries()) {
           if (item.info.sessionID !== existing.info.sessionID) continue
           pending.delete(id)
-          yield* bus.publish(Event.Replied, {
+          yield* events.publish(Event.Replied, {
             sessionID: item.info.sessionID,
             requestID: item.info.id,
             reply: "reject",
@@ -258,7 +258,7 @@ export const layer = Layer.effect(
         )
         if (!ok) continue
         pending.delete(id)
-        yield* bus.publish(Event.Replied, {
+        yield* events.publish(Event.Replied, {
           sessionID: item.info.sessionID,
           requestID: item.info.id,
           reply: "always",
@@ -306,6 +306,6 @@ export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
   return PermissionV2.disabled(tools, ruleset)
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
 
 export * as Permission from "."

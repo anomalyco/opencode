@@ -1,6 +1,6 @@
 import { Agent } from "@/agent/agent"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
@@ -57,7 +57,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -311,7 +311,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
             yield* Effect.logError("prompt_async failed").pipe(
               Effect.annotateLogs({ sessionID: ctx.params.sessionID, cause }),
             )
-            yield* bus.publish(Session.Event.Error, {
+            yield* events.publish(Session.Event.Error, {
               sessionID: ctx.params.sessionID,
               error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
             })

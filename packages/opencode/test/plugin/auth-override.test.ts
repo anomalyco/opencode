@@ -9,7 +9,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { Plugin } from "@/plugin"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Auth } from "@/auth"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { TestConfig } from "../fixture/config"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -22,7 +22,7 @@ function layer(directory: string, plugins: string[]) {
     Layer.provide(Auth.defaultLayer),
     Layer.provide(
       Plugin.layer.pipe(
-        Layer.provide(Bus.layer),
+        Layer.provide(EventV2Bridge.defaultLayer),
         Layer.provide(RuntimeFlags.layer()),
         Layer.provide(
           TestConfig.layer({

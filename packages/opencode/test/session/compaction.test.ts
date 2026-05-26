@@ -5,7 +5,6 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { APICallError } from "ai"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
-import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
 import { Image } from "@/image/image"
 import { Agent } from "../../src/agent/agent"
@@ -231,7 +230,7 @@ const deps = Layer.mergeAll(
   layer("continue"),
   Agent.defaultLayer,
   Plugin.defaultLayer,
-  Bus.layer,
+  EventV2Bridge.defaultLayer,
   Config.defaultLayer,
   RuntimeFlags.layer({ experimentalEventSystem: true }),
   Database.defaultLayer,
@@ -264,8 +263,8 @@ function withCompaction(options?: CompactionProcessOptions) {
 }
 
 function compactionProcessLayer(options?: CompactionProcessOptions) {
-  const bus = Bus.layer
-  const status = SessionStatus.layer.pipe(Layer.provide(bus))
+  const events = EventV2Bridge.defaultLayer
+  const status = SessionStatus.layer.pipe(Layer.provide(events))
   const processor = options?.llm
     ? SessionProcessorModule.SessionProcessor.layer.pipe(
         Layer.provide(summary),
@@ -274,7 +273,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
         Layer.provide(status),
       )
     : layer(options?.result ?? "continue")
-  return Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
+  return Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, events, status).pipe(
     Layer.provide(SessionNs.defaultLayer),
     Layer.provide((options?.provider ?? wide()).layer),
     Layer.provide(Snapshot.defaultLayer),
@@ -283,7 +282,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(Agent.defaultLayer),
     Layer.provide(options?.plugin ?? Plugin.defaultLayer),
     Layer.provide(status),
-    Layer.provide(bus),
+    Layer.provide(events),
     Layer.provide(options?.config ?? Config.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provide(EventV2Bridge.defaultLayer),
@@ -589,6 +588,26 @@ describe("session.compaction.create", () => {
           overflow: true,
         })
 
+      }),
+    ),
+  )
+
+  it.live.skip(
+    "projects a compaction message to v2 (v2 projector disabled)",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+
+        yield* compact.create({
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          auto: true,
+          overflow: true,
+        })
+
         const v2 = yield* SessionV2.Service.use((svc) => svc.messages({ sessionID: info.id })).pipe(
           Effect.provide(SessionV2.defaultLayer),
         )
@@ -824,19 +843,21 @@ describe("session.compaction.process", () => {
   it.instance(
     "publishes compacted event on continue",
     Effect.gen(function* () {
-      const bus = yield* Bus.Service
+      const events = yield* EventV2Bridge.Service
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       const msg = yield* createUserMessage(session.id, "hello")
       const msgs = yield* ssn.messages({ sessionID: session.id })
       const done = yield* Deferred.make<void, Error>()
       let seen = false
-      const unsub = yield* bus.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
-        if (evt.properties.sessionID !== session.id) return
+      const unsub = yield* events.listen((evt) => {
+        if (evt.type !== SessionCompaction.Event.Compacted.type) return Effect.void
+        if ((evt.data as typeof SessionCompaction.Event.Compacted.data.Type).sessionID !== session.id) return Effect.void
         seen = true
         Deferred.doneUnsafe(done, Effect.void)
+        return Effect.void
       })
-      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+      yield* Effect.addFinalizer(() => unsub)
 
       const result = yield* SessionCompaction.use.process({
         parentID: msg.id,
@@ -1200,17 +1221,19 @@ describe("session.compaction.process", () => {
 
       return Effect.gen(function* () {
         const ssn = yield* SessionNs.Service
-        const bus = yield* Bus.Service
+        const events = yield* EventV2Bridge.Service
         const ready = yield* Deferred.make<void>()
         const session = yield* ssn.create({})
         const msg = yield* createUserMessage(session.id, "hello")
         const msgs = yield* ssn.messages({ sessionID: session.id })
-        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
-          if (evt.properties.sessionID !== session.id) return
-          if (evt.properties.status.type !== "retry") return
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+          const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+          if (data.sessionID !== session.id || data.status.type !== "retry") return Effect.void
           Deferred.doneUnsafe(ready, Effect.void)
+          return Effect.void
         })
-        yield* Effect.addFinalizer(() => Effect.sync(off))
+        yield* Effect.addFinalizer(() => off)
 
         const fiber = yield* SessionCompaction.use
           .process({

@@ -7,7 +7,7 @@ import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
 import { ShellTool } from "../../src/tool/shell"
 import { Filesystem } from "@/util/filesystem"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
@@ -28,6 +28,7 @@ const shellLayer = Layer.mergeAll(
   Config.defaultLayer,
   Agent.defaultLayer,
   RuntimeFlags.defaultLayer,
+  testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)
 type ShellTestServices =

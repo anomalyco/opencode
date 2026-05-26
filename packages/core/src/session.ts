@@ -78,12 +78,19 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
   sessionID: SessionSchema.ID,
 }) {}
 
+export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
+  "Session.OperationUnavailableError",
+  {
+    operation: Schema.Literals(["prompt", "compact", "wait"]),
+  },
+) {}
+
 export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
 
-export type Error = NotFoundError | MessageDecodeError
+export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -99,8 +106,10 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError>
-  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], NotFoundError>
+  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly context: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly prompt: (input: {
@@ -109,7 +118,7 @@ export interface Interface {
     prompt: Prompt
     delivery?: SessionSchema.Delivery
     resume?: boolean
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<SessionMessage.User, NotFoundError | OperationUnavailableError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -124,8 +133,8 @@ export interface Interface {
     delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
-  readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
@@ -227,24 +236,91 @@ export const layer = Layer.effect(
         )
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
-      messages: Effect.fn("V2Session.messages")(function* () {
-        return yield* Effect.die(new Error("Session.messages is not implemented"))
+      messages: Effect.fn("V2Session.messages")(function* (input) {
+        yield* result.get(input.sessionID)
+        const direction = input.cursor?.direction ?? "next"
+        const requestedOrder = input.order ?? "desc"
+        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+        const boundary = input.cursor
+          ? order === "asc"
+            ? or(
+                gt(SessionMessageTable.time_created, input.cursor.time),
+                and(
+                  eq(SessionMessageTable.time_created, input.cursor.time),
+                  gt(SessionMessageTable.id, input.cursor.id),
+                ),
+              )
+            : or(
+                lt(SessionMessageTable.time_created, input.cursor.time),
+                and(
+                  eq(SessionMessageTable.time_created, input.cursor.time),
+                  lt(SessionMessageTable.id, input.cursor.id),
+                ),
+              )
+          : undefined
+        const where = boundary
+          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
+          : eq(SessionMessageTable.session_id, input.sessionID)
+        const query = db
+          .select()
+          .from(SessionMessageTable)
+          .where(where)
+          .orderBy(
+            order === "asc" ? asc(SessionMessageTable.time_created) : desc(SessionMessageTable.time_created),
+            order === "asc" ? asc(SessionMessageTable.id) : desc(SessionMessageTable.id),
+          )
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
+          Effect.orDie,
+        )
+        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
       }),
-      context: Effect.fn("V2Session.context")(function* () {
-        return yield* Effect.die(new Error("Session.context is not implemented"))
+      context: Effect.fn("V2Session.context")(function* (sessionID) {
+        yield* result.get(sessionID)
+        const compaction = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
+          .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie)
+        const rows = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, sessionID),
+              compaction
+                ? or(
+                    gt(SessionMessageTable.time_created, compaction.time_created),
+                    and(
+                      eq(SessionMessageTable.time_created, compaction.time_created),
+                      gte(SessionMessageTable.id, compaction.id),
+                    ),
+                  )
+                : undefined,
+            ),
+          )
+          .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        return yield* Effect.forEach(rows, decode)
       }),
-      prompt: Effect.fn("V2Session.prompt")(function* () {
-        return yield* Effect.die(new Error("Session.prompt is not implemented"))
+      prompt: Effect.fn("V2Session.prompt")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* Effect.fail(new OperationUnavailableError({ operation: "prompt" }))
       }),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* () {}),
       switchModel: Effect.fn("V2Session.switchModel")(function* () {}),
-      compact: Effect.fn("V2Session.compact")(function* () {
-        return yield* Effect.die(new Error("Session.compact is not implemented"))
+      compact: Effect.fn("V2Session.compact")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* new OperationUnavailableError({ operation: "compact" })
       }),
-      wait: Effect.fn("V2Session.wait")(function* () {
-        return yield* Effect.die(new Error("Session.wait is not implemented"))
+      wait: Effect.fn("V2Session.wait")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "wait" })
       }),
       resume: Effect.fn("V2Session.resume")(function* () {}),
       move: Effect.fn("V2Session.move")(function* () {}),

@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 
-export const ID = Schema.String.pipe(
+export const ID = Schema.String.check(Schema.isStartsWith("wrk")).pipe(
   Schema.brand("WorkspaceV2.ID"),
   withStatics((schema) => ({
     ascending: (id?: string) => {

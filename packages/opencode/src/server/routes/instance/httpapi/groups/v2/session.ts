@@ -1,12 +1,15 @@
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   InvalidCursorError,
   InvalidRequestError,
+  ServiceUnavailableError,
   SessionNotFoundError,
+  UnknownError,
 } from "../../errors"
 import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
@@ -56,11 +59,29 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
     ),
   )
   .add(
+    HttpApiEndpoint.post("prompt", "/api/session/:sessionID/prompt", {
+      params: { sessionID: SessionID },
+      query: WorkspaceRoutingQuery,
+      payload: Schema.Struct({
+        prompt: Prompt,
+        delivery: SessionV2.Delivery.pipe(Schema.optional),
+      }),
+      success: SessionMessage.Message,
+      error: [SessionNotFoundError, ServiceUnavailableError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.session.prompt",
+        summary: "Send v2 message",
+        description: "Create a v2 session message and queue it for the agent loop.",
+      }),
+    ),
+  )
+  .add(
     HttpApiEndpoint.post("compact", "/api/session/:sessionID/compact", {
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
-      error: [SessionNotFoundError],
+      error: [SessionNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.compact",
@@ -74,7 +95,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
-      error: [SessionNotFoundError],
+      error: [SessionNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.wait",
@@ -88,7 +109,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: Schema.Array(SessionMessage.Message),
-      error: [SessionNotFoundError],
+      error: [SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.context",

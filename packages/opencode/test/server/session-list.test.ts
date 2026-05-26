@@ -10,18 +10,17 @@ import path from "path"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Storage } from "@/storage/storage"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
-import { EventV2Bridge } from "@/event-v2-bridge"
 
 void Log.init({ print: false })
 const it = testEffect(
   Layer.mergeAll(
     Database.defaultLayer,
     SessionNs.layer.pipe(
-      Layer.provide(Bus.layer),
+      Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(Storage.defaultLayer),
       Layer.provide(Database.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),

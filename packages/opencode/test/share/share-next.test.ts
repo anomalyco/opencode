@@ -7,7 +7,7 @@ import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/s
 import { Account } from "../../src/account/account"
 import { AccountRepo } from "../../src/account/repo"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
@@ -43,7 +43,7 @@ const none = HttpClient.make(() => Effect.die("unexpected http call"))
 function live(client: HttpClient.HttpClient) {
   const http = Layer.succeed(HttpClient.HttpClient, client)
   return ShareNext.layer.pipe(
-    Layer.provide(Bus.layer),
+    Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(http))),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Database.defaultLayer),
@@ -56,7 +56,7 @@ function live(client: HttpClient.HttpClient) {
 function wired(client: HttpClient.HttpClient) {
   const http = Layer.succeed(HttpClient.HttpClient, client)
   return Layer.mergeAll(
-    Bus.layer,
+    EventV2Bridge.defaultLayer,
     ShareNext.layer,
     Session.defaultLayer,
     AccountRepo.defaultLayer,
@@ -64,7 +64,7 @@ function wired(client: HttpClient.HttpClient) {
     NodeFileSystem.layer,
     CrossSpawnSpawner.defaultLayer,
   ).pipe(
-    Layer.provide(Bus.layer),
+    Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(Account.layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(http))),
     Layer.provide(Config.defaultLayer),
     Layer.provide(http),
@@ -251,7 +251,7 @@ describe("ShareNext", () => {
         })
 
         return Effect.gen(function* () {
-          const bus = yield* Bus.Service
+          const events = yield* EventV2Bridge.Service
           const share = yield* ShareNext.Service
           const session = yield* Session.Service
 
@@ -270,7 +270,7 @@ describe("ShareNext", () => {
             .run()
             .pipe(Effect.orDie)
 
-          yield* bus.publish(Session.Event.Diff, {
+          yield* events.publish(Session.Event.Diff, {
             sessionID: info.id,
             diff: [
               {
@@ -283,7 +283,7 @@ describe("ShareNext", () => {
               },
             ],
           })
-          yield* bus.publish(Session.Event.Diff, {
+          yield* events.publish(Session.Event.Diff, {
             sessionID: info.id,
             diff: [
               {

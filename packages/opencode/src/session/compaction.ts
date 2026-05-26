@@ -1,6 +1,4 @@
-import { BusEvent } from "@/bus/bus-event"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
-import { Bus } from "@/bus"
 import * as Session from "./session"
 import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "@/provider/provider"
@@ -22,16 +20,17 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "session.compaction" })
 
 export const Event = {
-  Compacted: BusEvent.define(
-    "session.compacted",
-    Schema.Struct({
+  Compacted: EventV2.define({
+    type: "session.compacted",
+    schema: {
       sessionID: SessionID,
-    }),
-  ),
+    },
+  }),
 }
 
 export const PRUNE_MINIMUM = 20_000
@@ -214,7 +213,6 @@ export const use = serviceUse(Service)
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
     const config = yield* Config.Service
     const session = yield* Session.Service
     const agents = yield* Agent.Service
@@ -578,7 +576,7 @@ export const layer = Layer.effect(
             include: selected.tail_start_id,
           })
         }
-        yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
       }
       return result
     })
@@ -631,7 +629,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionProcessor.defaultLayer),
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),

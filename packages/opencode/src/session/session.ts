@@ -3,14 +3,13 @@ import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionV2 } from "@opencode-ai/core/session"
 
 import { NotFoundError } from "@/storage/storage"
@@ -299,6 +298,16 @@ export type ListInput = {
   limit?: number
 }
 
+export type GlobalListInput = {
+  directory?: string
+  roots?: boolean
+  start?: number
+  cursor?: number
+  search?: string
+  limit?: number
+  archived?: boolean
+}
+
 const CreatedEventSchema = Schema.Struct({
   sessionID: SessionID,
   info: Info,
@@ -342,25 +351,25 @@ const UpdatedEventSchema = Schema.Struct({
 })
 
 export const Event = {
-  Created: BusEvent.define("session.created", SessionLegacy.Event.Created.data),
-  Updated: BusEvent.define("session.updated", SessionLegacy.Event.Updated.data),
-  Deleted: BusEvent.define("session.deleted", SessionLegacy.Event.Deleted.data),
-  Diff: BusEvent.define(
-    "session.diff",
-    Schema.Struct({
+  Created: SessionLegacy.Event.Created,
+  Updated: SessionLegacy.Event.Updated,
+  Deleted: SessionLegacy.Event.Deleted,
+  Diff: EventV2.define({
+    type: "session.diff",
+    schema: {
       sessionID: SessionID,
       diff: Schema.Array(Snapshot.FileDiff),
-    }),
-  ),
-  Error: BusEvent.define(
-    "session.error",
-    Schema.Struct({
+    },
+  }),
+  Error: EventV2.define({
+    type: "session.error",
+    schema: {
       sessionID: Schema.optional(SessionID),
       // Reuses SessionLegacy.Assistant.fields.error (already Schema.optional) so
-      // the derived zod keeps the same discriminated-union shape on the bus.
+      // the derived schema keeps the same discriminated-union shape on the event stream.
       error: SessionLegacy.Assistant.fields.error,
-    }),
-  ),
+    },
+  }),
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
@@ -445,6 +454,7 @@ export type NotFound = NotFoundError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
+  readonly listGlobal: (input?: GlobalListInput) => Effect.Effect<GlobalInfo[]>
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
@@ -469,7 +479,10 @@ export interface Interface {
   readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
   readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
-  readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionLegacy.WithParts[], NotFound>
+  readonly messages: (input: {
+    sessionID: SessionID
+    limit?: number
+  }) => Effect.Effect<SessionLegacy.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends SessionLegacy.Info>(msg: T) => Effect.Effect<T>
@@ -510,14 +523,17 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | Bus.Service | Storage.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  | BackgroundJob.Service
+  | Storage.Service
+  | RuntimeFlags.Service
+  | Database.Service
+  | EventV2Bridge.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const database = yield* Database.Service
     const background = yield* BackgroundJob.Service
-    const bus = yield* Bus.Service
     const events = yield* EventV2Bridge.Service
     const storage = yield* Storage.Service
     const flags = yield* RuntimeFlags.Service
@@ -570,13 +586,11 @@ export const layer: Layer.Layer<
       }
       log.info("created", result)
 
-      yield* events.publish(SessionLegacy.Event.Created, { sessionID: result.id, info: result }, { location: eventLocation(result) })
-
-      if (!flags.experimentalWorkspaces) {
-        // This only exist for backwards compatibility. We should not be
-        // manually publishing this event; it is a sync event now
-        yield* bus.publish(Event.Updated, { sessionID: result.id, info: result })
-      }
+      yield* events.publish(
+        SessionLegacy.Event.Created,
+        { sessionID: result.id, info: result },
+        { location: eventLocation(result) },
+      )
 
       return result
     })
@@ -589,9 +603,52 @@ export const layer: Layer.Layer<
 
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
       const ctx = yield* InstanceState.context
-      return Array.from(
-        listByProject({ projectID: ctx.project.id, experimentalWorkspaces: flags.experimentalWorkspaces, ...input }),
-      )
+      return yield* listByProject(db, {
+        projectID: ctx.project.id,
+        experimentalWorkspaces: flags.experimentalWorkspaces,
+        ...input,
+      })
+    })
+
+    const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
+      const conditions: SQL[] = []
+      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
+      if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
+      if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
+      if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+      if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+      if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
+
+      const query =
+        conditions.length > 0
+          ? db
+              .select()
+              .from(SessionTable)
+              .where(and(...conditions))
+          : db.select().from(SessionTable)
+      const rows = yield* query
+        .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+        .limit(input?.limit ?? 100)
+        .all()
+        .pipe(Effect.orDie)
+      const ids = [...new Set(rows.map((row) => row.project_id))]
+      const projects = new Map<string, ProjectInfo>()
+      if (ids.length > 0) {
+        const items = yield* db
+          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+          .from(ProjectTable)
+          .where(inArray(ProjectTable.id, ids))
+          .all()
+          .pipe(Effect.orDie)
+        for (const item of items) {
+          projects.set(item.id, {
+            id: item.id,
+            name: item.name ?? undefined,
+            worktree: item.worktree,
+          })
+        }
+      }
+      return rows.map((row) => ({ ...fromRow(row), project: projects.get(row.project_id) ?? null }))
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -620,7 +677,11 @@ export const layer: Layer.Layer<
           yield* remove(child.id)
         }
 
-        yield* events.publish(SessionLegacy.Event.Deleted, { sessionID, info: session }, { location: eventLocation(session) })
+        yield* events.publish(
+          SessionLegacy.Event.Deleted,
+          { sessionID, info: session },
+          { location: eventLocation(session) },
+        )
         yield* events.remove(sessionID)
       } catch (e) {
         log.error(e)
@@ -630,11 +691,7 @@ export const layer: Layer.Layer<
     const updateMessage = <T extends SessionLegacy.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
         const location = yield* locationForSession(msg.sessionID)
-        yield* events.publish(
-          SessionLegacy.Event.MessageUpdated,
-          { sessionID: msg.sessionID, info: msg },
-          { location },
-        )
+        yield* events.publish(SessionLegacy.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg }, { location })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
@@ -780,9 +837,11 @@ export const layer: Layer.Layer<
       revert: Info["revert"]
       summary: Info["summary"]
     }) {
-      yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert }).pipe(
-        Effect.orDie,
-      )
+      yield* patch(input.sessionID, {
+        summary: input.summary,
+        time: { updated: Date.now() },
+        revert: input.revert,
+      }).pipe(Effect.orDie)
     })
 
     const clearRevert = Effect.fn("Session.clearRevert")(function* (sessionID: SessionID) {
@@ -804,7 +863,9 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       workspaceID: Info["workspaceID"]
     }) {
-      yield* patch(input.sessionID, { workspaceID: input.workspaceID, time: { updated: Date.now() } }).pipe(Effect.orDie)
+      yield* patch(input.sessionID, { workspaceID: input.workspaceID, time: { updated: Date.now() } }).pipe(
+        Effect.orDie,
+      )
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
@@ -879,7 +940,7 @@ export const layer: Layer.Layer<
       field: string
       delta: string
     }) {
-      yield* bus.publish(MessageV2.Event.PartDelta, input)
+      yield* events.publish(MessageV2.Event.PartDelta, input)
     })
 
     /** Finds the first message matching the predicate, searching newest-first. */
@@ -903,6 +964,7 @@ export const layer: Layer.Layer<
 
     return Service.of({
       list,
+      listGlobal,
       create,
       fork,
       touch,
@@ -932,7 +994,6 @@ export const layer: Layer.Layer<
 
 export const defaultLayer = layer.pipe(
   Layer.provide(BackgroundJob.defaultLayer),
-  Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(EventV2Bridge.defaultLayer),
@@ -957,7 +1018,8 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
   )
 })
 
-function* listByProject(
+function listByProject(
+  db: Database.Interface["db"],
   input: ListInput & {
     projectID: ProjectV2.ID
     experimentalWorkspaces: boolean
@@ -995,19 +1057,17 @@ function* listByProject(
 
   const limit = input.limit ?? 100
 
-  const rows = runtime.runSync(({ db }) =>
-    db
-      .select()
-      .from(SessionTable)
-      .where(and(...conditions))
-      .orderBy(desc(SessionTable.time_updated))
-      .limit(limit)
-      .all()
-      .pipe(Effect.orDie),
-  )
-  for (const row of rows) {
-    yield fromRow(row)
-  }
+  return db
+    .select()
+    .from(SessionTable)
+    .where(and(...conditions))
+    .orderBy(desc(SessionTable.time_updated))
+    .limit(limit)
+    .all()
+    .pipe(
+      Effect.orDie,
+      Effect.map((rows) => rows.map(fromRow)),
+    )
 }
 
 export function* listGlobal(input?: {

@@ -9,7 +9,6 @@ import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
-import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
 import { Image } from "@/image/image"
 import { Permission } from "../../src/permission"
@@ -172,7 +171,7 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
   return msg
 })
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
+const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 const deps = Layer.mergeAll(
   Session.defaultLayer,
@@ -584,7 +583,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
     ({ dir, llm }) =>
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
-        const bus = yield* Bus.Service
+        const events = yield* EventV2Bridge.Service
 
         yield* llm.error(503, { error: "boom" })
         yield* llm.text("")
@@ -594,9 +593,11 @@ it.live("session.processor effect tests publish retry status updates", () =>
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const states: number[] = []
-        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
-          if (evt.properties.sessionID !== chat.id) return
-          if (evt.properties.status.type === "retry") states.push(evt.properties.status.attempt)
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+          const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+          if (data.sessionID === chat.id && data.status.type === "retry") states.push(data.status.attempt)
+          return Effect.void
         })
         const handle = yield* processors.create({
           assistantMessage: msg,
@@ -621,7 +622,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
           tools: {},
         })
 
-        off()
+        yield* off
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(2)
@@ -813,7 +814,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
       Effect.gen(function* () {
         const seen = defer<void>()
         const { processors, session, provider } = yield* boot()
-        const bus = yield* Bus.Service
+        const events = yield* EventV2Bridge.Service
         const sts = yield* SessionStatus.Service
 
         yield* llm.hang
@@ -823,11 +824,13 @@ it.live("session.processor effect tests record aborted errors and idle state", (
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const errs: string[] = []
-        const off = yield* bus.subscribeCallback(Session.Event.Error, (evt) => {
-          if (evt.properties.sessionID !== chat.id) return
-          if (!evt.properties.error) return
-          errs.push(evt.properties.error.name)
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== Session.Event.Error.type) return Effect.void
+          const data = evt.data as typeof Session.Event.Error.data.Type
+          if (data.sessionID !== chat.id || !data.error) return Effect.void
+          errs.push(data.error.name)
           seen.resolve()
+          return Effect.void
         })
         const handle = yield* processors.create({
           assistantMessage: msg,
@@ -861,7 +864,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
         yield* Effect.promise(() => seen.promise)
         const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
         const state = yield* sts.get(chat.id)
-        off()
+        yield* off
 
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {

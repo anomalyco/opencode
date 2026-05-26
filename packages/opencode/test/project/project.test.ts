@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import * as Log from "@opencode-ai/core/util/log"
 import { $ } from "bun"
@@ -75,7 +75,7 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
     Layer.provide(mockGitFailure(failArg)),
     Layer.provide(ProjectV2.defaultLayer),
-    Layer.provide(Bus.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(Database.defaultLayer),
@@ -85,7 +85,7 @@ function projectLayerWithFailure(failArg: string) {
 
 function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.layer>[0]) {
   return Project.layer.pipe(
-    Layer.provide(Bus.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(ProjectV2.defaultLayer),
     Layer.provide(AppProcess.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),

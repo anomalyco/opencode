@@ -15,7 +15,7 @@ import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
@@ -55,8 +55,8 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Truncate.defaultLayer,
   )
 
-const it = testEffect(readLayer())
-const scout = testEffect(readLayer({ experimentalScout: true }))
+const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))
+const scout = testEffect(Layer.mergeAll(readLayer({ experimentalScout: true }), testInstanceStoreLayer))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool

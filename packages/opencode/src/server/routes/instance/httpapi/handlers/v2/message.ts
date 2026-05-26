@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
-import { InvalidCursorError, SessionNotFoundError } from "../../errors"
+import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"
 
 const DefaultMessagesLimit = 50
 
@@ -58,6 +58,20 @@ export const messageHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.message
                 }),
               ),
             ),
+            Effect.catchTag("Session.MessageDecodeError", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to decode v2 session message").pipe(
+                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({
+                      message: "Unexpected server error. Check server logs for details.",
+                      ref,
+                    }),
+                  ),
+                ),
+              )
+            }),
           )
         const first = messages[0]
         const last = messages.at(-1)

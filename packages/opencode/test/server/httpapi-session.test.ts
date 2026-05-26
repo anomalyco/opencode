@@ -1,8 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
+import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
+import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -13,7 +16,7 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
-import { Server } from "../../src/server/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import * as HttpSessionError from "../../src/server/routes/instance/httpapi/handlers/session-errors"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
@@ -43,13 +46,28 @@ const instanceStoreLayer = InstanceStore.defaultLayer.pipe(
     Layer.succeed(InstanceBootstrapService.Service, InstanceBootstrapService.Service.of({ run: Effect.void })),
   ),
 )
-const it = testEffect(
-  Layer.mergeAll(instanceStoreLayer, Project.defaultLayer, Session.defaultLayer, workspaceLayer, Database.defaultLayer),
+const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
+  HttpApiApp.routes,
+  {
+    disableListenLog: true,
+    disableLogger: true,
+  },
 )
-
-function app() {
-  return Server.Default().app
-}
+const httpApiLayer = servedRoutes.pipe(
+  Layer.provide(layerWebSocketConstructorGlobal),
+  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(NodeServices.layer),
+)
+const it = testEffect(
+  Layer.mergeAll(
+    instanceStoreLayer,
+    Project.defaultLayer,
+    Session.defaultLayer,
+    workspaceLayer,
+    Database.defaultLayer,
+    httpApiLayer,
+  ),
+)
 
 function pathFor(path: string, params: Record<string, string>) {
   return Object.entries(params).reduce((result, [key, value]) => result.replace(`:${key}`, value), path)
@@ -180,7 +198,12 @@ const setLegacySummaryDiff = (sessionID: SessionIDType) =>
 const getWorkspaceID = (sessionID: SessionIDType) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    return yield* db.select({ workspaceID: SessionTable.workspace_id }).from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+    return yield* db
+      .select({ workspaceID: SessionTable.workspace_id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, sessionID))
+      .get()
+      .pipe(Effect.orDie)
   })
 
 const clearSessionPath = (sessionID: SessionIDType) =>
@@ -190,18 +213,20 @@ const clearSessionPath = (sessionID: SessionIDType) =>
   })
 
 function request(path: string, init?: RequestInit) {
-  return Effect.promise(async () => app().request(path, init))
+  const url = new URL(path, "http://localhost")
+  return HttpClientRequest.fromWeb(new Request(url, init)).pipe(
+    HttpClientRequest.setUrl(url.pathname),
+    HttpClient.execute,
+  )
 }
 
-function json<T>(response: Response) {
-  return Effect.promise(async () => {
-    if (response.status !== 200) throw new Error(await response.text())
-    return (await response.json()) as T
-  })
+function json<T>(response: HttpClientResponse.HttpClientResponse) {
+  if (response.status !== 200) return response.text.pipe(Effect.flatMap((text) => Effect.die(new Error(text))))
+  return response.json.pipe(Effect.map((value) => value as T))
 }
 
-function responseJson(response: Response) {
-  return Effect.promise(() => response.json())
+function responseJson(response: HttpClientResponse.HttpClientResponse) {
+  return response.json
 }
 
 function requestJson<T>(path: string, init?: RequestInit) {
@@ -335,7 +360,7 @@ describe("session HttpApi", () => {
           headers,
         })
         const messagePage = yield* json<SessionLegacy.WithParts[]>(messages)
-        const nextCursor = messages.headers.get("x-next-cursor")
+        const nextCursor = messages.headers["x-next-cursor"]
         expect(nextCursor).toBeTruthy()
         expect(messagePage[0]?.parts[0]).toMatchObject({ type: "text" })
 
@@ -745,9 +770,9 @@ describe("session HttpApi", () => {
 
         const response = yield* request(route, { headers })
 
-        expect(response.headers.get("x-next-cursor")).toBeTruthy()
-        expect(response.headers.get("link")).toContain("limit=1")
-        expect(response.headers.get("access-control-expose-headers")?.toLowerCase()).toContain("x-next-cursor")
+        expect(response.headers["x-next-cursor"]).toBeTruthy()
+        expect(response.headers["link"]).toContain("limit=1")
+        expect(response.headers["access-control-expose-headers"]?.toLowerCase()).toContain("x-next-cursor")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

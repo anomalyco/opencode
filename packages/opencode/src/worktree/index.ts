@@ -9,7 +9,7 @@ import type { ProjectV2 } from "@opencode-ai/core/project"
 import * as Log from "@opencode-ai/core/util/log"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
 import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
@@ -22,19 +22,19 @@ import { InstanceState } from "@/effect/instance-state"
 const log = Log.create({ service: "worktree" })
 
 export const Event = {
-  Ready: BusEvent.define(
-    "worktree.ready",
-    Schema.Struct({
+  Ready: EventV2.define({
+    type: "worktree.ready",
+    schema: {
       name: Schema.String,
       branch: Schema.optional(Schema.String),
-    }),
-  ),
-  Failed: BusEvent.define(
-    "worktree.failed",
-    Schema.Struct({
+    },
+  }),
+  Failed: EventV2.define({
+    type: "worktree.failed",
+    schema: {
       message: Schema.String,
-    }),
-  ),
+    },
+  }),
 }
 
 export const Info = Schema.Struct({

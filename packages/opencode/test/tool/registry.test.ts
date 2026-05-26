@@ -23,7 +23,7 @@ import { Provider } from "@/provider/provider"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
@@ -64,7 +64,7 @@ const registryLayer = (opts: RegistryLayerOptions = {}) =>
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
-      Layer.provide(Bus.layer),
+      Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(Layer.mergeAll(node, Database.defaultLayer)),

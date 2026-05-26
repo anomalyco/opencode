@@ -9,7 +9,6 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { eq } from "drizzle-orm"
 
-import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID } from "../../src/session/schema"
@@ -19,8 +18,9 @@ import { resetDatabase } from "../fixture/db"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer))
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
 
 function seedNegativeTokenSession() {
   return Effect.gen(function* () {
@@ -74,7 +74,7 @@ describe("messages endpoint tolerates legacy negative token counts", () => {
       const test = yield* TestInstance
       const sessionID = yield* seedNegativeTokenSession()
       const url = `${SessionPaths.messages.replace(":sessionID", sessionID)}?limit=80&directory=${encodeURIComponent(test.directory)}`
-      const res = yield* Effect.promise(async () => Server.Default().app.request(url))
+      const res = yield* requestInDirectory(url, test.directory)
       expect(res.status, "messages endpoint 400'd on legacy negative tokens").not.toBe(400)
     }),
     { git: true, config: { formatter: false, lsp: false } },

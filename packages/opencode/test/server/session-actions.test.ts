@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, mock } from "bun:test"
-import { Effect } from "effect"
-import { Server } from "../../src/server/server"
+import { Effect, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
 
-const it = testEffect(SessionNs.defaultLayer)
+const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, httpApiLayer))
 
 afterEach(async () => {
   mock.restore()
@@ -25,17 +25,10 @@ describe("session action routes", () => {
           SessionNs.use.remove(created.id).pipe(Effect.ignore),
         )
 
-        const res = yield* Effect.promise(() =>
-          Promise.resolve(
-            Server.Default().app.request(`/session/${session.id}/abort`, {
-              method: "POST",
-              headers: { "x-opencode-directory": test.directory },
-            }),
-          ),
-        )
+        const res = yield* requestInDirectory(`/session/${session.id}/abort`, test.directory, { method: "POST" })
 
         expect(res.status).toBe(200)
-        expect(yield* Effect.promise(() => res.json())).toBe(true)
+        expect(yield* res.json).toBe(true)
       }),
     { git: true },
   )

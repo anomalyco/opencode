@@ -9,7 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { Truncate } from "../../src/tool/truncate"
 import { RepoOverviewTool } from "../../src/tool/repo_overview"
-import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
@@ -43,9 +43,8 @@ const init = Effect.fn("RepoOverviewToolTest.init")(function* () {
 })
 
 describe("tool.repo_overview", () => {
-  it.live("summarizes a local repository path", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("summarizes a local repository path", () =>
+    Effect.gen(function* () {
         const repo = yield* tmpdirScoped({ git: true })
         const fs = yield* AppFileSystem.Service
         yield* fs.writeWithDirs(
@@ -93,13 +92,12 @@ describe("tool.repo_overview", () => {
         expect(result.output).toContain("Top-level structure:")
         expect(result.output).toContain("src/")
         expect(result.output).toContain("README.md")
-      }),
-    ),
+    }),
   )
 
-  it.live("resolves relative paths from the instance directory", () =>
-    provideTmpdirInstance((dir) =>
-      Effect.gen(function* () {
+  it.instance("resolves relative paths from the instance directory", () =>
+    Effect.gen(function* () {
+        const dir = (yield* TestInstance).directory
         const fs = yield* AppFileSystem.Service
         yield* fs.writeWithDirs(path.join(dir, "nested", "README.md"), "# Nested\n")
 
@@ -108,13 +106,11 @@ describe("tool.repo_overview", () => {
 
         expect(result.metadata.path).toBe(path.join(dir, "nested"))
         expect(result.output).toContain("README.md")
-      }),
-    ),
+    }),
   )
 
-  it.live("resolves a cached repository from repository shorthand", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("resolves a cached repository from repository shorthand", () =>
+    Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const cached = path.join(Global.Path.repos, "github.com", "owner", "repo")
         yield* fs.writeWithDirs(path.join(cached, "package.json"), JSON.stringify({ name: "cached-repo" }, null, 2))
@@ -127,13 +123,11 @@ describe("tool.repo_overview", () => {
         expect(result.metadata.repository).toBe("owner/repo")
         expect(result.output).toContain("Repository: owner/repo")
         expect(result.output).toContain(`Path: ${cached}`)
-      }),
-    ),
+    }),
   )
 
-  it.live("fails clearly when a repository is not cloned", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("fails clearly when a repository is not cloned", () =>
+    Effect.gen(function* () {
         const tool = yield* init()
         const result = yield* tool.execute({ repository: "missing/repo" }, ctx).pipe(Effect.exit)
 
@@ -142,13 +136,11 @@ describe("tool.repo_overview", () => {
           const error = Cause.squash(result.cause)
           expect(error instanceof Error ? error.message : String(error)).toContain("Use repo_clone first")
         }
-      }),
-    ),
+    }),
   )
 
-  it.live("resolves cached repositories from host/path references", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("resolves cached repositories from host/path references", () =>
+    Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const cached = path.join(Global.Path.repos, "gitlab.com", "group", "repo")
         yield* fs.writeWithDirs(path.join(cached, "README.md"), "cached\n")
@@ -159,7 +151,6 @@ describe("tool.repo_overview", () => {
         expect(result.metadata.path).toBe(cached)
         expect(result.metadata.repository).toBe("gitlab.com/group/repo")
         expect(result.output).toContain("Repository: gitlab.com/group/repo")
-      }),
-    ),
+    }),
   )
 })

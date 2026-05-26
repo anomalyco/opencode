@@ -27,8 +27,9 @@ import { Session } from "@/session/session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
 import { Provider } from "@/provider/provider"
-import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionPrompt } from "@/session/prompt"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -436,7 +437,7 @@ export const GithubRunCommand = effectCmd({
     const sessionSvc = yield* Session.Service
     const sessionShare = yield* SessionShare.Service
     const sessionPrompt = yield* SessionPrompt.Service
-    const busSvc = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const runLocalEffect = <A, E>(effect: Effect.Effect<A, E>) =>
       Effect.runPromise(effect.pipe(Effect.provideService(InstanceRef, ctx)))
     yield* Effect.promise(async () => {
@@ -898,10 +899,12 @@ export const GithubRunCommand = effectCmd({
 
         let text = ""
         await runLocalEffect(
-          busSvc.subscribeCallback(MessageV2.Event.PartUpdated, (evt) => {
-            if (evt.properties.part.sessionID !== session.id) return
+          events.listen((evt) => {
+            if (evt.type !== MessageV2.Event.PartUpdated.type) return Effect.void
+            const data = evt.data as EventV2.Data<typeof MessageV2.Event.PartUpdated>
+            if (data.part.sessionID !== session.id) return Effect.void
             //if (evt.properties.part.messageID === messageID) return
-            const part = evt.properties.part
+            const part = data.part
 
             if (part.type === "tool" && part.state.status === "completed") {
               const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
@@ -921,9 +924,10 @@ export const GithubRunCommand = effectCmd({
                 UI.println(UI.markdown(text))
                 UI.empty()
                 text = ""
-                return
+                return Effect.void
               }
             }
+            return Effect.void
           }),
         )
       }

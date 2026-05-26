@@ -1,7 +1,6 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Schema } from "effect"
+import { EventV2 } from "@opencode-ai/core/event"
 
 export const Event = {
-  Connected: BusEvent.define("server.connected", Schema.Struct({})),
-  Disposed: BusEvent.define("global.disposed", Schema.Struct({})),
+  Connected: EventV2.define({ type: "server.connected", schema: {} }),
+  Disposed: EventV2.define({ type: "global.disposed", schema: {} }),
 }

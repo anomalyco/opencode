@@ -180,6 +180,29 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("runs listeners inline after projectors", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      yield* events.project(SyncMessage, () =>
+        Effect.sync(() => {
+          received.push("projector")
+        }),
+      )
+      const unsubscribe = yield* events.listen(() =>
+        Effect.sync(() => {
+          received.push("listener")
+        }),
+      )
+
+      yield* events.publish(SyncMessage, { id: "one", text: "hello" })
+      yield* unsubscribe
+      yield* events.publish(SyncMessage, { id: "one", text: "after unsubscribe" })
+
+      expect(received).toEqual(["projector", "listener", "projector"])
+    }),
+  )
+
   it.effect("inserts sync event rows on publish", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service

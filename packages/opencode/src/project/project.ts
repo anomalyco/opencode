@@ -5,10 +5,8 @@ import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
-import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
@@ -20,6 +18,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "project" })
 
@@ -56,7 +56,7 @@ export const Info = Schema.Struct({
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
-  Updated: BusEvent.define("project.updated", Info),
+  Updated: EventV2.define({ type: "project.updated", schema: Info.fields }),
 }
 
 type Row = typeof ProjectTable.$inferSelect
@@ -143,7 +143,7 @@ export const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const { db } = yield* Database.Service
 
@@ -398,12 +398,12 @@ export const layer = Layer.effect(
 
     const initState = yield* InstanceState.make(
       Effect.fn("Project.initState")(function* (ctx) {
-        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
-          Stream.runForEach((payload) =>
-            payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
-          ),
-          Effect.forkScoped,
-        )
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.type !== Command.Event.Executed.type || event.location?.directory !== ctx.directory) return Effect.void
+          const data = event.data as EventV2.Data<typeof Command.Event.Executed>
+          return data.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
       }),
     )
 
@@ -474,7 +474,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Bus.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),

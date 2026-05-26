@@ -11,7 +11,7 @@ import { MessageID, SessionID } from "../../src/session/schema"
 import { Truncate } from "../../src/tool/truncate"
 import { RepoCloneTool } from "../../src/tool/repo_clone"
 import { RepositoryCache } from "../../src/reference/repository-cache"
-import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
@@ -80,9 +80,8 @@ const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
   )
 
 describe("tool.repo_clone", () => {
-  it.live("clones a repo into the managed cache and reuses it on subsequent calls", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("clones a repo into the managed cache and reuses it on subsequent calls", () =>
+    Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const source = yield* tmpdirScoped({ git: true })
         const remoteRoot = yield* tmpdirScoped()
@@ -106,13 +105,11 @@ describe("tool.repo_clone", () => {
         expect(cloned.metadata.localPath).toBe(path.join(Global.Path.repos, "github.com", "owner", "repo"))
         expect(cached.metadata.status).toBe("cached")
         expect(yield* fs.readFileString(path.join(cloned.metadata.localPath, "README.md"))).toBe("v1\n")
-      }),
-    ),
+    }),
   )
 
-  it.live("refresh updates an existing cached clone", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("refresh updates an existing cached clone", () =>
+    Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const source = yield* tmpdirScoped({ git: true })
         const remoteRoot = yield* tmpdirScoped()
@@ -145,13 +142,11 @@ describe("tool.repo_clone", () => {
         expect(first.metadata.status).toBe("cloned")
         expect(refreshed.metadata.status).toBe("refreshed")
         expect(yield* fs.readFileString(path.join(first.metadata.localPath, "README.md"))).toBe("v2\n")
-      }),
-    ),
+    }),
   )
 
-  it.live("clones a configured branch", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("clones a configured branch", () =>
+    Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const source = yield* tmpdirScoped({ git: true })
         const remoteRoot = yield* tmpdirScoped()
@@ -177,19 +172,18 @@ describe("tool.repo_clone", () => {
         expect(result.metadata.status).toBe("cloned")
         expect(result.metadata.branch).toBe("docs")
         expect(yield* fs.readFileString(path.join(result.metadata.localPath, "DOCS.md"))).toBe("docs\n")
-      }),
-    ),
+    }),
   )
 
-  it.live("rejects invalid repository inputs", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("rejects invalid repository inputs", () =>
+    Effect.gen(function* () {
+        const dir = (yield* TestInstance).directory
         const tool = yield* init()
         const inputs = [
           { repository: "not-a-repo", message: "git URL" },
           { repository: "git@github.com:../../../etc/passwd", message: "git URL" },
           { repository: "-u:foo/bar", message: "git URL" },
-          { repository: pathToFileURL(path.join(_dir, "local.git")).href, message: "Local file" },
+          { repository: pathToFileURL(path.join(dir, "local.git")).href, message: "Local file" },
         ]
 
         yield* Effect.forEach(
@@ -206,13 +200,11 @@ describe("tool.repo_clone", () => {
             }),
           { discard: true },
         )
-      }),
-    ),
+    }),
   )
 
-  it.live("rejects local file repository URLs", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("rejects local file repository URLs", () =>
+    Effect.gen(function* () {
         const source = yield* tmpdirScoped({ git: true })
         const tool = yield* init()
         const result = yield* tool.execute({ repository: pathToFileURL(source).href }, ctx).pipe(Effect.exit)
@@ -222,13 +214,11 @@ describe("tool.repo_clone", () => {
           const error = Cause.squash(result.cause)
           expect(error instanceof Error ? error.message : String(error)).toContain("Local file")
         }
-      }),
-    ),
+    }),
   )
 
-  it.live("rejects invalid branch inputs", () =>
-    provideTmpdirInstance((_dir) =>
-      Effect.gen(function* () {
+  it.instance("rejects invalid branch inputs", () =>
+    Effect.gen(function* () {
         const tool = yield* init()
         const result = yield* tool.execute({ repository: "owner/repo", branch: "bad..branch" }, ctx).pipe(Effect.exit)
 
@@ -239,7 +229,6 @@ describe("tool.repo_clone", () => {
             "Branch must contain only alphanumeric characters",
           )
         }
-      }),
-    ),
+    }),
   )
 })

@@ -10,7 +10,6 @@ import { MessageV2 } from "../../src/session/message-v2"
 
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
-import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -86,9 +85,8 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
   })
 
-  it.live("policy updates retry status and increments attempts", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
+  it.instance("policy updates retry status and increments attempts", () =>
+    Effect.gen(function* () {
         const sessionID = SessionID.make("session-retry-test")
         const error = apiError({ "retry-after-ms": "0" })
         const status = yield* SessionStatus.Service
@@ -114,8 +112,7 @@ describe("session.retry.delay", () => {
           attempt: 2,
           message: "boom",
         })
-      }),
-    ),
+    }),
   )
 })
 
