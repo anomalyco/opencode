@@ -2,9 +2,12 @@ import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
+import { InstanceState } from "../../src/effect/instance-state"
 import { Snapshot } from "../../src/snapshot"
 import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -71,6 +74,10 @@ const bootstrapScoped = Effect.fn("SnapshotTest.bootstrapScoped")(function* () {
 })
 
 const scopedGitTmpdir = () => tmpdirScoped({ git: true }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer))
+const snapshotGitdir = Effect.gen(function* () {
+  const ctx = yield* InstanceState.context
+  return path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+})
 
 const cleanupWorktree = (repo: string, worktree: string, files: string[] = []) =>
   Effect.promise(async () => {
@@ -440,6 +447,30 @@ it.live(
       expect(patch.files).not.toContain(fwd(dir, "build/new-build.js"))
     }).pipe(provideInstance(dir))
   }),
+)
+
+it.instance(
+  "removes stale snapshot index lock before tracking",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    const lock = path.join(yield* snapshotGitdir, "index.lock")
+    yield* write(lock, "stale")
+    yield* Effect.promise(() => {
+      const stale = new Date(Date.now() - 60_000)
+      return fs.utimes(lock, stale, stale)
+    })
+    yield* write(`${tmp.path}/after-lock.txt`, "tracked after stale lock")
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+    expect(after).not.toBe(before)
+    expect(yield* exists(lock)).toBe(false)
+    const diffs = yield* snapshot.diffFull(before!, after!)
+    expect(diffs.some((x) => x.file === "after-lock.txt")).toBe(true)
+  }),
+  { git: true },
 )
 
 it.instance(

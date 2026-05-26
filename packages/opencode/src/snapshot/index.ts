@@ -1,4 +1,4 @@
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Option } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
@@ -31,6 +31,7 @@ export type FileDiff = typeof FileDiff.Type
 const log = Log.create({ service: "snapshot" })
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const staleLockAge = Duration.seconds(30)
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -165,6 +166,19 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
           const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
           const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
 
+          const removeStaleLock = Effect.fnUntraced(function* () {
+            const lockfile = path.join(state.gitdir, "index.lock")
+            const stat = yield* fs.stat(lockfile).pipe(Effect.catch(() => Effect.void))
+            if (!stat || stat.type !== "File") return
+            const age = Date.now() - Option.getOrElse(stat.mtime, () => new Date()).getTime()
+            if (age <= Duration.toMillis(staleLockAge)) return
+            yield* remove(lockfile)
+            log.warn("removed stale snapshot index lock", {
+              lock: lockfile,
+              age,
+            })
+          })
+
           const enabled = Effect.fnUntraced(function* () {
             if (state.vcs !== "git") return false
             return (yield* config.get()).snapshot !== false
@@ -194,6 +208,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
           })
 
           const add = Effect.fnUntraced(function* () {
+            yield* removeStaleLock()
             yield* sync()
             const [diff, other] = yield* Effect.all(
               [
@@ -263,6 +278,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
               Effect.gen(function* () {
                 if (!(yield* enabled())) return
                 if (!(yield* exists(state.gitdir))) return
+                yield* removeStaleLock()
                 const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
                 if (result.code !== 0) {
                   log.warn("cleanup failed", {
@@ -337,6 +353,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
           const restore = Effect.fnUntraced(function* (snapshot: string) {
             return yield* locked(
               Effect.gen(function* () {
+                yield* removeStaleLock()
                 log.info("restore", { commit: snapshot })
                 const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
                 if (result.code === 0) {
@@ -363,6 +380,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
           const revert = Effect.fnUntraced(function* (patches: Patch[]) {
             return yield* locked(
               Effect.gen(function* () {
+                yield* removeStaleLock()
                 const ops: { hash: string; file: string; rel: string }[] = []
                 const seen = new Set<string>()
                 for (const item of patches) {
@@ -498,6 +516,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
           const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
             return yield* locked(
               Effect.gen(function* () {
+                yield* removeStaleLock()
                 type Row = {
                   file: string
                   status: "added" | "deleted" | "modified"
