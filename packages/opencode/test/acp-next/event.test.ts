@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import type { Event, Message, OpencodeClient, Part, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import { ACPNextEvent } from "@/acp-next/event"
 import * as ACPNextService from "@/acp-next/service"
@@ -151,6 +151,18 @@ function partUpdated(sessionID: string, messageID: string, partID: string, type:
   }
 }
 
+function toolUpdated(part: ToolPart): Event {
+  return {
+    id: `evt_${part.sessionID}_${part.messageID}_${part.id}_${part.state.status}`,
+    type: "message.part.updated",
+    properties: {
+      sessionID: part.sessionID,
+      time: Date.now(),
+      part,
+    },
+  }
+}
+
 function assistantMessage(sessionID: string, messageID: string, partID: string, type: DeltaPartType) {
   return {
     info: {
@@ -186,6 +198,98 @@ function assistantMessage(sessionID: string, messageID: string, partID: string, 
           },
     ],
   } satisfies SessionMessageResponse
+}
+
+function assistantToolMessage(part: ToolPart) {
+  return {
+    info: {
+      id: part.messageID,
+      sessionID: part.sessionID,
+      role: "assistant",
+      time: { created: Date.now() },
+      parentID: "msg_parent",
+      modelID: "model",
+      providerID: "provider",
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/workspace", root: "/workspace" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    parts: [part],
+  } satisfies SessionMessageResponse
+}
+
+function runningTool(
+  sessionID: string,
+  callID: string,
+  output?: string,
+  input: Record<string, unknown> = { cmd: "printf hello" },
+) {
+  return {
+    id: `part_${callID}`,
+    sessionID,
+    messageID: `msg_${callID}`,
+    type: "tool",
+    callID,
+    tool: "bash",
+    state: {
+      status: "running",
+      input,
+      title: "bash",
+      ...(output !== undefined ? { metadata: { output } } : {}),
+      time: { start: Date.now() },
+    },
+  } satisfies ToolPart
+}
+
+function completedTool(
+  sessionID: string,
+  callID: string,
+  output = "done",
+  attachments: Extract<ToolPart["state"], { status: "completed" }>["attachments"] = [],
+) {
+  return {
+    id: `part_${callID}`,
+    sessionID,
+    messageID: `msg_${callID}`,
+    type: "tool",
+    callID,
+    tool: "bash",
+    state: {
+      status: "completed",
+      input: { cmd: "printf done" },
+      output,
+      title: "bash",
+      metadata: { exit: 0 },
+      time: { start: Date.now() - 1, end: Date.now() },
+      ...(attachments.length ? { attachments } : {}),
+    },
+  } satisfies ToolPart
+}
+
+function errorTool(sessionID: string, callID: string) {
+  return {
+    id: `part_${callID}`,
+    sessionID,
+    messageID: `msg_${callID}`,
+    type: "tool",
+    callID,
+    tool: "bash",
+    state: {
+      status: "error",
+      input: { cmd: "exit 1" },
+      error: "failed hard",
+      metadata: { exit: 1 },
+      time: { start: Date.now() - 1, end: Date.now() },
+    },
+  } satisfies ToolPart
+}
+
+function toolUpdates(updates: SessionUpdateParams[]) {
+  return updates.filter(
+    (item) => item.update.sessionUpdate === "tool_call" || item.update.sessionUpdate === "tool_call_update",
+  )
 }
 
 async function createKnownSession(
@@ -324,5 +428,148 @@ describe("acp-next event routing", () => {
     await harness.subscription.handle(textDelta("ses_user", "msg_user", "part_user", "hello"))
 
     expect(harness.updates).toHaveLength(0)
+  })
+
+  it("emits synthetic pending before the first running tool update", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_tool", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(runningTool("ses_tool", "call_1", "hello")))
+
+    expect(toolUpdates(harness.updates).map((item) => item.update.sessionUpdate)).toEqual([
+      "tool_call",
+      "tool_call_update",
+    ])
+    expect(harness.updates[0]?.update).toMatchObject({ status: "pending", toolCallId: "call_1" })
+    expect(harness.updates[1]?.update).toMatchObject({ status: "in_progress", toolCallId: "call_1" })
+  })
+
+  it("does not emit duplicate synthetic pending after a replayed running tool", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_replay", cwd: "/workspace" }))
+
+    await harness.subscription.replayMessage(assistantToolMessage(runningTool("ses_replay", "call_replay", "first")))
+    await harness.subscription.handle(toolUpdated(runningTool("ses_replay", "call_replay", "second")))
+
+    expect(toolUpdates(harness.updates).filter((item) => item.update.sessionUpdate === "tool_call")).toHaveLength(1)
+    expect(toolUpdates(harness.updates).map((item) => item.update.sessionUpdate)).toEqual([
+      "tool_call",
+      "tool_call_update",
+      "tool_call_update",
+    ])
+  })
+
+  it("dedupes shell output snapshots while still sending status-only running updates", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_shell", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(runningTool("ses_shell", "call_shell", "same")))
+    await harness.subscription.handle(toolUpdated(runningTool("ses_shell", "call_shell", "same")))
+
+    const updates = toolUpdates(harness.updates)
+    expect(updates).toHaveLength(3)
+    expect(updates[1]?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      content: [{ type: "content", content: { type: "text", text: "same" } }],
+    })
+    expect(updates[2]?.update).toMatchObject({ sessionUpdate: "tool_call_update", status: "in_progress" })
+    expect("content" in updates[2]!.update).toBe(false)
+  })
+
+  it("clears shell snapshot marker when a tool returns to pending", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_pending", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(runningTool("ses_pending", "call_pending", "repeat")))
+    await harness.subscription.handle(
+      toolUpdated({
+        id: "part_call_pending",
+        sessionID: "ses_pending",
+        messageID: "msg_call_pending",
+        type: "tool",
+        callID: "call_pending",
+        tool: "bash",
+        state: {
+          status: "pending",
+          input: { cmd: "printf repeat" },
+          raw: '{"cmd":"printf repeat"}',
+        },
+      }),
+    )
+    await harness.subscription.handle(toolUpdated(runningTool("ses_pending", "call_pending", "repeat")))
+
+    expect(
+      toolUpdates(harness.updates)
+        .filter((item) => item.update.sessionUpdate === "tool_call_update")
+        .map((item) => ("content" in item.update ? item.update.content : undefined)),
+    ).toEqual([
+      [{ type: "content", content: { type: "text", text: "repeat" } }],
+      [{ type: "content", content: { type: "text", text: "repeat" } }],
+    ])
+  })
+
+  it("emits completed tool output and rawOutput", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_done", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(completedTool("ses_done", "call_done", "finished")))
+
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_done",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "finished" } }],
+      rawOutput: { output: "finished", metadata: { exit: 0 } },
+    })
+  })
+
+  it("emits error tool output", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_error", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(errorTool("ses_error", "call_error")))
+
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_error",
+      status: "failed",
+      content: [{ type: "content", content: { type: "text", text: "failed hard" } }],
+      rawOutput: { error: "failed hard", metadata: { exit: 1 } },
+    })
+  })
+
+  it("emits image attachments as ACP image content for live and replayed completed tool updates", async () => {
+    const harness = createHarness()
+    const image = Buffer.from("image-data").toString("base64")
+    const attachment = {
+      id: "file_image",
+      sessionID: "ses_image",
+      messageID: "msg_image",
+      type: "file",
+      mime: "image/png",
+      filename: "image.png",
+      url: `data:image/png;base64,${image}`,
+    } as const
+    await Effect.runPromise(harness.session.create({ id: "ses_image", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(completedTool("ses_image", "call_live", "live", [attachment])))
+    await harness.subscription.replayMessage(
+      assistantToolMessage(completedTool("ses_image", "call_replayed", "replayed", [attachment])),
+    )
+
+    expect(
+      toolUpdates(harness.updates)
+        .filter((item) => item.update.sessionUpdate === "tool_call_update" && item.update.status === "completed")
+        .map((item) => ("content" in item.update ? item.update.content : [])),
+    ).toEqual([
+      [
+        { type: "content", content: { type: "text", text: "live" } },
+        { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
+      ],
+      [
+        { type: "content", content: { type: "text", text: "replayed" } },
+        { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
+      ],
+    ])
   })
 })

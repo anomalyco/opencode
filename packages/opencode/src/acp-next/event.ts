@@ -7,9 +7,18 @@ import type {
   OpencodeClient,
   Part,
   SessionMessageResponse,
+  ToolPart,
 } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
 import { ACPNextSession } from "./session"
+import {
+  duplicateRunningToolUpdate,
+  errorToolUpdate,
+  pendingToolCall,
+  runningToolUpdate,
+  shellOutputSnapshot,
+  completedToolUpdate,
+} from "./tool"
 
 const log = Log.create({ service: "acp-next-event" })
 
@@ -29,6 +38,8 @@ export function start(input: { sdk: OpencodeClient; connection: Connection; sess
 
 export class Subscription {
   private readonly abort = new AbortController()
+  private readonly shellSnapshots = new Map<string, string>()
+  private readonly toolStarts = new Set<string>()
   private started = false
 
   constructor(
@@ -58,6 +69,17 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+    }
+  }
+
+  async replayMessage(message: SessionMessageResponse) {
+    if (message.info.role !== "assistant" && message.info.role !== "user") return
+
+    for (const part of message.parts) {
+      await this.recordFetchedPart(message.info.sessionID, message, part)
+      if (part.type === "tool") {
+        await this.handleToolPart(message.info.sessionID, part)
+      }
     }
   }
 
@@ -96,6 +118,9 @@ export class Subscription {
         metadata: "metadata" in part ? part.metadata : undefined,
       }),
     )
+    if (part.type === "tool") {
+      await this.handleToolPart(session.id, part)
+    }
   }
 
   private async handlePartDelta(event: EventMessagePartDelta) {
@@ -180,6 +205,106 @@ export class Subscription {
         metadata: "metadata" in part ? part.metadata : undefined,
       }),
     )
+  }
+
+  private async handleToolPart(sessionId: string, part: ToolPart) {
+    await this.toolStart(sessionId, part)
+
+    switch (part.state.status) {
+      case "pending":
+        this.shellSnapshots.delete(part.callID)
+        return
+
+      case "running":
+        await this.runningTool(sessionId, part)
+        return
+
+      case "completed":
+        this.clearTool(part.callID)
+        await this.input.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...completedToolUpdate({
+              toolCallId: part.callID,
+              toolName: part.tool,
+              state: part.state,
+            }),
+          },
+        })
+        return
+
+      case "error":
+        this.clearTool(part.callID)
+        await this.input.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...errorToolUpdate({
+              toolCallId: part.callID,
+              toolName: part.tool,
+              state: part.state,
+            }),
+          },
+        })
+        return
+    }
+  }
+
+  private async runningTool(sessionId: string, part: ToolPart) {
+    if (part.state.status !== "running") return
+
+    const output = part.tool === "bash" ? shellOutputSnapshot(part.state) : undefined
+    if (output !== undefined) {
+      if (this.shellSnapshots.get(part.callID) === output) {
+        await this.input.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            ...duplicateRunningToolUpdate({
+              toolCallId: part.callID,
+              toolName: part.tool,
+              state: part.state,
+            }),
+          },
+        })
+        return
+      }
+      this.shellSnapshots.set(part.callID, output)
+    }
+
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "tool_call_update",
+        ...runningToolUpdate({
+          toolCallId: part.callID,
+          toolName: part.tool,
+          state: part.state,
+          output,
+        }),
+      },
+    })
+  }
+
+  private async toolStart(sessionId: string, part: ToolPart) {
+    if (this.toolStarts.has(part.callID)) return
+    this.toolStarts.add(part.callID)
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "tool_call",
+        ...pendingToolCall({
+          toolCallId: part.callID,
+          toolName: part.tool,
+        }),
+      },
+    })
+  }
+
+  private clearTool(toolCallId: string) {
+    this.toolStarts.delete(toolCallId)
+    this.shellSnapshots.delete(toolCallId)
   }
 }
 

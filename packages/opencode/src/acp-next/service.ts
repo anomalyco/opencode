@@ -31,7 +31,7 @@ import {
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
-import type { Message, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPNextError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
@@ -77,10 +77,10 @@ export function make(input: {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
-  if (input.connection) {
-    const subscription = ACPNextEvent.start({ sdk: input.sdk, connection: input.connection, session })
-    input.eventSubscription?.(subscription)
-  }
+  const events = input.connection
+    ? ACPNextEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    : undefined
+  if (events) input.eventSubscription?.(events)
 
   const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
     const authMethod: AuthMethod = {
@@ -207,6 +207,7 @@ export function make(input: {
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
+    yield* replayMessages(events, messages)
 
     return {
       configOptions: configOptions(snapshot, {
@@ -276,6 +277,7 @@ export function make(input: {
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
+    yield* replayMessages(events, messages)
 
     return {
       configOptions: configOptions(snapshot, {
@@ -335,6 +337,7 @@ export function make(input: {
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
+    yield* replayMessages(events, messages)
 
     return {
       sessionId: state.id,
@@ -468,6 +471,14 @@ function makeDirectoryService(sdk: OpencodeClient) {
       ),
     ),
   ).runSync(Directory.Service.use((service) => Effect.succeed(service)))
+}
+
+function replayMessages(subscription: ACPNextEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
+  if (!subscription) return Effect.void
+  return Effect.tryPromise({
+    try: () => Promise.all(messages.map((message) => subscription.replayMessage(message))).then(() => undefined),
+    catch: (error) => fromUnknownError(error, "event"),
+  })
 }
 
 type ConfigState = {
