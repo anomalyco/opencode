@@ -9,6 +9,7 @@ import { Skill } from "@/skill"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { ApiVcsApplyError } from "../groups/instance"
 import { markInstanceForDisposal } from "../lifecycle"
 
 export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance", (handlers) =>
@@ -37,12 +38,39 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     })
 
     const getVcs = Effect.fn("InstanceHttpApi.vcs")(function* () {
-      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
+      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
+        concurrency: "unbounded",
+      })
       return { branch, default_branch }
     })
 
-    const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: { query: { mode: Vcs.Mode } }) {
-      return yield* vcs.diff(ctx.query.mode)
+    const getVcsStatus = Effect.fn("InstanceHttpApi.vcsStatus")(function* () {
+      return yield* vcs.status()
+    })
+
+    const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: {
+      query: { mode: Vcs.Mode; context?: number }
+    }) {
+      return yield* vcs.diff(ctx.query.mode, { context: ctx.query.context })
+    })
+
+    const getVcsDiffRaw = Effect.fn("InstanceHttpApi.vcsDiffRaw")(function* () {
+      return yield* vcs.diffRaw()
+    })
+
+    const applyVcs = Effect.fn("InstanceHttpApi.vcsApply")(function* (ctx: { payload: Vcs.ApplyInput }) {
+      return yield* vcs.apply(ctx.payload).pipe(
+        Effect.mapError(
+          (error) =>
+            new ApiVcsApplyError({
+              name: "VcsApplyError",
+              data: {
+                message: error.message,
+                reason: error.reason,
+              },
+            }),
+        ),
+      )
     })
 
     const getCommand = Effect.fn("InstanceHttpApi.command")(function* () {
@@ -69,7 +97,10 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("dispose", dispose)
       .handle("path", getPath)
       .handle("vcs", getVcs)
+      .handle("vcsStatus", getVcsStatus)
       .handle("vcsDiff", getVcsDiff)
+      .handle("vcsDiffRaw", getVcsDiffRaw)
+      .handle("vcsApply", applyVcs)
       .handle("command", getCommand)
       .handle("agent", getAgent)
       .handle("skill", getSkill)

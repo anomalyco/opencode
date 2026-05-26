@@ -1,50 +1,51 @@
-import { z } from "zod"
 import type { Model } from "@opencode-ai/sdk/v2"
+import { Schema } from "effect"
 
-export const schema = z.object({
-  data: z.array(
-    z.object({
-      model_picker_enabled: z.boolean(),
-      id: z.string(),
-      name: z.string(),
+export const schema = Schema.Struct({
+  data: Schema.Array(
+    Schema.Struct({
+      model_picker_enabled: Schema.Boolean,
+      id: Schema.String,
+      name: Schema.String,
       // every version looks like: `{model.id}-YYYY-MM-DD`
-      version: z.string(),
-      supported_endpoints: z.array(z.string()).optional(),
-      policy: z
-        .object({
-          state: z.string().optional(),
-        })
-        .optional(),
-      capabilities: z.object({
-        family: z.string(),
-        limits: z.object({
-          max_context_window_tokens: z.number(),
-          max_output_tokens: z.number(),
-          max_prompt_tokens: z.number(),
-          vision: z
-            .object({
-              max_prompt_image_size: z.number(),
-              max_prompt_images: z.number(),
-              supported_media_types: z.array(z.string()),
-            })
-            .optional(),
+      version: Schema.String,
+      supported_endpoints: Schema.optional(Schema.Array(Schema.String)),
+      policy: Schema.optional(
+        Schema.Struct({
+          state: Schema.optional(Schema.String),
         }),
-        supports: z.object({
-          adaptive_thinking: z.boolean().optional(),
-          max_thinking_budget: z.number().optional(),
-          min_thinking_budget: z.number().optional(),
-          reasoning_effort: z.array(z.string()).optional(),
-          streaming: z.boolean(),
-          structured_outputs: z.boolean().optional(),
-          tool_calls: z.boolean(),
-          vision: z.boolean().optional(),
+      ),
+      capabilities: Schema.Struct({
+        family: Schema.String,
+        limits: Schema.Struct({
+          max_context_window_tokens: Schema.Number,
+          max_output_tokens: Schema.Number,
+          max_prompt_tokens: Schema.Number,
+          vision: Schema.optional(
+            Schema.Struct({
+              max_prompt_image_size: Schema.Number,
+              max_prompt_images: Schema.Number,
+              supported_media_types: Schema.Array(Schema.String),
+            }),
+          ),
+        }),
+        supports: Schema.Struct({
+          adaptive_thinking: Schema.optional(Schema.Boolean),
+          max_thinking_budget: Schema.optional(Schema.Number),
+          min_thinking_budget: Schema.optional(Schema.Number),
+          reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
+          streaming: Schema.Boolean,
+          structured_outputs: Schema.optional(Schema.Boolean),
+          tool_calls: Schema.Boolean,
+          vision: Schema.optional(Schema.Boolean),
         }),
       }),
     }),
   ),
 })
 
-type Item = z.infer<typeof schema>["data"][number]
+type Item = Schema.Schema.Type<typeof schema>["data"][number]
+const decodeModels = Schema.decodeUnknownSync(schema)
 
 function build(key: string, remote: Item, url: string, prev?: Model): Model {
   const reasoning =
@@ -165,7 +166,7 @@ export async function get(
     if (!res.ok) {
       throw new Error(`Failed to fetch models: ${res.status}`)
     }
-    return schema.parse(await res.json())
+    return decodeModels(await res.json())
   })
 
   const result = { ...existing }

@@ -9,15 +9,25 @@ export default $config({
       home: "cloudflare",
       providers: {
         stripe: {
+          version: "0.0.28",
           apiKey: process.env.STRIPE_SECRET_KEY!,
         },
+        random: "4.19.2",
         planetscale: "0.4.1",
+        honeycomb: "0.49.0",
       },
     }
   },
   async run() {
     await import("./infra/app.js")
-    await import("./infra/console.js")
+    const { stat } = await import("./infra/console.js")
     await import("./infra/enterprise.js")
+    if ($app.stage === "production" || $app.stage === "vimtor") {
+      await import("./infra/monitoring.js")
+    }
+
+    return {
+      StatWorkerUrl: stat.url,
+    }
   },
 })

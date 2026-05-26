@@ -3,6 +3,7 @@ export * from "./gen/types.gen.js"
 import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
+import { wrapClientError } from "../error-interceptor.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
 
 function pick(value: string | null, fallback?: string, encode?: (value: string) => string) {
@@ -84,5 +85,6 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
 
     return response
   })
+  client.interceptors.error.use(wrapClientError)
   return new OpencodeClient({ client })
 }

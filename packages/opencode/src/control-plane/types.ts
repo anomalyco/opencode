@@ -1,28 +1,31 @@
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { ProjectID } from "@/project/schema"
+import type { InstanceContext } from "@/project/instance-context"
 import { WorkspaceID } from "./schema"
-import { zod } from "@/util/effect-zod"
-import { type DeepMutable, withStatics } from "@/util/schema"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 
 export const WorkspaceInfo = Schema.Struct({
   id: WorkspaceID,
   type: Schema.String,
   name: Schema.String,
-  branch: Schema.NullOr(Schema.String),
-  directory: Schema.NullOr(Schema.String),
-  extra: Schema.NullOr(Schema.Unknown),
+  branch: Schema.optional(Schema.NullOr(Schema.String)),
+  directory: Schema.optional(Schema.NullOr(Schema.String)),
+  extra: Schema.optional(Schema.NullOr(Schema.Unknown)),
   projectID: ProjectID,
-})
-  .annotate({ identifier: "Workspace" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Workspace" })
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>
 
-export const WorkspaceAdaptorEntry = Schema.Struct({
+export const WorkspaceListedInfo = Schema.Struct(Struct.omit(WorkspaceInfo.fields, ["id"])).annotate({
+  identifier: "WorkspaceListedInfo",
+})
+export type WorkspaceListedInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceListedInfo>>
+
+export const WorkspaceAdapterEntry = Schema.Struct({
   type: Schema.String,
   name: Schema.String,
   description: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
-export type WorkspaceAdaptorEntry = Schema.Schema.Type<typeof WorkspaceAdaptorEntry>
+})
+export type WorkspaceAdapterEntry = Schema.Schema.Type<typeof WorkspaceAdapterEntry>
 
 export type Target =
   | {
@@ -35,11 +38,22 @@ export type Target =
       headers?: HeadersInit
     }
 
-export type WorkspaceAdaptor = {
+export type WorkspaceAdapterContext = {
+  readonly instance?: InstanceContext
+  readonly workspaceID?: WorkspaceID
+}
+
+export type WorkspaceAdapter = {
   name: string
   description: string
-  configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(info: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
-  remove(info: WorkspaceInfo): Promise<void>
-  target(info: WorkspaceInfo): Target | Promise<Target>
+  configure(info: WorkspaceInfo, context?: WorkspaceAdapterContext): WorkspaceInfo | Promise<WorkspaceInfo>
+  create(
+    info: WorkspaceInfo,
+    env: Record<string, string | undefined>,
+    from?: WorkspaceInfo,
+    context?: WorkspaceAdapterContext,
+  ): Promise<void>
+  list?(context?: WorkspaceAdapterContext): WorkspaceListedInfo[] | Promise<WorkspaceListedInfo[]>
+  remove(info: WorkspaceInfo, context?: WorkspaceAdapterContext): Promise<void>
+  target(info: WorkspaceInfo, context?: WorkspaceAdapterContext): Target | Promise<Target>
 }
