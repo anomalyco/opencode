@@ -1,20 +1,33 @@
 import { describe, expect, spyOn, test } from "bun:test"
+import { Effect, Layer } from "effect"
+import * as Stream from "effect/Stream"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LLMEvent } from "@opencode-ai/llm"
 import type { Agent } from "../../src/agent/agent"
-import { Identifier } from "../../src/id/id"
+import { Agent as AgentSvc } from "../../src/agent/agent"
+import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { Image } from "../../src/image/image"
+import { Permission } from "../../src/permission"
+import { Plugin } from "../../src/plugin"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "../../src/provider/provider"
-import { Instance } from "../../src/project/instance"
-import { Session } from "../../src/session"
-import { SessionCompaction } from "../../src/session/compaction"
+import { Snapshot } from "../../src/snapshot"
+import { Session as SessionNs } from "../../src/session/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
+import { MessageID } from "../../src/session/schema"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionRetry } from "../../src/session/retry"
+import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
-import { tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance } from "../fixture/fixture"
 
 const model: Provider.Model = {
-  id: "test-model",
-  providerID: "test",
+  id: ModelID.make("test-model"),
+  providerID: ProviderID.make("test"),
   api: {
     id: "test-model",
     url: "https://example.com",
@@ -70,7 +83,7 @@ const agent = {
 
 function user(id: string, session: string): MessageV2.User {
   return {
-    id,
+    id: MessageID.make(id),
     sessionID: session,
     role: "user",
     time: { created: Date.now() },
@@ -83,10 +96,10 @@ function user(id: string, session: string): MessageV2.User {
 
 function assistant(id: string, session: string, parent: string): MessageV2.Assistant {
   return {
-    id,
+    id: MessageID.make(id),
     sessionID: session,
     role: "assistant",
-    parentID: parent,
+    parentID: MessageID.make(parent),
     time: { created: Date.now() },
     modelID: model.id,
     providerID: model.providerID,
@@ -103,7 +116,7 @@ function assistant(id: string, session: string, parent: string): MessageV2.Assis
   } as unknown as MessageV2.Assistant
 }
 
-function stalled<T>(chunks: T[], cancel: () => void): AsyncIterable<T> {
+function stalled(chunks: LLMEvent[], cancel: () => void): AsyncIterable<LLMEvent> {
   return {
     [Symbol.asyncIterator]() {
       let index = 0
@@ -112,7 +125,7 @@ function stalled<T>(chunks: T[], cancel: () => void): AsyncIterable<T> {
           if (index < chunks.length) {
             return { done: false, value: chunks[index++] }
           }
-          return new Promise<IteratorResult<T>>(() => {})
+          return new Promise<IteratorResult<LLMEvent>>(() => {})
         },
         async return() {
           cancel()
@@ -123,57 +136,94 @@ function stalled<T>(chunks: T[], cancel: () => void): AsyncIterable<T> {
   }
 }
 
-async function process(stream: AsyncIterable<unknown>) {
-  await using tmp = await tmpdir({
-    git: true,
-  })
+async function process(stream: AsyncIterable<LLMEvent>, override?: { model?: Provider.Model }) {
+  let calls = 0
+  const abort = new AbortController()
+  const delay = spyOn(SessionRetry, "delay").mockImplementation(() => 1)
+  try {
+    const program = provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const session = yield* SessionNs.Service
+          const processors = yield* SessionProcessor.Service
+          const created = yield* session.create({})
+          const parent = MessageID.ascending()
+          const message = MessageID.ascending()
+          const testModel = override?.model ?? model
+          const current = user(parent, created.id)
+          const assistantMessage = yield* session.updateMessage(assistant(message, created.id, parent))
+          const processor = yield* processors.create({
+            assistantMessage: assistantMessage as MessageV2.Assistant,
+            sessionID: created.id,
+            model: testModel,
+            abort: abort.signal,
+            timeout: {
+              firstByte: 5,
+              idle: 5,
+            },
+          })
+          const result = yield* processor.process({
+            user: current,
+            sessionID: created.id,
+            model: testModel,
+            agent,
+            system: [],
+            messages: [],
+            tools: {},
+          })
+          return {
+            result,
+            calls,
+            assistantMessage: processor.message,
+            parts: MessageV2.parts(message),
+          }
+        }),
+      { git: true },
+    ).pipe(Effect.provide(testLayer(stream, () => calls++)))
+    return await Effect.runPromise(Effect.scoped(program))
+  } finally {
+    delay.mockRestore()
+  }
+}
 
-  return Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const session = await Session.create({})
-      const parent = Identifier.ascending("message")
-      const message = Identifier.ascending("message")
-      const abort = new AbortController()
-      const current = user(parent, session.id)
-      const processor = SessionProcessor.create({
-        assistantMessage: (await Session.updateMessage(assistant(message, session.id, parent))) as MessageV2.Assistant,
-        sessionID: session.id,
-        model,
-        abort: abort.signal,
-        timeout: {
-          firstByte: 5,
-          idle: 5,
-        },
-      })
-      const delay = spyOn(SessionRetry, "delay").mockImplementation(() => 1)
-      const llm = spyOn(LLM, "stream").mockImplementation(async () => {
-        return { fullStream: stream } as unknown as Awaited<ReturnType<typeof LLM.stream>>
-      })
-      try {
-        const result = await processor.process({
-          user: current,
-          sessionID: session.id,
-          model,
-          agent,
-          system: [],
-          abort: abort.signal,
-          messages: [],
-          tools: {},
-        })
-        return {
-          result,
-          calls: llm.mock.calls.length,
-          message: processor.message,
-          parts: await MessageV2.parts(message),
-        }
-      } finally {
-        delay.mockRestore()
-        llm.mockRestore()
-        await Session.remove(session.id)
-      }
-    },
-  })
+function testLayer(stream: AsyncIterable<LLMEvent>, called: () => void) {
+  const llm = Layer.succeed(
+    LLM.Service,
+    LLM.Service.of({
+      stream: () => {
+        called()
+        return Stream.fromAsyncIterable(stream, (error) => error)
+      },
+    }),
+  )
+  const summary = Layer.succeed(
+    SessionSummary.Service,
+    SessionSummary.Service.of({
+      summarize: () => Effect.void,
+      diff: () => Effect.succeed([]),
+      computeDiff: () => Effect.succeed([]),
+    }),
+  )
+  const deps = Layer.mergeAll(
+    SessionNs.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Snapshot.defaultLayer,
+    AgentSvc.defaultLayer,
+    Permission.defaultLayer,
+    Plugin.defaultLayer,
+    SessionStatus.defaultLayer,
+    Bus.layer,
+    Config.defaultLayer,
+    RuntimeFlags.layer({ experimentalEventSystem: true }),
+    EventV2Bridge.defaultLayer,
+  )
+  const processor = SessionProcessor.layer.pipe(
+    Layer.provide(llm),
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provideMerge(deps),
+  )
+  return Layer.mergeAll(deps, processor)
 }
 
 describe("session.processor stream watchdog", () => {
@@ -184,8 +234,8 @@ describe("session.processor stream watchdog", () => {
     expect(output.result).toBe("stop")
     expect(output.calls).toBe(SessionProcessor.RETRY_MAX + 1)
     expect(canceled).toBe(SessionProcessor.RETRY_MAX + 1)
-    expect(output.message.error?.name).toBe("APIError")
-    expect(output.message.error?.data.message).toContain("Stream first byte timed out")
+    expect(output.assistantMessage.error?.name).toBe("APIError")
+    expect(errorMessage(output.assistantMessage.error?.data)).toContain("Stream first byte timed out")
   })
 
   test("retries and stops when stream idles after first chunk", async () => {
@@ -193,9 +243,9 @@ describe("session.processor stream watchdog", () => {
     const output = await process(
       stalled(
         [
-          { type: "text-start" },
-          { type: "text-delta", text: "hello" },
-          { type: "text-end" },
+          LLMEvent.textStart({ id: "text-0" }),
+          LLMEvent.textDelta({ id: "text-0", text: "hello" }),
+          LLMEvent.textEnd({ id: "text-0" }),
         ],
         () => canceled++,
       ),
@@ -204,44 +254,40 @@ describe("session.processor stream watchdog", () => {
     expect(output.result).toBe("stop")
     expect(output.calls).toBe(SessionProcessor.RETRY_MAX + 1)
     expect(canceled).toBe(SessionProcessor.RETRY_MAX + 1)
-    expect(output.message.error?.name).toBe("APIError")
-    expect(output.message.error?.data.message).toContain("Stream idle timed out")
+    expect(output.assistantMessage.error?.name).toBe("APIError")
+    expect(errorMessage(output.assistantMessage.error?.data)).toContain("Stream idle timed out")
     expect(output.parts.some((part) => part.type === "text" && part.text.includes("hello"))).toBe(true)
   })
 
   test("closes provider stream when compaction exits stream early", async () => {
     let canceled = 0
-    const overflow = spyOn(SessionCompaction, "isOverflow").mockImplementation(async () => true)
-    const summary = spyOn(SessionSummary, "summarize").mockImplementation(
-      Object.assign(async () => {}, {
-        force: SessionSummary.summarize.force,
-        schema: SessionSummary.summarize.schema,
-      }),
-    )
-    try {
-      const output = await process(
-        stalled(
-          [
-            {
-              type: "finish-step",
-              finishReason: "stop",
-              usage: {
-                inputTokens: 1,
-                outputTokens: 1,
-                totalTokens: 2,
-              },
+    const compactModel: Provider.Model = { ...model, limit: { ...model.limit, context: 1, output: 0 } }
+    const output = await process(
+      stalled(
+        [
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: "stop",
+            usage: {
+              inputTokens: 1,
+              outputTokens: 1,
+              totalTokens: 2,
             },
-          ],
-          () => canceled++,
-        ),
-      )
+          }),
+        ],
+        () => canceled++,
+      ),
+      { model: compactModel },
+    )
 
-      expect(output.result).toBe("compact")
-      expect(output.calls).toBe(1)
-      expect(canceled).toBe(1)
-    } finally {
-      summary.mockRestore()
-      overflow.mockRestore()
-    }
+    expect(output.result).toBe("compact")
+    expect(output.calls).toBe(1)
+    expect(canceled).toBe(1)
   })
 })
+
+function errorMessage(data: unknown) {
+  if (!data || typeof data !== "object") return ""
+  if (!("message" in data)) return ""
+  return typeof data.message === "string" ? data.message : ""
+}

@@ -1,5 +1,5 @@
 import { Image } from "@/image/image"
-import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Schedule, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -31,6 +31,9 @@ import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
+export const RETRY_MAX = 3
+export const STREAM_FIRST_BYTE_TIMEOUT = 30_000
+export const STREAM_IDLE_TIMEOUT = 120_000
 
 export type Result = "compact" | "stop" | "continue"
 
@@ -56,6 +59,12 @@ type Input = {
   assistantMessage: MessageV2.Assistant
   sessionID: SessionID
   model: Provider.Model
+  abort?: AbortSignal
+  retryMax?: number
+  timeout?: {
+    firstByte?: number
+    idle?: number
+  }
 }
 
 export interface Interface {
@@ -81,6 +90,64 @@ interface ProcessorContext extends Input {
 }
 
 type StreamEvent = LLMEvent
+
+async function next<T>(input: {
+  iterator: AsyncIterator<T>
+  abort?: AbortSignal
+  timeout: number
+  message: string
+}) {
+  input.abort?.throwIfAborted()
+  let id: ReturnType<typeof setTimeout> | undefined
+  let listener: (() => void) | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    id = setTimeout(() => reject(new DOMException(input.message, "TimeoutError")), input.timeout)
+    listener = () => reject(input.abort?.reason ?? new DOMException("Aborted", "AbortError"))
+    input.abort?.addEventListener("abort", listener, { once: true })
+  })
+  try {
+    return await Promise.race([input.iterator.next(), timeout])
+  } finally {
+    if (id) clearTimeout(id)
+    if (listener) input.abort?.removeEventListener("abort", listener)
+  }
+}
+
+function watchStream<T>(
+  stream: Stream.Stream<T, unknown>,
+  input: {
+    abort?: AbortSignal
+    firstByte: number
+    idle: number
+  },
+) {
+  return Stream.fromAsyncIterable(
+    {
+      async *[Symbol.asyncIterator]() {
+        const iterator = Stream.toAsyncIterable(stream)[Symbol.asyncIterator]()
+        let started = false
+        try {
+          while (true) {
+            const result = await next({
+              iterator,
+              abort: input.abort,
+              timeout: started ? input.idle : input.firstByte,
+              message: started
+                ? `Stream idle timed out after ${input.idle}ms`
+                : `Stream first byte timed out after ${input.firstByte}ms`,
+            })
+            if (result.done) return
+            started = true
+            yield result.value
+          }
+        } finally {
+          await iterator.return?.()
+        }
+      },
+    },
+    (error) => error,
+  )
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -787,7 +854,11 @@ export const layer = Layer.effect(
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+            const stream = watchStream(llm.stream(streamInput), {
+              abort: input.abort,
+              firstByte: input.timeout?.firstByte ?? STREAM_FIRST_BYTE_TIMEOUT,
+              idle: input.timeout?.idle ?? STREAM_IDLE_TIMEOUT,
+            })
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
@@ -836,7 +907,7 @@ export const layer = Layer.effect(
                     ),
                   )
                 },
-              }),
+              }).pipe(Schedule.both(Schedule.recurs(input.retryMax ?? RETRY_MAX))),
             ),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),

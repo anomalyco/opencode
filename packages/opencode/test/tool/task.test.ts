@@ -368,7 +368,11 @@ describe("tool.task", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
-        expect(Cause.squash(exit.cause).message).toBe("Invalid subagent timeout value: 0. Timeout must be greater than 0.")
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Error)
+        if (error instanceof Error) {
+          expect(error.message).toBe("Invalid subagent timeout value: 0. Timeout must be greater than 0.")
+        }
       }
     }),
   )
@@ -415,7 +419,11 @@ describe("tool.task", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       expect(yield* Effect.promise(() => cancelled.promise)).toStartWith("ses_")
       if (Exit.isFailure(exit)) {
-        expect(Cause.squash(exit.cause).message).toBe("Subagent timed out after 5ms")
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Error)
+        if (error instanceof Error) {
+          expect(error.message).toBe("Subagent timed out after 5ms")
+        }
       }
     }),
   )
