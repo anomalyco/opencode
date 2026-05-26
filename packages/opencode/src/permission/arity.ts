@@ -41,6 +41,8 @@ const ARITY: Record<string, number> = {
   pwd: 1, // pwd
   rm: 1, // rm file.txt
   rmdir: 1, // rmdir empty-dir
+  rtk: 2, // rtk env
+  "rtk git": 3, // rtk git clone
   sleep: 1, // sleep 5
   source: 1, // source ~/.bashrc
   tail: 1, // tail -f log.txt
