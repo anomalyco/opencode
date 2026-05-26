@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { Marked } from "marked"
 import { fileLink } from "./markdown"
+import { protectMathExpressions, renderMathExpressions } from "../context/marked"
 
 describe("markdown fileLink", () => {
   test("parses relative file paths", () => {
@@ -49,5 +51,84 @@ describe("markdown fileLink", () => {
 
   test("ignores inline code commands containing file paths", () => {
     expect(fileLink("pytest tests/test_backend.py tests/test_operator_spaces.py -q")).toBeUndefined()
+  })
+})
+
+describe("markdown math", () => {
+  test("protects display math from markdown block parsing", () => {
+    const markdown = `好的，本题已完成。核心结果是：
+
+$$
+n_k(a)
+=
+\\sum_{r=0}^{k}
+\\frac{B_r}{r!}
+E_{k+1-r}\\left[\\begin{matrix}-1\\\\ ab\\end{matrix}\\right]
++
+p(a),
+\\qquad
+p(aq)=p(a),
+$$`
+
+    const html = protectMathExpressions(markdown)
+
+    expect(html).toContain('data-opencode-math-style="display"')
+    expect(html).toContain("n_k(a)&#10;=&#10;&#92;sum")
+    expect(html).toContain("&#92;begin{matrix}-1&#92;&#92; ab&#92;end{matrix}")
+    expect(html).not.toContain("$$")
+  })
+
+  test("renders protected display math with relation and matrix rows", () => {
+    const protectedHtml =
+      '<p>核心结果是：</p><div data-opencode-math-style="display">n_k(a)\n=\nE_k\\left[\\begin{matrix}-1\\\\ ab\\end{matrix}\\right]</div>'
+
+    const html = renderMathExpressions(protectedHtml, "html")
+
+    expect(html).toContain("katex-display")
+    expect(html).toContain("mrel")
+    expect(html).toContain("mtable")
+  })
+
+  test("protects inline math commands before markdown parsing", () => {
+    const html = protectMathExpressions("约定 $E_0\\!\\left[\\substack{-1\\\\ z}\\right]=-1$ 下满足")
+
+    expect(html).toContain('data-opencode-math-style="inline"')
+    expect(html).toContain('data-opencode-math-tex="E_0&#92;!&#92;left')
+    expect(html).toContain("&#92;substack{-1&#92;&#92; z}")
+    expect(html).not.toContain("$E_0")
+  })
+
+  test("keeps inline math escapes through markdown parsing", async () => {
+    const marked = new Marked()
+    const protectedMarkdown = protectMathExpressions("约定 $E_0\\!\\left[\\substack{-1\\\\ z}\\right]=-1$ 下满足")
+    const parsed = await marked.parse(protectedMarkdown)
+    const html = renderMathExpressions(parsed, "html")
+
+    expect(parsed).toContain("data-opencode-math-tex")
+    expect(parsed).toContain("E_0&#92;!&#92;left")
+    expect(html).toContain("katex")
+    expect(html).toContain("mspace")
+    expect(html).toContain("vlist")
+    expect(html).not.toContain("E_0!")
+    expect(html).not.toContain("\\substack")
+  })
+
+  test("renders protected inline spacing and substack commands", () => {
+    const protectedHtml =
+      '<p>约定 <span data-math-style="inline">E_0\\!\\left[\\substack{-1\\\\ z}\\right]=-1</span> 下满足</p>'
+
+    const html = renderMathExpressions(protectedHtml, "html")
+
+    expect(html).toContain("katex")
+    expect(html).toContain("mspace")
+    expect(html).toContain("vlist")
+    expect(html).not.toContain("E_0!")
+    expect(html).not.toContain("\\substack")
+  })
+
+  test("does not protect inline math inside code", () => {
+    const html = protectMathExpressions("`$E_0[\\substack{-1\\\\ z}]=-1$`")
+
+    expect(html).toBe("`$E_0[\\substack{-1\\\\ z}]=-1$`")
   })
 })

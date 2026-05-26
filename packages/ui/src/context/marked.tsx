@@ -441,10 +441,13 @@ registerCustomTheme("OpenCode", () => {
 
 function unescapeHtmlEntities(text: string): string {
   return text
+    .replace(/&#10;/g, "\n")
+    .replace(/&#13;/g, "\r")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
+    .replace(/&#92;/g, "\\")
     .replace(/&#39;/g, "'")
 }
 
@@ -461,25 +464,129 @@ function stripMathHtml(text: string): string {
     .trim()
 }
 
-function normalizeDisplayMath(markdown: string): string {
+function escapeMathHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/\r/g, "&#13;")
+    .replace(/\n/g, "&#10;")
+    .replace(/\\/g, "&#92;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function mathPlaceholder(math: string, style: "display" | "inline") {
+  const tag = style === "display" ? "div" : "span"
+  return `<${tag} data-opencode-math-style="${style}" data-opencode-math-tex="${escapeMathHtml(math)}"></${tag}>`
+}
+
+export function protectMathExpressions(markdown: string): string {
   const block = /(```[\s\S]*?```|~~~[\s\S]*?~~~)/g
   const parts = markdown.split(block)
 
   return parts
     .map((part, i) => {
       if (i % 2 === 1) return part
-      return part
-        .replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => `\n$$\n${math.trim()}\n$$\n`)
-        .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `\n\\[\n${math.trim()}\n\\]\n`)
+      const displayProtected = part
+        .replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => {
+          const clean = math.trim()
+          return clean ? `\n\n${mathPlaceholder(clean, "display")}\n\n` : "$$$$"
+        })
+        .replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => {
+          const clean = math.trim()
+          return clean ? `\n\n${mathPlaceholder(clean, "display")}\n\n` : "\\[\\]"
+        })
+      return protectInlineMath(displayProtected)
     })
     .join("")
+}
+
+function escapedDollar(text: string, at: number) {
+  let slash = 0
+  for (let i = at - 1; i >= 0 && text[i] === "\\"; i--) slash++
+  return slash % 2 === 1
+}
+
+function rawInlineMathEnd(text: string, from: number) {
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === "<") {
+      const close = text.indexOf(">", i + 1)
+      if (close === -1) return
+      i = close
+      continue
+    }
+    if (ch !== "$" || escapedDollar(text, i)) continue
+    if (text[i + 1] === "$") {
+      i++
+      continue
+    }
+    if (/\s/.test(text[i - 1] ?? "")) continue
+    return i
+  }
+}
+
+function inlineCodeEnd(text: string, at: number) {
+  if (text[at] !== "`") return
+  let size = 0
+  while (text[at + size] === "`") size++
+  const mark = "`".repeat(size)
+  const end = text.indexOf(mark, at + size)
+  if (end === -1) return
+  return end + size
+}
+
+function protectInlineMath(text: string) {
+  let out = ""
+  let from = 0
+
+  for (let i = 0; i < text.length; i++) {
+    const code = inlineCodeEnd(text, i)
+    if (code) {
+      out += text.slice(from, code)
+      i = code - 1
+      from = code
+      continue
+    }
+
+    const ch = text[i]
+    if (ch === "<") {
+      const close = text.indexOf(">", i + 1)
+      if (close === -1) break
+      i = close
+      continue
+    }
+    if (ch !== "$" || escapedDollar(text, i)) continue
+    if (text[i + 1] === "$") {
+      const end = text.indexOf("$$", i + 2)
+      if (end === -1) continue
+      i = end + 1
+      continue
+    }
+    if (/\s/.test(text[i + 1] ?? "")) continue
+
+    const end = rawInlineMathEnd(text, i + 1)
+    if (!end) continue
+
+    const math = text.slice(i + 1, end)
+    if (!math.trim()) continue
+    out += text.slice(from, i)
+    out += mathPlaceholder(math, "inline")
+    i = end
+    from = end + 1
+  }
+
+  if (from === 0) return text
+  return out + text.slice(from)
 }
 
 function renderMathInText(text: string, output: MathOutput): string {
   const render = (math: string, displayMode: boolean, fallback: string) => {
     try {
+      const latex = unescapeHtmlEntities(math)
       return katex.renderToString(
-        displayMode ? stripEquationNumbers(unescapeHtmlEntities(math)) : unescapeHtmlEntities(math),
+        displayMode ? stripEquationNumbers(latex) : latex,
         {
           displayMode,
           output,
@@ -492,6 +599,14 @@ function renderMathInText(text: string, output: MathOutput): string {
   }
 
   let result = text
+
+  result = result.replace(
+    /<(span|div) data-opencode-math-style="(inline|display)" data-opencode-math-tex="([^"]*)"[^>]*><\/\1>/g,
+    (_, _tag, style: "inline" | "display", math) => {
+      const displayMode = style === "display"
+      return render(math, displayMode, displayMode ? `$$${math}$$` : `$${math}$`)
+    },
+  )
 
   result = result.replace(/<div data-opencode-math-style="display">([\s\S]*?)<\/div>/g, (_, math) =>
     render(math, true, `$$${math}$$`),
@@ -523,7 +638,7 @@ function renderMathInText(text: string, output: MathOutput): string {
   return result
 }
 
-function renderMathExpressions(html: string, output: MathOutput): string {
+export function renderMathExpressions(html: string, output: MathOutput): string {
   // Split on code/pre/kbd tags to avoid processing their contents
   const codeBlockPattern = /(<(?:pre|code|kbd)[^>]*>[\s\S]*?<\/(?:pre|code|kbd)>)/gi
   const parts = html.split(codeBlockPattern)
@@ -676,21 +791,21 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
     if (native) {
       return {
         async parse(markdown: string): Promise<string> {
-          const html = await native(markdown)
+          const html = await native(protectMathExpressions(markdown))
           const withMath = renderMathExpressions(html, output)
           return highlightCodeBlocks(withMath)
         },
         async parseNoMath(markdown: string): Promise<string> {
-          const html = await native(markdown)
+          const html = await native(protectMathExpressions(markdown))
           return highlightCodeBlocks(html)
         },
         async parseFast(markdown: string): Promise<string> {
           // Keep the first paint in-process; native IPC is too expensive per message.
-          return fastParser.parse(normalizeDisplayMath(markdown))
+          return fastParser.parse(protectMathExpressions(markdown))
         },
         async parseLite(markdown: string): Promise<string> {
           // Large previews still mount with the local lightweight parser, then upgrade later.
-          return liteParser.parse(normalizeDisplayMath(markdown))
+          return liteParser.parse(protectMathExpressions(markdown))
         },
         renderMath(html: string) {
           return renderMathExpressions(html, output)
@@ -703,18 +818,18 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
 
     return {
       async parse(markdown: string): Promise<string> {
-        const html = await fullParser.parse(normalizeDisplayMath(markdown))
+        const html = await fullParser.parse(protectMathExpressions(markdown))
         return renderMathExpressions(html, output)
       },
       async parseNoMath(markdown: string): Promise<string> {
-        return noMathParser.parse(normalizeDisplayMath(markdown))
+        return noMathParser.parse(protectMathExpressions(markdown))
       },
       async parseFast(markdown: string): Promise<string> {
-        return fastParser.parse(normalizeDisplayMath(markdown))
+        return fastParser.parse(protectMathExpressions(markdown))
       },
       async parseLite(markdown: string): Promise<string> {
         // The lite path skips KaTeX/shiki so large file previews can mount before block-by-block upgrades run.
-        return liteParser.parse(normalizeDisplayMath(markdown))
+        return liteParser.parse(protectMathExpressions(markdown))
       },
       renderMath(html: string) {
         return renderMathExpressions(html, output)
