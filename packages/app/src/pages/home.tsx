@@ -10,6 +10,7 @@ import { ProjectAvatar } from "@opencode-ai/ui/v2/components/project-avatar-v2.j
 import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
+import { TabStateIndicator } from "@opencode-ai/ui/v2/components/tab-state-indicator.jsx"
 import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -642,7 +643,14 @@ function HomeSessionSearchResultRow(props: {
       onMouseEnter={() => props.onHighlight()}
       onClick={() => props.onSelect(props.record.session)}
     >
-      <Show when={showStatus()} fallback={<span class="size-4 shrink-0" aria-hidden="true" />}>
+      <Show
+        when={showStatus()}
+        fallback={
+          <div class="flex size-4 shrink-0 items-center justify-center">
+            <TabStateIndicator />
+          </div>
+        }
+      >
         <div
           class="flex size-4 shrink-0 items-center justify-center"
           style={{ color: tint() ?? "var(--icon-interactive-base)" }}
@@ -728,7 +736,14 @@ function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (sessio
       class={`${HOME_ROW} h-10 gap-2 px-6 py-3 pl-4`}
       onClick={() => props.openSession(props.record.session)}
     >
-      <Show when={showStatus()}>
+      <Show
+        when={showStatus()}
+        fallback={
+          <div class="flex size-4 shrink-0 items-center justify-center">
+            <TabStateIndicator />
+          </div>
+        }
+      >
         <div
           class="flex size-4 shrink-0 items-center justify-center"
           style={{ color: tint() ?? "var(--icon-interactive-base)" }}
