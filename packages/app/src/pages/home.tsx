@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
@@ -31,6 +31,7 @@ import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 import { shouldUseV2Settings } from "@/components/settings-layout"
+import { useCommand } from "@/context/command"
 
 const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const HOME_SESSION_LIMIT = 15
@@ -110,6 +111,8 @@ function HomeDesign() {
   const navigate = useNavigate()
   const server = useServer()
   const language = useLanguage()
+  const command = useCommand()
+  let focusSessionSearch: (() => void) | undefined
   const [state, setState] = createStore({
     search: "",
     project: undefined as string | undefined,
@@ -163,6 +166,16 @@ function HomeDesign() {
     openSession(session)
     closeSearch()
   }
+
+  command.register("home", () => [
+    {
+      id: "home.sessions.search.focus",
+      title: language.t("home.sessions.search.placeholder"),
+      keybind: "mod+f",
+      hidden: true,
+      onSelect: () => focusSessionSearch?.(),
+    },
+  ])
 
   function selectProject(directory: string) {
     if (!projects().some((project) => project.worktree === directory)) return
@@ -250,6 +263,9 @@ function HomeDesign() {
           loading={sessionLoad.isLoading}
           results={searchResults()}
           noResultsLabel={language.t("home.sessions.search.noResults", { query: search() })}
+          bindFocus={(focus) => {
+            focusSessionSearch = focus
+          }}
           onInput={(value) => setState("search", value)}
           onFocus={() => setState("searchFocused", true)}
           onClose={closeSearch}
@@ -384,6 +400,7 @@ function HomeSessionSearch(props: {
   loading: boolean
   results: HomeSessionRecord[]
   noResultsLabel: string
+  bindFocus: (focus: () => void) => void
   onInput: (value: string) => void
   onFocus: () => void
   onClose: () => void
@@ -394,6 +411,15 @@ function HomeSessionSearch(props: {
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let listRef: HTMLDivElement | undefined
+
+  const focusInput = () => {
+    input?.focus()
+    props.onFocus()
+  }
+
+  onMount(() => {
+    props.bindFocus(focusInput)
+  })
 
   const syncActive = (results: HomeSessionRecord[]) => {
     if (results.length === 0) {
