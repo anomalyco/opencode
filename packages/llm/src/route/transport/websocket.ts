@@ -1,6 +1,7 @@
 import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { LLMError, TransportReason } from "../../schema"
+import { redactUrl } from "../redaction"
 import * as HttpTransport from "./http"
 import type { Transport } from "./index"
 
@@ -124,7 +125,7 @@ const webSocketUrl = (value: string) =>
 
 export const open = (input: WebSocketRequest) =>
   Effect.logInfo("llm websocket open").pipe(
-    Effect.annotateLogs({ "llm.websocket.url": input.url }),
+    Effect.annotateLogs({ "llm.websocket.url": redactUrl(input.url) }),
     Effect.andThen(
       Effect.try({
         try: () =>
