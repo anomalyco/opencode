@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, Scope, Stream } from "effect"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { FilePathInput, NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -27,7 +27,7 @@ class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 // Schema output is identical (`type: "number"`), so the LLM view is
 // unchanged; purely CLI-facing uses must now send numbers rather than strings.
 export const Parameters = Schema.Struct({
-  filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
+  filePath: FilePathInput({ description: "The absolute path to the file or directory to read" }),
   offset: Schema.optional(NonNegativeInt).annotate({
     description: "The line number to start reading from (1-indexed)",
   }),
@@ -292,14 +292,29 @@ export const ReadTool = Tool.define(
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
-      const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 })
+      const limit = params.limit ?? DEFAULT_READ_LIMIT
+      const offset = params.offset || 1
+      const file = yield* lines(filepath, { limit, offset })
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),
         )
       }
 
+      // Surface the offset/limit pairing decision back to the model. Some
+      // models call this tool with only one of the two and previously had
+      // no signal as to what the other was filled with — so they could not
+      // self-correct on the next turn. Note the message is informational
+      // (no `Error:` prefix) so it doesn't read as a failure.
+      const pairingNote =
+        params.offset !== undefined && params.limit === undefined
+          ? `Note: limit was not provided; defaulted to ${DEFAULT_READ_LIMIT} lines. To control the window, pass both offset and limit.\n`
+          : params.limit !== undefined && params.offset === undefined
+            ? `Note: offset was not provided; defaulted to 1 (start of file). To control the window, pass both offset and limit.\n`
+            : ""
+
       let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
+      if (pairingNote) output += pairingNote
       output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
 
       const last = file.offset + file.raw.length - 1

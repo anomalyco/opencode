@@ -7,6 +7,49 @@ export const RelativePath = Schema.String.pipe(Schema.brand("RelativePath"))
 export type RelativePath = typeof RelativePath.Type
 
 /**
+ * String input intended to flow to a filesystem operation (fopen, stat, etc.).
+ *
+ * Some open-weight models occasionally emit file paths wrapped in markdown
+ * auto-links, e.g. `"[notes.md](http://notes.md)"`. This is post-training
+ * chat distribution leaking through the tool boundary: the model has been
+ * rewarded for auto-linking in conversational output and applies that prior
+ * to fields where it makes no sense. Encoding the intent at the schema
+ * level — "this string is going to fopen, not into a chat bubble" — plugs
+ * the leak for every path field at once.
+ *
+ * Only the degenerate case (link text equals the URL with protocol stripped)
+ * is rewritten. Real markdown like `[click](https://example.com)` passes
+ * through untouched.
+ *
+ * Replaces `Schema.String` in tool parameter definitions for fields that
+ * carry filesystem paths. The annotation lives on the encoded side so the
+ * JSON Schema emitted to the LLM still carries the description.
+ *
+ *   filePath: FilePathInput({ description: "The absolute path to the file" })
+ */
+export const FilePathInput = (annotations?: { readonly description?: string }) => {
+  const source = annotations?.description
+    ? Schema.String.annotate({ description: annotations.description })
+    : Schema.String
+  return source.pipe(
+    Schema.decodeTo(Schema.String, {
+      decode: SchemaGetter.transform(unwrapDegenerateAutoLink),
+      encode: SchemaGetter.passthrough({ strict: false }),
+    }),
+  )
+}
+
+function unwrapDegenerateAutoLink(input: string): string {
+  // Two regexes — one for the whole-string case where the model emitted only
+  // the auto-link, one for embedded auto-links within a longer path.
+  const whole = input.match(/^\[([^\]]+)\]\((https?:\/\/)?([^)]+)\)$/)
+  if (whole && whole[1] === whole[3]) return whole[1]
+  return input.replace(/\[([^\]]+)\]\((https?:\/\/)?([^)]+)\)/g, (match, text, _proto, url) =>
+    text === url ? text : match,
+  )
+}
+
+/**
  * Integer greater than zero.
  */
 export const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))

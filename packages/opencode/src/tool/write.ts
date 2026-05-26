@@ -10,6 +10,7 @@ import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FilePathInput } from "@opencode-ai/core/schema"
 import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -19,7 +20,7 @@ const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
 export const Parameters = Schema.Struct({
   content: Schema.String.annotate({ description: "The content to write to the file" }),
-  filePath: Schema.String.annotate({
+  filePath: FilePathInput({
     description: "The absolute path to the file to write (must be absolute, not relative)",
   }),
 })

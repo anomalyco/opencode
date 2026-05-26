@@ -17,6 +17,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FilePathInput } from "@opencode-ai/core/schema"
 import * as Bom from "@/util/bom"
 
 function normalizeLineEndings(text: string): string {
@@ -45,7 +46,7 @@ function lock(filePath: string) {
 }
 
 export const Parameters = Schema.Struct({
-  filePath: Schema.String.annotate({ description: "The absolute path to the file to modify" }),
+  filePath: FilePathInput({ description: "The absolute path to the file to modify" }),
   oldString: Schema.String.annotate({ description: "The text to replace" }),
   newString: Schema.String.annotate({
     description: "The text to replace it with (must be different from oldString)",

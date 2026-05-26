@@ -7,6 +7,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FilePathInput } from "@opencode-ai/core/schema"
 
 const operations = [
   "goToDefinition",
@@ -22,7 +23,7 @@ const operations = [
 
 export const Parameters = Schema.Struct({
   operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
-  filePath: Schema.String.annotate({ description: "The absolute or relative path to the file" }),
+  filePath: FilePathInput({ description: "The absolute or relative path to the file" }),
   line: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
     description: "The line number (1-based, as shown in editors)",
   }),

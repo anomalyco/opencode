@@ -4,6 +4,7 @@ import type { MessageV2 } from "../session/message-v2"
 import type { Permission } from "../permission"
 import type { SessionID, MessageID } from "../session/schema"
 import * as Truncate from "./truncate"
+import * as Repair from "./repair"
 import { Agent } from "@/agent/agent"
 
 interface Metadata {
@@ -117,6 +118,13 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
         }
         return Effect.gen(function* () {
           const decoded = yield* decode(args).pipe(
+            // Open-weight models commonly emit a small, repeatable set of
+            // shape mistakes (null at optional fields, stringified arrays,
+            // empty-object placeholders, bare scalars where arrays were
+            // expected). On parse failure we let the validator's own issue
+            // list localize the bug, apply targeted repairs at those paths,
+            // and re-decode. Successful inputs are never touched.
+            Effect.catch((error) => Repair.recover(decode, args, error)),
             Effect.mapError(
               (error) =>
                 new InvalidArgumentsError({
