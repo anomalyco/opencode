@@ -31,11 +31,12 @@ import {
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Message, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPNextError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { Directory } from "./directory"
+import { ACPNextEvent } from "./event"
 import { ACPNextSession } from "./session"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
@@ -71,10 +72,15 @@ export function make(input: {
   connection?: Pick<AgentSideConnection, "sessionUpdate">
   directory?: Directory.Interface
   session?: ACPNextSession.Interface
+  eventSubscription?: (subscription: ACPNextEvent.Subscription) => void
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
+  if (input.connection) {
+    const subscription = ACPNextEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    input.eventSubscription?.(subscription)
+  }
 
   const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
     const authMethod: AuthMethod = {
@@ -476,17 +482,13 @@ type SdkResponse<T> = {
 }
 
 type MessageInfo = {
-  readonly role?: string
-  readonly model?: {
-    readonly providerID?: string
-    readonly modelID?: string
-    readonly variant?: string
-  }
-  readonly providerID?: string
-  readonly modelID?: string
-  readonly variant?: string
-  readonly mode?: string
-  readonly agent?: string
+  readonly role?: Message["role"]
+  readonly model?: Extract<Message, { role: "user" }>["model"]
+  readonly providerID?: Extract<Message, { role: "assistant" }>["providerID"]
+  readonly modelID?: Extract<Message, { role: "assistant" }>["modelID"]
+  readonly variant?: Extract<Message, { role: "assistant" }>["variant"]
+  readonly mode?: Extract<Message, { role: "assistant" }>["mode"]
+  readonly agent?: Message["agent"]
 }
 
 function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
