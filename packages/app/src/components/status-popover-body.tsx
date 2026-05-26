@@ -7,16 +7,17 @@ import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
+import { type ServerHealth } from "@/utils/server-health"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
+import { useServers } from "@/context/servers"
 
 const pollMs = 10_000
 
@@ -52,40 +53,6 @@ const listServersByHealth = (
     if (diff !== 0) return diff
     return (order.get(a) ?? 0) - (order.get(b) ?? 0)
   })
-}
-
-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
-  const checkServerHealth = useCheckServerHealth()
-  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
-
-  createEffect(() => {
-    if (!enabled()) {
-      setStatus(reconcile({}))
-      return
-    }
-    const list = servers()
-    let dead = false
-
-    const refresh = async () => {
-      const results: Record<string, ServerHealth> = {}
-      await Promise.all(
-        list.map(async (conn) => {
-          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
-        }),
-      )
-      if (dead) return
-      setStatus(reconcile(results))
-    }
-
-    void refresh()
-    const id = setInterval(() => void refresh(), pollMs)
-    onCleanup(() => {
-      dead = true
-      clearInterval(id)
-    })
-  })
-
-  return status
 }
 
 const useDefaultServerKey = (
@@ -168,6 +135,7 @@ const useMcpToggleMutation = () => {
 
 export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sync = useSync()
+  const servers = useServers()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -192,15 +160,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogDead = true
     dialogRun += 1
   })
-  const servers = createMemo(() => {
-    const current = server.current
-    const list = server.list
-    if (!current) return list
-    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
-    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
-  })
-  const health = useServerHealth(servers, props.shown)
-  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
+  const sortedServers = createMemo(() => listServersByHealth(servers.list(), server.key, servers.health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
@@ -226,7 +186,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
       >
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
           <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-            {sortedServers().length > 0 ? `${sortedServers().length} ` : ""}
+            {servers.list().length > 0 ? `${servers.list().length} ` : ""}
             {language.t("status.popover.tab.servers")}
           </Tabs.Trigger>
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
@@ -249,7 +209,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               <For each={sortedServers()}>
                 {(s) => {
                   const key = ServerConnection.key(s)
-                  const blocked = () => health[key]?.healthy === false
+                  const blocked = () => servers.health[key]?.healthy === false
                   return (
                     <button
                       type="button"
@@ -265,11 +225,11 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                         queueMicrotask(() => server.setActive(key))
                       }}
                     >
-                      <ServerHealthIndicator health={health[key]} />
+                      <ServerHealthIndicator health={servers.health[key]} />
                       <ServerRow
                         conn={s}
                         dimmed={blocked()}
-                        status={health[key]}
+                        status={servers.health[key]}
                         class="flex items-center gap-2 w-full min-w-0"
                         nameClass="text-14-regular text-text-base truncate"
                         versionClass="text-12-regular text-text-weak truncate"

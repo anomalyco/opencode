@@ -37,6 +37,14 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor"/>`,
   },
+  "outline-chevron-down": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor"/>`,
+  },
+  "outline-dots": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor"/><path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor"/><path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor"/>`,
+  },
 }
 
 const spriteID = "opencode-v2-icon-sprite"

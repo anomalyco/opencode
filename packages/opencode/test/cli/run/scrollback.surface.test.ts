@@ -938,8 +938,7 @@ test("renders promoted task markdown without a leading blank row", async () => {
             subagent_type: "explore",
           },
           output: [
-            "task_id: child-1 (for resuming to continue this task if needed)",
-            "",
+            '<task id="child-1" state="completed">',
             "<task_result>",
             "Location: `/tmp/run.ts`",
             "",
@@ -947,6 +946,7 @@ test("renders promoted task markdown without a leading blank row", async () => {
             "- Local interactive mode",
             "- Attach mode",
             "</task_result>",
+            "</task>",
           ].join("\n"),
           metadata: {
             sessionId: "child-1",
