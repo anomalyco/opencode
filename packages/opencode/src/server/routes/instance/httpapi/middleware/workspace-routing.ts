@@ -1,18 +1,18 @@
-import { getAdapter } from "@/control-plane/adapters"
 import { WorkspaceID } from "@/control-plane/schema"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
-import { EffectBridge } from "@/effect/bridge"
+import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
 import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
 import * as Fence from "@/server/shared/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/shared/workspace-routing"
 import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Context, Data, Effect, Layer, Schema } from "effect"
+import { Context, Data, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
+import { InvalidRequestError } from "../errors"
 
 // Query fields this middleware reads from the URL. Spread into every
 // endpoint query schema in groups that apply WorkspaceRoutingMiddleware,
@@ -29,6 +29,7 @@ export const WorkspaceRoutingQuery = Schema.Struct(WorkspaceRoutingQueryFields)
 type RemoteTarget = Extract<Target, { type: "remote" }>
 
 type RequestPlan = Data.TaggedEnum<{
+  InvalidWorkspace: {}
   MissingWorkspace: { readonly workspaceID: WorkspaceID }
   Local: { readonly directory: string; readonly workspaceID?: WorkspaceID }
   Remote: {
@@ -39,6 +40,7 @@ type RequestPlan = Data.TaggedEnum<{
   }
 }>
 const RequestPlan = Data.taggedEnum<RequestPlan>()
+const InvalidWorkspaceID = Symbol("InvalidWorkspaceID")
 
 export class WorkspaceRouteContext extends Context.Service<
   WorkspaceRouteContext,
@@ -69,6 +71,18 @@ function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): Worksp
   return sessionWorkspaceID ?? (workspaceParam ? WorkspaceID.make(workspaceParam) : undefined)
 }
 
+function selectedV2WorkspaceID(
+  url: URL,
+  sessionWorkspaceID?: WorkspaceID,
+): WorkspaceID | typeof InvalidWorkspaceID | undefined {
+  if (sessionWorkspaceID) return sessionWorkspaceID
+  const workspaceParam = url.searchParams.get("workspace")
+  if (!workspaceParam) return undefined
+  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(workspaceParam)
+  if (Option.isNone(workspaceID)) return InvalidWorkspaceID
+  return workspaceID.value
+}
+
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
   return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
 }
@@ -93,8 +107,7 @@ function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServe
 }
 
 function resolveTarget(workspace: Workspace.Info): Effect.Effect<Target> {
-  const adapter = getAdapter(workspace.projectID, workspace.type)
-  return EffectBridge.fromPromise(() => adapter.target(workspace))
+  return WorkspaceAdapterRuntime.target(workspace)
 }
 
 function proxyRemote(
@@ -118,7 +131,7 @@ function proxyRemote(
     const response = yield* HttpApiProxy.http(client, proxyURL, target.headers, request)
     const sync = Fence.parse(new Headers(response.headers))
     if (sync) {
-      const syncFailure = yield* Fence.waitEffect(
+      const syncFailure = yield* Fence.wait(
         workspace.id,
         sync,
         request.source instanceof Request ? request.source.signal : undefined,
@@ -151,7 +164,10 @@ function planRequest(
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
-    const workspaceID = selectedWorkspaceID(url, sessionWorkspaceID)
+    const workspaceID = url.pathname.startsWith("/api/")
+      ? selectedV2WorkspaceID(url, sessionWorkspaceID)
+      : selectedWorkspaceID(url, sessionWorkspaceID)
+    if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
     if (workspaceID && workspace === undefined && !envWorkspaceID) {
@@ -172,6 +188,17 @@ function routeWorkspace<E>(
   plan: RequestPlan,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor | Workspace.Service> {
   return RequestPlan.$match(plan, {
+    InvalidWorkspace: () =>
+      Effect.succeed(
+        HttpServerResponse.jsonUnsafe(
+          new InvalidRequestError({
+            message: "Invalid workspace query parameter",
+            kind: "Query",
+            field: "workspace",
+          }),
+          { status: 400 },
+        ),
+      ),
     MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
     Remote: ({ request, workspace, target, url }) => proxyRemote(client, request, workspace, target, url),
     Local: ({ directory, workspaceID }) =>

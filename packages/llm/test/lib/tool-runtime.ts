@@ -1,4 +1,3 @@
-import { Stream } from "effect"
 import { LLMClient } from "../../src/route"
 import type { Tools } from "../../src/tool"
 import type { RunOptions } from "../../src/tool-runtime"

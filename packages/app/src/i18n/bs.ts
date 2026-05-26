@@ -300,6 +300,7 @@ export const dict = {
   "mcp.status.connected": "povezano",
   "mcp.status.failed": "neuspjelo",
   "mcp.status.needs_auth": "potrebna autentifikacija",
+  "mcp.auth.clickToAuthenticate": "Kliknite za autentifikaciju",
   "mcp.status.disabled": "onemogućeno",
 
   "dialog.fork.empty": "Nema poruka za fork",
@@ -461,7 +462,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Korijenski element nije pronađen. Da li si zaboravio da ga dodaš u index.html? Ili je možda id atribut pogrešno napisan?",
 
-  "error.globalSync.connectFailed": "Nije moguće povezati se na server. Da li server radi na `{{url}}`?",
+  "error.serverSync.connectFailed": "Nije moguće povezati se na server. Da li server radi na `{{url}}`?",
   "directory.error.invalidUrl": "Nevažeći direktorij u URL-u.",
 
   "error.chain.unknown": "Nepoznata greška",
@@ -925,8 +926,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "nepoznato",
   "error.page.circular": "[Kružno]",
-  "error.globalSDK.noServerAvailable": "Nema dostupnog servera",
-  "error.globalSDK.serverNotAvailable": "Server nije dostupan",
+  "error.serverSDK.noServerAvailable": "Nema dostupnog servera",
+  "error.serverSDK.serverNotAvailable": "Server nije dostupan",
   "error.childStore.persistedCacheCreateFailed": "Nije uspjelo kreiranje trajnog keša",
   "error.childStore.persistedProjectMetadataCreateFailed": "Nije uspjelo kreiranje trajnih metapodataka projekta",
   "error.childStore.persistedProjectIconCreateFailed": "Nije uspjelo kreiranje trajne ikone projekta",

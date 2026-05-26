@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
-import { Instance } from "../../src/project/instance"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { PtyID } from "../../src/pty/schema"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -14,7 +13,7 @@ void Log.init({ print: false })
 
 function app(input: { password?: string; username?: string }) {
   const handler = HttpRouter.toWebHandler(
-    ExperimentalHttpApiServer.routes.pipe(
+    HttpApiApp.routes.pipe(
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
@@ -28,7 +27,7 @@ function app(input: { password?: string; username?: string }) {
   ).handler
 
   return {
-    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    fetch: (request: Request) => handler(request, HttpApiApp.context),
     request(input: string | URL | Request, init?: RequestInit) {
       return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },

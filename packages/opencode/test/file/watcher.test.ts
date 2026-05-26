@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import path from "path"
+import { realpath } from "fs/promises"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { ConfigProvider, Deferred, Effect, Layer, Option } from "effect"
+import { ConfigProvider, Deferred, Duration, Effect, Layer, Option } from "effect"
 import { TestInstance, provideInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
@@ -78,20 +79,46 @@ function wait(directory: string, check: (evt: WatcherEvent) => boolean) {
   })
 }
 
-function nextUpdate<E>(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
+function maybeNextUpdate<E>(
+  directory: string,
+  check: (evt: WatcherEvent) => boolean,
+  trigger: Effect.Effect<void, E>,
+  timeout: Duration.Input = "5 seconds",
+) {
   return Effect.acquireUseRelease(
     wait(directory, check),
     ({ deferred }) =>
       Effect.gen(function* () {
         yield* trigger
-        return yield* Deferred.await(deferred).pipe(
-          Effect.timeoutOrElse({
-            duration: "5 seconds",
-            orElse: () => Effect.fail(new Error("timed out waiting for file watcher update")),
-          }),
-        )
+        return yield* Deferred.await(deferred).pipe(Effect.timeoutOption(timeout))
       }),
     ({ cleanup }) => Effect.sync(cleanup),
+  )
+}
+
+function nextUpdate<E>(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
+  return Effect.gen(function* () {
+    const result = yield* maybeNextUpdate(directory, check, trigger)
+    if (Option.isSome(result)) return result.value
+    return yield* Effect.fail(new Error("timed out waiting for file watcher update"))
+  })
+}
+
+function eventuallyUpdate<E>(
+  directory: string,
+  check: (evt: WatcherEvent) => boolean,
+  trigger: () => Effect.Effect<void, E>,
+) {
+  return Effect.gen(function* () {
+    while (true) {
+      const result = yield* maybeNextUpdate(directory, check, trigger(), "250 millis")
+      if (Option.isSome(result)) return result.value
+    }
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: "5 seconds",
+      orElse: () => Effect.fail(new Error("timed out waiting for file watcher readiness")),
+    }),
   )
 }
 
@@ -125,22 +152,25 @@ function ready(directory: string) {
     const fs = yield* AppFileSystem.Service
     const git = yield* Git.Service
 
-    yield* nextUpdate(
+    yield* eventuallyUpdate(
       directory,
-      (evt) => evt.file === file && evt.event === "add",
-      fs.writeFileString(file, "ready"),
+      (evt) => evt.file === file,
+      () => fs.writeFileString(file, `ready-${Math.random()}`),
     ).pipe(Effect.ensuring(fs.remove(file, { force: true }).pipe(Effect.ignore)), Effect.asVoid)
 
     if (!(yield* fs.existsSafe(head))) return
 
-    const branch = `watch-${Math.random().toString(36).slice(2)}`
+    const realHead = yield* Effect.promise(() => realpath(head).catch(() => head))
     const hash = (yield* git.run(["rev-parse", "HEAD"], { cwd: directory })).text()
-    yield* nextUpdate(
+    yield* eventuallyUpdate(
       directory,
-      (evt) => evt.file === head && evt.event !== "unlink",
-      fs
-        .writeFileString(path.join(directory, ".git", "refs", "heads", branch), hash.trim() + "\n")
-        .pipe(Effect.andThen(fs.writeFileString(head, `ref: refs/heads/${branch}\n`))),
+      (evt) => (evt.file === head || evt.file === realHead) && evt.event !== "unlink",
+      () => {
+        const branch = `watch-${Math.random().toString(36).slice(2)}`
+        return fs
+          .writeFileString(path.join(directory, ".git", "refs", "heads", branch), hash.trim() + "\n")
+          .pipe(Effect.andThen(fs.writeFileString(head, `ref: refs/heads/${branch}\n`)))
+      },
     ).pipe(Effect.asVoid)
   })
 }
@@ -260,4 +290,58 @@ describeWatcher("FileWatcher", () => {
       }),
     { git: true },
   )
+
+  // Symlink support varies by platform; skip where unavailable
+  const describeSymlink = process.platform !== "win32" ? describe : describe.skip
+
+  describeSymlink("symlinked .git", () => {
+    it.instance(
+      "publishes .git/HEAD events through a symlinked .git directory",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const fs = yield* AppFileSystem.Service
+          const git = yield* Git.Service
+          const dir = test.directory
+          const actualGit = path.join(dir, "..", "tmp_actual_git_" + Math.random().toString(36).slice(2))
+
+          // Move .git to a sibling directory and replace with a symlink
+          yield* Effect.promise(() => import("fs")).pipe(
+            Effect.flatMap((nodeFs) =>
+              Effect.all([
+                Effect.promise(() => nodeFs.promises.rename(path.join(dir, ".git"), actualGit)),
+                Effect.promise(() => nodeFs.promises.symlink(actualGit, path.join(dir, ".git"))),
+              ]),
+            ),
+          )
+
+          yield* Effect.acquireRelease(Effect.succeed(actualGit), (p) =>
+            Effect.promise(() =>
+              import("fs").then((f) => f.promises.rm(p, { recursive: true, force: true }).catch(() => undefined)),
+            ),
+          )
+
+          const head = path.join(dir, ".git", "HEAD")
+          const branch = `watch-${Math.random().toString(36).slice(2)}`
+          yield* git.run(["branch", branch], { cwd: dir })
+
+          yield* withWatcher(
+            dir,
+            nextUpdate(
+              dir,
+              (evt) => evt.file === path.join(actualGit, "HEAD") && evt.event !== "unlink",
+              fs.writeFileString(head, `ref: refs/heads/${branch}\n`),
+            ).pipe(
+              Effect.tap((evt) =>
+                Effect.sync(() => {
+                  expect(evt.file).toBe(path.join(actualGit, "HEAD"))
+                  expect(["add", "change"]).toContain(evt.event)
+                }),
+              ),
+            ),
+          )
+        }),
+      { git: true },
+    )
+  })
 })
