@@ -122,7 +122,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
                 "-z",
               ],
               {
-                cwd: state.directory,
+                cwd: state.worktree,
                 stdin: feed(files),
               },
             )
@@ -138,7 +138,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
                 ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
               ],
               {
-                cwd: state.directory,
+                cwd: state.worktree,
                 stdin: feed(files),
               },
             )
@@ -149,7 +149,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
             const result = yield* git(
               [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
               {
-                cwd: state.directory,
+                cwd: state.worktree,
                 stdin: feed(files),
               },
             )
