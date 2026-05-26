@@ -22,6 +22,5 @@
     }
   },
   "include": ["src", "package.json"],
-  "exclude": ["dist", "ts-dist"],
-  "references": [{ "path": "../sdk/js" }]
+  "exclude": ["dist", "ts-dist"]
 }

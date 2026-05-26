@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import {
+  CodexAuthPlugin,
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
-  CodexAuthPlugin,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
-import type { PluginInput } from "@opencode-ai/plugin"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -123,74 +122,174 @@ describe("plugin.codex", () => {
     })
   })
 
-  describe("oauth fetch", () => {
-    test("preserves caller signal through token refresh and Codex rewrite", async () => {
-      const signal = new AbortController().signal
-      const urls: string[] = []
-      const signals: (AbortSignal | undefined)[] = []
-      const original = globalThis.fetch
+  test("deduplicates concurrent Codex token refreshes", async () => {
+    let auth = {
+      type: "oauth" as const,
+      refresh: "refresh-old",
+      access: "",
+      expires: 0,
+    }
+    const authUpdates: Array<{
+      body: { refresh: string; access: string; expires: number; accountId?: string }
+    }> = []
+    let resolveRefresh: (() => void) | undefined
+    const refreshReady = new Promise<void>((resolve) => {
+      resolveRefresh = resolve
+    })
+    let refreshRequests = 0
+    const apiRequests: { authorization: string | null; accountId: string | null }[] = []
 
-      const next = Object.assign(
-        async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
-          const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-          urls.push(url)
-          signals.push(init?.signal ?? undefined)
-          if (url.includes("/oauth/token")) {
-            return new Response(
-              JSON.stringify({
-                id_token: "",
-                access_token: "access-new",
-                refresh_token: "refresh-new",
-                expires_in: 3600,
-              }),
-              { status: 200 },
-            )
-          }
+    using server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/oauth/token") {
+          expect(await request.text()).toContain("refresh_token=refresh-old")
+          refreshRequests += 1
+          await refreshReady
+          return Response.json({
+            id_token: createTestJwt({ chatgpt_account_id: "acc-123" }),
+            access_token: "access-new",
+            refresh_token: "refresh-new",
+            expires_in: 3600,
+          })
+        }
+
+        if (url.pathname === "/backend-api/codex/responses") {
+          apiRequests.push({
+            authorization: request.headers.get("authorization"),
+            accountId: request.headers.get("ChatGPT-Account-Id"),
+          })
           return new Response("{}", { status: 200 })
-        },
-        { preconnect: original.preconnect },
-      ) satisfies typeof fetch
-      globalThis.fetch = next
+        }
 
-      try {
-        const sets: unknown[] = []
-        const hooks = await CodexAuthPlugin({
-          client: {
-            auth: {
-              set: async (input: unknown) => {
-                sets.push(input)
-              },
+        return new Response("unexpected request", { status: 500 })
+      },
+    })
+
+    const hooks = await CodexAuthPlugin(
+      {
+        client: {
+          auth: {
+            async set(input: { body: { refresh: string; access: string; expires: number; accountId?: string } }) {
+              authUpdates.push(input)
+              auth = {
+                type: "oauth",
+                refresh: input.body.refresh,
+                access: input.body.access,
+                expires: input.body.expires,
+                ...(input.body.accountId && { accountId: input.body.accountId }),
+              }
             },
           },
-        } as unknown as PluginInput)
-        if (!hooks.auth?.loader) throw new Error("missing auth loader")
-        const loaded = await hooks.auth.loader(
-          async () => ({
-            type: "oauth",
-            refresh: "refresh-old",
-            access: "",
-            expires: 0,
-            accountId: "account",
-          }),
-          {
-            models: {
-              "gpt-5.3-codex": {
-                cost: { input: 1, output: 1, cache: { read: 1, write: 1 } },
-              },
+        } as never,
+        project: {} as never,
+        directory: "",
+        worktree: "",
+        experimental_workspace: {
+          register() {},
+        },
+        serverUrl: new URL("https://example.com"),
+        $: {} as never,
+      },
+      {
+        issuer: server.url.origin,
+        codexApiEndpoint: new URL("/backend-api/codex/responses", server.url).toString(),
+      },
+    )
+    const loaded = await hooks.auth!.loader!(async () => auth as never, {} as never)
+
+    const first = loaded.fetch!("https://api.openai.com/v1/responses")
+    const second = loaded.fetch!("https://api.openai.com/v1/responses")
+
+    await waitFor(() => refreshRequests === 1)
+    expect(apiRequests).toHaveLength(0)
+
+    resolveRefresh!()
+    await Promise.all([first, second])
+
+    expect(refreshRequests).toBe(1)
+    expect(authUpdates).toHaveLength(1)
+    expect(authUpdates[0]?.body.refresh).toBe("refresh-new")
+    expect(authUpdates[0]?.body.access).toBe("access-new")
+    expect(authUpdates[0]?.body.accountId).toBe("acc-123")
+    expect(apiRequests).toEqual([
+      { authorization: "Bearer access-new", accountId: "acc-123" },
+      { authorization: "Bearer access-new", accountId: "acc-123" },
+    ])
+  })
+
+  test("preserves caller signal through token refresh and Codex rewrite", async () => {
+    const signal = new AbortController().signal
+    const urls: string[] = []
+    const signals: (AbortSignal | undefined)[] = []
+    const original = globalThis.fetch
+
+    const next = Object.assign(
+      async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+        urls.push(url)
+        signals.push(init?.signal ?? undefined)
+        if (url.includes("/oauth/token")) {
+          return Response.json({
+            id_token: "",
+            access_token: "access-new",
+            refresh_token: "refresh-new",
+            expires_in: 3600,
+          })
+        }
+        return new Response("{}", { status: 200 })
+      },
+      { preconnect: original.preconnect },
+    ) satisfies typeof fetch
+    globalThis.fetch = next
+
+    try {
+      const sets: unknown[] = []
+      const hooks = await CodexAuthPlugin({
+        client: {
+          auth: {
+            set: async (input: unknown) => {
+              sets.push(input)
             },
-          } as unknown as Parameters<typeof hooks.auth.loader>[1],
-        )
+          },
+        },
+      } as never)
+      const loaded = await hooks.auth!.loader!(
+        async () => ({
+          type: "oauth",
+          refresh: "refresh-old",
+          access: "",
+          expires: 0,
+          accountId: "account",
+        }),
+        {
+          models: {
+            "gpt-5.3-codex": {
+              api: { id: "gpt-5.3-codex" },
+              cost: { input: 1, output: 1, cache: { read: 1, write: 1 } },
+              limit: { context: 1, input: 1, output: 1 },
+            },
+          },
+        } as never,
+      )
 
-        if (!loaded.fetch) throw new Error("missing fetch")
-        await loaded.fetch("https://api.openai.com/v1/responses", { signal })
+      await loaded.fetch!("https://api.openai.com/v1/responses", { signal })
 
-        expect(urls[0]).toBe("https://auth.openai.com/oauth/token")
-        expect(urls[1]).toBe("https://chatgpt.com/backend-api/codex/responses")
-        expect(signals).toEqual([signal, signal])
-        expect(sets.length).toBe(1)
-      } finally {
-        globalThis.fetch = original
-      }
-    })
+      expect(urls[0]).toBe("https://auth.openai.com/oauth/token")
+      expect(urls[1]).toBe("https://chatgpt.com/backend-api/codex/responses")
+      expect(signals).toEqual([signal, signal])
+      expect(sets.length).toBe(1)
+    } finally {
+      globalThis.fetch = original
+    }
   })
 })
+
+async function waitFor(predicate: () => boolean) {
+  const started = Date.now()
+  while (!predicate()) {
+    if (Date.now() - started > 1_000) throw new Error("timed out waiting for condition")
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  }
+}

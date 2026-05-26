@@ -117,6 +117,78 @@ try {
 
 ---
 
+## 構造化出力
+
+`format` を JSON スキーマで指定することで、モデルから構造化された JSON 出力をリクエストできます。モデルは `StructuredOutput` ツールを使用して、スキーマに一致する検証済み JSON を返します。
+
+### 基本的な使用法
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### 出力フォーマットの種類
+
+| タイプ        | 説明                                                 |
+| ------------- | ---------------------------------------------------- |
+| `text`        | デフォルト。標準テキスト応答 (構造化出力なし)        |
+| `json_schema` | 提供されたスキーマに一致する検証済み JSON を返します |
+
+### JSON スキーマフォーマット
+
+`type: 'json_schema'` を使用する場合は、以下を指定します:
+
+| フィールド   | タイプ          | 説明                                               |
+| ------------ | --------------- | -------------------------------------------------- |
+| `type`       | `'json_schema'` | 必須。JSON スキーマモードを指定します              |
+| `schema`     | `object`        | 必須。出力構造を定義する JSON スキーマオブジェクト |
+| `retryCount` | `number`        | オプション。検証の再試行回数 (デフォルト: 2)       |
+
+### エラー処理
+
+すべての再試行後にモデルが有効な構造化出力を生成できない場合、応答には `StructuredOutputError` が含まれます:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### ベストプラクティス
+
+1. **明確な説明を提供する**: モデルが抽出するデータを理解できるように、スキーマプロパティに明確な説明を提供します
+2. **`required` を使用する**: 存在する必要があるフィールドを指定します
+3. **スキーマを焦点を絞ったものにする**: 複雑なネストされたスキーマは、モデルが正しく入力するのが難しい場合があります
+4. **適切な `retryCount` を設定する**: 複雑なスキーマの場合は増やし、単純なスキーマの場合は減らします
+
+---
+
 ## API
 
 SDK は、型安全なクライアントを通じてすべてのサーバー API を公開します。
@@ -226,27 +298,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Sessions
 
-| メソッド                                                   | 説明                                    | 詳細                                                                                                                                                               |
-| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `session.list()`                                           | セッションをリストする                  | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
-| `session.get({ path })`                                    | セッションを取得                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.children({ path })`                               | 子セッションをリストする                | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
-| `session.create({ body })`                                 | セッションの作成                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.delete({ path })`                                 | セッションを削除                        | 戻り値 `boolean`                                                                                                                                                   |
-| `session.update({ path, body })`                           | セッションのプロパティを更新する        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.init({ path, body })`                             | アプリを分析して `AGENTS.md` を作成する | 戻り値 `boolean`                                                                                                                                                   |
-| `session.abort({ path })`                                  | 実行中のセッションを中止する            | 戻り値 `boolean`                                                                                                                                                   |
-| `session.share({ path })`                                  | セッションを共有する                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.unshare({ path })`                                | セッションの共有を解除                  | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.summarize({ path, body })`                        | セッションを要約する                    | 戻り値 `boolean`                                                                                                                                                   |
-| `session.messages({ path })`                               | セッション内のメッセージをリストする    | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                             |
-| `session.message({ path })`                                | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                               |
-| `session.prompt({ path, body })`                           | プロンプトメッセージを送信する          | `body.noReply: true` は UserMessage (コンテキストのみ) を返します。デフォルトでは、AI 応答を含む <a href={typesUrl}><code>AssistantMessage</code></a> を返します。 |
-| `session.command({ path, body })`                          | コマンドをセッションに送信              | 戻り値 `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                      |
-| `session.shell({ path, body })`                            | シェルコマンドを実行する                | 戻り値 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                        |
-| `session.revert({ path, body })`                           | メッセージを元に戻す                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `session.unrevert({ path })`                               | 元に戻したメッセージを復元する          | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | 許可リクエストに応答する                | 戻り値 `boolean`                                                                                                                                                   |
+| メソッド                                                   | 説明                                    | 詳細                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | セッションをリストする                  | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                                        |
+| `session.get({ path })`                                    | セッションを取得                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `session.children({ path })`                               | 子セッションをリストする                | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                                        |
+| `session.create({ body })`                                 | セッションの作成                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `session.delete({ path })`                                 | セッションを削除                        | 戻り値 `boolean`                                                                                                                                                                                                                            |
+| `session.update({ path, body })`                           | セッションのプロパティを更新する        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `session.init({ path, body })`                             | アプリを分析して `AGENTS.md` を作成する | 戻り値 `boolean`                                                                                                                                                                                                                            |
+| `session.abort({ path })`                                  | 実行中のセッションを中止する            | 戻り値 `boolean`                                                                                                                                                                                                                            |
+| `session.share({ path })`                                  | セッションを共有する                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `session.unshare({ path })`                                | セッションの共有を解除                  | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `session.summarize({ path, body })`                        | セッションを要約する                    | 戻り値 `boolean`                                                                                                                                                                                                                            |
+| `session.messages({ path })`                               | セッション内のメッセージをリストする    | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                                                      |
+| `session.message({ path })`                                | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                                        |
+| `session.prompt({ path, body })`                           | プロンプトメッセージを送信する          | `body.noReply: true` は UserMessage (コンテキストのみ) を返します。デフォルトでは、AI 応答を含む <a href={typesUrl}><code>AssistantMessage</code></a> を返します。[構造化出力](#構造化出力) のための `body.outputFormat` をサポートします。 |
+| `session.command({ path, body })`                          | コマンドをセッションに送信              | 戻り値 `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                               |
+| `session.shell({ path, body })`                            | シェルコマンドを実行する                | 戻り値 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                                 |
+| `session.revert({ path, body })`                           | メッセージを元に戻す                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `session.unrevert({ path })`                               | 元に戻したメッセージを復元する          | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                          |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | 許可リクエストに応答する                | 戻り値 `boolean`                                                                                                                                                                                                                            |
 
 ---
 

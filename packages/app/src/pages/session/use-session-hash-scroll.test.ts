@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { messageIdFromHash } from "./use-session-hash-scroll"
+import { messageIdFromHash } from "./message-id-from-hash"
 
 describe("messageIdFromHash", () => {
   test("parses hash with leading #", () => {

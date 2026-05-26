@@ -1,11 +1,10 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, batch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
-import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
+type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
@@ -15,9 +14,9 @@ export function normalizeServerUrl(input: string) {
   return withProtocol.replace(/\/+$/, "")
 }
 
-export function serverDisplayName(conn?: ServerConnection.Any) {
+export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = false) {
   if (!conn) return ""
-  if (conn.displayName) return conn.displayName
+  if (conn.displayName && !ignoreDisplayName) return conn.displayName
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
@@ -33,6 +32,39 @@ function isLocalHost(url: string) {
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
 
+export function resolveServerList(input: {
+  props?: Array<ServerConnection.Any>
+  stored: StoredServer[]
+}): Array<ServerConnection.Any> {
+  const deduped = new Map<ServerConnection.Key, ServerConnection.Any>(
+    input.props?.map((v) => [ServerConnection.key(v), v]) ?? [],
+  )
+
+  for (const value of input.stored) {
+    const conn: ServerConnection.Http =
+      typeof value === "string"
+        ? {
+            type: "http" as const,
+            http: { url: value },
+          }
+        : "http" in value
+          ? value
+          : { type: "http", http: value }
+    const key = ServerConnection.key(conn)
+
+    const existing = deduped.get(key)
+    if (existing)
+      deduped.set(key, {
+        ...existing,
+        ...conn,
+        http: { ...existing.http, ...conn.http },
+      })
+    else deduped.set(key, conn)
+  }
+
+  return [...deduped.values()]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string }
 
@@ -46,6 +78,7 @@ export namespace ServerConnection {
   export type Http = {
     type: "http"
     http: HttpBase
+    authToken?: boolean
   } & Base
 
   export type Sidecar = {
@@ -95,104 +128,57 @@ export namespace ServerConnection {
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
-    const platform = usePlatform()
-
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
-        list: [] as string[],
+        list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
 
+    const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
+
     const allServers = createMemo((): Array<ServerConnection.Any> => {
-      const servers = [
-        ...(props.servers ?? []),
-        ...store.list.map((value) => ({
-          type: "http" as const,
-          http: typeof value === "string" ? { url: value } : value,
-        })),
-      ]
-
-      const deduped = new Map(servers.map((conn) => [ServerConnection.key(conn), conn]))
-
-      return [...deduped.values()]
+      return resolveServerList({ stored: store.list, props: props.servers })
     })
 
     const [state, setState] = createStore({
       active: props.defaultServer,
-      healthy: undefined as boolean | undefined,
     })
-
-    const healthy = () => state.healthy
-
-    function startHealthPolling(conn: ServerConnection.Any) {
-      let alive = true
-      let busy = false
-
-      const run = () => {
-        if (busy) return
-        busy = true
-        void check(conn)
-          .then((next) => {
-            if (!alive) return
-            setState("healthy", next)
-          })
-          .finally(() => {
-            busy = false
-          })
-      }
-
-      run()
-      const interval = setInterval(run, HEALTH_POLL_INTERVAL_MS)
-      return () => {
-        alive = false
-        clearInterval(interval)
-      }
-    }
 
     function setActive(input: ServerConnection.Key) {
       if (state.active !== input) setState("active", input)
     }
 
-    function add(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
+    function add(input: ServerConnection.Http) {
+      const url_ = normalizeServerUrl(input.http.url)
+      if (!url_) return
+      const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
       return batch(() => {
-        const http: ServerConnection.HttpBase = { url }
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
+        const existing = store.list.findIndex((x) => url(x) === url_)
+        if (existing !== -1) {
+          setStore("list", existing, conn)
+        } else {
+          setStore("list", store.list.length, conn)
         }
-        const conn: ServerConnection.Http = { type: "http", http }
         setState("active", ServerConnection.key(conn))
         return conn
       })
     }
 
     function remove(key: ServerConnection.Key) {
-      const list = store.list.filter((x) => x !== key)
+      const list = store.list.filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
         if (state.active === key) {
           const next = list[0]
-          setState("active", next ? ServerConnection.key({ type: "http", http: { url: next } }) : props.defaultServer)
+          setState("active", next ? ServerConnection.Key.make(url(next)) : props.defaultServer)
         }
       })
     }
 
     const isReady = createMemo(() => ready() && !!state.active)
-
-    const fetcher = platform.fetch ?? globalThis.fetch
-    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http, fetcher).then((x) => x.healthy)
-
-    createEffect(() => {
-      const current_ = current()
-      if (!current_) return
-
-      setState("healthy", undefined)
-      onCleanup(startHealthPolling(current_))
-    })
 
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
@@ -206,13 +192,12 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     return {
       ready: isReady,
-      healthy,
       isLocal,
       get key() {
         return state.active
       },
       get name() {
-        return serverDisplayName(current())
+        return serverName(current())
       },
       get list() {
         return allServers()

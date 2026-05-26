@@ -36,10 +36,10 @@ function providerIconsPlugin() {
   return {
     name: "provider-icons-plugin",
     configureServer() {
-      fetchProviderIcons()
+      void fetchProviderIcons()
     },
     buildStart() {
-      fetchProviderIcons()
+      void fetchProviderIcons()
     },
   }
 }

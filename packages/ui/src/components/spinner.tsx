@@ -23,7 +23,7 @@ export function Spinner(props: {
       viewBox="0 0 15 15"
       data-component="spinner"
       classList={{
-        ...(props.classList ?? {}),
+        ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
       fill="currentColor"
@@ -41,6 +41,7 @@ export function Spinner(props: {
               animation: square.corner
                 ? undefined
                 : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
+              "animation-fill-mode": square.corner ? undefined : "both",
               "animation-delay": square.corner ? undefined : `${square.delay}s`,
             }}
           />

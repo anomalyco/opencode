@@ -1,0 +1,58 @@
+diff --git a/Users/brendonovich/github.com/anomalyco/opencode/node_modules/solid-js/.bun-tag-6fcb6b48d6947d2c b/.bun-tag-6fcb6b48d6947d2c
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/Users/brendonovich/github.com/anomalyco/opencode/node_modules/solid-js/.bun-tag-b272f631c12927b0 b/.bun-tag-b272f631c12927b0
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/dev.cjs b/dist/dev.cjs
+index 7104749486e4361e8c4ee7836a8046582cec7aa1..0501eb1ec5d13b81ecb13a5ac1a82db42502b976 100644
+--- a/dist/dev.cjs
++++ b/dist/dev.cjs
+@@ -764,6 +764,8 @@ function runComputation(node, value, time) {
+     if (node.updatedAt != null && "observers" in node) {
+       writeSignal(node, nextValue, true);
+     } else if (Transition && Transition.running && node.pure) {
++      // On first computation during transition, also set committed value #2046
++      if (!Transition.sources.has(node)) node.value = nextValue;
+       Transition.sources.add(node);
+       node.tValue = nextValue;
+     } else node.value = nextValue;
+diff --git a/dist/dev.js b/dist/dev.js
+index ea5e4bc2fd4f0b3922a73d9134439529dc81339f..4b3ec07e624d20fdd23d6941a4fdde6d3a78cca3 100644
+--- a/dist/dev.js
++++ b/dist/dev.js
+@@ -762,6 +762,8 @@ function runComputation(node, value, time) {
+     if (node.updatedAt != null && "observers" in node) {
+       writeSignal(node, nextValue, true);
+     } else if (Transition && Transition.running && node.pure) {
++      // On first computation during transition, also set committed value #2046
++      if (!Transition.sources.has(node)) node.value = nextValue;
+       Transition.sources.add(node);
+       node.tValue = nextValue;
+     } else node.value = nextValue;
+diff --git a/dist/solid.cjs b/dist/solid.cjs
+index 7c133a2b254678a84fd61d719fbeffad766e1331..2f68c99f2698210cc0bac62f074cc8cd3beb2881 100644
+--- a/dist/solid.cjs
++++ b/dist/solid.cjs
+@@ -717,6 +717,8 @@ function runComputation(node, value, time) {
+     if (node.updatedAt != null && "observers" in node) {
+       writeSignal(node, nextValue, true);
+     } else if (Transition && Transition.running && node.pure) {
++      // On first computation during transition, also set committed value #2046
++      if (!Transition.sources.has(node)) node.value = nextValue;
+       Transition.sources.add(node);
+       node.tValue = nextValue;
+     } else node.value = nextValue;
+diff --git a/dist/solid.js b/dist/solid.js
+index 656fd26e7e5c794aa22df19c2377ff5c0591fc29..f08e9f5a7157c3506e5b6922fe2ef991335a80be 100644
+--- a/dist/solid.js
++++ b/dist/solid.js
+@@ -715,6 +715,8 @@ function runComputation(node, value, time) {
+     if (node.updatedAt != null && "observers" in node) {
+       writeSignal(node, nextValue, true);
+     } else if (Transition && Transition.running && node.pure) {
++      // On first computation during transition, also set committed value #2046
++      if (!Transition.sources.has(node)) node.value = nextValue;
+       Transition.sources.add(node);
+       node.tValue = nextValue;
+     } else node.value = nextValue;

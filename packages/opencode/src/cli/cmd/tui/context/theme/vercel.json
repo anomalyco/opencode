@@ -138,8 +138,8 @@
       "light": "lightBackground"
     },
     "diffLineNumber": {
-      "dark": "gray600",
-      "light": "lightGray600"
+      "dark": "#8a8a8a",
+      "light": "textMuted"
     },
     "diffAddedLineNumberBg": {
       "dark": "#0F2613",

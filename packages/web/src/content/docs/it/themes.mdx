@@ -45,13 +45,13 @@ E altri ancora: aggiungiamo costantemente nuovi temi.
 
 ## Tema di sistema
 
-Il tema `system` e progettato per adattarsi automaticamente allo schema colori del tuo terminale. A differenza dei temi tradizionali con colori fissi, il tema _system_:
+Il tema `system` è progettato per adattarsi automaticamente allo schema colori del tuo terminale. A differenza dei temi tradizionali con colori fissi, il tema _system_:
 
 - **Genera una scala di grigi**: crea una scala di grigi personalizzata in base al colore di sfondo del terminale, garantendo un contrasto ottimale.
 - **Usa colori ANSI**: sfrutta i colori ANSI standard (0-15) per evidenziazione della sintassi ed elementi UI, rispettando la palette del terminale.
 - **Preserva i default del terminale**: usa `none` per testo e sfondo per mantenere l'aspetto nativo del terminale.
 
-Il tema di sistema e pensato per chi:
+Il tema di sistema è pensato per chi:
 
 - Vuole che OpenCode corrisponda all'aspetto del terminale
 - Usa schemi colori personalizzati del terminale
@@ -61,11 +61,11 @@ Il tema di sistema e pensato per chi:
 
 ## Usare un tema
 
-Puoi selezionare un tema aprendo la selezione temi con il comando `/theme`. In alternativa, puoi specificarlo nella tua [configurazione](/docs/config).
+Puoi selezionare un tema aprendo la selezione temi con il comando `/theme`. In alternativa, puoi specificarlo in `tui.json`.
 
-```json title="opencode.json" {3}
+```json title="tui.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -80,14 +80,14 @@ OpenCode supporta un sistema di temi flessibile basato su JSON che permette di c
 
 ### Gerarchia
 
-I temi vengono caricati da piu directory nel seguente ordine, dove le directory successive sovrascrivono le precedenti:
+I temi vengono caricati da più directory nel seguente ordine, dove le directory successive sovrascrivono le precedenti:
 
 1. **Temi integrati** - incorporati nel binario
 2. **Directory di configurazione utente** - in `~/.config/opencode/themes/*.json` o `$XDG_CONFIG_HOME/opencode/themes/*.json`
 3. **Directory root del progetto** - in `<project-root>/.opencode/themes/*.json`
 4. **Directory di lavoro corrente** - in `./.opencode/themes/*.json`
 
-Se piu directory contengono un tema con lo stesso nome, verra usato il tema della directory con priorita piu alta.
+Se più directory contengono un tema con lo stesso nome, verrà usato il tema della directory con priorità più alta.
 
 ---
 
@@ -125,13 +125,13 @@ I temi usano un formato JSON flessibile che supporta:
 
 ### Definizioni dei colori
 
-La sezione `defs` e opzionale e ti permette di definire colori riutilizzabili che possono essere referenziati nel tema.
+La sezione `defs` è opzionale e ti permette di definire colori riutilizzabili che possono essere referenziati nel tema.
 
 ---
 
 ### Valori predefiniti del terminale
 
-Il valore speciale `"none"` puo essere usato per qualunque colore per ereditare il colore predefinito del terminale. E particolarmente utile per creare temi che si fondono con lo schema colori del terminale:
+Il valore speciale `"none"` può essere usato per qualunque colore per ereditare il colore predefinito del terminale. È particolarmente utile per creare temi che si fondono con lo schema colori del terminale:
 
 - `"text": "none"` - usa il colore del testo predefinito del terminale
 - `"background": "none"` - usa il colore di sfondo predefinito del terminale
