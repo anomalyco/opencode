@@ -552,6 +552,33 @@ it.instance("handles file inclusion with replacement tokens", () =>
   }),
 )
 
+it.instance("resolves ${env:VAR} templates in provider options", () =>
+  withProcessEnvs(
+    {
+      PROVIDER_API_KEY: "test-provider-key",
+      PROVIDER_BASE_URL: "https://provider.example.com/v1",
+    },
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          "opencode-go": {
+            options: {
+              apiKey: "${env:PROVIDER_API_KEY}",
+              baseURL: "${env:PROVIDER_BASE_URL}",
+            },
+          },
+        },
+      })
+
+      const config = yield* Config.use.get()
+      expect(config.provider?.["opencode-go"]?.options?.apiKey).toBe("test-provider-key")
+      expect(config.provider?.["opencode-go"]?.options?.baseURL).toBe("https://provider.example.com/v1")
+    }),
+  ),
+)
+
 const accountTokenIt = configIt({
   account: Layer.mock(Account.Service)({
     active: () =>
