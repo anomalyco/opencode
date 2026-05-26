@@ -35,28 +35,31 @@ await $`mkdir -p ./dist/${pkg.name}`
 await $`mkdir -p ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
-await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
-  [
-    `echo "Error: ${pkg.name}-ai's postinstall script was not run." >&2`,
-    'echo "" >&2',
-    'echo "This occurs when using --ignore-scripts during installation, or when using a" >&2',
-    'echo "package manager like pnpm that does not run postinstall scripts by default." >&2',
-    'echo "" >&2',
-    'echo "To fix this, run the postinstall script manually:" >&2',
-    `echo "  cd node_modules/${pkg.name}-ai && node postinstall.mjs" >&2`,
-    'echo "" >&2',
-    `echo "Or reinstall ${pkg.name}-ai without the --ignore-scripts flag." >&2`,
-    "exit 1",
-    "",
-  ].join("\n"),
-)
+
+const binScript = [
+  "#!/usr/bin/env node",
+  "const cp = require('child_process'), fs = require('fs'), path = require('path')",
+  `const bin = path.join(__dirname, process.platform === 'win32' ? '${pkg.name}.exe' : '${pkg.name}')`,
+  "if (!fs.existsSync(bin)) {",
+  `  console.error('${pkg.name}-ai postinstall did not run. Try: cd node_modules/${pkg.name}-ai && node postinstall.mjs')`,
+  "  process.exit(1)",
+  "}",
+  "const child = cp.spawn(bin, process.argv.slice(2), { stdio: 'inherit' })",
+  "child.on('error', e => { console.error(e.message); process.exit(1) })",
+  "const sigs = ['SIGINT','SIGTERM','SIGHUP'], fw = {}",
+  "sigs.forEach(s => { fw[s] = () => { try { child.kill(s) } catch {} }; process.on(s, fw[s]) })",
+  "child.on('exit', (code, sig) => { sigs.forEach(s => process.removeListener(s, fw[s])); sig ? process.kill(process.pid, sig) : process.exit(code ?? 0) })",
+  "",
+].join("\n")
+
+await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.js`).write(binScript)
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}.exe`,
+        [pkg.name]: `./bin/${pkg.name}.js`,
       },
       scripts: {
         postinstall: "node ./postinstall.mjs",
