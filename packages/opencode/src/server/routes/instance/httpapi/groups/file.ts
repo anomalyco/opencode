@@ -5,7 +5,11 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
+} from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 export const FileQuery = Schema.Struct({
@@ -97,6 +101,7 @@ export const FileApi = HttpApi.make("file")
           }),
         ),
         HttpApiEndpoint.get("status", FilePaths.status, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(File.Info), "File status"),
         }).annotateMerge(
           OpenApi.annotations({

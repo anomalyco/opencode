@@ -10,6 +10,7 @@ import { Global } from "@opencode-ai/core/global"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { Truncate } from "../../src/tool/truncate"
 import { RepoCloneTool } from "../../src/tool/repo_clone"
+import { RepositoryCache } from "../../src/reference/repository-cache"
 import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -19,7 +20,7 @@ afterEach(async () => {
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "scout",
   abort: AbortSignal.any([]),
@@ -34,6 +35,7 @@ const it = testEffect(
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Git.defaultLayer,
+    RepositoryCache.defaultLayer,
     Truncate.defaultLayer,
   ),
 )
@@ -219,6 +221,23 @@ describe("tool.repo_clone", () => {
         if (Exit.isFailure(result)) {
           const error = Cause.squash(result.cause)
           expect(error instanceof Error ? error.message : String(error)).toContain("Local file")
+        }
+      }),
+    ),
+  )
+
+  it.live("rejects invalid branch inputs", () =>
+    provideTmpdirInstance((_dir) =>
+      Effect.gen(function* () {
+        const tool = yield* init()
+        const result = yield* tool.execute({ repository: "owner/repo", branch: "bad..branch" }, ctx).pipe(Effect.exit)
+
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) {
+          const error = Cause.squash(result.cause)
+          expect(error instanceof Error ? error.message : String(error)).toContain(
+            "Branch must contain only alphanumeric characters",
+          )
         }
       }),
     ),

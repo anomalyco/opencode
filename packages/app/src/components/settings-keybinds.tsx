@@ -123,11 +123,13 @@ function listFor(command: CommandContext, map: KeybindMap, palette: string) {
 
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
+    if (opt.hidden) continue
     out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
   }
 
   for (const opt of command.options) {
     if (opt.id.startsWith("suggested.")) continue
+    if (opt.hidden) continue
     out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
   }
 

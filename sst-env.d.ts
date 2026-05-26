@@ -22,30 +22,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "Api": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "AuthApi": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "AuthStorage": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
-    "Bucket": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
-    "CLOUDFLARE_API_TOKEN": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "CLOUDFLARE_DEFAULT_ACCOUNT_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
+    "Api": import("@cloudflare/workers-types").Service
+    "AuthApi": import("@cloudflare/workers-types").Service
+    "AuthStorage": import("@cloudflare/workers-types").KVNamespace
+    "Bucket": import("@cloudflare/workers-types").R2Bucket
     "Console": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
@@ -74,10 +54,7 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "EnterpriseStorage": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "EnterpriseStorage": import("@cloudflare/workers-types").R2Bucket
     "FEISHU_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string
@@ -106,10 +83,6 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "GatewayKv": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -118,9 +91,38 @@ declare module "sst" {
       "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
-    "LogProcessor": {
-      "type": "sst.cloudflare.Worker"
+    "InferenceEvent": {
+      "catalog": string
+      "database": string
+      "region": string
+      "table": string
+      "tableBucket": string
+      "type": "sst.sst.Linkable"
+      "workgroup": string
     }
+    "LakeIngest": {
+      "secret": string
+      "type": "sst.sst.Linkable"
+      "url": string
+    }
+    "LakeIngestConfig": {
+      "secret": string
+      "streamName": string
+      "type": "sst.sst.Linkable"
+    }
+    "LakeIngestSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
+      "value": string
+    }
+    "LakeIngestService": {
+      "service": string
+      "type": "sst.aws.Service"
+      "url": string
+    }
+    "LakeVpc": {
+      "type": "sst.aws.Vpc"
+    }
+    "LogProcessor": import("@cloudflare/workers-types").Service
     "R2AccessKey": {
       "type": "sst.sst.Secret"
       "value": string
@@ -153,9 +155,35 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "Stat": import("@cloudflare/workers-types").Service
+    "StatsDatabase": {
+      "database": string
+      "host": string
+      "password": string
+      "port": number
+      "type": "sst.sst.Linkable"
+      "url": string
+      "username": string
+    }
+    "StatsSyncConfig": {
+      "dataset": string
+      "type": "sst.sst.Linkable"
+    }
+    "StatsSyncService": {
+      "service": string
+      "type": "sst.aws.Service"
+    }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
+    }
+    "UpstashRedisRestToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "UpstashRedisRestUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "Web": {
       "type": "sst.cloudflare.Astro"
@@ -311,17 +339,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "ZenData": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
-    "ZenDataNew": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "ZenData": import("@cloudflare/workers-types").R2Bucket
+    "ZenDataNew": import("@cloudflare/workers-types").R2Bucket
   }
 }
-/// <reference path="sst-env.d.ts" />
 
 import "sst"
 export {}

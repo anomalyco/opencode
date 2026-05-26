@@ -18,7 +18,7 @@ afterEach(async () => {
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "scout",
   abort: AbortSignal.any([]),
@@ -92,6 +92,21 @@ describe("tool.repo_overview", () => {
         )
         expect(result.output).toContain("Top-level structure:")
         expect(result.output).toContain("src/")
+        expect(result.output).toContain("README.md")
+      }),
+    ),
+  )
+
+  it.live("resolves relative paths from the instance directory", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        yield* fs.writeWithDirs(path.join(dir, "nested", "README.md"), "# Nested\n")
+
+        const tool = yield* init()
+        const result = yield* tool.execute({ path: "nested" }, ctx)
+
+        expect(result.metadata.path).toBe(path.join(dir, "nested"))
         expect(result.output).toContain("README.md")
       }),
     ),

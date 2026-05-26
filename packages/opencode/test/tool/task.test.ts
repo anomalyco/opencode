@@ -1,16 +1,21 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
+import { BackgroundJob } from "@/background/job"
+import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
+import { SessionRunState } from "@/session/run-state"
+import { SessionStatus } from "@/session/status"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -23,16 +28,23 @@ const ref = {
   modelID: ModelID.make("test-model"),
 }
 
-const it = testEffect(
+const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
+    BackgroundJob.defaultLayer,
+    Bus.defaultLayer,
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
+    SessionRunState.defaultLayer,
+    SessionStatus.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
-  ),
-)
+    RuntimeFlags.layer(flags),
+  )
+
+const it = testEffect(layer())
+const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -224,7 +236,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
       expect(result.metadata.sessionId).toBe(child.id)
-      expect(result.output).toContain(`task_id: ${child.id}`)
+      expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
     }),
   )
@@ -357,7 +369,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(result.metadata.sessionId)
       expect(result.metadata.sessionId).not.toBe("ses_missing")
-      expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
+      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
     }),
   )
@@ -431,5 +443,291 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance("rejects background execution when the experiment is disabled", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            background: true,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  background.instance("execute launches background tasks without waiting for completion", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: () => Effect.never,
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const job = yield* jobs.get(result.metadata.sessionId)
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain(`state="running"`)
+      expect(job?.status).toBe("running")
+    }),
+  )
+
+  background.instance("background tasks complete through the background job service", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ text: "background done" }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+      expect(waited.info?.status).toBe("completed")
+      expect(waited.info?.output).toBe("background done")
+    }),
+  )
+
+  background.instance("background task completion does not wait for the parent async prompt", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps({ text: "background done" }),
+              prompt: (input) =>
+                input.sessionID === chat.id ? Effect.never : Effect.succeed(reply(input, "background done")),
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+      expect(waited.info?.status).toBe("completed")
+    }),
+  )
+
+  background.instance("removing the parent session cancels running background tasks", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: () => Effect.never,
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      yield* sessions.remove(chat.id)
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+      expect(waited.info?.status).toBe("cancelled")
+    }),
+  )
+
+  background.instance("removing the child task session cancels its running background task", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: () => Effect.never,
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      yield* sessions.remove(result.metadata.sessionId)
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+      expect(waited.info?.status).toBe("cancelled")
+    }),
+  )
+
+  background.instance("cancelling the parent run cancels running background tasks", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: () => Effect.never,
+            } satisfies TaskPromptOps,
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      yield* runState.cancel(chat.id)
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.timedOut).toBe(false)
+      expect(waited.info?.status).toBe("cancelled")
+    }),
+  )
+
+  it.instance("cancelling a parent run recursively cancels descendant background tasks", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const sessions = yield* Session.Service
+      const { chat } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "child" })
+      const grandchild = yield* sessions.create({ parentID: child.id, title: "grandchild" })
+
+      yield* jobs.start({
+        id: child.id,
+        type: "task",
+        metadata: { parentSessionId: chat.id, sessionId: child.id },
+        run: Effect.never,
+      })
+      yield* jobs.start({
+        id: grandchild.id,
+        type: "task",
+        metadata: { parentSessionId: child.id, sessionId: grandchild.id },
+        run: Effect.never,
+      })
+
+      yield* runState.cancel(chat.id)
+
+      expect((yield* jobs.get(child.id))?.status).toBe("cancelled")
+      expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
+    }),
   )
 })

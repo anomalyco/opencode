@@ -1,103 +1,148 @@
-import { describe, expect, test } from "bun:test"
-import { AppRuntime } from "../../src/effect/app-runtime"
+import { describe, expect } from "bun:test"
 import { Bus } from "../../src/bus"
-import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
+import { Config } from "../../src/config/config"
+import { Plugin } from "../../src/plugin"
 import { Pty } from "../../src/pty"
 import type { PtyID } from "../../src/pty/schema"
-import { tmpdir } from "../fixture/fixture"
-import { setTimeout as sleep } from "node:timers/promises"
+import { Cause, Effect, Exit, Layer, Queue } from "effect"
+import { testEffect } from "../lib/effect"
 
-const wait = async (fn: () => boolean, ms = 5000) => {
-  const end = Date.now() + ms
-  while (Date.now() < end) {
-    if (fn()) return
-    await sleep(25)
-  }
-  throw new Error("timeout waiting for pty events")
-}
+type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
 
-const pick = (log: Array<{ type: "created" | "exited" | "deleted"; id: PtyID }>, id: PtyID) => {
-  return log.filter((evt) => evt.id === id).map((evt) => evt.type)
+const it = testEffect(
+  Pty.layer.pipe(
+    Layer.provideMerge(Bus.layer),
+    Layer.provideMerge(Config.defaultLayer),
+    Layer.provideMerge(Plugin.defaultLayer),
+  ),
+)
+const ptyTest = process.platform === "win32" ? it.instance.skip : it.instance
+
+const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
+  const bus = yield* Bus.Service
+  const events = yield* Queue.unbounded<PtyEvent>()
+
+  const subscribe = <A>(effect: Effect.Effect<() => void, never, A>) =>
+    Effect.acquireRelease(effect, (off) => Effect.sync(off))
+
+  yield* subscribe(
+    bus.subscribeCallback(Pty.Event.Created, (evt) => {
+      Queue.offerUnsafe(events, { type: "created", id: evt.properties.info.id })
+    }),
+  )
+  yield* subscribe(
+    bus.subscribeCallback(Pty.Event.Exited, (evt) => {
+      Queue.offerUnsafe(events, { type: "exited", id: evt.properties.id })
+    }),
+  )
+  yield* subscribe(
+    bus.subscribeCallback(Pty.Event.Deleted, (evt) => {
+      Queue.offerUnsafe(events, { type: "deleted", id: evt.properties.id })
+    }),
+  )
+
+  return events
+})
+
+const createPty = Effect.fn("PtySessionTest.createPty")(function* (input: Pty.CreateInput) {
+  const pty = yield* Pty.Service
+  return yield* Effect.acquireRelease(pty.create(input), (info) => pty.remove(info.id).pipe(Effect.ignore))
+})
+
+const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) => {
+  return Effect.gen(function* () {
+    const picked: Array<PtyEvent["type"]> = []
+    while (picked.length < count) {
+      const evt = yield* Queue.take(events)
+      if (evt.id === id) picked.push(evt.type)
+    }
+    return picked
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: "5 seconds",
+      orElse: () => Effect.fail(new Error("timeout waiting for pty events")),
+    }),
+  )
 }
 
 describe("pty", () => {
-  test("publishes created, exited, deleted in order for a short-lived process", async () => {
-    if (process.platform === "win32") return
+  it.instance(
+    "returns typed not found errors for missing sessions",
+    () =>
+      Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        const id = "pty_missing" as PtyID
+        let closed = false
+        const socket = {
+          readyState: 1,
+          send: () => {},
+          close: () => {
+            closed = true
+          },
+        }
 
-    await using dir = await tmpdir({ git: true })
+        const get = yield* pty.get(id).pipe(Effect.exit)
+        expect(Exit.isFailure(get)).toBe(true)
+        if (Exit.isFailure(get)) expect(Cause.squash(get.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
 
-    await WithInstance.provide({
-      directory: dir.path,
-      fn: () =>
-        AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const pty = yield* Pty.Service
-            const log: Array<{ type: "created" | "exited" | "deleted"; id: PtyID }> = []
-            const off = [
-              Bus.subscribe(Pty.Event.Created, (evt) => log.push({ type: "created", id: evt.properties.info.id })),
-              Bus.subscribe(Pty.Event.Exited, (evt) => log.push({ type: "exited", id: evt.properties.id })),
-              Bus.subscribe(Pty.Event.Deleted, (evt) => log.push({ type: "deleted", id: evt.properties.id })),
-            ]
+        const update = yield* pty.update(id, { title: "missing" }).pipe(Effect.exit)
+        expect(Exit.isFailure(update)).toBe(true)
+        if (Exit.isFailure(update))
+          expect(Cause.squash(update.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
 
-            let id: PtyID | undefined
-            try {
-              const info = yield* pty.create({
-                command: "/usr/bin/env",
-                args: ["sh", "-c", "sleep 0.1"],
-                title: "sleep",
-              })
-              id = info.id
+        const remove = yield* pty.remove(id).pipe(Effect.exit)
+        expect(Exit.isFailure(remove)).toBe(true)
+        if (Exit.isFailure(remove))
+          expect(Cause.squash(remove.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
 
-              yield* Effect.promise(() => wait(() => pick(log, id!).includes("exited")))
+        const resize = yield* pty.resize(id, 80, 24).pipe(Effect.exit)
+        expect(Exit.isFailure(resize)).toBe(true)
+        if (Exit.isFailure(resize))
+          expect(Cause.squash(resize.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
 
-              yield* pty.remove(id)
-              yield* Effect.promise(() => wait(() => pick(log, id!).length >= 3))
-              expect(pick(log, id!)).toEqual(["created", "exited", "deleted"])
-            } finally {
-              off.forEach((x) => x())
-              if (id) yield* pty.remove(id)
-            }
-          }),
-        ),
-    })
-  })
+        const write = yield* pty.write(id, "input").pipe(Effect.exit)
+        expect(Exit.isFailure(write)).toBe(true)
+        if (Exit.isFailure(write))
+          expect(Cause.squash(write.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
 
-  test("publishes created, exited, deleted in order for /bin/sh + remove", async () => {
-    if (process.platform === "win32") return
+        const connect = yield* pty.connect(id, socket).pipe(Effect.exit)
+        expect(Exit.isFailure(connect)).toBe(true)
+        if (Exit.isFailure(connect))
+          expect(Cause.squash(connect.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: id })
+        expect(closed).toBe(true)
+      }),
+    { git: true },
+  )
 
-    await using dir = await tmpdir({ git: true })
+  ptyTest(
+    "publishes created, exited, deleted in order for a short-lived process",
+    () =>
+      Effect.gen(function* () {
+        const events = yield* subscribePtyEvents()
+        const info = yield* createPty({
+          command: "/usr/bin/env",
+          args: ["sh", "-c", "sleep 0.1"],
+          title: "sleep",
+        })
 
-    await WithInstance.provide({
-      directory: dir.path,
-      fn: () =>
-        AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const pty = yield* Pty.Service
-            const log: Array<{ type: "created" | "exited" | "deleted"; id: PtyID }> = []
-            const off = [
-              Bus.subscribe(Pty.Event.Created, (evt) => log.push({ type: "created", id: evt.properties.info.id })),
-              Bus.subscribe(Pty.Event.Exited, (evt) => log.push({ type: "exited", id: evt.properties.id })),
-              Bus.subscribe(Pty.Event.Deleted, (evt) => log.push({ type: "deleted", id: evt.properties.id })),
-            ]
+        expect(yield* waitForEvents(events, info.id, 3)).toEqual(["created", "exited", "deleted"])
+      }),
+    { git: true },
+  )
 
-            let id: PtyID | undefined
-            try {
-              const info = yield* pty.create({ command: "/bin/sh", title: "sh" })
-              id = info.id
+  ptyTest(
+    "publishes created, exited, deleted in order for /bin/sh + remove",
+    () =>
+      Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        const events = yield* subscribePtyEvents()
+        const info = yield* createPty({ command: "/bin/sh", title: "sh" })
 
-              yield* Effect.promise(() => sleep(100))
-
-              yield* pty.remove(id)
-              yield* Effect.promise(() => wait(() => pick(log, id!).length >= 3))
-              expect(pick(log, id!)).toEqual(["created", "exited", "deleted"])
-            } finally {
-              off.forEach((x) => x())
-              if (id) yield* pty.remove(id)
-            }
-          }),
-        ),
-    })
-  })
+        expect(yield* waitForEvents(events, info.id, 1)).toEqual(["created"])
+        yield* pty.write(info.id, "exit\n")
+        expect(yield* waitForEvents(events, info.id, 2)).toEqual(["exited", "deleted"])
+        yield* pty.remove(info.id).pipe(Effect.ignore)
+      }),
+    { git: true },
+  )
 })

@@ -1,7 +1,6 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
-import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -10,6 +9,8 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
+import { useTerminalDimensions } from "@opentui/solid"
+import { useTuiConfig } from "../context/tui-config"
 
 let once = false
 const placeholder = {
@@ -19,13 +20,19 @@ const placeholder = {
 
 export function Home() {
   const sync = useSync()
-  const project = useProject()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
   const editor = useEditorContext()
+  const dimensions = useTerminalDimensions()
+  const tuiConfig = useTuiConfig()
+  const promptMaxWidth = createMemo(() => {
+    const configured = tuiConfig.prompt?.max_width
+    if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
+    return configured ?? 75
+  })
   let sent = false
 
   onMount(() => {
@@ -69,19 +76,9 @@ export function Home() {
           </TuiPluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <TuiPluginRuntime.Slot
-            name="home_prompt"
-            mode="replace"
-            workspace_id={project.workspace.current()}
-            ref={bind}
-          >
-            <Prompt
-              ref={bind}
-              workspaceID={project.workspace.current()}
-              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
-              placeholders={placeholder}
-            />
+        <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
+          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
+            <Prompt ref={bind} right={<TuiPluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </TuiPluginRuntime.Slot>
         </box>
         <TuiPluginRuntime.Slot name="home_bottom" />

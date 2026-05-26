@@ -12,15 +12,15 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
-  const globalSync = useGlobalSync()
-  const globalSDK = useGlobalSDK()
+  const serverSync = useServerSync()
+  const serverSDK = useServerSDK()
   const language = useLanguage()
   const providers = useProviders()
 
@@ -41,9 +41,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   })
 
   const provider = createMemo(
-    () =>
-      providers.all().find((x) => x.id === props.provider) ??
-      globalSync.data.provider.all.find((x) => x.id === props.provider)!,
+    () => providers.all().get(props.provider) ?? serverSync.data.provider.all.get(props.provider)!,
   )
   const fallback = createMemo<ProviderAuthMethod[]>(() => [
     {
@@ -54,16 +52,16 @@ export function DialogConnectProvider(props: { provider: string }) {
   const [auth] = createResource(
     () => props.provider,
     async () => {
-      const cached = globalSync.data.provider_auth[props.provider]
+      const cached = serverSync.data.provider_auth[props.provider]
       if (cached) return cached
-      const res = await globalSDK.client.provider.auth()
+      const res = await serverSDK.client.provider.auth()
       if (!alive.value) return fallback()
-      globalSync.set("provider_auth", res.data ?? {})
+      serverSync.set("provider_auth", res.data ?? {})
       return res.data?.[props.provider] ?? fallback()
     },
   )
-  const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
-  const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
+  const loading = createMemo(() => auth.loading && !serverSync.data.provider_auth[props.provider])
+  const methods = createMemo(() => auth.latest ?? serverSync.data.provider_auth[props.provider] ?? fallback())
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
@@ -160,7 +158,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
       dispatch({ type: "auth.pending" })
       const start = Date.now()
-      await globalSDK.client.provider.oauth
+      await serverSDK.client.provider.oauth
         .authorize(
           {
             providerID: props.provider,
@@ -332,7 +330,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   })
 
   async function complete() {
-    await globalSDK.client.global.dispose()
+    await serverSDK.client.global.dispose()
     dialog.close()
     showToast({
       variant: "success",
@@ -409,7 +407,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      await globalSDK.client.auth.set({
+      await serverSDK.client.auth.set({
         providerID: props.provider,
         auth: {
           type: "api",
@@ -480,7 +478,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      const result = await globalSDK.client.provider.oauth
+      const result = await serverSDK.client.provider.oauth
         .callback({
           providerID: props.provider,
           method: store.methodIndex,
@@ -526,14 +524,14 @@ export function DialogConnectProvider(props: { provider: string }) {
     const code = createMemo(() => {
       const instructions = store.authorization?.instructions
       if (instructions?.includes(":")) {
-        return instructions.split(":")[1]?.trim()
+        return instructions.split(":").pop()?.trim()
       }
       return instructions
     })
 
     onMount(() => {
       void (async () => {
-        const result = await globalSDK.client.provider.oauth
+        const result = await serverSDK.client.provider.oauth
           .callback({
             providerID: props.provider,
             method: store.methodIndex,

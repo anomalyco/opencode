@@ -1,5 +1,10 @@
 import { Option, Schema, SchemaGetter } from "effect"
-import { zod, ZodOverride } from "./effect-zod"
+
+export const AbsolutePath = Schema.String.pipe(Schema.brand("AbsolutePath"))
+export type AbsolutePath = typeof AbsolutePath.Type
+
+export const RelativePath = Schema.String.pipe(Schema.brand("RelativePath"))
+export type RelativePath = typeof RelativePath.Type
 
 /**
  * Integer greater than zero.
@@ -21,7 +26,6 @@ export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
       decode: SchemaGetter.passthrough({ strict: false }),
       encode: SchemaGetter.transformOptional(Option.filter((value) => value !== undefined)),
     }),
-    Schema.annotate({ [ZodOverride]: zod(schema).optional() }),
   )
 
 /**
