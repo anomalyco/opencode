@@ -68,7 +68,7 @@ LSP etkinleştirildiğinde ve opencode bir dosyayı açtığında:
 
 LSP, dil sunucularından tanılama sağlayarak agent'ın sorunları bulup düzeltmesine yardımcı olabilir. Bu bazı projelerde yararlıdır, ancak her zaman net bir kazanç değildir.
 
-Dil sunucuları senkronizasyonu kaybedebilir, önemli miktarda bellek kullanabilir, sürüme veya projeye göre değişebilir ve agent iş akışlarını yavaşlatabilir. Birçok projede agent'ın lint, typecheck veya diğer tanılama CLI araçlarını doğrudan çalıştırması daha iyidir; böylece hatalar bu ödünleşimler olmadan agent döngüsüne geri beslenir. Projeniz ek dil sunucusu geri bildiriminden yararlanıyorsa LSP'yi etkinleştirin.
+Dil sunucuları senkronizasyonu kaybedebilir, önemli miktarda bellek kullanabilir, sürüme veya projeye göre değişebilir ve agent iş akışlarını yavaşlatabilir. Birçok projede agent'ın lint, typecheck veya diğer tanılama CLI araçlarını doğrudan çalıştırması daha iyidir; böylece hatalar bu ödünleşimler olmadan agent döngüsüne geri beslenir. Agent'ın ne çalıştıracağını bilmesi için bu komutları `AGENTS.md` veya skills gibi talimat dosyalarında belgeleyin. Projeniz ek dil sunucusu geri bildiriminden yararlanıyorsa LSP'yi etkinleştirin.
 
 ---
 
