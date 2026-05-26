@@ -10,6 +10,7 @@
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
     "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
+    "dev:stats": "bun run --cwd packages/stats/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "lint": "oxlint",
     "typecheck": "bun turbo typecheck",
@@ -17,13 +18,14 @@
     "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
     "random": "echo 'Random script'",
-    "hello": "echo 'Hello World!'",
+    "sso": "aws sso login --sso-session=opencode --no-browser",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
     "packages": [
       "packages/*",
       "packages/console/*",
+      "packages/stats/*",
       "packages/sdk/js",
       "packages/slack"
     ],
@@ -72,6 +74,7 @@
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",
       "remeda": "2.26.0",
+      "sst": "4.13.1",
       "shiki": "3.20.0",
       "solid-list": "0.3.0",
       "tailwindcss": "4.1.11",
@@ -98,7 +101,7 @@
     "oxlint-tsgolint": "0.21.0",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
-    "sst": "4.13.1",
+    "sst": "catalog:",
     "turbo": "2.8.13"
   },
   "dependencies": {
