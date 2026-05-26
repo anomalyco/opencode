@@ -510,6 +510,7 @@ export const dict = {
   "session.tab.review": "審查",
   "session.tab.context": "上下文",
   "session.tab.preview": "預覽",
+  "session.preview.notReady": "預覽尚未準備就緒",
   "session.panel.reviewAndFiles": "審查與檔案",
   "session.review.filesChanged": "{{count}} 個檔案變更",
   "session.review.change.one": "變更",

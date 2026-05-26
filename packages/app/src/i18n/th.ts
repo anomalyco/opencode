@@ -512,6 +512,7 @@ export const dict = {
   "session.tab.review": "ตรวจสอบ",
   "session.tab.context": "บริบท",
   "session.tab.preview": "ตัวอย่าง",
+  "session.preview.notReady": "ตัวอย่างยังไม่พร้อม",
   "session.panel.reviewAndFiles": "ตรวจสอบและไฟล์",
   "session.review.filesChanged": "{{count}} ไฟล์ที่เปลี่ยนแปลง",
   "session.review.change.one": "การเปลี่ยนแปลง",

@@ -591,6 +591,129 @@
     box-shadow: 0 14px 42px rgba(0, 0, 0, 0.08);
   }
 
+  [data-slot="preview-fallback"] {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%),
+        color-mix(in srgb, var(--app-paper) 92%, var(--app-mix) 8%)
+      );
+  }
+
+  [data-component="codle-preview-loader"] {
+    position: relative;
+    width: 86px;
+    height: 70px;
+    color: var(--app-ink);
+  }
+
+  [data-component="codle-preview-loader"]::before,
+  [data-component="codle-preview-loader"]::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 18%, transparent);
+  }
+
+  [data-component="codle-preview-loader"]::before {
+    top: 7px;
+    height: 2px;
+    transform-origin: 50% 50%;
+    animation: codle-preview-scan 2.4s ease-in-out infinite;
+  }
+
+  [data-component="codle-preview-loader"]::after {
+    bottom: 0;
+    height: 1px;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"] {
+    position: absolute;
+    width: 22px;
+    height: 14px;
+    border-radius: 4px;
+    background: currentColor;
+    opacity: 0.2;
+    transform: translateY(7px) scale(0.9);
+    animation: codle-preview-build 2.4s ease-in-out infinite;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(1) {
+    left: 15px;
+    bottom: 6px;
+    animation-delay: 0s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(2) {
+    left: 41px;
+    bottom: 6px;
+    animation-delay: 0.2s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(3) {
+    left: 28px;
+    bottom: 24px;
+    animation-delay: 0.4s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(4) {
+    left: 15px;
+    bottom: 42px;
+    animation-delay: 0.6s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(5) {
+    left: 41px;
+    bottom: 42px;
+    animation-delay: 0.8s;
+  }
+
+  @keyframes codle-preview-build {
+    0%,
+    18% {
+      opacity: 0.12;
+      transform: translateY(7px) scale(0.9);
+    }
+
+    34%,
+    74% {
+      opacity: 0.72;
+      transform: translateY(0) scale(1);
+    }
+
+    100% {
+      opacity: 0.18;
+      transform: translateY(-2px) scale(0.96);
+    }
+  }
+
+  @keyframes codle-preview-scan {
+    0%,
+    100% {
+      transform: translateY(0) scaleX(0.55);
+      opacity: 0.22;
+    }
+
+    50% {
+      transform: translateY(50px) scaleX(1);
+      opacity: 0.45;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="codle-preview-loader"]::before,
+    [data-component="codle-preview-loader"] [data-slot="block"] {
+      animation: none;
+    }
+
+    [data-component="codle-preview-loader"] [data-slot="block"] {
+      opacity: 0.55;
+      transform: none;
+    }
+  }
+
   @media (prefers-color-scheme: dark) {
     [data-component="codle-session-frame"] {
       box-shadow: 0 18px 56px rgba(0, 0, 0, 0.26);

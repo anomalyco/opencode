@@ -517,6 +517,7 @@ export const dict = {
   "session.tab.review": "Обзор",
   "session.tab.context": "Контекст",
   "session.tab.preview": "Предпросмотр",
+  "session.preview.notReady": "Предпросмотр еще не готов",
   "session.panel.reviewAndFiles": "Обзор и файлы",
   "session.review.filesChanged": "{{count}} файлов изменено",
   "session.review.change.one": "Изменение",

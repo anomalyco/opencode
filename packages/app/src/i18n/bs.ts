@@ -516,6 +516,7 @@ export const dict = {
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
   "session.tab.preview": "Pregled",
+  "session.preview.notReady": "Pregled još nije spreman",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
   "session.review.filesChanged": "Izmijenjeno {{count}} datoteka",
   "session.review.change.one": "Izmjena",

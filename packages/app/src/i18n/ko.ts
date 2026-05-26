@@ -477,6 +477,7 @@ export const dict = {
   "session.tab.review": "검토",
   "session.tab.context": "컨텍스트",
   "session.tab.preview": "미리보기",
+  "session.preview.notReady": "아직 미리보기가 준비되지 않았습니다",
   "session.panel.reviewAndFiles": "검토 및 파일",
   "session.review.filesChanged": "{{count}}개 파일 변경됨",
   "session.review.change.one": "변경",

@@ -521,6 +521,7 @@ export const dict = {
   "session.tab.review": "İnceleme",
   "session.tab.context": "Bağlam",
   "session.tab.preview": "Önizleme",
+  "session.preview.notReady": "Önizleme henüz hazır değil",
   "session.panel.reviewAndFiles": "İnceleme ve dosyalar",
   "session.review.filesChanged": "{{count}} Dosya Değişti",
   "session.review.change.one": "Değişiklik",
