@@ -5,6 +5,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import { Context, Effect, Layer, SynchronizedRef } from "effect"
+import type * as ACPNextError from "./error"
 
 export type ModelOption = {
   readonly providerID: ProviderID
@@ -38,12 +39,12 @@ export type Snapshot = {
 }
 
 export interface LoaderInterface {
-  readonly load: (directory: string) => Effect.Effect<Snapshot>
+  readonly load: (directory: string) => Effect.Effect<Snapshot, ACPNextError.Error>
 }
 
 export interface Interface {
-  readonly get: (directory: string) => Effect.Effect<Snapshot>
-  readonly refresh: (directory: string) => Effect.Effect<Snapshot>
+  readonly get: (directory: string) => Effect.Effect<Snapshot, ACPNextError.Error>
+  readonly refresh: (directory: string) => Effect.Effect<Snapshot, ACPNextError.Error>
   readonly variants: (snapshot: Snapshot, model: DefaultModel) => ModelVariants | undefined
 }
 
@@ -141,7 +142,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const loader = yield* Loader
-    const snapshots = yield* SynchronizedRef.make(new Map<string, Effect.Effect<Snapshot>>())
+    const snapshots = yield* SynchronizedRef.make(new Map<string, Effect.Effect<Snapshot, ACPNextError.Error>>())
 
     const cached = Effect.fnUntraced(function* (directory: string) {
       return yield* SynchronizedRef.modifyEffect(
@@ -149,7 +150,17 @@ export const layer = Layer.effect(
         Effect.fnUntraced(function* (items) {
           const current = items.get(directory)
           if (current) return [current, items] as const
-          const next = yield* Effect.cached(loader.load(directory))
+          const next = yield* Effect.cached(
+            loader.load(directory).pipe(
+              Effect.tapError(() =>
+                SynchronizedRef.update(snapshots, (state) => {
+                  const next = new Map(state)
+                  next.delete(directory)
+                  return next
+                }),
+              ),
+            ),
+          )
           return [next, new Map(items).set(directory, next)] as const
         }),
       )
@@ -163,7 +174,17 @@ export const layer = Layer.effect(
       return yield* SynchronizedRef.modifyEffect(
         snapshots,
         Effect.fnUntraced(function* (items) {
-          const next = yield* Effect.cached(loader.load(directory))
+          const next = yield* Effect.cached(
+            loader.load(directory).pipe(
+              Effect.tapError(() =>
+                SynchronizedRef.update(snapshots, (state) => {
+                  const next = new Map(state)
+                  next.delete(directory)
+                  return next
+                }),
+              ),
+            ),
+          )
           return [next, new Map(items).set(directory, next)] as const
         }),
       ).pipe(Effect.flatten)

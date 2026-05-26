@@ -46,6 +46,12 @@ import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { ServersProvider } from "./context/servers"
+
+if (import.meta.env.VITE_OPENCODE_CHANNEL !== "prod") {
+  document.body.classList.remove("text-12-regular")
+  document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
+}
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -296,31 +302,29 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider
-      defaultServer={props.defaultServer}
-      disableHealthCheck={props.disableHealthCheck}
-      servers={props.servers}
-    >
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <ServerKey>
-          <QueryProvider>
-            <ServerSDKProvider>
-              <ServerSyncProvider>
-                <Dynamic
-                  component={props.router ?? Router}
-                  root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                >
-                  <Route path="/" component={HomeRoute} />
-                  <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={() => <Navigate href="session" />} />
-                    <Route path="/session/:id?" component={SessionRoute} />
-                  </Route>
-                </Dynamic>
-              </ServerSyncProvider>
-            </ServerSDKProvider>
-          </QueryProvider>
-        </ServerKey>
-      </ConnectionGate>
+    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+      <ServersProvider>
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <ServerKey>
+            <QueryProvider>
+              <ServerSDKProvider>
+                <ServerSyncProvider>
+                  <Dynamic
+                    component={props.router ?? Router}
+                    root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                  >
+                    <Route path="/" component={HomeRoute} />
+                    <Route path="/:dir" component={DirectoryLayout}>
+                      <Route path="/" component={() => <Navigate href="session" />} />
+                      <Route path="/session/:id?" component={SessionRoute} />
+                    </Route>
+                  </Dynamic>
+                </ServerSyncProvider>
+              </ServerSDKProvider>
+            </QueryProvider>
+          </ServerKey>
+        </ConnectionGate>
+      </ServersProvider>
     </ServerProvider>
   )
 }
