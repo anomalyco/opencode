@@ -879,51 +879,103 @@ function CollabSessionInner(props: { me: Me }) {
 // `<Show>` in CollabSessionInner for the reasoning.
 //
 // Two phases:
-//   1. First 30 seconds — friendly "Preparing your collab session…" copy.
-//   2. After 30 seconds — assumes preWarm has stalled; shows a "Setup is
-//      taking longer than expected" message with a refresh link.  A reload
-//      re-triggers the SPA's data fetch + SSE handshake and the iframe
-//      remounts cleanly against whatever state the server has reached.
+//   1. First 4 minutes — friendly rotating-status copy + animated icons.
+//      Big monorepos with submodules + a cold plugin cache can legitimately
+//      take a few minutes; the previous 30s timeout was rushing users into
+//      a "stalled" message before the server was actually done.
+//   2. After 4 minutes — assumes preWarm has truly stalled; shows a
+//      "still cooking" panel with a refresh link.  A reload re-triggers
+//      the SPA's data fetch + SSE handshake and the iframe remounts
+//      cleanly against whatever state the server has reached.
 
-const PREPARING_TIMEOUT_MS = 30_000
+const PREPARING_TIMEOUT_MS = 4 * 60 * 1000
+
+/** Friendly rotating-status messages.  Cycles every ~3.5s while we wait so
+ *  the user has something to read and feels progress is happening even
+ *  though we have no real progress signal from the server. */
+const PREPARING_TIPS: ReadonlyArray<string> = [
+  "Cloning your repositories…",
+  "Checking out the collab branch…",
+  "Installing the prepare-commit-msg hook…",
+  "Warming up the editor…",
+  "Bootstrapping the LLM session…",
+  "Almost there — hang tight 🙂",
+  "Brewing a fresh workspace for your team ☕",
+  "Polishing the file tree…",
+  "Tuning the typing indicators…",
+  "Setting up the prompt queue…",
+] as const
 
 function PreparingWorkspacePanel() {
   const [stalled, setStalled] = createSignal(false)
+  const [tipIndex, setTipIndex] = createSignal(0)
 
-  // Solid effect so the timer participates in component lifecycle —
-  // navigating away mid-wait cleans up automatically.
+  // Stalled fallback timer.  Lifetime-tied to the component so navigating
+  // away cleans up automatically.
   createEffect(() => {
     const handle = setTimeout(() => setStalled(true), PREPARING_TIMEOUT_MS)
     onCleanup(() => clearTimeout(handle))
   })
 
+  // Rotate the status tip every 3.5s while we're in the patient phase.
+  createEffect(() => {
+    if (stalled()) return
+    const interval = setInterval(() => {
+      setTipIndex((i) => (i + 1) % PREPARING_TIPS.length)
+    }, 3500)
+    onCleanup(() => clearInterval(interval))
+  })
+
   return (
     <div class="flex-1 flex flex-col items-center justify-center text-center bg-zinc-950 px-6">
-      <div class="w-16 h-16 rounded-full bg-zinc-800/60 flex items-center justify-center mb-5">
+      {/* Friendly animated icon: a pulsing ring with three orbiting dots.
+          Pure CSS animations + a single SVG so this still renders on the
+          slowest network without a JS framework hop. */}
+      <div class="relative w-20 h-20 mb-6 flex items-center justify-center">
+        {/* Outer pulse — slow breathing halo */}
+        <div
+          class="absolute inset-0 rounded-full bg-blue-500/10 animate-ping"
+          style={{ "animation-duration": "2.4s" }}
+        />
+        {/* Inner ring — solid base */}
+        <div class="absolute inset-2 rounded-full bg-zinc-800/70 border border-zinc-700/60" />
+        {/* Spinning gradient arc */}
         <svg
-          class="w-8 h-8 text-zinc-500 animate-spin"
+          class="absolute inset-0 w-full h-full text-blue-400 animate-spin"
+          style={{ "animation-duration": "2s" }}
           fill="none"
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
           <path
-            class="opacity-75"
+            class="opacity-90"
             fill="currentColor"
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
+        {/* Center emoji — handcrafted little mascot */}
+        <span
+          class="relative text-2xl"
+          style={{ animation: "bounce 1.6s ease-in-out infinite" }}
+          aria-hidden="true"
+        >
+          🛠️
+        </span>
       </div>
+
       <Show
         when={!stalled()}
         fallback={
           <>
             <p class="text-sm font-medium text-zinc-300 mb-1">
-              Setup is taking longer than expected
+              Still cooking…
             </p>
             <p class="text-xs text-zinc-500 mb-4 max-w-sm">
-              The server is still cloning your repositories or starting the
-              editor.  If this persists, refresh to retry.
+              Your workspace is taking longer than usual to come up.  This can
+              happen with very large repos or on a cold worker.  If you'd
+              rather not wait any more, refresh to reconnect — your session
+              and chat history are safe on the server.
             </p>
             <button
               type="button"
@@ -935,14 +987,52 @@ function PreparingWorkspacePanel() {
           </>
         }
       >
-        <p class="text-sm font-medium text-zinc-300 mb-1">
+        <p class="text-sm font-medium text-zinc-300 mb-2">
           Preparing your collab session
         </p>
-        <p class="text-xs text-zinc-500 max-w-sm">
-          Cloning repositories and warming up the editor.  This usually
-          takes 5–15 seconds.
+
+        {/* Rotating tip — fades in/out via key swap so each message gets
+            a soft fade rather than a hard cut.  The `key={...}` forces
+            Solid to re-mount this node when the index changes, which
+            re-triggers the CSS animation. */}
+        <p
+          class="text-xs text-zinc-400 max-w-sm h-4 transition-opacity"
+          style={{ animation: "fadeIn 0.6s ease-out" }}
+          aria-live="polite"
+        >
+          {PREPARING_TIPS[tipIndex()]}
         </p>
+
+        <p class="text-[11px] text-zinc-600 mt-4 max-w-sm leading-relaxed">
+          This usually takes <span class="text-zinc-400">30 seconds to a few minutes</span> —
+          we're cloning repos, checking out the branch, and warming up the
+          editor.  Be patient ✨
+        </p>
+
+        {/* Bouncing dots — secondary "we're alive" signal in case the tip
+            text feels static. */}
+        <div class="mt-5 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-400/80" style={{ animation: "bounce 1.4s ease-in-out -0.32s infinite" }} />
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-400/80" style={{ animation: "bounce 1.4s ease-in-out -0.16s infinite" }} />
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-400/80" style={{ animation: "bounce 1.4s ease-in-out 0s infinite" }} />
+        </div>
       </Show>
+
+      {/* Local keyframes — kept here so this component is self-contained
+          and doesn't depend on Tailwind's JIT picking up `animate-bounce`
+          elsewhere in the build.  Tailwind ships these globally but only
+          when the matching utility class is referenced somewhere; we use
+          inline `animation: bounce ...` so we declare the keyframes here. */}
+      <style>{`
+        @keyframes fadeIn {
+          0% { opacity: 0; transform: translateY(2px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(-15%); animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
+          50%      { transform: translateY(0);    animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
+        }
+      `}</style>
     </div>
   )
 }
