@@ -1485,15 +1485,18 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
     ).pipe(
       Effect.scoped,
       Effect.provide(
-        Config.layer.pipe(
-          Layer.provide(testFlock),
-          Layer.provide(AppFileSystem.defaultLayer),
-          Layer.provide(Env.defaultLayer),
-          Layer.provide(wellKnownAuth(server.url.origin)),
-          Layer.provide(AccountTest.empty),
-          Layer.provideMerge(infra),
-          Layer.provide(NpmTest.noop),
-          Layer.provide(FetchHttpClient.layer),
+        Layer.mergeAll(
+          Config.layer.pipe(
+            Layer.provide(testFlock),
+            Layer.provide(AppFileSystem.defaultLayer),
+            Layer.provide(Env.defaultLayer),
+            Layer.provide(wellKnownAuth(server.url.origin)),
+            Layer.provide(AccountTest.empty),
+            Layer.provideMerge(infra),
+            Layer.provide(NpmTest.noop),
+            Layer.provide(FetchHttpClient.layer),
+          ),
+          testInstanceStoreLayer,
         ),
       ),
       Effect.runPromise,

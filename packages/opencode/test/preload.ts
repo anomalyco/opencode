@@ -73,6 +73,9 @@ delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
 delete process.env["OPENCODE_SERVER_PASSWORD"]
 delete process.env["OPENCODE_SERVER_USERNAME"]
+delete process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+delete process.env["OTEL_EXPORTER_OTLP_HEADERS"]
+delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"

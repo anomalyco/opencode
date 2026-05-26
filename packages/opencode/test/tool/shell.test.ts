@@ -18,6 +18,7 @@ import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceStore } from "@/project/instance-store"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -31,6 +32,7 @@ const shellLayer = Layer.mergeAll(
 const it = testEffect(shellLayer)
 type ShellTestServices =
   | (typeof shellLayer extends Layer.Layer<infer ROut, infer _E, infer _RIn> ? ROut : never)
+  | InstanceStore.Service
   | Scope.Scope
 
 const initShell = Effect.fn("ShellToolTest.init")(function* () {

@@ -164,13 +164,8 @@ export function tmpdirScoped(options?: {
 
 export const provideInstance =
   (directory: string) =>
-  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.contextWith((services: Context.Context<R>) =>
-      Effect.promise<A>(async () => {
-        const ctx = await runTestInstanceStore((store) => store.load({ directory }))
-        return Effect.runPromiseWith(services)(self.pipe(Effect.provideService(InstanceRef, ctx)))
-      }),
-    )
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | InstanceStore.Service> =>
+    InstanceStore.Service.use((store) => store.provide({ directory }, self))
 
 export const provideInstanceEffect =
   (directory: string) =>
@@ -227,7 +222,7 @@ export function provideTmpdirServer<A, E, R>(
 ): Effect.Effect<
   A,
   E | PlatformError.PlatformError,
-  R | TestLLMServer | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+  R | TestLLMServer | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope | InstanceStore.Service
 > {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
