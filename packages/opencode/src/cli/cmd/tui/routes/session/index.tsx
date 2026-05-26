@@ -301,6 +301,17 @@ export function Session() {
 
   let seeded = false
   let scroll: ScrollBoxRenderable
+  const STICKY_THRESHOLD = 3
+  const [stickToEnd, setStickToEnd] = createSignal(true)
+  onMount(() => {
+    function checkStickyScroll() {
+      if (!scroll || scroll.isDestroyed) return
+      const atBottom = scroll.y + scroll.height >= scroll.scrollHeight - STICKY_THRESHOLD
+      setStickToEnd(atBottom)
+      requestAnimationFrame(checkStickyScroll)
+    }
+    requestAnimationFrame(checkStickyScroll)
+  })
   let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
@@ -1128,7 +1139,7 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={true}
+                stickyScroll={stickToEnd()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}

@@ -7,7 +7,7 @@ import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
 import { reasoningSummary, useThinkingMode } from "@tui/context/thinking"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { RGBA, TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
+import { RGBA, TextAttributes, type BoxRenderable, type ScrollBoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -28,7 +28,7 @@ import type {
   ToolFileContent,
   ToolTextContent,
 } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 
 const id = "internal:session-v2-debug"
@@ -70,14 +70,28 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
     ],
   }))
 
+  let scroll: ScrollBoxRenderable
+  const STICKY_THRESHOLD = 3
+  const [stickToEnd, setStickToEnd] = createSignal(true)
+  onMount(() => {
+    function checkStickyScroll() {
+      if (!scroll || scroll.isDestroyed) return
+      const atBottom = scroll.y + scroll.height >= scroll.scrollHeight - STICKY_THRESHOLD
+      setStickToEnd(atBottom)
+      requestAnimationFrame(checkStickyScroll)
+    }
+    requestAnimationFrame(checkStickyScroll)
+  })
+
   return (
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background}>
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
           <scrollbox
+            ref={(r) => (scroll = r)}
             viewportOptions={{ paddingRight: 0 }}
             verticalScrollbarOptions={{ visible: false }}
-            stickyScroll={true}
+            stickyScroll={stickToEnd()}
             stickyStart="bottom"
             flexGrow={1}
           >
