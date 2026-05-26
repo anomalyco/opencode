@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import type { AgentSideConnection, LoadSessionResponse, NewSessionResponse } from "@agentclientprotocol/sdk"
+import type {
+  AgentSideConnection,
+  LoadSessionResponse,
+  NewSessionResponse,
+  SessionConfigOption,
+  SessionConfigSelectOption,
+  SetSessionConfigOptionResponse,
+} from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
 import * as ACPNextService from "@/acp-next/service"
@@ -10,6 +17,7 @@ import type { Provider } from "@/provider/provider"
 const providerID = ProviderID.make("test")
 const modelID = ModelID.make("test-model")
 const configuredModelID = ModelID.make("configured-model")
+const secondModelID = ModelID.make("second-model")
 
 const provider: Provider.Info = {
   id: providerID,
@@ -87,6 +95,43 @@ const provider: Provider.Info = {
       options: {},
       headers: {},
       release_date: "2026-01-01",
+    },
+    [secondModelID]: {
+      id: secondModelID,
+      providerID,
+      api: {
+        id: secondModelID,
+        url: "https://example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Second Model",
+      family: "test",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+      variants: {
+        low: { reasoningEffort: "low" },
+        medium: { reasoningEffort: "medium" },
+      },
     },
   },
 }
@@ -359,8 +404,131 @@ describe("ACP next service sessions", () => {
     expect(result.sessionId).toBe("configured-model")
     expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/configured-model")
   })
+
+  it("switches model and returns updated model and effort options", async () => {
+    const { service } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const updated = await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "model",
+        value: "test/second-model",
+      }),
+    )
+
+    expect(select(updated, "model")?.currentValue).toBe("test/second-model")
+    expect(select(updated, "effort")?.currentValue).toBe("low")
+    expect(flattenSelectOptions(select(updated, "effort")).map((option) => option.value)).toEqual(["low", "medium"])
+  })
+
+  it("switches effort and returns the updated effort current value", async () => {
+    const { service } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const updated = await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "effort",
+        value: "high",
+      }),
+    )
+
+    expect(select(updated, "effort")?.currentValue).toBe("high")
+  })
+
+  it("switches mode and returns the updated mode current value", async () => {
+    const { service } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const updated = await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "mode",
+        value: "plan",
+      }),
+    )
+
+    expect(select(updated, "mode")?.currentValue).toBe("plan")
+  })
+
+  it("maps invalid model effort mode and config id to invalid params", async () => {
+    const { service } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    const results = await Promise.all(
+      [
+        { configId: "model", value: "test/missing-model" },
+        { configId: "effort", value: "max" },
+        { configId: "mode", value: "missing-mode" },
+        { configId: "missing", value: "value" },
+      ].map((input) =>
+        Effect.runPromise(
+          service
+            .setSessionConfigOption({ sessionId: session.sessionId, ...input })
+            .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+        ),
+      ),
+    )
+    expect(results.map((error) => error.code)).toEqual([-32602, -32602, -32602, -32602])
+  })
+
+  it("does not reload providers or commands when switching effort from a warm snapshot", async () => {
+    let providersCalls = 0
+    let commandCalls = 0
+    const sdk = {
+      config: {
+        providers: () => {
+          providersCalls++
+          return Promise.resolve({ data: { providers: [provider], default: { test: modelID } } })
+        },
+        get: () => Promise.resolve({ data: {} }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => {
+          commandCalls++
+          return Promise.resolve({ data: [] })
+        },
+      },
+      session: {
+        create: () => Promise.resolve({ data: { id: "ses_fast" } }),
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(providersCalls).toBe(1)
+    expect(commandCalls).toBe(1)
+
+    await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "effort",
+        value: "high",
+      }),
+    )
+
+    expect(providersCalls).toBe(1)
+    expect(commandCalls).toBe(1)
+  })
 })
 
 function categories(result: NewSessionResponse | LoadSessionResponse) {
   return result.configOptions?.map((option) => option.category) ?? []
+}
+
+function select(result: SetSessionConfigOptionResponse, id: string) {
+  return result.configOptions.find(
+    (option): option is Extract<SessionConfigOption, { type: "select" }> =>
+      option.id === id && option.type === "select",
+  )
+}
+
+function flattenSelectOptions(option: Extract<SessionConfigOption, { type: "select" }> | undefined) {
+  return option?.options.flatMap((item): SessionConfigSelectOption[] => ("value" in item ? [item] : item.options)) ?? []
 }
