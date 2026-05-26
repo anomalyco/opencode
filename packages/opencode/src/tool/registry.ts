@@ -17,6 +17,8 @@ import { PatentResearchTool } from "./patent-research"
 import { PatentSearchTool } from "./patent-search"
 import { PatentAnalyzeTool } from "./patent-analyze"
 import { PatentCheckTool } from "./patent-check"
+import { TrademarkTool } from "./trademark"
+import { SlopTool } from "./slop-check"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -59,6 +61,8 @@ import * as PatentKnowledge from "@/patent/knowledge"
 import * as PatentIPC from "@/patent/ipc"
 import * as PatentSearch from "@/patent/search"
 import * as PatentQuality from "@/patent/quality"
+import * as Trademark from "@/patent/trademark"
+import * as SlopDetector from "@/patent/slop"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -109,6 +113,8 @@ export const layer: Layer.Layer<
   | PatentIPC.Service
   | PatentSearch.Service
   | PatentQuality.Service
+  | Trademark.Service
+  | SlopDetector.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -139,6 +145,8 @@ export const layer: Layer.Layer<
     const patentSearch = yield* PatentSearchTool
     const patentAnalyze = yield* PatentAnalyzeTool
     const patentCheck = yield* PatentCheckTool
+    const trademarkTool = yield* TrademarkTool
+    const slopCheck = yield* SlopTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -241,6 +249,8 @@ export const layer: Layer.Layer<
           patentSearch: Tool.init(patentSearch),
           patentAnalyze: Tool.init(patentAnalyze),
           patentCheck: Tool.init(patentCheck),
+          trademark: Tool.init(trademarkTool),
+          slopCheck: Tool.init(slopCheck),
         })
 
         return {
@@ -267,6 +277,8 @@ export const layer: Layer.Layer<
             tool.patentSearch,
             tool.patentAnalyze,
             tool.patentCheck,
+            tool.trademark,
+            tool.slopCheck,
           ],
           task: tool.task,
           read: tool.read,
@@ -395,6 +407,8 @@ export const defaultLayer = Layer.suspend(() =>
     PatentIPC.defaultLayer,
     PatentSearch.defaultLayer,
     PatentQuality.defaultLayer,
+    Trademark.defaultLayer,
+    SlopDetector.defaultLayer,
   ),
 )
 

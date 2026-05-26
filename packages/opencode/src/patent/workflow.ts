@@ -11,7 +11,7 @@ class ActionMismatchError extends Schema.TaggedErrorClass<ActionMismatchError>()
   actual: Schema.String,
 }) {}
 
-type WorkflowType = "draft" | "oa" | "reexam" | "invalidation" | "creativity"
+type WorkflowType = "draft" | "oa" | "reexam" | "invalidation" | "creativity" | "trademark"
 type WorkflowStatus = "running" | "paused" | "completed" | "failed"
 
 interface Step {
@@ -67,6 +67,13 @@ const WORKFLOW_STEPS: Record<WorkflowType, Step[]> = {
     { name: "创造性三步法分析", action: "three_step", description: "最接近现有技术→区别特征→技术启示" },
     { name: "技术效果论证", action: "effects", description: "论证显著进步" },
     { name: "创造性结论报告", action: "conclude", description: "输出结论报告" },
+  ],
+  trademark: [
+    { name: "商标特征理解", action: "understand", description: "确定商标类型和尼斯分类" },
+    { name: "近似检索", action: "search", description: "按名称和类别检索近似商标" },
+    { name: "显著性评估", action: "distinctiveness", description: "评估商标显著性和注册可行性" },
+    { name: "申请文件撰写", action: "draft", description: "撰写商标说明和商品/服务项目" },
+    { name: "整合与质量检查", action: "validate", description: "反套话检测 + 质量检查" },
   ],
 }
 

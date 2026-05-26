@@ -15,6 +15,7 @@ import PROMPT_PATENT_OA from "./prompt/patent-oa.txt"
 import PROMPT_PATENT_CREATIVITY from "./prompt/patent-creativity.txt"
 import PROMPT_PATENT_REEXAM from "./prompt/patent-reexam.txt"
 import PROMPT_PATENT_INVALIDATION from "./prompt/patent-invalidation.txt"
+import PROMPT_PATENT_TRADEMARK from "./prompt/patent-trademark.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -297,6 +298,27 @@ export const layer = Layer.effect(
               user,
             ),
             prompt: PROMPT_PATENT_INVALIDATION,
+            steps: 5,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          "patent-trademark": {
+            name: "patent-trademark",
+            description: "商标全流程服务。支持注册申请、近似分析、异议答辩、驳回复审、侵权分析。",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                trademark: "allow",
+                patent_research: "allow",
+                patent_check: "allow",
+                slop_check: "allow",
+                read: "allow",
+                write: "allow",
+              }),
+              user,
+            ),
+            prompt: PROMPT_PATENT_TRADEMARK,
             steps: 5,
             options: {},
             mode: "subagent",

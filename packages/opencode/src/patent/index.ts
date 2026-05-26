@@ -1,3 +1,5 @@
 export * as PatentLaw from "./law"
 export * as PatentIPC from "./ipc"
 export * as PatentQuality from "./quality"
+export * as Trademark from "./trademark"
+export * as SlopDetector from "./slop"
