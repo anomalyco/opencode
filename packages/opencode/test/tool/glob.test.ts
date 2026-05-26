@@ -118,6 +118,26 @@ describe("tool.glob", () => {
     }),
   )
 
+  it.instance("matches files from an absolute glob pattern", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const skill = path.join(test.directory, ".config", "opencode", "skills", "test-skill", "SKILL.md")
+      yield* Effect.promise(() => Bun.write(skill, "# Test Skill\n"))
+
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      const result = yield* glob.execute(
+        {
+          pattern: path.join(test.directory, ".config", "opencode", "skills", "**", "SKILL.md"),
+        },
+        ctx,
+      )
+
+      expect(result.metadata.count).toBe(1)
+      expect(result.output).toContain(skill)
+    }),
+  )
+
   it.instance("rejects exact file paths", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

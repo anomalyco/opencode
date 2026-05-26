@@ -39,8 +39,8 @@ export const GlobTool = Tool.define(
             },
           })
 
-          let search = params.path ?? ins.directory
-          search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
+          const target = resolveGlobTarget(params, ins.directory)
+          const search = target.path
           yield* reference.ensure(search)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (info?.type === "File") {
@@ -53,7 +53,7 @@ export const GlobTool = Tool.define(
 
           const limit = 100
           let truncated = false
-          const files = yield* rg.files({ cwd: search, glob: [params.pattern], signal: ctx.abort }).pipe(
+          const files = yield* rg.files({ cwd: search, glob: [target.pattern], signal: ctx.abort }).pipe(
             Stream.mapEffect((file) =>
               Effect.gen(function* () {
                 const full = path.resolve(search, file)
@@ -101,3 +101,30 @@ export const GlobTool = Tool.define(
     }
   }),
 )
+
+function resolveGlobTarget(params: { pattern: string; path?: string }, directory: string) {
+  if (params.path) {
+    return {
+      path: path.isAbsolute(params.path) ? params.path : path.resolve(directory, params.path),
+      pattern: params.pattern,
+    }
+  }
+
+  if (!path.isAbsolute(params.pattern)) {
+    return {
+      path: directory,
+      pattern: params.pattern,
+    }
+  }
+
+  const parsed = path.parse(params.pattern)
+  const parts = params.pattern.slice(parsed.root.length).split(/[\\/]+/).filter(Boolean)
+  const index = parts.findIndex((part) => /[*?[\]{}]/.test(part))
+  const root = index === -1 ? parts.slice(0, -1) : parts.slice(0, index)
+  const pattern = index === -1 ? parts.slice(-1) : parts.slice(index)
+
+  return {
+    path: path.join(parsed.root, ...root),
+    pattern: pattern.join("/") || "*",
+  }
+}
