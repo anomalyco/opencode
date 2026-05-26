@@ -1,8 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { type Accessor, batch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import { useCheckServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -38,6 +37,7 @@ export function resolveServerList(input: {
   stored: StoredServer[]
 }): Array<ServerConnection.Any> {
   const servers = [
+    ...(input.props ?? []),
     ...input.stored.map((value) =>
       typeof value === "string"
         ? {
@@ -46,7 +46,6 @@ export function resolveServerList(input: {
           }
         : value,
     ),
-    ...(input.props ?? []),
   ]
 
   const deduped = new Map<ServerConnection.Key, ServerConnection.Any>()
@@ -122,13 +121,7 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: {
-    defaultServer: ServerConnection.Key
-    disableHealthCheck?: boolean
-    servers?: Array<ServerConnection.Any>
-  }) => {
-    const checkServerHealth = useCheckServerHealth()
-
+  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
@@ -146,35 +139,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const [state, setState] = createStore({
       active: props.defaultServer,
-      healthy: undefined as boolean | undefined,
     })
-
-    const healthy = () => state.healthy
-
-    function startHealthPolling(conn: ServerConnection.Any) {
-      let alive = true
-      let busy = false
-
-      const run = () => {
-        if (busy) return
-        busy = true
-        void check(conn)
-          .then((next) => {
-            if (!alive) return
-            setState("healthy", next)
-          })
-          .finally(() => {
-            busy = false
-          })
-      }
-
-      run()
-      const interval = setInterval(run, HEALTH_POLL_INTERVAL_MS)
-      return () => {
-        alive = false
-        clearInterval(interval)
-      }
-    }
 
     function setActive(input: ServerConnection.Key) {
       if (state.active !== input) setState("active", input)
@@ -209,20 +174,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http).then((x) => x.healthy)
-
-    createEffect(() => {
-      const current_ = current()
-      if (!current_) return
-
-      if (props.disableHealthCheck) {
-        setState("healthy", true)
-        return
-      }
-      setState("healthy", undefined)
-      onCleanup(startHealthPolling(current_))
-    })
-
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
@@ -235,7 +186,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     return {
       ready: isReady,
-      healthy,
       isLocal,
       get key() {
         return state.active
