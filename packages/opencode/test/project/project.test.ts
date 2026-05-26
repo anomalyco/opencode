@@ -254,6 +254,45 @@ describe("Project.fromDirectory", () => {
       ).toBe(remoteID)
     }),
   )
+
+  it.live("migrates root project data when repo cache already contains remote id", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const { project: rootProject } = yield* projects.fromDirectory(tmp)
+      const remoteID = remoteProjectID("github.com/acme/app")
+      const sessionID = crypto.randomUUID() as SessionID
+
+      yield* Effect.sync(() => {
+        Database.use((db) => {
+          db.insert(SessionTable)
+            .values({
+              id: sessionID,
+              project_id: rootProject.id,
+              slug: sessionID,
+              directory: tmp,
+              title: "test",
+              version: "0.0.0-test",
+              time_created: Date.now(),
+              time_updated: Date.now(),
+            })
+            .run()
+        })
+      })
+      yield* Effect.promise(() => $`git remote add origin git@github.com:acme/app.git`.cwd(tmp).quiet())
+      yield* Effect.promise(() => Bun.write(path.join(tmp, ".git", "opencode"), remoteID))
+
+      const { project } = yield* projects.fromDirectory(tmp)
+
+      expect(project.id).toBe(remoteID)
+      expect(
+        Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, rootProject.id)).get()),
+      ).toBeUndefined()
+      expect(
+        Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())?.project_id,
+      ).toBe(remoteID)
+    }),
+  )
 })
 
 describe("Project.fromDirectory git failure paths", () => {

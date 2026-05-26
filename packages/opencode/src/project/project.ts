@@ -232,6 +232,21 @@ export const layer = Layer.effect(
       )
     })
 
+    const migrateProjectWorktree = Effect.fn("Project.migrateProjectWorktree")(function* (
+      worktree: string,
+      projectID: ProjectID,
+    ) {
+      if (projectID === ProjectID.global) return
+      const candidates = yield* db((d) =>
+        d.select({ id: ProjectTable.id }).from(ProjectTable).where(eq(ProjectTable.worktree, worktree)).all(),
+      )
+      yield* Effect.forEach(
+        candidates.filter((row) => row.id !== projectID),
+        (row) => migrateProjectId(row.id, projectID),
+        { concurrency: 1 },
+      )
+    })
+
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
       log.info("fromDirectory", { directory })
 
@@ -241,6 +256,7 @@ export const layer = Layer.effect(
       // Phase 2: upsert
       const projectID = ProjectID.make(data.id)
       yield* migrateProjectId(data.previous ? ProjectID.make(data.previous) : undefined, projectID)
+      yield* migrateProjectWorktree(worktree, projectID)
       const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())
       const existing = row
         ? fromRow(row)
