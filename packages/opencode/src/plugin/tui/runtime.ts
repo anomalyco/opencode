@@ -232,12 +232,15 @@ function isTheme(value: unknown) {
 }
 
 function resolveRoot(root: string) {
+  if (typeof root !== "string") {
+    return path.resolve(process.cwd(), String(root))
+  }
   if (root.startsWith("file://")) {
     const file = fileURLToPath(root)
     if (root.endsWith("/")) return file
     return path.dirname(file)
   }
-  if (path.isAbsolute(root)) return root
+  if (Filesystem.isAbsolutePath(root)) return root
   return path.resolve(process.cwd(), root)
 }
 

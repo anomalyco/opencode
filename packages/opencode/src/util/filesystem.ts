@@ -144,6 +144,11 @@ export function resolve(p: string): string {
   }
 }
 
+export function isAbsolutePath(p: unknown): p is string {
+  if (typeof p !== "string") return false
+  return isAbsolute(p)
+}
+
 export function resolveFilePath(root: string, file: string): string {
   const raw = file.startsWith("file://") ? fileURLToPath(file) : file
   if (isAbsolute(raw)) return raw

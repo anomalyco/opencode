@@ -64,7 +64,10 @@ async function input(value?: string) {
 
 export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
   const root = Filesystem.resolve(envPWD ?? cwd)
-  if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
+  if (project !== undefined && project !== null) {
+    const resolved = Filesystem.isAbsolutePath(project) ? project : path.join(root, String(project))
+    return Filesystem.resolve(resolved)
+  }
   return Filesystem.resolve(cwd)
 }
 

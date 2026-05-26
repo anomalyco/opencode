@@ -308,7 +308,7 @@ export const RunCommand = effectCmd({
         if (args.attach) return args.dir
 
         try {
-          process.chdir(path.isAbsolute(args.dir) ? args.dir : path.join(root, args.dir))
+          process.chdir(Filesystem.isAbsolutePath(args.dir) ? args.dir : path.join(root, args.dir))
           return process.cwd()
         } catch {
           UI.error("Failed to change directory to " + args.dir)

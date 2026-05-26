@@ -63,6 +63,9 @@ export async function substitute(input: SubstituteInput) {
       filePath = path.join(os.homedir(), filePath.slice(2))
     }
 
+    if (typeof filePath !== "string") {
+      throw new InvalidError({ path: configSource, message: `bad file reference: file path must be a string, got ${typeof filePath}` })
+    }
     const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
     const fileContent = (
       await Filesystem.readText(resolvedPath).catch((error: NodeJS.ErrnoException) => {
