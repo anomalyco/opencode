@@ -26,7 +26,6 @@ export interface MockServerConfig {
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const staticRoutes: Record<string, unknown> = {
-    "/global/health": { healthy: true, version: "dev" },
     "/provider": config.provider,
     "/path": {
       state: config.directory,
