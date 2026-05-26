@@ -197,7 +197,7 @@ try {
     await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
       if (err) throw err
       if (!out) return
-      show(out)
+      show(out + EOL)
     })
   } else {
     await cli.parse()
