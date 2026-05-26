@@ -2,9 +2,6 @@
 
 export default $config({
   app(input) {
-    const prepareAwsDestroy = input.stage === "production" || input.stage === "dev"
-    // Temporarily omit AWS infra so SST removes the lake/stats resources.
-    const deployAws = false
     return {
       name: "opencode",
       removal: input?.stage === "production" ? "retain" : "remove",
@@ -33,9 +30,6 @@ export default $config({
   async run() {
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    if (stage.prepareAwsDestroy) {
-      await import("./infra/lake-destroy-prep.js")
-    }
     if (stage.deployAws) {
       await import("./infra/lake.js")
       await import("./infra/stats.js")
