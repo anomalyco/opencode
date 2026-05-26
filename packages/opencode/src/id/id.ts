@@ -8,6 +8,7 @@ const prefixes = {
   permission: "per",
   question: "que",
   part: "prt",
+  goal: "goal",
   pty: "pty",
   tool: "tool",
   workspace: "wrk",

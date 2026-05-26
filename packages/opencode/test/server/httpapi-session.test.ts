@@ -16,6 +16,7 @@ import { Server } from "../../src/server/server"
 import * as HttpSessionError from "../../src/server/routes/instance/httpapi/handlers/session-errors"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
+import { SessionGoal } from "@/session/goal"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
@@ -547,6 +548,52 @@ describe("session HttpApi", () => {
         })
         expect((contextBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
         expect(JSON.stringify(contextBody)).not.toContain("assistant")
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "titles a default session from native goal commands",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "content-type": "application/json", "x-opencode-directory": test.directory }
+        const session = yield* createSession()
+        const path = pathFor(SessionPaths.goal, { sessionID: session.id })
+
+        expect(Session.isDefaultTitle(session.title)).toBe(true)
+
+        yield* requestJson<SessionGoal.Info>(path, {
+          headers,
+          method: "POST",
+          body: JSON.stringify({ objective: "refactor project title handling" }),
+        })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ title: "refactor project title handling" })
+
+        yield* requestJson<SessionGoal.Info>(path, {
+          headers,
+          method: "PATCH",
+          body: JSON.stringify({ objective: "verify edited goal titles" }),
+        })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ title: "verify edited goal titles" })
+
+        yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: session.id }), {
+          headers,
+          method: "PATCH",
+          body: JSON.stringify({ title: "manual title" }),
+        })
+        yield* requestJson<SessionGoal.Info>(path, {
+          headers,
+          method: "PATCH",
+          body: JSON.stringify({ objective: "do not override manual titles" }),
+        })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ title: "manual title" })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

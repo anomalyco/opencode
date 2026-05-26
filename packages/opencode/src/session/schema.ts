@@ -24,3 +24,12 @@ export const PartID = Schema.String.check(Schema.isStartsWith("prt")).pipe(
 )
 
 export type PartID = Schema.Schema.Type<typeof PartID>
+
+export const GoalID = Schema.String.check(Schema.isStartsWith("goal")).pipe(
+  Schema.brand("GoalID"),
+  withStatics((s) => ({
+    ascending: (id?: string) => s.make(Identifier.ascending("goal", id)),
+  })),
+)
+
+export type GoalID = Schema.Schema.Type<typeof GoalID>

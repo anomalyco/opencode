@@ -1,10 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import { Worktree } from "@/utils/worktree"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
+const createdSessionInputs: unknown[] = []
 const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
 const optimistic: Array<{
   directory?: string
@@ -20,18 +22,26 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const goalActions: Array<{ action: string; sessionID: string; objective?: string; status?: string }> = []
+const toasts: Array<{ title?: string; description?: string }> = []
+type GoalTestData = { id: string; sessionID: string; objective: string; status: string }
+let goalGetData: GoalTestData | undefined
+let goalUpdateData: GoalTestData | undefined
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
 
-const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 const clientFor = (directory: string) => {
   createdClients.push(directory)
   return {
     session: {
-      create: async () => {
+      create: async (input?: unknown) => {
+        createdSessionInputs.push(input)
         createdSessions.push(directory)
         return {
           data: {
@@ -48,6 +58,21 @@ const clientFor = (directory: string) => {
       promptAsync: async () => ({ data: undefined }),
       command: async () => ({ data: undefined }),
       abort: async () => ({ data: undefined }),
+      goal: {
+        get: async () => ({ data: goalGetData }),
+        create: async (input: { sessionID: string; objective: string }) => {
+          goalActions.push({ action: "create", ...input })
+          return { data: undefined }
+        },
+        update: async (input: { sessionID: string; objective?: string; status?: string }) => {
+          goalActions.push({ action: "update", ...input })
+          return { data: goalUpdateData }
+        },
+        clear: async (input: { sessionID: string }) => {
+          goalActions.push({ action: "clear", ...input })
+          return { data: undefined }
+        },
+      },
     },
     worktree: {
       create: async () => ({ data: { directory: `${directory}/new` } }),
@@ -71,7 +96,10 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
-    showToast: () => 0,
+    showToast: (input: { title?: string; description?: string }) => {
+      toasts.push(input)
+      return 0
+    },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -204,6 +232,7 @@ beforeAll(async () => {
 beforeEach(() => {
   createdClients.length = 0
   createdSessions.length = 0
+  createdSessionInputs.length = 0
   enabledAutoAccept.length = 0
   optimistic.length = 0
   optimisticSeeded.length = 0
@@ -211,8 +240,13 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
+  goalActions.length = 0
+  toasts.length = 0
+  goalGetData = undefined
+  goalUpdateData = undefined
   selected = "/repo/worktree-a"
   variant = undefined
+  promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
@@ -341,5 +375,170 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("routes /goal through the native goal API instead of prompt submission", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "/goal ship app parity\n", start: 0, end: 22 }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await flush()
+
+    expect(goalActions).toEqual([{ action: "create", sessionID: "session-1", objective: "ship app parity" }])
+    expect(optimistic).toHaveLength(0)
+  })
+
+  test("rejects oversized /goal objectives before posting to the goal API", async () => {
+    params = { id: "session-1" }
+    const text = `/goal ${"x".repeat(4001)}`
+    promptValue = [{ type: "text", content: text, start: 0, end: text.length }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await flush()
+
+    expect(goalActions).toEqual([])
+    expect(toasts.at(-1)?.title).toBe("Goal command failed")
+    expect(toasts.at(-1)?.description).toContain("Goal objective is too long (4001/4000 characters)")
+    expect(optimistic).toHaveLength(0)
+  })
+
+  test("waits for created worktrees before applying /goal", async () => {
+    promptValue = [{ type: "text", content: "/goal ship app parity", start: 0, end: 21 }]
+
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => "create",
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await flush()
+
+    expect(createdSessions).toEqual(["/repo/main/new"])
+    expect(createdSessionInputs[0]).toMatchObject({
+      agent: "agent",
+      model: { providerID: "provider", id: "model" },
+    })
+    expect(goalActions).toEqual([])
+
+    Worktree.ready("/repo/main/new")
+    await flush()
+
+    expect(goalActions).toEqual([{ action: "create", sessionID: "session-1", objective: "ship app parity" }])
+    expect(optimistic).toHaveLength(0)
+  })
+
+  test("applies /goal controls immediately while followups are queued", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "/goal pause", start: 0, end: 11 }]
+    goalGetData = { id: "goal-1", sessionID: "session-1", objective: "ship app parity", status: "active" }
+    const queued: unknown[] = []
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => true,
+      onQueue: (draft) => queued.push(draft),
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await flush()
+
+    expect(goalActions).toEqual([{ action: "update", sessionID: "session-1", status: "paused" }])
+    expect(queued).toHaveLength(0)
+    expect(optimistic).toHaveLength(0)
+  })
+
+  test("reports when /goal resume remains budget-limited", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "/goal resume", start: 0, end: 12 }]
+    goalGetData = { id: "goal-1", sessionID: "session-1", objective: "ship app parity", status: "budget_limited" }
+    goalUpdateData = goalGetData
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await flush()
+
+    expect(goalActions).toEqual([{ action: "update", sessionID: "session-1", status: "active" }])
+    expect(toasts.at(-1)).toMatchObject({
+      title: "Goal still budget-limited",
+      description: "Increase or clear the token budget to resume continuation.",
+    })
+    expect(optimistic).toHaveLength(0)
   })
 })

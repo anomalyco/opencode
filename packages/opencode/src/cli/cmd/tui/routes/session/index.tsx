@@ -445,6 +445,25 @@ export function Session() {
 
   const sessionCommandList = createMemo(() => [
     {
+      title: "Goal",
+      value: "session.goal",
+      suggested: route.type === "session",
+      category: "Session",
+      slash: {
+        name: "goal",
+      },
+      run: async () => {
+        const goal = sync.data.session_goal[route.sessionID]
+        toast.show({
+          message: goal
+            ? `Goal ${goal.status}: ${goal.objective} | tokens ${goal.tokens.used}${goal.tokens.budget === undefined ? "" : `/${goal.tokens.budget}`} | ${goal.time.used}s | /goal edit, pause, resume, clear`
+            : "No goal set. Use /goal <objective>.",
+          variant: "success",
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: session()?.share?.url ? "Copy share link" : "Share session",
       value: "session.share",
       suggested: route.type === "session",

@@ -1,4 +1,4 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session, SessionGoal } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -25,6 +25,7 @@ type PendingPrompt = {
 }
 
 const pending = new Map<string, PendingPrompt>()
+const GOAL_OBJECTIVE_MAX_LENGTH = 4000
 
 export type FollowupDraft = {
   sessionID: string
@@ -50,8 +51,79 @@ const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? 
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
 
+const goalDescription = (goal: SessionGoal) =>
+  [
+    goal.objective,
+    `Tokens: ${goal.tokens.used}${goal.tokens.budget === undefined ? "" : `/${goal.tokens.budget}`}`,
+    `Time: ${goal.time.used}s`,
+    "Commands: /goal edit, /goal pause, /goal resume, /goal clear",
+  ].join("\n")
+
+async function runGoal(input: {
+  client: ReturnType<typeof useSDK>["client"]
+  sessionID: string
+  text: string
+  edit?: (value: string) => void
+}) {
+  const text = input.text.trim()
+  const arg = text.slice("/goal".length).trim()
+  const control = !arg || arg === "pause" || arg === "resume" || arg === "clear" || arg === "edit"
+  if (!control && arg.length > GOAL_OBJECTIVE_MAX_LENGTH) {
+    throw new Error(
+      `Goal objective is too long (${arg.length}/${GOAL_OBJECTIVE_MAX_LENGTH} characters). Shorten the /goal objective and put extra details in a normal follow-up prompt.`,
+    )
+  }
+  const current = await input.client.session.goal.get({ sessionID: input.sessionID })
+  if (!arg) {
+    const goal = current.data
+    showToast({
+      title: goal ? `Goal ${goal.status}` : "No goal set",
+      description: goal ? goalDescription(goal) : "Use /goal <objective>.",
+    })
+    return true
+  }
+  if (arg === "pause") {
+    if (!current.data) throw new Error("No goal to pause.")
+    await input.client.session.goal.update({ sessionID: input.sessionID, status: "paused" })
+    showToast({ title: "Goal paused" })
+    return true
+  }
+  if (arg === "resume") {
+    if (!current.data) throw new Error("No goal to resume.")
+    const updated = await input.client.session.goal.update({ sessionID: input.sessionID, status: "active" })
+    if (updated.data?.status === "budget_limited") {
+      showToast({
+        title: "Goal still budget-limited",
+        description: "Increase or clear the token budget to resume continuation.",
+      })
+    } else {
+      showToast({ title: "Goal resumed" })
+    }
+    return true
+  }
+  if (arg === "clear") {
+    await input.client.session.goal.clear({ sessionID: input.sessionID })
+    showToast({ title: "Goal cleared" })
+    return true
+  }
+  if (arg === "edit") {
+    if (!current.data) throw new Error("No goal to edit. Use /goal <objective>.")
+    input.edit?.(`/goal ${current.data.objective}`)
+    return true
+  }
+  if (current.data) {
+    await input.client.session.goal.update({ sessionID: input.sessionID, objective: arg, status: "active" })
+    showToast({ title: "Goal updated" })
+    return true
+  }
+  await input.client.session.goal.create({ sessionID: input.sessionID, objective: arg })
+  showToast({ title: "Goal set" })
+  return true
+}
+
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
+  const commandText = text.trim()
   const images = draftImages(input.draft.prompt)
   const [, setStore] = input.serverSync.child(input.draft.sessionDirectory)
 
@@ -73,6 +145,11 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
+  if (commandText === "/goal" || commandText.startsWith("/goal ")) {
+    if (!(await wait())) return false
+    await runGoal({ client: input.client, sessionID: input.draft.sessionID, text: commandText })
+    return true
+  }
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
     setBusy()
     try {
@@ -363,7 +440,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     let session = input.info()
     if (!session && isNewSession) {
       const created = await client.session
-        .create()
+        .create({
+          agent: currentAgent.name,
+          model: {
+            providerID: currentModel.provider.id,
+            id: currentModel.id,
+            variant,
+          },
+        })
         .then((x) => x.data ?? undefined)
         .catch((err) => {
           showToast({
@@ -422,6 +506,99 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         setCursorPosition(editor, input.promptLength(currentPrompt))
         input.queueScroll()
       })
+    }
+
+    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
+    const messageID = Identifier.ascending("message")
+
+    const removeOptimisticMessage = () => {
+      sync.session.optimistic.remove({
+        directory: sessionDirectory,
+        sessionID: session.id,
+        messageID,
+      })
+    }
+
+    const waitForWorktree = async (options: { restoreCommentItems?: boolean } = {}) => {
+      const worktree = WorktreeState.get(sessionDirectory)
+      if (!worktree || worktree.status !== "pending") return true
+
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "busy" })
+      }
+
+      const controller = new AbortController()
+      const cleanup = () => {
+        if (sessionDirectory === projectDirectory) {
+          sync.set("session_status", session.id, { type: "idle" })
+        }
+        removeOptimisticMessage()
+        if (options.restoreCommentItems !== false) restoreCommentItems(commentItems)
+        restoreInput()
+      }
+
+      pending.set(session.id, { abort: controller, cleanup })
+
+      const abortWait = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        if (controller.signal.aborted) {
+          resolve({ status: "failed", message: "aborted" })
+          return
+        }
+        controller.signal.addEventListener(
+          "abort",
+          () => {
+            resolve({ status: "failed", message: "aborted" })
+          },
+          { once: true },
+        )
+      })
+
+      const timeoutMs = 5 * 60 * 1000
+      const timer = { id: undefined as number | undefined }
+      const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        timer.id = window.setTimeout(() => {
+          resolve({
+            status: "failed",
+            message: language.t("workspace.error.stillPreparing"),
+          })
+        }, timeoutMs)
+      })
+
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abortWait, timeout]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
+      pending.delete(session.id)
+      if (controller.signal.aborted) return false
+      if (result.status === "failed") throw new Error(result.message)
+      return true
+    }
+
+    if (mode === "normal" && text.startsWith("/")) {
+      const [cmdName] = text.split(" ")
+      const commandName = cmdName.slice(1)
+      if (commandName === "goal") {
+        input.onSubmit?.()
+        clearInput()
+        void (async () => {
+          if (!(await waitForWorktree({ restoreCommentItems: false }))) return
+          await runGoal({
+            client,
+            sessionID: session.id,
+            text,
+            edit: (value) => prompt.set([{ type: "text", content: value, start: 0, end: value.length }], value.length),
+          })
+        })().catch((err) => {
+          pending.delete(session.id)
+          showToast({
+            variant: "error",
+            title: "Goal command failed",
+            description: formatServerError(err, language.t, language.t("common.requestFailed")),
+          })
+          restoreInput()
+        })
+        return
+      }
     }
 
     if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
@@ -485,74 +662,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
     }
 
-    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
-    const messageID = Identifier.ascending("message")
-
-    const removeOptimisticMessage = () => {
-      sync.session.optimistic.remove({
-        directory: sessionDirectory,
-        sessionID: session.id,
-        messageID,
-      })
-    }
-
     removeCommentItems(commentItems)
     clearInput()
-
-    const waitForWorktree = async () => {
-      const worktree = WorktreeState.get(sessionDirectory)
-      if (!worktree || worktree.status !== "pending") return true
-
-      if (sessionDirectory === projectDirectory) {
-        sync.set("session_status", session.id, { type: "busy" })
-      }
-
-      const controller = new AbortController()
-      const cleanup = () => {
-        if (sessionDirectory === projectDirectory) {
-          sync.set("session_status", session.id, { type: "idle" })
-        }
-        removeOptimisticMessage()
-        restoreCommentItems(commentItems)
-        restoreInput()
-      }
-
-      pending.set(session.id, { abort: controller, cleanup })
-
-      const abortWait = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
-        if (controller.signal.aborted) {
-          resolve({ status: "failed", message: "aborted" })
-          return
-        }
-        controller.signal.addEventListener(
-          "abort",
-          () => {
-            resolve({ status: "failed", message: "aborted" })
-          },
-          { once: true },
-        )
-      })
-
-      const timeoutMs = 5 * 60 * 1000
-      const timer = { id: undefined as number | undefined }
-      const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
-        timer.id = window.setTimeout(() => {
-          resolve({
-            status: "failed",
-            message: language.t("workspace.error.stillPreparing"),
-          })
-        }, timeoutMs)
-      })
-
-      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abortWait, timeout]).finally(() => {
-        if (timer.id === undefined) return
-        clearTimeout(timer.id)
-      })
-      pending.delete(session.id)
-      if (controller.signal.aborted) return false
-      if (result.status === "failed") throw new Error(result.message)
-      return true
-    }
 
     void sendFollowupDraft({
       client,

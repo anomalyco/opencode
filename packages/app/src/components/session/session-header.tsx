@@ -158,6 +158,7 @@ export function SessionHeader() {
   const tree = createMemo(() => !isDesktopBeta || settings.general.showFileTree())
   const term = createMemo(() => !isDesktopBeta || settings.general.showTerminal())
   const status = createMemo(() => !isDesktopBeta || settings.general.showStatus())
+  const goal = createMemo(() => sync.data.session_goal[params.id ?? ""])
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -426,6 +427,13 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <Show when={goal()}>
+                  {(item) => (
+                    <div class="text-muted-foreground max-w-48 truncate rounded border px-2 py-1 text-xs">
+                      goal {item().status}
+                    </div>
+                  )}
+                </Show>
                 <Show when={status()}>
                   <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                     <StatusPopover />

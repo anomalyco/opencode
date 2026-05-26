@@ -21,11 +21,12 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "./session.sql"
+import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
+import { SessionGoal } from "./goal"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
@@ -510,7 +511,7 @@ const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D)
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service
+  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service | SessionGoal.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -519,6 +520,7 @@ export const layer: Layer.Layer<
     const storage = yield* Storage.Service
     const sync = yield* SyncEvent.Service
     const flags = yield* RuntimeFlags.Service
+    const goal = yield* SessionGoal.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -617,17 +619,69 @@ export const layer: Layer.Layer<
 
     const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
+        const previous =
+          msg.role === "assistant"
+            ? yield* MessageV2.get({ sessionID: msg.sessionID, messageID: msg.id }).pipe(
+                Effect.map((message) => message.info),
+                Effect.catch(() => Effect.succeed(undefined)),
+              )
+            : undefined
         yield* sync.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg })
+        if (
+          msg.role === "assistant" &&
+          !msg.summary &&
+          msg.time.completed !== undefined &&
+          previous?.role === "assistant" &&
+          previous.time.completed === undefined
+        ) {
+          yield* goal
+            .account({
+              sessionID: msg.sessionID,
+              messageID: msg.id,
+              tokens: 0,
+              seconds: Math.max(0, Math.ceil((msg.time.completed - msg.time.created) / 1000)),
+            })
+            .pipe(Effect.ignore)
+        }
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
     const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
+        const previous =
+          part.type === "step-finish"
+            ? yield* db((d) =>
+                d
+                  .select()
+                  .from(PartTable)
+                  .where(and(eq(PartTable.id, part.id), eq(PartTable.session_id, part.sessionID)))
+                  .get(),
+              )
+            : undefined
         yield* sync.run(MessageV2.Event.PartUpdated, {
           sessionID: part.sessionID,
           part: structuredClone(part),
           time: Date.now(),
         })
+        if (part.type === "step-finish" && previous?.data.type !== "step-finish") {
+          const message = yield* db((d) =>
+            d
+              .select()
+              .from(MessageTable)
+              .where(and(eq(MessageTable.id, part.messageID), eq(MessageTable.session_id, part.sessionID)))
+              .get(),
+          )
+          if (message?.data.role === "assistant" && !message.data.summary) {
+            yield* goal
+              .account({
+                sessionID: part.sessionID,
+                messageID: part.messageID,
+                tokens: Math.max(0, part.tokens.input + part.tokens.output),
+                seconds: 0,
+              })
+              .pipe(Effect.ignore)
+          }
+        }
         return part
       }).pipe(Effect.withSpan("Session.updatePart"))
 
@@ -867,6 +921,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(BackgroundJob.defaultLayer),
   Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
+  Layer.provide(SessionGoal.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )

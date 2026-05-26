@@ -5,8 +5,9 @@ import { sql } from "drizzle-orm"
 import type { TxOrDb } from "@/storage/db"
 import { SyncEvent } from "@/sync"
 import * as Session from "./session"
+import { SessionGoal } from "./goal"
 import { MessageV2 } from "./message-v2"
-import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { SessionTable, MessageTable, PartTable, SessionGoalTable } from "./session.sql"
 import { WorkspaceTable } from "@/control-plane/workspace.sql"
 import { Log } from "@opencode-ai/core/util/log"
 import nextProjectors from "./projectors-next"
@@ -120,6 +121,20 @@ export default [
 
   SyncEvent.project(Session.Event.Deleted, (db, data) => {
     db.delete(SessionTable).where(eq(SessionTable.id, data.sessionID)).run()
+  }),
+
+  SyncEvent.project(SessionGoal.Event.Updated, (db, data) => {
+    db.insert(SessionGoalTable)
+      .values(SessionGoal.toRow(data.goal as SessionGoal.Info))
+      .onConflictDoUpdate({
+        target: SessionGoalTable.session_id,
+        set: SessionGoal.toRow(data.goal as SessionGoal.Info),
+      })
+      .run()
+  }),
+
+  SyncEvent.project(SessionGoal.Event.Cleared, (db, data) => {
+    db.delete(SessionGoalTable).where(eq(SessionGoalTable.session_id, data.sessionID)).run()
   }),
 
   SyncEvent.project(MessageV2.Event.Updated, (db, data) => {

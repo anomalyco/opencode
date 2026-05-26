@@ -61,6 +61,9 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
+import { errorMessage } from "@/util/error"
+
+const GOAL_OBJECTIVE_MAX_LENGTH = 4000
 
 export type PromptProps = {
   sessionID?: string
@@ -1136,6 +1139,8 @@ export function Prompt(props: PromptProps) {
           ]
         : []
 
+    const goalCommandText = inputText.trim()
+
     if (store.mode === "shell") {
       void sdk.client.session.shell({
         sessionID,
@@ -1147,6 +1152,84 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (goalCommandText === "/goal" || goalCommandText.startsWith("/goal ")) {
+      const arg = goalCommandText.slice("/goal".length).trim()
+      const show = (message: string, variant: "success" | "error" = "success") => toast.show({ message, variant })
+      const control = !arg || arg === "pause" || arg === "resume" || arg === "clear" || arg === "edit"
+      if (!control && arg.length > GOAL_OBJECTIVE_MAX_LENGTH) {
+        show(
+          `Goal objective is too long (${arg.length}/${GOAL_OBJECTIVE_MAX_LENGTH} characters). Shorten the /goal objective and put extra details in a normal follow-up prompt.`,
+          "error",
+        )
+        return true
+      }
+      const current = await sdk.client.session.goal.get({ sessionID })
+      const runGoalMutation = async (request: Promise<{ error?: unknown }>, message: string) => {
+        const result = await request
+        if (result.error) {
+          show(errorMessage(result.error), "error")
+          return false
+        }
+        show(message)
+        return true
+      }
+      if (current.error) {
+        show(errorMessage(current.error), "error")
+        return true
+      }
+      if (!arg) {
+        const goal = current.data
+        show(
+          goal
+            ? [
+                `Goal ${goal.status}: ${goal.objective}`,
+                `tokens ${goal.tokens.used}${goal.tokens.budget === undefined ? "" : `/${goal.tokens.budget}`}`,
+                `time ${formatDuration(goal.time.used * 1000)}`,
+                "commands /goal edit, /goal pause, /goal resume, /goal clear",
+              ].join(" | ")
+            : "No goal set. Use /goal <objective>.",
+        )
+      } else if (arg === "pause") {
+        if (!current.data) show("No goal to pause.", "error")
+        else {
+          if (!(await runGoalMutation(sdk.client.session.goal.update({ sessionID, status: "paused" }), "Goal paused.")))
+            return true
+        }
+      } else if (arg === "resume") {
+        if (!current.data) show("No goal to resume.", "error")
+        else {
+          const result = await sdk.client.session.goal.update({ sessionID, status: "active" })
+          if (result.error) {
+            show(errorMessage(result.error), "error")
+            return true
+          }
+          if (result.data?.status === "budget_limited") {
+            show("Goal still budget-limited. Increase or clear the token budget to resume.", "error")
+            return true
+          }
+          show("Goal resumed.")
+        }
+      } else if (arg === "clear") {
+        if (!(await runGoalMutation(sdk.client.session.goal.clear({ sessionID }), "Goal cleared."))) return true
+      } else if (arg === "edit") {
+        if (!current.data) show("No goal to edit. Use /goal <objective>.", "error")
+        else {
+          input.setText(`/goal ${current.data.objective}`)
+          setStore("prompt", "input", `/goal ${current.data.objective}`)
+          return true
+        }
+      } else if (current.data) {
+        if (
+          !(await runGoalMutation(
+            sdk.client.session.goal.update({ sessionID, objective: arg, status: "active" }),
+            "Goal updated.",
+          ))
+        )
+          return true
+      } else {
+        if (!(await runGoalMutation(sdk.client.session.goal.create({ sessionID, objective: arg }), "Goal set.")))
+          return true
+      }
     } else if (
       inputText.startsWith("/") &&
       iife(() => {

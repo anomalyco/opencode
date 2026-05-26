@@ -5,6 +5,7 @@ import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
+import { SessionGoal } from "@/session/goal"
 import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -14,6 +15,7 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
+import { NotFoundError } from "@/storage/storage"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -24,6 +26,8 @@ import {
   CommandPayload,
   DiffQuery,
   ForkPayload,
+  GoalCreatePayload,
+  GoalUpdatePayload,
   InitPayload,
   ListQuery,
   MessagesQuery,
@@ -34,7 +38,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
-import { PermissionNotFoundError } from "../errors"
+import * as ApiError from "../errors"
 import * as SessionError from "./session-errors"
 
 const tryParseJson = (text: string) =>
@@ -43,9 +47,15 @@ const tryParseJson = (text: string) =>
     catch: () => new HttpApiError.BadRequest({}),
   })
 
+function goalTitle(objective: string) {
+  const title = objective.replace(/\s+/g, " ").trim()
+  return title.length > 100 ? title.slice(0, 97) + "..." : title
+}
+
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const goalSvc = yield* SessionGoal.Service
     const shareSvc = yield* SessionShare.Service
     const promptSvc = yield* SessionPrompt.Service
     const revertSvc = yield* SessionRevert.Service
@@ -60,6 +70,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
+      yield* promptSvc.resumeGoals().pipe(Effect.ignore)
       return yield* session.list({
         directory: ctx.query.scope === "project" ? undefined : ctx.query.directory,
         scope: ctx.query.scope,
@@ -72,6 +83,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const status = Effect.fn("SessionHttpApi.status")(function* () {
+      yield* promptSvc.resumeGoals().pipe(Effect.ignore)
       return Object.fromEntries(yield* statusSvc.list())
     })
 
@@ -79,7 +91,22 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* SessionError.mapStorageNotFound(session.get(sessionID))
     })
 
+    const updateGoalTitle = Effect.fn("SessionHttpApi.updateGoalTitle")(function* (input: {
+      sessionID: SessionID
+      objective: string
+      previousObjective?: string
+    }) {
+      const current = yield* requireSession(input.sessionID)
+      const previousTitle = input.previousObjective ? goalTitle(input.previousObjective) : undefined
+      if (!Session.isDefaultTitle(current.title) && current.title !== previousTitle) return
+
+      const title = goalTitle(input.objective)
+      if (!title || current.title === title) return
+      yield* session.setTitle({ sessionID: input.sessionID, title })
+    })
+
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* promptSvc.resumeGoals().pipe(Effect.ignore)
       return yield* requireSession(ctx.params.sessionID)
     })
 
@@ -91,6 +118,58 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
+
+    const goal = Effect.fn("SessionHttpApi.goal")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* promptSvc.resumeGoals().pipe(Effect.ignore)
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      return (yield* goalSvc.get(ctx.params.sessionID)) ?? null
+    })
+
+    const goalCreate = Effect.fn("SessionHttpApi.goalCreate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalCreatePayload.Type
+    }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      const created = yield* goalSvc
+        .create({ ...ctx.payload, sessionID: ctx.params.sessionID })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      yield* updateGoalTitle({ sessionID: ctx.params.sessionID, objective: created.objective })
+      yield* promptSvc.continueGoal(ctx.params.sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
+      return created
+    })
+
+    const goalUpdate = Effect.fn("SessionHttpApi.goalUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalUpdatePayload.Type
+    }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      const before = yield* goalSvc.get(ctx.params.sessionID)
+      const updated = yield* goalSvc
+        .update({ ...ctx.payload, sessionID: ctx.params.sessionID })
+        .pipe(
+          Effect.mapError((error) =>
+            NotFoundError.isInstance(error) ? ApiError.notFound(error.message) : new HttpApiError.BadRequest({}),
+          ),
+        )
+      if (ctx.payload.objective !== undefined) {
+        yield* updateGoalTitle({
+          sessionID: ctx.params.sessionID,
+          objective: updated.objective,
+          previousObjective: before?.objective,
+        })
+      }
+      if (updated.status === "active") {
+        yield* promptSvc.continueGoal(ctx.params.sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
+      }
+      return updated
+    })
+
+    const goalClear = Effect.fn("SessionHttpApi.goalClear")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
+      yield* goalSvc.clear(ctx.params.sessionID)
+      return true
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -360,7 +439,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
         Effect.catchTag("Permission.NotFoundError", (error) =>
           Effect.fail(
-            new PermissionNotFoundError({
+            new ApiError.PermissionNotFoundError({
               requestID: String(error.requestID),
               message: `Permission request not found: ${error.requestID}`,
             }),
@@ -409,6 +488,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
+      .handle("goal", goal)
+      .handle("goalCreate", goalCreate)
+      .handle("goalUpdate", goalUpdate)
+      .handle("goalClear", goalClear)
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)

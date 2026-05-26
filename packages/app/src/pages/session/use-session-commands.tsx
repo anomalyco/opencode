@@ -75,6 +75,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" ||
     settings.general.showFileTree()
 
+  const goal = () => sync.data.session_goal[params.id ?? ""]
+  const goalDescription = () => {
+    const current = goal()
+    if (!current) return "Use /goal <objective>."
+    return [
+      current.objective,
+      `Tokens: ${current.tokens.used}${current.tokens.budget === undefined ? "" : `/${current.tokens.budget}`}`,
+      `Time: ${current.time.used}s`,
+    ].join("\n")
+  }
   const messages = () => {
     const id = params.id
     if (!id) return []
@@ -379,6 +389,58 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const sessionCmds = () => [
+    sessionCommand({
+      id: "session.goal",
+      title: "Goal",
+      description: goal() ? `${goal()!.status}: ${goal()!.objective}` : "Show or set the session goal",
+      slash: "goal",
+      disabled: !params.id,
+      onSelect: () =>
+        showToast({
+          title: goal() ? `Goal ${goal()!.status}` : "No goal set",
+          description: goalDescription(),
+        }),
+    }),
+    sessionCommand({
+      id: "session.goal.pause",
+      title: "Pause Goal",
+      description: "Pause active goal continuation",
+      disabled: !params.id || !goal() || goal()?.status === "paused",
+      onSelect: async () => {
+        if (!params.id) return
+        await sdk.client.session.goal.update({ sessionID: params.id, status: "paused" })
+        showToast({ title: "Goal paused" })
+      },
+    }),
+    sessionCommand({
+      id: "session.goal.resume",
+      title: "Resume Goal",
+      description: "Resume goal continuation",
+      disabled: !params.id || !goal() || goal()?.status === "active",
+      onSelect: async () => {
+        if (!params.id) return
+        const updated = await sdk.client.session.goal.update({ sessionID: params.id, status: "active" })
+        if (updated.data?.status === "budget_limited") {
+          showToast({
+            title: "Goal still budget-limited",
+            description: "Increase or clear the token budget to resume continuation.",
+          })
+        } else {
+          showToast({ title: "Goal resumed" })
+        }
+      },
+    }),
+    sessionCommand({
+      id: "session.goal.clear",
+      title: "Clear Goal",
+      description: "Clear the current session goal",
+      disabled: !params.id || !goal(),
+      onSelect: async () => {
+        if (!params.id) return
+        await sdk.client.session.goal.clear({ sessionID: params.id })
+        showToast({ title: "Goal cleared" })
+      },
+    }),
     sessionCommand({
       id: "session.new",
       title: language.t("command.session.new"),

@@ -14,6 +14,7 @@ import type {
   McpResource,
   FormatterStatus,
   SessionStatus,
+  SessionGoal,
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
@@ -57,6 +58,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_status: {
         [sessionID: string]: SessionStatus
       }
+      session_goal: {
+        [sessionID: string]: SessionGoal | undefined
+      }
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
       }
@@ -96,6 +100,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_default: {},
       session: [],
       session_status: {},
+      session_goal: {},
       session_diff: {},
       todo: {},
       message: {},
@@ -247,6 +252,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
+          break
+        }
+
+        case "session.goal.updated": {
+          setStore("session_goal", event.properties.sessionID, reconcile(event.properties.goal))
+          break
+        }
+
+        case "session.goal.cleared": {
+          setStore("session_goal", event.properties.sessionID, undefined)
           break
         }
 
@@ -520,11 +535,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
+          const [session, messages, todo, diff, goal] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100 }),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
+            sdk.client.session.goal.get({ sessionID }),
           ])
           setStore(
             produce((draft) => {
@@ -532,6 +548,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
+              draft.session_goal[sessionID] = goal.data ?? undefined
               const infos: (typeof draft.message)[string] = []
               for (const message of messages.data ?? []) {
                 infos.push(message.info)

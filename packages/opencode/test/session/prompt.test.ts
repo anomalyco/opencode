@@ -21,6 +21,7 @@ import { Image } from "../../src/image/image"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
+import { SessionGoal } from "@/session/goal"
 import { Session } from "@/session/session"
 import { SessionMessageTable } from "../../src/session/session.sql"
 import { LLM } from "../../src/session/llm"
@@ -167,6 +168,7 @@ const blockingProcessor = Layer.succeed(
 function makePrompt(input?: { processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
+    SessionGoal.defaultLayer,
     Snapshot.defaultLayer,
     LLM.defaultLayer,
     Env.defaultLayer,
@@ -618,6 +620,84 @@ it.instance("static loop consumes queued replies across turns", () =>
     expect(yield* llm.hits).toHaveLength(2)
     expect(yield* llm.pending).toBe(0)
   }),
+)
+
+it.instance(
+  "goal continuation does not auto-pause when recent assistant work made progress",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const goals = yield* SessionGoal.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Goal continuation recent progress",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* goals.create({ sessionID: session.id, objective: "continue after tool progress" })
+      const created = Date.now()
+      const synthetic = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        time: { created },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: synthetic.id,
+        sessionID: session.id,
+        type: "text",
+        synthetic: true,
+        text: "<system-reminder>\nContinue working toward the active session goal.\n</system-reminder>",
+      })
+      const progress = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: synthetic.id,
+        sessionID: session.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: created + 1, completed: created + 2 },
+        finish: "tool-calls",
+      })
+      yield* addSubtask(session.id, progress.id)
+      const summary = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: synthetic.id,
+        sessionID: session.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: created + 3, completed: created + 4 },
+        finish: "stop",
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: summary.id,
+        sessionID: session.id,
+        type: "text",
+        text: "Status summary, continuing next.",
+      })
+      yield* llm.text("continued", { usage: { input: 1, output: 1 } })
+
+      yield* prompt.continueGoal(session.id)
+
+      expect(yield* llm.calls).toBeGreaterThan(0)
+      expect(yield* goals.get(session.id)).toMatchObject({ status: "active" })
+    }),
+  { git: true },
 )
 
 it.instance("loop continues when finish is tool-calls", () =>
