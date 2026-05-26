@@ -1,11 +1,15 @@
+import path from "path"
+import { pathToFileURL } from "url"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
+import * as Stream from "effect/Stream"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
+import { Ripgrep } from "../file/ripgrep"
 import { Skill } from "../skill"
 import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
@@ -69,6 +73,8 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
     const skill = yield* Skill.Service
+
+    const rg = yield* Ripgrep.Service
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
@@ -141,12 +147,40 @@ export const layer = Layer.effect(
 
       for (const item of yield* skill.all()) {
         if (commands[item.name]) continue
+        const dir = path.dirname(item.location)
+        const base = pathToFileURL(dir).href
         commands[item.name] = {
           name: item.name,
           description: item.description,
           source: "skill",
           get template() {
-            return item.content
+            return bridge.promise(
+              Effect.gen(function* () {
+                const limit = 10
+                const files = yield* rg.files({ cwd: dir, follow: false, hidden: true }).pipe(
+                  Stream.filter((file) => !file.includes("SKILL.md")),
+                  Stream.map((file) => path.resolve(dir, file)),
+                  Stream.take(limit),
+                  Stream.runCollect,
+                  Effect.map((chunk) => [...chunk].map((file) => `<file>${file}</file>`).join("\n")),
+                )
+                return [
+                  `<skill_content name="${item.name}">`,
+                  `# Skill: ${item.name}`,
+                  "",
+                  item.content.trim(),
+                  "",
+                  `Base directory for this skill: ${base}`,
+                  "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+                  "Note: file list is sampled.",
+                  "",
+                  "<skill_files>",
+                  files,
+                  "</skill_files>",
+                  "</skill_content>",
+                ].join("\n")
+              }),
+            )
           },
           hints: [],
         }
