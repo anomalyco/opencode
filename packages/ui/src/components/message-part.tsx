@@ -168,6 +168,7 @@ export interface MessageProps {
   parts: PartType[]
   actions?: UserActions
   showAssistantCopyPartID?: string | null
+  assistantCopyText?: string
   interrupted?: boolean
   showReasoningSummaries?: boolean
   showCustomHookParts?: boolean
@@ -192,6 +193,7 @@ export interface MessagePartProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
+  assistantCopyText?: string
   turnDurationMs?: number
   markdownEager?: boolean
   markdownViewport?: HTMLDivElement
@@ -623,6 +625,7 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
+  assistantCopyText?: string
   turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
@@ -717,6 +720,7 @@ export function AssistantParts(props: {
                   part={entry().part}
                   message={entry().message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  assistantCopyText={props.assistantCopyText}
                   turnDurationMs={props.turnDurationMs}
                   defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                   markdownEager={props.markdownEager}
@@ -852,6 +856,7 @@ export function Message(props: MessageProps) {
             message={assistantMessage() as AssistantMessage}
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
+            assistantCopyText={props.assistantCopyText}
             showReasoningSummaries={props.showReasoningSummaries}
             showCustomHookParts={props.showCustomHookParts}
             markdownEager={props.markdownEager}
@@ -868,6 +873,7 @@ export function AssistantMessageDisplay(props: {
   message: AssistantMessage
   parts: PartType[]
   showAssistantCopyPartID?: string | null
+  assistantCopyText?: string
   showReasoningSummaries?: boolean
   showCustomHookParts?: boolean
   markdownEager?: boolean
@@ -943,6 +949,7 @@ export function AssistantMessageDisplay(props: {
                   part={entry().part}
                   message={props.message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  assistantCopyText={props.assistantCopyText}
                   markdownEager={props.markdownEager}
                   markdownMath={props.markdownMath}
                 />
@@ -1359,6 +1366,7 @@ export function Part(props: MessagePartProps) {
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
+        assistantCopyText={props.assistantCopyText}
         turnDurationMs={props.turnDurationMs}
         markdownEager={props.markdownEager}
         markdownViewport={props.markdownViewport}
@@ -1677,7 +1685,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
-    const content = displayText()
+    const content = props.assistantCopyText?.trim() ? props.assistantCopyText : displayText()
     if (!content) return
     await navigator.clipboard.writeText(content)
     setCopied(true)

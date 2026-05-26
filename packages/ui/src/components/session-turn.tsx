@@ -398,6 +398,7 @@ export function SessionTurn(
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
   const assistantSummary = createMemo(() => {
     let copy: string | undefined
+    const copyText: string[] = []
     let visible = 0
     let headingText: string | undefined
     let end: number | undefined
@@ -411,7 +412,10 @@ export function SessionTurn(
         const state = partState(part, showReasoningSummaries(), props.showCustomHookParts ?? true)
         if (state !== "visible") continue
         visible++
-        if (part.type === "text" && part.text?.trim()) copy = part.id
+        if (part.type === "text" && part.text?.trim()) {
+          copy = part.id
+          copyText.push(part.text)
+        }
         if (part.type === "reasoning") {
           const value = heading(part.text)
           if (value) headingText = value
@@ -419,9 +423,10 @@ export function SessionTurn(
       }
     }
 
-    return { copy, visible, headingText, end }
+    return { copy, copyText: copyText.join("\n\n"), visible, headingText, end }
   })
-  const summary = () => assistantSummary() ?? { copy: undefined, visible: 0, headingText: undefined, end: undefined }
+  const summary = () =>
+    assistantSummary() ?? { copy: undefined, copyText: "", visible: 0, headingText: undefined, end: undefined }
 
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
@@ -568,6 +573,7 @@ export function SessionTurn(
                     <AssistantParts
                       messages={assistantList()}
                       showAssistantCopyPartID={assistantCopyPartID()}
+                      assistantCopyText={summary().copyText}
                       turnDurationMs={turnDurationMs()}
                       working={working()}
                       showReasoningSummaries={showReasoningSummaries()}
