@@ -395,6 +395,9 @@ export const layer: Layer.Layer<
 
       const directory = yield* canonical(input.directory)
 
+      // Bootstrapped worktrees may hold file handles, which must be released before removal on Windows.
+      if (directory !== (yield* canonical(ctx.worktree))) yield* store.disposeDirectory(directory)
+
       const list = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
       if (list.code !== 0) {
         return yield* new RemoveFailedError({ message: list.stderr || list.text || "Failed to read git worktrees" })
