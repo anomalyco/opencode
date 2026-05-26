@@ -192,6 +192,26 @@
         "cloudflare": "5.2.0",
       },
     },
+    "packages/console/support": {
+      "name": "@opencode-ai/console-support",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cloudflare/vite-plugin": "1.15.2",
+        "@opencode-ai/console-core": "workspace:*",
+        "@solidjs/meta": "catalog:",
+        "@solidjs/router": "catalog:",
+        "@solidjs/start": "catalog:",
+        "nitro": "3.0.1-alpha.1",
+        "solid-js": "catalog:",
+        "vite": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+        "wrangler": "4.50.0",
+      },
+    },
     "packages/core": {
       "name": "@opencode-ai/core",
       "version": "1.15.10",
@@ -1630,6 +1650,8 @@
     "@opencode-ai/console-mail": ["@opencode-ai/console-mail@workspace:packages/console/mail"],
 
     "@opencode-ai/console-resource": ["@opencode-ai/console-resource@workspace:packages/console/resource"],
+
+    "@opencode-ai/console-support": ["@opencode-ai/console-support@workspace:packages/console/support"],
 
     "@opencode-ai/core": ["@opencode-ai/core@workspace:packages/core"],
 
