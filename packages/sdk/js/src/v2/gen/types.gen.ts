@@ -4025,6 +4025,34 @@ export type GlobalConfigUpdateResponses = {
 
 export type GlobalConfigUpdateResponse = GlobalConfigUpdateResponses[keyof GlobalConfigUpdateResponses]
 
+export type GlobalConfigProviderRemoveData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/global/config/provider/{providerID}"
+}
+
+export type GlobalConfigProviderRemoveErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type GlobalConfigProviderRemoveError = GlobalConfigProviderRemoveErrors[keyof GlobalConfigProviderRemoveErrors]
+
+export type GlobalConfigProviderRemoveResponses = {
+  /**
+   * Successfully removed provider from global config
+   */
+  200: Config
+}
+
+export type GlobalConfigProviderRemoveResponse =
+  GlobalConfigProviderRemoveResponses[keyof GlobalConfigProviderRemoveResponses]
+
 export type GlobalDisposeData = {
   body?: never
   path?: never
@@ -4159,6 +4187,36 @@ export type ConfigUpdateResponses = {
 }
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
+
+export type ConfigProviderRemoveData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/provider/{providerID}"
+}
+
+export type ConfigProviderRemoveErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type ConfigProviderRemoveError = ConfigProviderRemoveErrors[keyof ConfigProviderRemoveErrors]
+
+export type ConfigProviderRemoveResponses = {
+  /**
+   * Successfully removed provider from config
+   */
+  200: Config
+}
+
+export type ConfigProviderRemoveResponse = ConfigProviderRemoveResponses[keyof ConfigProviderRemoveResponses]
 
 export type ConfigProvidersData = {
   body?: never

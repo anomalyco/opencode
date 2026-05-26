@@ -69,6 +69,13 @@ export type Platform = {
   /** Fetch override */
   fetch?: typeof fetch
 
+  /** JSON request override for desktop-only cross-origin calls */
+  fetchJson?: (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }) => Promise<{
+    ok: boolean
+    status: number
+    data: unknown
+  }>
+
   /** Get the configured default server URL (platform-specific) */
   getDefaultServer?(): Promise<ServerConnection.Key | null>
 

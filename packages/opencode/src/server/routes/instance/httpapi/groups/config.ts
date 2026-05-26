@@ -1,5 +1,6 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
@@ -7,6 +8,9 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/config"
+const ConfigProviderParams = Schema.Struct({
+  providerID: Schema.String,
+})
 
 export const ConfigApi = HttpApi.make("config")
   .add(
@@ -32,6 +36,18 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.update",
             summary: "Update configuration",
             description: "Update OpenCode configuration settings and preferences.",
+          }),
+        ),
+        HttpApiEndpoint.delete("removeProvider", `${root}/provider/:providerID`, {
+          query: WorkspaceRoutingQuery,
+          params: ConfigProviderParams,
+          success: described(Config.Info, "Successfully removed provider from config"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.provider.remove",
+            summary: "Remove configured provider",
+            description: "Remove a configured provider from the current OpenCode configuration.",
           }),
         ),
         HttpApiEndpoint.get("providers", `${root}/providers`, {

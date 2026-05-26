@@ -78,6 +78,33 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+  ipcMain.handle(
+    "fetch-json",
+    async (
+      _event: IpcMainInvokeEvent,
+      url: string,
+      init?: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number },
+    ) => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), init?.timeoutMs ?? 5000)
+      try {
+        const response = await fetch(url, {
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body,
+          signal: controller.signal,
+        })
+        const text = await response.text()
+        return {
+          ok: response.ok,
+          status: response.status,
+          data: text ? JSON.parse(text) : null,
+        }
+      } finally {
+        clearTimeout(timeout)
+      }
+    },
+  )
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)

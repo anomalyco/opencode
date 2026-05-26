@@ -6,6 +6,10 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"
 
+const GlobalConfigProviderParams = Schema.Struct({
+  providerID: Schema.String,
+})
+
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
   version: Schema.String,
@@ -80,6 +84,17 @@ export const GlobalApi = HttpApi.make("global").add(
           identifier: "global.config.update",
           summary: "Update global configuration",
           description: "Update global OpenCode configuration settings and preferences.",
+        }),
+      ),
+      HttpApiEndpoint.delete("configProviderRemove", `${GlobalPaths.config}/provider/:providerID`, {
+        params: GlobalConfigProviderParams,
+        success: described(Config.Info, "Successfully removed provider from global config"),
+        error: HttpApiError.BadRequest,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.config.provider.remove",
+          summary: "Remove global provider configuration",
+          description: "Remove a configured provider from the global OpenCode configuration.",
         }),
       ),
       HttpApiEndpoint.post("dispose", GlobalPaths.dispose, {

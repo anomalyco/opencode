@@ -90,6 +90,12 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return result.info
     })
 
+    const configProviderRemove = Effect.fn("GlobalHttpApi.configProviderRemove")(function* (ctx) {
+      const result = yield* config.removeProviderGlobal(ctx.params.providerID)
+      if (result.changed) bridge.fork(disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true }))
+      return result.info
+    })
+
     const dispose = Effect.fn("GlobalHttpApi.dispose")(function* () {
       yield* disposeAllInstancesAndEmitGlobalDisposed()
       return true
@@ -151,6 +157,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       .handleRaw("event", event)
       .handle("configGet", configGet)
       .handle("configUpdate", configUpdate)
+      .handle("configProviderRemove", configProviderRemove)
       .handle("dispose", dispose)
       .handleRaw("upgrade", upgradeRaw)
   }),

@@ -21,6 +21,12 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       return ctx.payload
     })
 
+    const removeProvider = Effect.fn("ConfigHttpApi.removeProvider")(function* (ctx) {
+      const result = yield* configSvc.removeProvider(ctx.params.providerID)
+      if (result.changed) yield* markInstanceForDisposal(yield* InstanceState.context)
+      return result.info
+    })
+
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
       const providers = yield* providerSvc.list()
       return {
@@ -29,6 +35,6 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       }
     })
 
-    return handlers.handle("get", get).handle("update", update).handle("providers", providers)
+    return handlers.handle("get", get).handle("update", update).handle("removeProvider", removeProvider).handle("providers", providers)
   }),
 )

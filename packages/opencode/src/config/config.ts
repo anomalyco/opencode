@@ -326,7 +326,9 @@ export interface Interface {
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
+  readonly removeProvider: (providerID: string) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly removeProviderGlobal: (providerID: string) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -344,6 +346,12 @@ function globalConfigFile() {
     if (existsSync(file)) return file
   }
   return candidates[0]
+}
+
+function localConfigCandidate(ctx: InstanceContext, directories: string[]) {
+  const closestProjectDir = directories.find((dir) => dir.endsWith(".opencode") && containsPath(dir, ctx))
+  if (closestProjectDir) return path.join(closestProjectDir, "opencode.jsonc")
+  return path.join(ctx.directory, ".opencode", "opencode.jsonc")
 }
 
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
@@ -370,6 +378,42 @@ function writableGlobal(info: Info) {
   // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
   if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
   return next
+}
+
+function removeProviderFromInfo(info: Info, providerID: string) {
+  const next = { ...info }
+  const providers = next.provider ? { ...next.provider } : undefined
+  const hasProvider = !!providers?.[providerID]
+  if (providers) delete providers[providerID]
+
+  const disabled = next.disabled_providers
+  const nextDisabled = disabled?.filter((item) => item !== providerID)
+  const disabledChanged = !!disabled && nextDisabled!.length !== disabled.length
+  if (!hasProvider && !disabledChanged) return { info, changed: false }
+
+  if (providers) next.provider = providers
+  if (disabledChanged) next.disabled_providers = nextDisabled
+  return { info: next, changed: true }
+}
+
+function removeProviderJson(before: string, file: string, providerID: string, global: boolean) {
+  const parsed = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+  const result = removeProviderFromInfo(global ? writableGlobal(parsed) : writable(parsed), providerID)
+  const serialized = JSON.stringify(result.info, null, 2)
+  return { ...result, text: serialized, changed: serialized !== before }
+}
+
+function removeProviderJsonc(before: string, file: string, providerID: string, global: boolean) {
+  const parsed = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+  const result = removeProviderFromInfo(global ? writableGlobal(parsed) : writable(parsed), providerID)
+  if (!result.changed) return { ...result, text: before }
+  const updated = patchJsonc(before, {
+    provider: {
+      [providerID]: undefined,
+    },
+    disabled_providers: result.info.disabled_providers,
+  })
+  return { ...result, text: updated, changed: updated !== before }
 }
 
 export const ConfigDirectoryTypoError = NamedError.create("ConfigDirectoryTypoError", {
@@ -813,13 +857,54 @@ export const layer = Layer.effect(
       )
     })
 
+    const localConfigFile = Effect.fn("Config.localConfigFile")(function* () {
+      const ctx = yield* InstanceState.context
+      const files = yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(
+        Effect.provideService(AppFileSystem.Service, fs),
+        Effect.orDie,
+      )
+      const closestFile = files.at(-1)
+      if (closestFile) return closestFile
+
+      const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree).pipe(
+        Effect.provideService(AppFileSystem.Service, fs),
+        Effect.orDie,
+      )
+      return localConfigCandidate(ctx, directories)
+    })
+
+    const existingLocalConfigFile = Effect.fn("Config.existingLocalConfigFile")(function* () {
+      const file = yield* localConfigFile()
+      return (yield* fs.existsSafe(file)) ? file : undefined
+    })
+
     const update = Effect.fn("Config.update")(function* (config: Info) {
-      const dir = yield* InstanceState.directory
-      const file = path.join(dir, "config.json")
-      const existing = yield* loadFile(file)
-      yield* fs
-        .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
-        .pipe(Effect.orDie)
+      const file = yield* localConfigFile()
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      const patch = writable(config)
+
+      if (!file.endsWith(".jsonc")) {
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+        const merged = mergeDeep(writable(existing), patch)
+        const serialized = JSON.stringify(merged, null, 2)
+        yield* fs.writeWithDirs(file, serialized).pipe(Effect.orDie)
+        return
+      }
+
+      const updated = patchJsonc(before, patch)
+      yield* fs.writeWithDirs(file, updated).pipe(Effect.orDie)
+    })
+
+    const removeProvider = Effect.fn("Config.removeProvider")(function* (providerID: string) {
+      const file = yield* existingLocalConfigFile()
+      if (!file) return { info: yield* get(), changed: false }
+
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      const result = file.endsWith(".jsonc")
+        ? removeProviderJsonc(before, file, providerID, false)
+        : removeProviderJson(before, file, providerID, false)
+      if (result.changed) yield* fs.writeWithDirs(file, result.text).pipe(Effect.orDie)
+      return { info: result.info, changed: result.changed }
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
@@ -851,12 +936,25 @@ export const layer = Layer.effect(
       return { info: next, changed }
     })
 
+    const removeProviderGlobal = Effect.fn("Config.removeProviderGlobal")(function* (providerID: string) {
+      const file = globalConfigFile()
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      const result = file.endsWith(".jsonc")
+        ? removeProviderJsonc(before, file, providerID, true)
+        : removeProviderJson(before, file, providerID, true)
+      if (result.changed) yield* fs.writeFileString(file, result.text).pipe(Effect.orDie)
+      if (result.changed) yield* invalidate()
+      return { info: result.info, changed: result.changed }
+    })
+
     return Service.of({
       get,
       getGlobal,
       getConsoleState,
       update,
+      removeProvider,
       updateGlobal,
+      removeProviderGlobal,
       invalidate,
       directories,
       waitForDependencies,

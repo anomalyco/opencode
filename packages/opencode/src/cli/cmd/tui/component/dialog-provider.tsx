@@ -1,9 +1,10 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, on, Show } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
+import { useProject } from "../context/project"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
@@ -14,7 +15,7 @@ import * as Clipboard from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
-import { useBindings } from "../keymap"
+import { useBindings, useCommandShortcut } from "../keymap"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -27,6 +28,7 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
 const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
+const OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
 
 type ProviderOptionBase = {
   title: string
@@ -83,9 +85,45 @@ export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const project = useProject()
   const toast = useToast()
   const { theme } = useTheme()
   const onboarded = useConnected()
+  const [toDelete, setToDelete] = createSignal<string>()
+  const [selectedProviderID, setSelectedProviderID] = createSignal<string>()
+  const deleteHint = useCommandShortcut("provider.delete")
+  const deleteLabel = createMemo(() => deleteHint() || "ctrl+d")
+
+  const isConfigCustom = (providerID: string) => {
+    const provider = sync.data.config.provider?.[providerID]
+    if (!provider) return false
+    if (provider.npm !== OPENAI_COMPATIBLE) return false
+    if (!provider.models || Object.keys(provider.models).length === 0) return false
+    return true
+  }
+
+  const deletableProviderID = createMemo(() => {
+    const providerID = selectedProviderID()
+    if (!providerID) return
+    if (!isConfigCustom(providerID)) return
+    return providerID
+  })
+
+  createEffect(
+    on(
+      () => sync.data.provider_next.all,
+      (all) => {
+        if (selectedProviderID() && all.some((provider) => provider.id === selectedProviderID())) return
+        const [first] = providerOptions(all)
+        setSelectedProviderID(first?.type === "provider" ? first.providerID : undefined)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (toDelete() && !isConfigCustom(toDelete()!)) setToDelete(undefined)
+  })
 
   async function promptCustomProviderID(): Promise<string | undefined> {
     const value = await DialogPrompt.show(dialog, "Other", {
@@ -109,6 +147,152 @@ export function createDialogProviderOptions() {
     return promptCustomProviderID()
   }
 
+  async function promptCustomProviderEndpoint(): Promise<string | undefined> {
+    const value = await DialogPrompt.show(dialog, "Endpoint", {
+      placeholder: "https://api.example.com/v1",
+      description: () => (
+        <text fg={theme.textMuted}>OpenCode will try /models and /v1/models to discover models automatically.</text>
+      ),
+    })
+    if (value === null) return
+
+    const endpoint = normalizeCustomProviderEndpoint(value)
+    if (endpoint) return endpoint
+
+    toast.show({
+      variant: "error",
+      message: "Endpoint must start with http:// or https://",
+    })
+    return promptCustomProviderEndpoint()
+  }
+
+  async function promptCustomProviderApiKey(): Promise<string | undefined> {
+    const value = await DialogPrompt.show(dialog, "API key", {
+      placeholder: "Optional API key",
+      description: () => <text fg={theme.textMuted}>Leave empty if this endpoint does not require a bearer token.</text>,
+    })
+    if (value === null) return
+    return value.trim()
+  }
+
+  async function connectCustomProvider() {
+    const providerID = await promptCustomProviderID()
+    if (!providerID) return
+
+    const endpoint = await promptCustomProviderEndpoint()
+    if (!endpoint) return
+
+    const apiKey = await promptCustomProviderApiKey()
+    if (apiKey === undefined) return
+
+    try {
+      const models = await discoverCustomProviderModels({
+        baseURL: endpoint,
+        apiKey,
+      })
+
+      const existingProvider = sync.data.config.provider?.[providerID]
+      const config = {
+        ...sync.data.config,
+        provider: {
+          ...(sync.data.config.provider ?? {}),
+          [providerID]: {
+            ...existingProvider,
+            name: existingProvider?.name ?? providerID,
+            npm: OPENAI_COMPATIBLE,
+            options: {
+              ...(existingProvider?.options ?? {}),
+              baseURL: endpoint,
+            },
+            models,
+          },
+        },
+        disabled_providers: (sync.data.config.disabled_providers ?? []).filter((item) => item !== providerID),
+      }
+
+      const workspace = project.workspace.current()
+      const result = await sdk.client.config.update({ workspace, config })
+      if (result.error) {
+        toast.show({
+          variant: "error",
+          message: JSON.stringify(result.error),
+        })
+        dialog.clear()
+        return
+      }
+
+      if (apiKey) {
+        const auth = await sdk.client.auth.set({
+          providerID,
+          auth: {
+            type: "api",
+            key: apiKey,
+          },
+        })
+        if (auth.error) {
+          toast.show({
+            variant: "error",
+            message: JSON.stringify(auth.error),
+          })
+          dialog.clear()
+          return
+        }
+      }
+
+      await sdk.client.instance.dispose()
+      await sync.bootstrap({ fatal: false })
+      const refreshed = await sdk.client.config.providers({ workspace })
+      const available = (refreshed.data?.providers ?? []).some((provider) => provider.id === providerID)
+
+      if (!available) {
+        toast.show({
+          variant: "info",
+          message: `Saved ${providerID}, but it is not available yet. Check the endpoint and model list.`,
+        })
+        dialog.clear()
+        return
+      }
+
+      dialog.replace(() => <DialogModel providerID={providerID} />)
+    } catch (error) {
+      toast.show({
+        variant: "error",
+        message: error instanceof Error ? error.message : String(error),
+      })
+      dialog.clear()
+    }
+  }
+
+  async function deleteCustomProvider(providerID: string) {
+    try {
+      const workspace = project.workspace.current()
+      const result = await sdk.client.config.provider.remove({ workspace, providerID })
+      if (result.error) {
+        toast.show({
+          variant: "error",
+          message: JSON.stringify(result.error),
+        })
+        setToDelete(undefined)
+        return
+      }
+
+      await sdk.client.auth.remove({ providerID }).catch(() => undefined)
+      await sdk.client.instance.dispose()
+      await sync.bootstrap({ fatal: false })
+      setToDelete(undefined)
+      toast.show({
+        variant: "success",
+        message: `Deleted ${providerID}`,
+      })
+    } catch (error) {
+      setToDelete(undefined)
+      toast.show({
+        variant: "error",
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   const options = createMemo(() => {
     return pipe(
       providerOptions(sync.data.provider_next.all),
@@ -120,9 +304,7 @@ export function createDialogProviderOptions() {
             description: provider.description,
             category: provider.category,
             async onSelect() {
-              const providerID = await promptCustomProviderID()
-              if (!providerID) return
-              return dialog.replace(() => <ApiMethod providerID={providerID} title="API key" custom />)
+              await connectCustomProvider()
             },
           }
         }
@@ -130,10 +312,12 @@ export function createDialogProviderOptions() {
         const providerID = provider.providerID
         const consoleManaged = isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, providerID)
         const connected = sync.data.provider_next.connected.includes(providerID)
+        const deleting = toDelete() === providerID && isConfigCustom(providerID)
 
         return {
-          title: provider.title,
+          title: deleting ? `Press ${deleteLabel()} again to confirm` : provider.title,
           value: provider.value,
+          bg: deleting ? theme.error : undefined,
           description: provider.description,
           footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
           category: provider.category,
@@ -218,12 +402,105 @@ export function createDialogProviderOptions() {
       }),
     )
   })
-  return options
+  return {
+    options,
+    toDelete,
+    setToDelete,
+    isConfigCustom,
+    deletableProviderID,
+    deleteCustomProvider,
+    setSelectedProviderID,
+  }
 }
 
 export function DialogProvider() {
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  return (
+    <DialogSelect
+      title="Connect a provider"
+      options={options.options()}
+      onMove={(option) => {
+        options.setSelectedProviderID(option.value === CUSTOM_PROVIDER_OPTION_VALUE ? undefined : option.value)
+        options.setToDelete(undefined)
+      }}
+      actions={[
+        {
+          command: "provider.delete",
+          title: "delete",
+          disabled: !options.deletableProviderID(),
+          onTrigger: async (option) => {
+            if (option.value === CUSTOM_PROVIDER_OPTION_VALUE) return
+            if (!options.isConfigCustom(option.value)) return
+            if (options.toDelete() === option.value) {
+              await options.deleteCustomProvider(option.value)
+              return
+            }
+            options.setToDelete(option.value)
+          },
+        },
+      ]}
+    />
+  )
+}
+
+function normalizeCustomProviderEndpoint(value: string) {
+  const endpoint = value.trim().replace(/\/+$/, "")
+  if (!endpoint) return
+  if (!/^https?:\/\//.test(endpoint)) return
+  return endpoint
+}
+
+async function discoverCustomProviderModels(input: { baseURL: string; apiKey?: string }) {
+  const headers = new Headers()
+  if (input.apiKey) headers.set("Authorization", `Bearer ${input.apiKey}`)
+
+  let lastError: unknown
+  for (const path of ["models", "v1/models"]) {
+    const url = new URL(path, `${input.baseURL}/`).toString()
+    try {
+      const response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(5_000),
+      })
+      if (!response.ok) {
+        lastError = new Error(`Failed to fetch models from ${url}: ${response.status}`)
+        continue
+      }
+
+      const body = await response.json()
+      const models = parseCustomProviderModels(body)
+      if (Object.keys(models).length > 0) return models
+      lastError = new Error(`No models returned from ${url}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError
+  throw new Error("Failed to discover models")
+}
+
+function parseCustomProviderModels(input: unknown) {
+  if (!input || typeof input !== "object") throw new Error("Invalid model discovery response")
+
+  const value = input as { data?: unknown; models?: unknown }
+  const list = Array.isArray(value.data) ? value.data : Array.isArray(value.models) ? value.models : []
+  const result: Record<string, { name: string }> = {}
+
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue
+    const entry = item as { id?: unknown; name?: unknown }
+    const id = typeof entry.id === "string" ? entry.id.trim() : ""
+    if (!id || result[id]) continue
+    const name = typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : id
+    result[id] = { name }
+  }
+
+  if (Object.keys(result).length === 0) {
+    throw new Error("No models found at this endpoint")
+  }
+
+  return result
 }
 
 interface AutoMethodProps {

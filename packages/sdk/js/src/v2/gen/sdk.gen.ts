@@ -20,6 +20,8 @@ import type {
   Config as Config3,
   ConfigGetErrors,
   ConfigGetResponses,
+  ConfigProviderRemoveErrors,
+  ConfigProviderRemoveResponses,
   ConfigProvidersErrors,
   ConfigProvidersResponses,
   ConfigUpdateErrors,
@@ -70,6 +72,8 @@ import type {
   FormatterStatusResponses,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
+  GlobalConfigProviderRemoveErrors,
+  GlobalConfigProviderRemoveResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
   GlobalDisposeErrors,
@@ -493,6 +497,31 @@ export class App extends HeyApiClient {
   }
 }
 
+export class Provider extends HeyApiClient {
+  /**
+   * Remove global provider configuration
+   *
+   * Remove a configured provider from the global OpenCode configuration.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    return (options?.client ?? this.client).delete<
+      GlobalConfigProviderRemoveResponses,
+      GlobalConfigProviderRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/global/config/provider/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Config extends HeyApiClient {
   /**
    * Get global configuration
@@ -528,6 +557,11 @@ export class Config extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _provider?: Provider
+  get provider(): Provider {
+    return (this._provider ??= new Provider({ client: this.client }))
   }
 }
 
@@ -630,6 +664,44 @@ export class Event extends HeyApiClient {
   }
 }
 
+export class Provider2 extends HeyApiClient {
+  /**
+   * Remove configured provider
+   *
+   * Remove a configured provider from the current OpenCode configuration.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ConfigProviderRemoveResponses,
+      ConfigProviderRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/config/provider/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Config2 extends HeyApiClient {
   /**
    * Get configuration
@@ -726,6 +798,11 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _provider?: Provider2
+  get provider(): Provider2 {
+    return (this._provider ??= new Provider2({ client: this.client }))
   }
 }
 
@@ -2969,7 +3046,7 @@ export class Oauth extends HeyApiClient {
   }
 }
 
-export class Provider extends HeyApiClient {
+export class Provider3 extends HeyApiClient {
   /**
    * List providers
    *
@@ -4488,7 +4565,7 @@ export class Model extends HeyApiClient {
   }
 }
 
-export class Provider2 extends HeyApiClient {
+export class Provider4 extends HeyApiClient {
   /**
    * List v2 providers
    *
@@ -4556,9 +4633,9 @@ export class V2 extends HeyApiClient {
     return (this._model ??= new Model({ client: this.client }))
   }
 
-  private _provider?: Provider2
-  get provider(): Provider2 {
-    return (this._provider ??= new Provider2({ client: this.client }))
+  private _provider?: Provider4
+  get provider(): Provider4 {
+    return (this._provider ??= new Provider4({ client: this.client }))
   }
 }
 
@@ -5122,9 +5199,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._permission ??= new Permission({ client: this.client }))
   }
 
-  private _provider?: Provider
-  get provider(): Provider {
-    return (this._provider ??= new Provider({ client: this.client }))
+  private _provider?: Provider3
+  get provider(): Provider3 {
+    return (this._provider ??= new Provider3({ client: this.client }))
   }
 
   private _session?: Session2

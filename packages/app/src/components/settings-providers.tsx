@@ -4,7 +4,9 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { showToast } from "@opencode-ai/ui/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
+import { decode64 } from "@/utils/base64"
 import { createMemo, type Component, For, Show } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -33,6 +35,18 @@ export const SettingsProviders: Component = () => {
   const serverSDK = useServerSDK()
   const serverSync = useServerSync()
   const providers = useProviders()
+  const params = useParams()
+  const directory = createMemo(() => decode64(params.dir) ?? "")
+
+  const currentConfig = createMemo(() => {
+    if (!directory()) return serverSync.data.config
+    return serverSync.child(directory())[0].config
+  })
+
+  const currentClient = createMemo(() => {
+    if (!directory()) return
+    return serverSDK.createClient({ directory: directory(), throwOnError: true })
+  })
 
   const connected = createMemo(() => {
     return providers
@@ -69,12 +83,14 @@ export const SettingsProviders: Component = () => {
     return language.t("settings.providers.tag.other")
   }
 
+  const isCustomProvider = (item: ProviderItem) => source(item) === "custom" || isConfigCustom(item.id)
+
   const canDisconnect = (item: ProviderItem) => source(item) !== "env"
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
-    const provider = serverSync.data.config.provider?.[providerID]
+    const provider = currentConfig().provider?.[providerID]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
@@ -104,9 +120,28 @@ export const SettingsProviders: Component = () => {
   }
 
   const disconnect = async (providerID: string, name: string) => {
-    if (isConfigCustom(providerID)) {
+    const item = connected().find((entry) => entry.id === providerID)
+    if (item && isCustomProvider(item)) {
       await serverSDK.client.auth.remove({ providerID }).catch(() => undefined)
-      await disableProvider(providerID, name)
+      const client = currentClient()
+      const remove = client
+        ? client.config.provider.remove({ providerID })
+        : serverSDK.client.global.config.provider.remove({ providerID })
+
+      await remove
+        .then(async () => {
+          if (client) await serverSDK.client.global.dispose()
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
+            description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
+          })
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          showToast({ title: language.t("common.requestFailed"), description: message })
+        })
       return
     }
     await serverSDK.client.auth
@@ -163,7 +198,7 @@ export const SettingsProviders: Component = () => {
                       }
                     >
                       <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
+                        {isCustomProvider(item) ? language.t("common.delete") : language.t("common.disconnect")}
                       </Button>
                     </Show>
                   </div>

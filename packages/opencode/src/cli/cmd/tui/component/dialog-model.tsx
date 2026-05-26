@@ -101,7 +101,7 @@ export function DialogModel(props: { providerID?: string }) {
 
     const popularProviders = !connected()
       ? pipe(
-          providers(),
+          providers.options(),
           map((option) => ({
             ...option,
             category: "Popular providers",

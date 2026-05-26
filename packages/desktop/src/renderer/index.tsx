@@ -246,6 +246,10 @@ const createPlatform = (): Platform => {
       return fetch(input, init)
     },
 
+    fetchJson: (url, init) => {
+      return window.api.fetchJson(url, init)
+    },
+
     getWslEnabled: () => isWslEnabled(),
 
     setWslEnabled: async (enabled) => {
