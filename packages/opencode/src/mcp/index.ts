@@ -684,7 +684,7 @@ export const layer = Layer.effect(
         ([clientName, client]) =>
           Effect.gen(function* () {
             const mcpConfig = config[clientName]
-            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
 
             const listed = s.defs[clientName]
             if (!listed) {
