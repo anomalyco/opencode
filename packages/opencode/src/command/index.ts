@@ -145,7 +145,7 @@ export const layer = Layer.effect(
           description: item.description,
           source: "skill",
           get template() {
-            return item.content
+            return ""
           },
           hints: [],
         }

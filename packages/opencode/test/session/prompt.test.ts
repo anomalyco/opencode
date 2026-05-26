@@ -1571,6 +1571,46 @@ unix(
   30_000,
 )
 
+it.instance(
+  "skill slash command injects full skill content with referenced files",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      const skill = path.join(dir, ".opencode", "skill", "slash-skill")
+      yield* writeText(
+        path.join(skill, "SKILL.md"),
+        `---
+name: slash-skill
+description: Skill for slash command tests.
+---
+
+# Slash Skill
+
+Use reference/architecture.md before answering.
+`,
+      )
+      yield* writeText(path.join(skill, "reference", "architecture.md"), "reference details")
+
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("done")
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "slash-skill",
+        arguments: "",
+      })
+
+      const file = path.resolve(skill, "reference", "architecture.md").replaceAll("\\", "\\\\")
+      const messages = JSON.stringify((yield* llm.inputs).at(-1)?.messages)
+
+      expect(result.info.role).toBe("assistant")
+      expect(messages).toContain(`<skill_content name=\\\"slash-skill\\\">`)
+      expect(messages).toContain(`Base directory for this skill: ${pathToFileURL(skill).href}`)
+      expect(messages).toContain(`<file>${file}</file>`)
+    }),
+  30_000,
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>

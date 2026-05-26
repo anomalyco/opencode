@@ -1582,6 +1582,32 @@ export const layer = Layer.effect(
         throw error
       }
 
+      if (cmd.source === "skill") {
+        const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        const skill = (yield* registry.named()).skill
+        const result = yield* skill.execute(
+          { name: input.command },
+          {
+            agent: agent.name,
+            messageID: input.messageID ?? MessageID.ascending(),
+            sessionID: input.sessionID,
+            abort: AbortSignal.any([]),
+            callID: "",
+            messages: [],
+            metadata: () => Effect.void,
+            ask: (req) =>
+              permission
+                .ask({
+                  ...req,
+                  sessionID: input.sessionID,
+                  ruleset: Permission.merge(agent.permission, session.permission ?? []),
+                })
+                .pipe(Effect.orDie),
+          },
+        )
+        template = input.arguments.trim() ? result.output + "\n\n" + input.arguments : result.output
+      }
+
       const templateParts = yield* resolvePromptParts(template)
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
       const parts = isSubtask
