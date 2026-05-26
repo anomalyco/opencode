@@ -156,6 +156,8 @@ const sessionGlobalBindingCommands = [
   "session.half.page.down",
 ] as const
 
+const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] as const
+
 const context = createContext<{
   width: number
   sessionID: string
@@ -1066,6 +1068,11 @@ export function Session() {
 
   useBindings(() => ({
     bindings: tuiConfig.keybinds.gather("session.global", sessionGlobalBindingCommands),
+  }))
+
+  useBindings(() => ({
+    enabled: () => renderer.currentFocusedEditor === null,
+    bindings: tuiConfig.keybinds.gather("session.global.unfocused", sessionGlobalUnfocusedBindingCommands),
   }))
 
   useBindings(() => ({

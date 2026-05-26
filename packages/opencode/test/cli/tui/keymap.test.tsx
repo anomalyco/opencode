@@ -71,8 +71,14 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
         { name: "session.list", run() {} },
         { name: "session.new", run() {} },
         { name: "session.page.up", run() {} },
+        { name: "session.first", run() {} },
       ],
-      bindings: config.keybinds.gather("test.global", ["session.list", "session.new", "session.page.up"]),
+      bindings: config.keybinds.gather("test.global", [
+        "session.list",
+        "session.new",
+        "session.page.up",
+        "session.first",
+      ]),
     })
     const offBase = keymap.registerLayer({
       mode: OPENCODE_BASE_MODE,
@@ -84,7 +90,7 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
         Array.from(
           keymap.getCommandBindings({
             visibility: "active",
-            commands: ["session.list", "session.new", "session.page.up", "model.list"],
+            commands: ["session.list", "session.new", "session.page.up", "session.first", "model.list"],
           }),
           ([command, bindings]) => [command, bindings.length],
         ),
@@ -114,9 +120,15 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   const app = await testRender(() => <Harness />)
   try {
     expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "model.list": 0 },
-      autocomplete: { "session.list": 1, "session.new": 1, "session.page.up": 2, "model.list": 0 },
+      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
+      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
+      autocomplete: {
+        "session.list": 1,
+        "session.new": 1,
+        "session.page.up": 2,
+        "session.first": 2,
+        "model.list": 0,
+      },
     })
   } finally {
     app.renderer.destroy()
