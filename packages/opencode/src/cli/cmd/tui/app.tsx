@@ -81,6 +81,7 @@ import { DialogVariant } from "./component/dialog-variant"
 
 const appGlobalBindingCommands = [
   "session.list",
+  "session.new",
   "session.quick_switch.1",
   "session.quick_switch.2",
   "session.quick_switch.3",
@@ -94,7 +95,6 @@ const appGlobalBindingCommands = [
 
 const appBindingCommands = [
   "command.palette.show",
-  "session.new",
   "model.list",
   "model.cycle_recent",
   "model.cycle_recent_reverse",

@@ -133,12 +133,6 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
-  "session.page.up",
-  "session.page.down",
-  "session.line.up",
-  "session.line.down",
-  "session.half.page.up",
-  "session.half.page.down",
   "session.first",
   "session.last",
   "session.messages_last_user",
@@ -151,6 +145,15 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
+] as const
+
+const sessionGlobalBindingCommands = [
+  "session.page.up",
+  "session.page.down",
+  "session.line.up",
+  "session.line.down",
+  "session.half.page.up",
+  "session.half.page.down",
 ] as const
 
 const context = createContext<{
@@ -1059,6 +1062,10 @@ export function Session() {
 
   useBindings(() => ({
     commands: sessionCommands(),
+  }))
+
+  useBindings(() => ({
+    bindings: tuiConfig.keybinds.gather("session.global", sessionGlobalBindingCommands),
   }))
 
   useBindings(() => ({
