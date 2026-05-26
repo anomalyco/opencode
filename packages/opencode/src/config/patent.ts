@@ -19,7 +19,7 @@ export const PatentAgentConfig = Schema.Struct({
 export type PatentAgentConfig = Schema.Schema.Type<typeof PatentAgentConfig>
 
 export const PatentSearchConfig = Schema.Struct({
-  backend: Schema.optional(Schema.Literal("none", "local", "google", "custom")),
+  backend: Schema.optional(Schema.Union([Schema.Literal("none"), Schema.Literal("local"), Schema.Literal("google"), Schema.Literal("custom")])),
   connectionString: Schema.optional(Schema.String),
 })
 export type PatentSearchConfig = Schema.Schema.Type<typeof PatentSearchConfig>
