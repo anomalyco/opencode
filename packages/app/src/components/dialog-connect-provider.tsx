@@ -64,7 +64,16 @@ export function DialogConnectProvider(props: { provider: string }) {
     },
   )
   const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
-  const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
+  const methods = createMemo(() => {
+    const base = auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback()
+    // In collab, the opencode-claude-auth plugin only registers OAuth methods for
+    // anthropic. Ensure the API key method is always available as an alternative
+    // so users can authenticate with a plain sk-ant-... key instead of credentials.json.
+    if (isCollabEmbed() && props.provider === "anthropic" && !base.some((m) => m.type === "api")) {
+      return [...base, { type: "api" as const, label: language.t("provider.connect.method.apiKey") }]
+    }
+    return base
+  })
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
