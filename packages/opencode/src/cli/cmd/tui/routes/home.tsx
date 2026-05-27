@@ -12,7 +12,7 @@ import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
 
-let once = false
+let argsPromptUsed = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
   shell: ["ls -la", "git status", "pwd"],
@@ -42,15 +42,14 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r) return
+    if (!r) return
     if (route.prompt) {
       r.set(route.prompt)
-      once = true
       return
     }
-    if (!args.prompt) return
+    if (argsPromptUsed || !args.prompt) return
     r.set({ input: args.prompt, parts: [] })
-    once = true
+    argsPromptUsed = true
   }
 
   // Wait for sync and model store to be ready before auto-submitting --prompt
