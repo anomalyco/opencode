@@ -13,6 +13,7 @@ import { Session as SessionApi } from "@/session/session"
 import * as Locale from "@/util/locale"
 import { withRunSpan } from "./otel"
 import { resolveInteractiveStdin } from "./runtime.stdin"
+import { win32FreeConsole } from "@/cli/cmd/tui/win32"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
@@ -97,6 +98,7 @@ function shutdown(renderer: CliRenderer): void {
   if (!renderer.isDestroyed) {
     renderer.destroy()
   }
+  win32FreeConsole()
 }
 
 function splashInfo(title: string | undefined, history: RunPrompt[]) {

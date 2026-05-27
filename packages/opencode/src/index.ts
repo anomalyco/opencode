@@ -37,6 +37,7 @@ import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { win32TerminateSelf } from "./cli/cmd/tui/win32"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
@@ -244,8 +245,14 @@ try {
   process.exitCode = 1
 } finally {
   // Some subprocesses don't react properly to SIGTERM and similar signals.
-  // Most notably, some docker-container-based MCP servers don't handle such signals unless
-  // run using `docker run --init`.
+  // Most notably, some docker-container-based MCP servers don't handle such signals
+  // unless run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+  // On Windows, process.exit() triggers CTRL_CLOSE_EVENT which closes the
+  // terminal.  Use TerminateProcess via win32TerminateSelf instead.
+  if (process.platform === "win32") {
+    win32TerminateSelf(Number(process.exitCode) || 0)
+  } else {
+    process.exit()
+  }
 }

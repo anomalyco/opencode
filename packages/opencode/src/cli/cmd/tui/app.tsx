@@ -18,7 +18,7 @@ import {
   Show,
   on,
 } from "solid-js"
-import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32FreeConsole, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -322,6 +322,7 @@ function createTuiLifecycle(input: {
       input.renderer.setTerminalTitle("")
       input.renderer.destroy()
     }
+    win32FreeConsole()
     win32FlushInputBuffer()
     if (reason) {
       const formatted = FormatError(reason) ?? FormatUnknownError(reason)
@@ -351,6 +352,7 @@ function createTuiLifecycle(input: {
       exiting = true
       await cleanup().catch(() => {})
       if (!input.renderer.isDestroyed) input.renderer.destroy()
+      win32FreeConsole()
       completeExit()
       throw error
     },

@@ -10,6 +10,9 @@ const kernel = () =>
     GetConsoleMode: { args: ["ptr", "ptr"], returns: "i32" },
     SetConsoleMode: { args: ["ptr", "u32"], returns: "i32" },
     FlushConsoleInputBuffer: { args: ["ptr"], returns: "i32" },
+    FreeConsole: { args: [], returns: "i32" },
+    GetCurrentProcess: { args: [], returns: "ptr" },
+    TerminateProcess: { args: ["ptr", "u32"], returns: "i32" },
   })
 
 let k32: ReturnType<typeof kernel> | undefined
@@ -127,4 +130,26 @@ export function win32InstallCtrlCGuard() {
   }
 
   return unhook
+}
+
+/**
+ * Detach the current process from its console so the terminal window
+ * remains open when the process exits.
+ */
+export function win32FreeConsole() {
+  if (process.platform !== "win32") return
+  if (!load()) return
+  k32!.symbols.FreeConsole()
+}
+
+/**
+ * Terminate the current process using TerminateProcess (WIN32 API).
+ * Bypasses Bun's process.exit() which may reattach to the console.
+ */
+export function win32TerminateSelf(exitCode: number = 0) {
+  if (process.platform !== "win32") return
+  if (!load()) return
+  const hProc = k32!.symbols.GetCurrentProcess()
+  if (!hProc) return
+  k32!.symbols.TerminateProcess(hProc, exitCode)
 }
