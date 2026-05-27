@@ -1,4 +1,8 @@
 import "@/index.css"
+
+if (import.meta.env.VITE_OPENCODE_CHANNEL !== "prod") {
+  import("@/typography-v2")
+}
 import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"

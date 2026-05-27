@@ -1,5 +1,3 @@
-@import "@fontsource-variable/inter";
-
 @layer theme, base, components, utilities;
 
 @import "./colors.css" layer(theme);
