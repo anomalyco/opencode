@@ -29,30 +29,18 @@ interface PkceCodes {
 }
 
 async function generatePKCE(): Promise<PkceCodes> {
-  const verifier = generateRandomString(43)
-  const encoder = new TextEncoder()
-  const data = encoder.encode(verifier)
-  const hash = await crypto.subtle.digest("SHA-256", data)
-  const challenge = base64UrlEncode(hash)
-  return { verifier, challenge }
-}
-
-function generateRandomString(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  return Array.from(bytes)
+  const verifier = Array.from(crypto.getRandomValues(new Uint8Array(43)))
     .map((b) => chars[b % chars.length])
     .join("")
+  const challenge = base64UrlEncode(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
+  return { verifier, challenge }
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
   const binary = String.fromCharCode(...bytes)
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
-}
-
-function generateState(): string {
-  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
 }
 
 export interface IdTokenClaims {
@@ -432,7 +420,6 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
         return {
           apiKey: OAUTH_DUMMY_KEY,
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
-            // Remove dummy API key authorization header
             if (init?.headers) {
               if (init.headers instanceof Headers) {
                 init.headers.delete("authorization")
@@ -448,10 +435,8 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
             const currentAuth = await getAuth()
             if (currentAuth.type !== "oauth") return websocketFetch(requestInput, init)
 
-            // Cast to include accountId field
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
 
-            // Check if token needs refresh
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               if (!refreshPromise) {
                 log.info("refreshing codex access token")
@@ -483,7 +468,6 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               authWithAccount.accountId = refreshed.accountId
             }
 
-            // Build headers
             const headers = new Headers()
             if (init?.headers) {
               if (init.headers instanceof Headers) {
@@ -498,16 +482,11 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                 }
               }
             }
-
-            // Set authorization header with access token
             headers.set("authorization", `Bearer ${currentAuth.access}`)
-
-            // Set ChatGPT-Account-Id header for organization subscriptions
             if (authWithAccount.accountId) {
               headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
             }
 
-            // Rewrite URL to Codex endpoint
             const parsed =
               requestInput instanceof URL
                 ? requestInput
@@ -533,7 +512,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
           authorize: async () => {
             const { redirectUri } = await startOAuthServer()
             const pkce = await generatePKCE()
-            const state = generateState()
+            const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
             const authUrl = buildAuthorizeUrl(redirectUri, pkce, state)
 
             const callbackPromise = waitForOAuthCallback(pkce, state)

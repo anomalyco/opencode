@@ -15,9 +15,11 @@ export interface ConnectResponsesWebSocketOptions {
 export interface StreamResponsesWebSocketOptions {
   socket: WebSocket
   body: Record<string, unknown>
+  idleTimeout?: number
   signal?: AbortSignal
   onComplete?: (event: Record<string, unknown>) => void
   onTerminal?: (event: Record<string, unknown>) => void
+  onRetryableTerminal?: (event: Record<string, unknown>) => Promise<WebSocket | undefined>
   onConnectionInvalid?: (error: Error) => void
   onAbort?: (error: Error) => void
 }
@@ -71,6 +73,7 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
     const timeout = options.timeout
       ? setTimeout(() => {
           cleanup()
+          socket.on("error", () => {})
           socket.terminate()
           reject(new Error("WebSocket connect timed out"))
         }, options.timeout)
@@ -90,6 +93,7 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
     }
 
     function onError(error: Error) {
+      socket.on("error", () => {})
       cleanup()
       reject(error)
     }
@@ -101,6 +105,7 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
 
     function onAbort() {
       cleanup()
+      socket.on("error", () => {})
       socket.terminate()
       reject(abortError(options.signal))
     }
@@ -114,15 +119,19 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
 
 export function streamResponsesWebSocket(options: StreamResponsesWebSocketOptions) {
   const encoder = new TextEncoder()
-  let completed = false
 
   return new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
+        let socket = options.socket
+        let cleanupSocket = () => {}
+        let completed = false
+        let emitted = false
+        let idleTimer: ReturnType<typeof setTimeout> | undefined
+
         function cleanup() {
-          options.socket.off("message", onMessage)
-          options.socket.off("error", onError)
-          options.socket.off("close", onClose)
+          if (idleTimer) clearTimeout(idleTimer)
+          cleanupSocket()
           options.signal?.removeEventListener("abort", onAbort)
         }
 
@@ -133,21 +142,59 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
         }
 
         function invalidate(error: Error) {
+          if (completed) return
+          completed = true
           cleanup()
           options.onConnectionInvalid?.(error)
           controller.error(error)
         }
 
-        function onMessage(data: WebSocket.RawData, isBinary: boolean) {
+        function resetIdleTimeout(message: string) {
+          if (!options.idleTimeout) return
+          if (idleTimer) clearTimeout(idleTimer)
+          idleTimer = setTimeout(() => invalidate(new Error(message)), options.idleTimeout)
+          if (typeof idleTimer === "object" && "unref" in idleTimer && typeof idleTimer.unref === "function") {
+            idleTimer.unref()
+          }
+        }
+
+        async function onMessage(data: WebSocket.RawData, isBinary: boolean) {
+          if (completed) return
           if (isBinary) {
             invalidate(new Error("Unexpected binary WebSocket frame"))
             return
           }
 
           const text = data.toString()
-          controller.enqueue(encoder.encode(`${text.split(/\r?\n/).map((line) => `data: ${line}`).join("\n")}\n\n`))
+          const event = (() => {
+            try {
+              const parsed = JSON.parse(text)
+              return typeof parsed === "object" && parsed !== null ? parsed : undefined
+            } catch {
+              return undefined
+            }
+          })()
 
-          const event = parseEvent(text)
+          if (event?.type === "error" && !emitted && options.onRetryableTerminal) {
+            cleanupSocket()
+            if (idleTimer) clearTimeout(idleTimer)
+            idleTimer = undefined
+            try {
+              const next = await options.onRetryableTerminal(event)
+              if (next) {
+                attach(next)
+                return
+              }
+            } catch (error) {
+              invalidate(error instanceof Error ? error : new Error(String(error)))
+              return
+            }
+          }
+
+          controller.enqueue(encoder.encode(`${text.split(/\r?\n/).map((line) => `data: ${line}`).join("\n")}\n\n`))
+          emitted = true
+          resetIdleTimeout("idle timeout waiting for websocket")
+
           if (!event) return
 
           if (event.type === "response.completed" || event.type === "response.done") {
@@ -162,7 +209,9 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
             completed = true
             options.onTerminal?.(event)
             closeCompleted()
+            return
           }
+
         }
 
         function onError(error: Error) {
@@ -181,9 +230,6 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
           controller.error(error)
         }
 
-        options.socket.on("message", onMessage)
-        options.socket.once("error", onError)
-        options.socket.once("close", onClose)
         options.signal?.addEventListener("abort", onAbort, { once: true })
 
         if (options.signal?.aborted) {
@@ -191,10 +237,26 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
           return
         }
 
-        options.socket.send(JSON.stringify(responseCreate(options.body)), (error) => {
-          if (!error) return
-          invalidate(error)
-        })
+        function attach(next: WebSocket) {
+          cleanupSocket()
+          socket = next
+          socket.on("message", onMessage)
+          socket.once("error", onError)
+          socket.once("close", onClose)
+          cleanupSocket = () => {
+            socket.off("message", onMessage)
+            socket.off("error", onError)
+            socket.off("close", onClose)
+          }
+          const { stream: _stream, background: _background, ...payload } = options.body
+          resetIdleTimeout("idle timeout sending websocket request")
+          socket.send(JSON.stringify({ type: "response.create", ...payload }), (error) => {
+            resetIdleTimeout("idle timeout waiting for websocket")
+            if (error) invalidate(error)
+          })
+        }
+
+        attach(socket)
       },
     }),
     {
@@ -202,20 +264,6 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
       headers: { "content-type": "text/event-stream" },
     },
   )
-}
-
-function responseCreate(body: Record<string, unknown>) {
-  const { stream: _stream, background: _background, ...payload } = body
-  return { type: "response.create", ...payload }
-}
-
-function parseEvent(text: string): Record<string, unknown> | undefined {
-  try {
-    const event = JSON.parse(text)
-    return typeof event === "object" && event !== null ? event : undefined
-  } catch {
-    return undefined
-  }
 }
 
 function abortError(signal: AbortSignal | undefined) {

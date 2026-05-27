@@ -12,6 +12,7 @@ export interface CreateWebSocketFetchOptions {
   connectTimeout?: number
   idleTimeout?: number
   maxConnectionAge?: number
+  connectionLimitRetries?: number
 }
 
 interface PoolEntry {
@@ -25,6 +26,7 @@ interface PoolEntry {
 const DEFAULT_CONNECT_TIMEOUT = 15_000
 const DEFAULT_IDLE_TIMEOUT = 5 * 60 * 1000
 const DEFAULT_MAX_CONNECTION_AGE = 55 * 60 * 1000
+const CONNECTION_LIMIT_REACHED_CODE = "websocket_connection_limit_reached"
 
 export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   const httpFetch = options?.httpFetch ?? globalThis.fetch
@@ -32,13 +34,14 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   const connectTimeout = options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT
   const idleTimeout = options?.idleTimeout ?? DEFAULT_IDLE_TIMEOUT
   const maxConnectionAge = options?.maxConnectionAge ?? DEFAULT_MAX_CONNECTION_AGE
+  const connectionLimitRetries = options?.connectionLimitRetries ?? 5
   const pruneTimer = setInterval(() => prune(), Math.min(idleTimeout, 60_000))
   if (typeof pruneTimer === "object" && "unref" in pruneTimer && typeof pruneTimer.unref === "function") {
     pruneTimer.unref()
   }
 
   async function websocketFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const url = requestUrl(input)
+    const url = input instanceof URL ? input.toString() : typeof input === "string" ? input : input.url
     const internalHeaders = OpenAIWebSocket.normalizeHeaders(init?.headers)
     const httpInit = withoutInternalHeaders(init)
 
@@ -46,18 +49,27 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       return httpFetch(input, httpInit)
     }
 
-    const body = parseBody(init?.body)
+    const body = (() => {
+      try {
+        if (typeof init?.body !== "string") return undefined
+        const parsed = JSON.parse(init.body)
+        return typeof parsed === "object" && parsed !== null ? parsed : undefined
+      } catch {
+        return undefined
+      }
+    })()
     if (!body?.stream) return httpFetch(input, httpInit)
     if (internalHeaders[TITLE_HEADER] === "true") {
       log.debug("http fallback", { reason: "title" })
       return httpFetch(input, httpInit)
     }
 
-    const key = poolKey(internalHeaders)
-    if (!key) {
+    const sessionID = internalHeaders["x-session-affinity"] ?? internalHeaders["session-id"]
+    if (!sessionID) {
       log.debug("http fallback", { reason: "missing_session" })
       return httpFetch(input, httpInit)
     }
+    const key = `${sessionID}:conversation`
 
     const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false }
     pool.set(key, entry)
@@ -72,6 +84,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
 
     try {
+      let connectionLimitAttempts = 0
       entry.socket = await socket(
         entry,
         options?.url ?? url,
@@ -85,6 +98,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       return OpenAIWebSocket.streamResponsesWebSocket({
         socket: entry.socket,
         body,
+        idleTimeout,
         signal: init?.signal ?? undefined,
         onTerminal: (event) => {
           entry.busy = false
@@ -95,7 +109,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           }
         },
         onConnectionInvalid: (error) => {
-          log.warn("websocket invalidated", { key, error: errorMessage(error) })
+          log.warn("websocket invalidated", { key, error: error instanceof Error ? error.message : String(error) })
           entry.busy = false
           entry.fallback = true
           invalidate(entry)
@@ -106,6 +120,33 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           entry.lastUsedAt = Date.now()
           invalidate(entry)
         },
+        onRetryableTerminal: async (event) => {
+          const error = event.error
+          const connectionLimitReached =
+            event.type === "error" &&
+            error &&
+            typeof error === "object" &&
+            "code" in error &&
+            error.code === CONNECTION_LIMIT_REACHED_CODE
+          if (!connectionLimitReached) {
+            return undefined
+          }
+          if (connectionLimitAttempts >= connectionLimitRetries) return undefined
+
+          connectionLimitAttempts++
+          log.warn("websocket connection limit reached", { key, attempt: connectionLimitAttempts })
+          invalidate(entry)
+          entry.socket = await socket(
+            entry,
+            options?.url ?? url,
+            OpenAIWebSocket.normalizeHeaders(httpInit?.headers),
+            connectTimeout,
+            maxConnectionAge,
+            init?.signal,
+          )
+          entry.lastUsedAt = Date.now()
+          return entry.socket
+        },
       })
     } catch (error) {
       if (OpenAIWebSocket.isAbortError(error)) {
@@ -114,7 +155,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       }
 
       entry.fallback = true
-      log.warn("websocket setup failed", { key, error: errorMessage(error), fallback: "http" })
+      log.warn("websocket setup failed", { key, error: error instanceof Error ? error.message : String(error), fallback: "http" })
       invalidate(entry)
       return httpFetch(input, httpInit)
     }
@@ -166,61 +207,29 @@ async function socket(
 
 function invalidate(entry: PoolEntry) {
   if (entry.socket) {
+    entry.socket.on("error", () => {})
     entry.socket.terminate()
     entry.socket = undefined
   }
   entry.connectedAt = undefined
 }
 
-function poolKey(headers: Record<string, string>) {
-  const sessionID = headers["x-session-affinity"] ?? headers["session-id"]
-  if (!sessionID) return undefined
-
-  return [
-    sessionID,
-    headers[TITLE_HEADER] === "true" ? "title" : "conversation",
-  ].join(":")
-}
-
 export function withoutInternalHeaders<T extends { headers?: HeadersInit }>(init: T | undefined): T | undefined {
   if (!init?.headers) return init
+  if (init.headers instanceof Headers) {
+    const headers = new Headers(init.headers)
+    headers.delete(TITLE_HEADER)
+    return { ...init, headers }
+  }
+
+  if (Array.isArray(init.headers)) {
+    return { ...init, headers: init.headers.filter((item) => item[0].toLowerCase() !== TITLE_HEADER) }
+  }
+
   return {
     ...init,
-    headers: stripInternalHeaders(init.headers),
+    headers: Object.fromEntries(Object.entries(init.headers).filter(([key]) => key.toLowerCase() !== TITLE_HEADER)),
   }
-}
-
-function stripInternalHeaders(headers: HeadersInit): HeadersInit {
-  if (headers instanceof Headers) {
-    const next = new Headers(headers)
-    next.delete(TITLE_HEADER)
-    return next
-  }
-
-  if (Array.isArray(headers)) return headers.filter((item) => !isInternalHeader(item[0]))
-  return Object.fromEntries(Object.entries(headers).filter(([key]) => !isInternalHeader(key)))
-}
-
-function isInternalHeader(key: string) {
-  return key.toLowerCase() === TITLE_HEADER
-}
-
-function requestUrl(input: RequestInfo | URL) {
-  return input instanceof URL ? input.toString() : typeof input === "string" ? input : input.url
-}
-
-function parseBody(body: BodyInit | null | undefined): Record<string, unknown> | undefined {
-  try {
-    if (typeof body !== "string") return undefined
-    const parsed = JSON.parse(body)
-    return typeof parsed === "object" && parsed !== null ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
 }
 
 export * as OpenAIWebSocketPool from "./ws-pool"
