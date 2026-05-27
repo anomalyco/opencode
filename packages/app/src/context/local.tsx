@@ -235,6 +235,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return models.find(item)
     }
 
+    // Non-undefined when the user's explicitly-saved model exists in the
+    // provider catalog but its provider is not currently connected — i.e. the
+    // provider dropped from connected() after a re-bootstrap. The value is the
+    // providerID so callers can open the reconnect dialog directly.
+    const disconnectedProvider = createMemo(() => {
+      const explicit = scope()?.model
+      if (!explicit) return undefined
+      if (models.find(explicit)) return undefined
+      // model exists in the catalog but provider isn't connected
+      if (providers.all().find((p) => p.id === explicit.providerID)) return explicit.providerID
+      return undefined
+    })
+
     const configured = () => {
       const item = agent.current()
       const model = current()
@@ -275,6 +288,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const model = {
       ready: models.ready,
       current,
+      disconnectedProvider,
       recent,
       list: models.list,
       cycle(direction: 1 | -1) {
