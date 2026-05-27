@@ -1046,6 +1046,17 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
+      ...(platform.platform === "desktop" && platform.openPath
+        ? [
+            {
+              id: "settings.openConfig",
+              title: "Open Config File",
+              category: language.t("command.category.settings"),
+              keybind: "mod+alt+comma",
+              onSelect: () => openConfigFile(),
+            },
+          ]
+        : []),
       ...(platform.platform === "desktop" && platform.exportDebugLogs
         ? [
             {
@@ -1231,6 +1242,35 @@ export default function Layout(props: ParentProps) {
       if (dialogDead || dialogRun !== run) return
       dialog.show(() => <x.DialogSettings />)
     })
+  }
+
+  function openConfigFile() {
+    const openPath = platform.openPath
+    const dir = serverSync.data.path.config
+    if (!openPath || !dir) {
+      showToast({
+        variant: "error",
+        title: "Unable to open config",
+        description: "Config directory is not available yet.",
+      })
+      return
+    }
+
+    const files = ["opencode.jsonc", "opencode.json", "config.json"].map((file) => `${dir}/${file}`)
+    const app = platform.os === "macos" ? "TextEdit" : undefined
+    const open = (index = 0): Promise<void> => {
+      const file = files[index]
+      if (file) return openPath(file, app).catch(() => open(index + 1))
+      return openPath(dir).catch(() => {
+        showToast({
+          variant: "error",
+          title: "Unable to open config",
+          description: dir,
+        })
+      })
+    }
+
+    void open()
   }
 
   function projectRoot(directory: string) {
