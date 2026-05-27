@@ -126,6 +126,34 @@ const scenarios: Scenario[] = [
     .status(400, undefined, "status"),
   http.protected.get("/command", "command.list").json(200, array, "status"),
   http.protected.get("/agent", "app.agents").json(200, array, "status"),
+  http.protected
+    .get("/agent", "app.agents.custom")
+    .inProject({
+      git: true,
+      config: {
+        agent: {
+          "custom-primary": {
+            mode: "primary",
+            description: "Custom primary agent",
+          },
+        },
+      },
+    })
+    .at((ctx) => ({
+      path: `/agent?directory=${encodeURIComponent(ctx.directory ?? "")}&workspace=wrk_stale`,
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body) => {
+        array(body)
+        check(
+          body.some((item) => isRecord(item) && item.name === "custom-primary" && item.mode === "primary"),
+          "agent list should include custom primary agents from the requested directory",
+        )
+      },
+      "status",
+    ),
   http.protected.get("/skill", "app.skills").json(200, array, "status"),
   http.protected.get("/lsp", "lsp.status").json(200, array),
   http.protected.get("/formatter", "formatter.status").json(200, array),

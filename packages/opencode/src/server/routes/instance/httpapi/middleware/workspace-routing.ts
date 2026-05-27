@@ -164,17 +164,25 @@ function planRequest(
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
+    const local = shouldStayOnControlPlane(request, url)
     const workspaceID = url.pathname.startsWith("/api/")
       ? selectedV2WorkspaceID(url, sessionWorkspaceID)
       : selectedWorkspaceID(url, sessionWorkspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
+    // Control-plane reads can carry stale workspace params from clients; route
+    // them by directory instead of requiring the workspace to still exist.
+    if (local)
+      return RequestPlan.Local({
+        directory: defaultDirectory(request, url),
+        workspaceID: envWorkspaceID ?? workspaceID,
+      })
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
     if (workspaceID && workspace === undefined && !envWorkspaceID) {
       return RequestPlan.MissingWorkspace({ workspaceID })
     }
 
-    if (workspace !== undefined && !envWorkspaceID && !shouldStayOnControlPlane(request, url)) {
+    if (workspace !== undefined && !envWorkspaceID) {
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
