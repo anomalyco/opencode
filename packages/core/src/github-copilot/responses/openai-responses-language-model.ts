@@ -428,29 +428,31 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                     type: z.literal("output_text"),
                     text: z.string(),
                     logprobs: LOGPROBS_SCHEMA.nullish(),
-                    annotations: z.array(
-                      z.discriminatedUnion("type", [
-                        z.object({
-                          type: z.literal("url_citation"),
-                          start_index: z.number(),
-                          end_index: z.number(),
-                          url: z.string(),
-                          title: z.string(),
-                        }),
-                        z.object({
-                          type: z.literal("file_citation"),
-                          file_id: z.string(),
-                          filename: z.string().nullish(),
-                          index: z.number().nullish(),
-                          start_index: z.number().nullish(),
-                          end_index: z.number().nullish(),
-                          quote: z.string().nullish(),
-                        }),
-                        z.object({
-                          type: z.literal("container_file_citation"),
-                        }),
-                      ]),
-                    ),
+                    annotations: z
+                      .array(
+                        z.discriminatedUnion("type", [
+                          z.object({
+                            type: z.literal("url_citation"),
+                            start_index: z.number(),
+                            end_index: z.number(),
+                            url: z.string(),
+                            title: z.string(),
+                          }),
+                          z.object({
+                            type: z.literal("file_citation"),
+                            file_id: z.string(),
+                            filename: z.string().nullish(),
+                            index: z.number().nullish(),
+                            start_index: z.number().nullish(),
+                            end_index: z.number().nullish(),
+                            quote: z.string().nullish(),
+                          }),
+                          z.object({
+                            type: z.literal("container_file_citation"),
+                          }),
+                        ]),
+                      )
+                      .default([]),
                   }),
                 ),
               }),
