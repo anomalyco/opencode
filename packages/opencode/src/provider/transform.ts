@@ -344,7 +344,18 @@ function normalizeMessages(
 
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
-  const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+  let final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+
+  // Claude via the GitHub Copilot gateway rejects requests where the last message
+  // has cache-control provider options set, because the gateway translates those
+  // into a trailing assistant prefill block that Claude Sonnet 4.5+ does not allow.
+  // Strip any trailing assistant messages from the caching candidates to avoid the
+  // "This model does not support assistant message prefill" 400 error.
+  // See: https://github.com/anomalyco/opencode/issues (reported by user, diagnosed via
+  // AI-assisted analysis of transform.ts — treat with appropriate scepticism).
+  if (model.api.npm === "@ai-sdk/github-copilot") {
+    final = final.filter((msg) => msg.role !== "assistant")
+  }
 
   const providerOptions = {
     anthropic: {
