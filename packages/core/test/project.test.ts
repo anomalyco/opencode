@@ -5,15 +5,10 @@ import path from "path"
 import { Effect } from "effect"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Project.defaultLayer)
-
-function remoteID(remote: string) {
-  return Project.ID.make(Hash.fast(`git-remote:${remote}`))
-}
 
 function abs(value: string) {
   return AbsolutePath.make(value)
@@ -91,7 +86,7 @@ describe("ProjectV2.resolve", () => {
     }),
   )
 
-  it.live("prefers normalized origin over root commit", () =>
+  it.live("uses root commit when origin exists", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -102,36 +97,13 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(remoteID("github.com/Acme/App"))
-      expect(result.id).not.toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.vcs?.type).toBe("git")
     }),
   )
 
-  it.live("normalizes ssh and https remotes to the same id", () =>
-    Effect.gen(function* () {
-      const ssh = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
-      const https = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      )
-      yield* Effect.promise(() => initRepo(ssh.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
-      yield* Effect.promise(() => initRepo(https.path, { commit: true, remote: "https://github.com/owner/repo.git" }))
-      const project = yield* Project.Service
-
-      const a = yield* project.resolve(abs(ssh.path))
-      const b = yield* project.resolve(abs(https.path))
-
-      expect(a.id).toBe(remoteID("github.com/owner/repo"))
-      expect(b.id).toBe(a.id)
-    }),
-  )
-
-  it.live("ignores file remotes and falls back to root commit", () =>
+  it.live("uses root commit when local remote exists", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -146,7 +118,7 @@ describe("ProjectV2.resolve", () => {
     }),
   )
 
-  it.live("returns previous cached id from common dir", () =>
+  it.live("prefers previous cached id over origin", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -159,7 +131,7 @@ describe("ProjectV2.resolve", () => {
       const result = yield* project.resolve(abs(tmp.path))
 
       expect(result.previous).toBe(Project.ID.make("old-id"))
-      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.id).toBe(Project.ID.make("old-id"))
     }),
   )
 
@@ -213,7 +185,7 @@ describe("ProjectV2.resolve", () => {
 
       expect(result.directory).toBe(yield* real(worktree))
       expect(result.previous).toBe(Project.ID.make("old-id"))
-      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.id).toBe(Project.ID.make("old-id"))
       expect(result.vcs?.type).toBe("git")
     }),
   )

@@ -28,6 +28,8 @@ import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type S
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
+const USE_DESKTOP_V2 = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+
 type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
 
 function renderDiff(value: SnapshotFileDiff | VcsFileDiff): value is RenderDiff {
@@ -58,12 +60,8 @@ export function SessionSidePanel(props: {
   const { sessionKey, tabs, view, params } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const shown = createMemo(
-    () =>
-      platform.platform !== "desktop" ||
-      import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" ||
-      settings.general.showFileTree(),
-  )
+  const desktopV2 = () => platform.platform === "desktop" && USE_DESKTOP_V2
+  const shown = createMemo(() => (desktopV2() ? settings.general.showFileTree() : true))
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && shown() && layout.fileTree.opened())

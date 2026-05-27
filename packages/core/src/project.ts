@@ -108,7 +108,7 @@ export const layer = Layer.effect(
       if (!repo) return { id: ID.global, directory: input, vcs: undefined }
 
       const previous = yield* cached(repo.store)
-      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
+      const id = previous ?? (yield* root(repo))
 
       return {
         previous,

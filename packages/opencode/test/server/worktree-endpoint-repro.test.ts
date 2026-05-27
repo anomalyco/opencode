@@ -229,6 +229,28 @@ describe("worktree endpoint reproduction", () => {
   )
 
   worktreeTest(
+    "direct HttpApi worktree create rejects explicit null payload",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* request(
+          server,
+          `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "null",
+          },
+        )
+
+        expect(response.status).toBe(400)
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
     "workspace worktree create does not hang",
     () =>
       Effect.gen(function* () {

@@ -5,7 +5,7 @@ import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, u
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
-import { useGlobalSDK } from "./global-sdk"
+import { useServerSDK } from "./server-sdk"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
@@ -29,7 +29,8 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { createRefCountMap } from "@/utils/refcount"
 
 type GlobalStore = {
   ready: boolean
@@ -57,13 +58,13 @@ export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
     queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
   })
 
-function makeQueryOptionsApi(globalSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
+function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(globalSDK()),
-    projects: () => loadProjectsQuery(globalSDK()),
+    globalConfig: () => loadGlobalConfigQuery(serverSDK()),
+    projects: () => loadProjectsQuery(serverSDK()),
     providers: (directory: PathKey | null) =>
-      loadProvidersQuery(directory, directory === null ? globalSDK() : sdkFor(directory)),
-    path: (directory: PathKey | null) => loadPathQuery(directory, directory === null ? globalSDK() : sdkFor(directory)),
+      loadProvidersQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
+    path: (directory: PathKey | null) => loadPathQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
     agents: (directory: PathKey) => loadAgentsQuery(directory, sdkFor(directory)),
     mcp: (directory: PathKey) => loadMcpQuery(directory, sdkFor(directory)),
     lsp: (directory: PathKey) => loadLspQuery(directory, sdkFor(directory)),
@@ -72,11 +73,11 @@ function makeQueryOptionsApi(globalSDK: () => OpencodeClient, sdkFor: (dir: Path
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-function createGlobalSync() {
-  const globalSDK = useGlobalSDK()
+export function createServerSyncContext() {
+  const serverSDK = useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
-  if (!owner) throw new Error("GlobalSync must be created within owner")
+  if (!owner) throw new Error("ServerSync must be created within owner")
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
@@ -87,7 +88,7 @@ function createGlobalSync() {
     const key = directoryKey(directory)
     const cached = sdkCache.get(key)
     if (cached) return cached
-    const sdk = globalSDK.createClient({
+    const sdk = serverSDK.createClient({
       directory,
       throwOnError: true,
     })
@@ -95,7 +96,7 @@ function createGlobalSync() {
     return sdk
   }
 
-  const queryOptionsApi = makeQueryOptionsApi(() => globalSDK.client, sdkFor)
+  const queryOptionsApi = makeQueryOptionsApi(() => serverSDK.client, sdkFor)
 
   const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
     queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
@@ -154,7 +155,7 @@ function createGlobalSync() {
     queryKey: ["bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
-        globalSDK: globalSDK.client,
+        serverSDK: serverSDK.client,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
@@ -248,7 +249,7 @@ function createGlobalSync() {
           loadRootSessionsWithFallback({
             directory,
             limit,
-            list: (query) => globalSDK.client.session.list(query),
+            list: (query) => serverSDK.client.session.list(query),
           })
             .then((x) => {
               const nonArchived = (x.data ?? [])
@@ -334,7 +335,7 @@ function createGlobalSync() {
     return promise
   }
 
-  const unsub = globalSDK.event.listen((e) => {
+  const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
     const event = e.details
@@ -393,13 +394,13 @@ function createGlobalSync() {
         eventFrame = undefined
         eventTimer = setTimeout(() => {
           eventTimer = undefined
-          void globalSDK.event.start()
+          void serverSDK.event.start()
         }, 0)
       })
     } else {
       eventTimer = setTimeout(() => {
         eventTimer = undefined
-        void globalSDK.event.start()
+        void serverSDK.event.start()
       }, 0)
     }
   })
@@ -415,7 +416,7 @@ function createGlobalSync() {
   }
 
   const updateConfigMutation = useMutation(() => ({
-    mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
+    mutationFn: (config: Config) => serverSDK.client.global.config.update({ config }),
     onSuccess: () => {
       bootstrap.refetch()
       // Invalidate all provider queries so newly configured custom providers
@@ -424,9 +425,6 @@ function createGlobalSync() {
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
     },
   }))
-
-  const dirSyncContexts = new Map<string, ReturnType<typeof createDirSyncContext>>()
-  const dirSyncContextRefCounts = new Map<string, number>()
 
   return {
     data: globalStore,
@@ -446,42 +444,21 @@ function createGlobalSync() {
     todo: {
       set: setSessionTodo,
     },
-    createDirSyncContext: (directory: string) => {
-      onCleanup(() => {
-        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) - 1)
-        if (dirSyncContextRefCounts.get(directory) === 0) {
-          dirSyncContexts.delete(directory)
-          dirSyncContextRefCounts.delete(directory)
-        }
-      })
-
-      const cached = dirSyncContexts.get(directory)
-      if (cached) {
-        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) + 1)
-        return cached
-      }
-      const ctx = createDirSyncContext(globalSDK.createClient({ directory, throwOnError: true }), directory)
-      dirSyncContexts.set(directory, ctx)
-      dirSyncContextRefCounts.set(directory, 1)
-
-      return ctx
-    },
   }
 }
 
-const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
+export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
+  name: "ServerSync",
+  init: () => {
+    const sync = createServerSyncContext()
 
-export function GlobalSyncProvider(props: ParentProps) {
-  const value = createGlobalSync()
-  return <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
-}
-
-export function useGlobalSync() {
-  const context = useContext(GlobalSyncContext)
-  if (!context) throw new Error("useGlobalSync must be used within GlobalSyncProvider")
-  return context
-}
+    return {
+      ...sync,
+      createDirSyncContext: createRefCountMap((dir) => createDirSyncContext(dir, sync)),
+    }
+  },
+})
 
 export function useQueryOptions() {
-  return useGlobalSync().queryOptions
+  return useServerSync().queryOptions
 }
