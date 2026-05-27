@@ -170,7 +170,7 @@ export const dict = {
   "home.faq.a6":
     "OpenCode is 100% free to use. It also comes with a set of free models. There might be additional costs if you connect any other provider.",
   "home.faq.q7": "What about data and privacy?",
-  "home.faq.a7.p1": "Your data and information is only stored when you use our free models or create sharable links.",
+  "home.faq.a7.p1": "Your data and information is only stored when you use our free models or create shareable links.",
   "home.faq.a7.p2.beforeModels": "Learn more about",
   "home.faq.a7.p2.modelsLink": "our models",
   "home.faq.a7.p2.and": "and",
@@ -724,7 +724,7 @@ export const dict = {
     "Any additional costs will come from your subscription to a model provider. While OpenCode works with any model provider, we recommend using",
   "download.faq.a5.p2.afterZen": ".",
 
-  "download.faq.a6.p1": "Your data and information is only stored when you create sharable links in OpenCode.",
+  "download.faq.a6.p1": "Your data and information is only stored when you create shareable links in OpenCode.",
   "download.faq.a6.p2.beforeShare": "Learn more about",
   "download.faq.a6.shareLink": "share pages",
 
