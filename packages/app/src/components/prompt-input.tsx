@@ -1628,6 +1628,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       data-component="prompt-model-control"
                       style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
                     >
+                      <Show when={local.model.disconnectedProvider()}>
+                        {(providerID) => (
+                          <TooltipKeybind
+                            placement="top"
+                            gutter={4}
+                            title="Reconnect provider"
+                            keybind={command.keybind("model.choose")}
+                          >
+                            <Button
+                              data-action="prompt-model-reconnect"
+                              variant="ghost"
+                              size="normal"
+                              style={control()}
+                              class="min-w-0 max-w-[320px] text-13-regular text-text-warning group"
+                              onClick={() => {
+                                void import("@/components/dialog-connect-provider").then((x) => {
+                                  dialog.show(() => <x.DialogConnectProvider provider={providerID()} />)
+                                })
+                              }}
+                            >
+                              <Icon name="triangle-warning" class="size-4 shrink-0 text-icon-warning-base" />
+                              <span class="truncate">Reconnect {providerID()}</span>
+                              <Icon name="chevron-down" size="small" class="shrink-0" />
+                            </Button>
+                          </TooltipKeybind>
+                        )}
+                      </Show>
+                      <Show when={!local.model.disconnectedProvider()}>
                       <Show
                         when={providers.paid().length > 0}
                         fallback={
@@ -1696,6 +1724,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             <Icon name="chevron-down" size="small" class="shrink-0" />
                           </ModelSelectorPopover>
                         </TooltipKeybind>
+                      </Show>
                       </Show>
                     </div>
                     <Show when={variants().length > 2}>

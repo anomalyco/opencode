@@ -102,7 +102,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const pickAgent = (name: string | undefined) => {
+    // Exact-match only — never falls back to items[0]. The fallback caused
+    // agent.set("plan") to silently write "build" when the list was loading
+    // or the name didn't match, and agent.current() to display "build" even
+    // when scope().agent was "plan".
+    const pickAgent = (name: string | undefined) => list().find((item) => item.name === name)
+
+    // Fallback used only when no session-scoped agent is set (draft state or
+    // fresh session before the user has made any selection).
+    const pickAgentWithFallback = (name: string | undefined) => {
       const items = list()
       if (items.length === 0) return
       return items.find((item) => item.name === name) ?? items[0]
@@ -174,9 +182,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = {
       list,
       current() {
-        return pickAgent(scope()?.agent ?? store.current)
+        // When scope has an explicit agent saved, use exact-match only — never
+        // fall through to items[0] just because the list is still loading.
+        const scopeAgent = scope()?.agent
+        if (scopeAgent !== undefined) return pickAgent(scopeAgent)
+        // No explicit session selection yet: use store.current with fallback to
+        // items[0] so there's always a default agent shown in the fresh state.
+        return pickAgentWithFallback(store.current)
       },
       set(name: string | undefined) {
+        // Exact-match only — do not fall back to items[0] on a user selection.
         const item = pickAgent(name)
         if (!item) {
           setStore("current", undefined)
@@ -222,14 +237,31 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const current = () => {
+      const explicit = scope()?.model
+      if (explicit) {
+        const found = models.find(explicit)
+        if (found) return found
+      }
       const item = firstModel(
-        () => scope()?.model,
         () => agent.current()?.model,
         fallback,
       )
       if (!item) return
       return models.find(item)
     }
+
+    // Non-undefined when the user's explicitly-saved model exists in the
+    // provider catalog but its provider is not currently connected — i.e. the
+    // provider dropped from connected() after a re-bootstrap. The value is the
+    // providerID so callers can open the reconnect dialog directly.
+    const disconnectedProvider = createMemo(() => {
+      const explicit = scope()?.model
+      if (!explicit) return undefined
+      if (models.find(explicit)) return undefined
+      // model exists in the catalog but provider isn't connected
+      if (providers.all().find((p) => p.id === explicit.providerID)) return explicit.providerID
+      return undefined
+    })
 
     const configured = () => {
       const item = agent.current()
@@ -271,6 +303,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const model = {
       ready: models.ready,
       current,
+      disconnectedProvider,
       recent,
       list: models.list,
       cycle(direction: 1 | -1) {
@@ -297,7 +330,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             model: item ?? null,
             variant: selected(),
           })
-          write({ model: item })
+          // Clear the session-scoped variant when the model changes so a stale
+          // variant name from the previous model doesn't persist into the new
+          // model's state and cause resolveModelVariant to silently return
+          // undefined (showing "default") when the variant names differ.
+          write({ model: item, variant: undefined })
           if (!item) return
           models.setVisibility(item, true)
           if (!options?.recent) return
