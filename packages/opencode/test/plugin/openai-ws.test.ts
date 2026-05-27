@@ -411,6 +411,36 @@ describe("plugin.openai.ws-pool", () => {
     expect(httpRequests).toHaveLength(0)
     fetch.close()
   })
+
+  test("releases the websocket lane when the response body is cancelled", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {
+        if (connections === 1) return
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_after_cancel" } }))
+      })
+    })
+    const httpRequests: Headers[] = []
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      httpFetch: mockFetch(async (_input, init) => {
+        httpRequests.push(new Headers(init?.headers))
+        return new Response("http")
+      }),
+    })
+
+    const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
+    await waitFor(() => connections === 1, "first websocket did not connect")
+    await first.body!.cancel("stop")
+
+    const second = await fetch("https://api.openai.com/v1/responses", streamRequest())
+
+    expect(await second.text()).toContain("data: [DONE]")
+    expect(connections).toBe(2)
+    expect(httpRequests).toHaveLength(0)
+    fetch.close()
+  })
 })
 
 function streamRequest(headers?: Record<string, string>, signal?: AbortSignal): RequestInit {
