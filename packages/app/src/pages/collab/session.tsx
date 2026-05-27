@@ -821,26 +821,33 @@ function CollabSessionInner(props: { me: Me }) {
           fallback={<EmptyReposPanel />}
         >
 
-        {/* Wait for BOTH the workspace path AND a native session id before
-            mounting the iframe.  Earlier versions rendered the iframe as
-            soon as the workspace path was known — but that fired before
-            initSessionWorkspace's git clone + branch checkout completed,
-            so opencode inside the iframe cached an empty / main-branch
-            view in its InstanceStore.  Even when the URL later updated
-            with a sid via the collab:native_session_linked SSE event,
-            the cached store stuck and the user saw main branch + no
-            greeting until they did a full page reload.
+        {/* Triple gate before the iframe mounts:
+              1. initStatus === "ready"  — workspace clone + branch checkout
+                                            actually finished on the server.
+              2. nativeSessionDirectory   — set by collab:native_session_linked.
+              3. sessionId                — same SSE event.
 
-            Now: render a placeholder while initSessionWorkspace runs and
-            preWarmNativeSession creates the native session.  The placeholder
-            flips to a "taking too long" variant after 30 s with a refresh
-            link, so a stuck preWarm doesn't trap the user.  Once both
-            inputs are ready the iframe mounts ONCE with the final URL —
-            collab branch + seed prompt visible from the first frame. */}
+            initStatus is the load-bearing one this fix adds.  Previously
+            the gate only required (2) + (3), which the broken-fallback
+            preWarm could satisfy even after a clone failure — the iframe
+            would mount pointing at an empty workspace and the prompt input
+            would lock up because opencode's InstanceStore had nothing to
+            attach to.  See docs/adr/0001 and the fix/session commits.
+
+            initStatus === "failed" → the recovery panel takes over.  Driver
+            gets a retry button; everyone else sees the failure reason and
+            is told to wait. */}
         <Show
-          when={collab.nativeSessionDirectory() && collab.session()?.sessionId}
-          fallback={<PreparingWorkspacePanel />}
-        >
+          when={collab.session()?.initStatus === "failed"}
+          fallback={
+            <Show
+              when={
+                (collab.session()?.initStatus ?? "ready") === "ready" &&
+                collab.nativeSessionDirectory() &&
+                collab.session()?.sessionId
+              }
+              fallback={<PreparingWorkspacePanel />}
+            >
           {(_) => {
             const dir = collab.nativeSessionDirectory()!
             const sid = collab.session()!.sessionId!
@@ -860,6 +867,10 @@ function CollabSessionInner(props: { me: Me }) {
               />
             )
           }}
+            </Show>
+          }
+        >
+          <WorkspaceFailedPanel />
         </Show>
         </Show>
       </div>
@@ -1033,6 +1044,100 @@ function PreparingWorkspacePanel() {
           50%      { transform: translateY(0);    animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
         }
       `}</style>
+    </div>
+  )
+}
+
+// ── Workspace-init-failed recovery panel ──────────────────────────────────────
+//
+// Renders when the server-side workspace init (clone + branch checkout)
+// failed.  The collab session row still exists; only the workspace clone is
+// broken.  A Driver can hit "Retry initialization" to POST /collab/session/:id/reinit,
+// which wipes /var/opencode/workspaces/<id>/ on the server and re-runs the
+// clone.  Non-Drivers see the failure reason and are told to wait.
+
+function WorkspaceFailedPanel() {
+  const collab = useCollab()
+  const isDriver = () => collab.viewerRole() === "driver"
+  const [retrying, setRetrying] = createSignal(false)
+  const [retryErr, setRetryErr] = createSignal<string | null>(null)
+
+  async function retry() {
+    if (retrying()) return
+    setRetrying(true)
+    setRetryErr(null)
+    try {
+      await collab.reinitWorkspace()
+      // The optimistic flip to "pending" in reinitWorkspace() already swapped
+      // this panel out for the PreparingWorkspacePanel.  Server will broadcast
+      // workspace_ready / workspace_failed when it's done.
+    } catch (err) {
+      setRetryErr(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRetrying(false)
+    }
+  }
+
+  return (
+    <div class="flex-1 flex flex-col items-center justify-center text-center bg-zinc-950 px-6">
+      {/* Warning-style icon: red exclamation in a tinted circle */}
+      <div class="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mb-5">
+        <svg
+          class="w-8 h-8 text-red-400"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008m6.992-7.5a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+
+      <p class="text-sm font-medium text-zinc-200 mb-1">
+        Workspace setup failed
+      </p>
+
+      <p class="text-xs text-zinc-500 max-w-md mb-3">
+        The server couldn't finish preparing this session's workspace.  Most
+        often this is a transient git or network issue; a retry usually
+        clears it.
+      </p>
+
+      <Show when={collab.session()?.initError}>
+        <pre class="text-[11px] text-red-300/80 bg-red-500/5 border border-red-500/20 rounded px-3 py-2 mb-4 max-w-md overflow-x-auto whitespace-pre-wrap">
+          {collab.session()!.initError}
+        </pre>
+      </Show>
+
+      <Show
+        when={isDriver()}
+        fallback={
+          <p class="text-[11px] text-zinc-600 max-w-sm">
+            Only a Driver can retry workspace setup.  Hang tight while someone
+            with Driver access kicks it off.
+          </p>
+        }
+      >
+        <button
+          type="button"
+          onClick={retry}
+          disabled={retrying()}
+          class="text-xs px-4 py-2 rounded-md bg-blue-600/20 border border-blue-500/40 text-blue-200 hover:bg-blue-600/30 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {retrying() ? "Retrying…" : "Retry initialization"}
+        </button>
+
+        <Show when={retryErr()}>
+          <p class="mt-2 text-[11px] text-red-400">{retryErr()}</p>
+        </Show>
+
+        <p class="text-[11px] text-zinc-600 mt-3 max-w-sm">
+          Retry wipes the server-side workspace and re-runs the shallow clone
+          + branch checkout.  Your session, prompts, and chat history are
+          unaffected.
+        </p>
+      </Show>
     </div>
   )
 }

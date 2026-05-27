@@ -56,6 +56,12 @@ interface CollabContextValue {
   deleteSession: () => Promise<void>
   /** Broadcast that the local user has started/stopped typing.  Debounced by caller. */
   setTyping: (typing: boolean) => Promise<void>
+  /**
+   * Driver-only: retry workspace initialization after it failed.  Wipes the
+   * server-side workspace dir, resets initStatus → "pending", and re-runs
+   * the clone + branch checkout.  See POST /collab/session/:id/reinit.
+   */
+  reinitWorkspace: () => Promise<void>
 }
 
 const CollabContext = createContext<CollabContextValue>()
@@ -358,6 +364,25 @@ export function CollabProvider(props: CollabProviderProps) {
         setNativeSessionDirectory(event.directory)
         break
 
+      case "collab:workspace_ready":
+        // Server finished cloning + checking out + pre-warming.  Flip the
+        // session's initStatus so the iframe gate in pages/collab/session.tsx
+        // can mount the iframe (it ANDs initStatus === "ready" with the
+        // existing nativeSessionDirectory + sessionId gates).
+        setSession((prev) =>
+          prev ? { ...prev, initStatus: "ready", initError: null } : prev,
+        )
+        break
+
+      case "collab:workspace_failed":
+        // Server couldn't init the workspace.  Surface the reason so the
+        // recovery panel can display it; a Driver can retry via
+        // POST /collab/session/:id/reinit.
+        setSession((prev) =>
+          prev ? { ...prev, initStatus: "failed", initError: event.error } : prev,
+        )
+        break
+
       case "collab:typing_start":
         console.debug("[collab] typing_start", event.githubLogin)
         markTyping(event.githubLogin, true)
@@ -528,6 +553,16 @@ export function CollabProvider(props: CollabProviderProps) {
       } catch {
         // ignore
       }
+    },
+    async reinitWorkspace() {
+      // Optimistically flip the local UI back to pending so the recovery
+      // panel disappears and the patient-wait dialog comes back while the
+      // server churns.  Server will broadcast workspace_ready / _failed
+      // on completion.
+      setSession((prev) =>
+        prev ? { ...prev, initStatus: "pending", initError: null } : prev,
+      )
+      await api("/reinit", "POST")
     },
   }
 
