@@ -222,8 +222,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const current = () => {
+      const explicit = scope()?.model
+      if (explicit) {
+        const found = models.find(explicit)
+        if (found) return found
+      }
       const item = firstModel(
-        () => scope()?.model,
         () => agent.current()?.model,
         fallback,
       )
