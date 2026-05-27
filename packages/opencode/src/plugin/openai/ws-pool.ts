@@ -75,15 +75,25 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
-          if (event.type !== "response.completed") invalidate(entry)
+          if (event.type !== "response.completed" && event.type !== "response.done") invalidate(entry)
         },
         onConnectionInvalid: () => {
           entry.busy = false
           entry.fallback = true
           invalidate(entry)
         },
+        onAbort: () => {
+          entry.busy = false
+          entry.lastUsedAt = Date.now()
+          invalidate(entry)
+        },
       })
-    } catch {
+    } catch (error) {
+      if (OpenAIWebSocket.isAbortError(error)) {
+        invalidate(entry)
+        throw error
+      }
+
       entry.fallback = true
       invalidate(entry)
       return httpFetch(input, httpInit)

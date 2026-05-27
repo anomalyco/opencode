@@ -19,6 +19,7 @@ export interface StreamResponsesWebSocketOptions {
   onComplete?: (event: Record<string, unknown>) => void
   onTerminal?: (event: Record<string, unknown>) => void
   onConnectionInvalid?: (error: Error) => void
+  onAbort?: (error: Error) => void
 }
 
 export function toWebSocketUrl(url: string) {
@@ -49,10 +50,14 @@ export function normalizeHeaders(headers: HeadersInit | undefined): Record<strin
   return result
 }
 
+export function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
+}
+
 export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOptions) {
   return new Promise<WebSocket>((resolve, reject) => {
     if (options.signal?.aborted) {
-      reject(options.signal.reason ?? new DOMException("Aborted", "AbortError"))
+      reject(abortError(options.signal))
       return
     }
 
@@ -75,6 +80,7 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
       if (timeout) clearTimeout(timeout)
       socket.off("open", onOpen)
       socket.off("error", onError)
+      socket.off("close", onClose)
       options.signal?.removeEventListener("abort", onAbort)
     }
 
@@ -88,14 +94,20 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
       reject(error)
     }
 
+    function onClose(code: number, reason: Buffer) {
+      cleanup()
+      reject(closeError("WebSocket closed before open", code, reason))
+    }
+
     function onAbort() {
       cleanup()
       socket.terminate()
-      reject(options.signal?.reason ?? new DOMException("Aborted", "AbortError"))
+      reject(abortError(options.signal))
     }
 
     socket.once("open", onOpen)
     socket.once("error", onError)
+    socket.once("close", onClose)
     options.signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
@@ -157,13 +169,16 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
           invalidate(error)
         }
 
-        function onClose() {
+        function onClose(code: number, reason: Buffer) {
           if (completed) return
-          invalidate(new Error("WebSocket closed before response.completed"))
+          invalidate(closeError("WebSocket closed before response.completed", code, reason))
         }
 
         function onAbort() {
-          invalidate(options.signal?.reason ?? new DOMException("Aborted", "AbortError"))
+          const error = abortError(options.signal)
+          cleanup()
+          options.onAbort?.(error)
+          controller.error(error)
         }
 
         options.socket.on("message", onMessage)
@@ -201,6 +216,19 @@ function parseEvent(text: string): Record<string, unknown> | undefined {
   } catch {
     return undefined
   }
+}
+
+function abortError(signal: AbortSignal | undefined) {
+  const reason = signal?.reason
+  if (isAbortError(reason)) return reason
+  return new DOMException(reason instanceof Error ? reason.message : "Aborted", "AbortError")
+}
+
+function closeError(message: string, code: number, reason: Buffer) {
+  const details = [`code ${code}`]
+  if (code === 1009) details.push("message too big")
+  if (reason.length > 0) details.push(reason.toString())
+  return new Error(`${message} (${details.join(": ")})`)
 }
 
 export * as OpenAIWebSocket from "./ws"
