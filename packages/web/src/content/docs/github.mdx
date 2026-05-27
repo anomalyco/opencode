@@ -86,6 +86,7 @@ Or you can set it up manually.
 - `share`: Whether to share the OpenCode session. Defaults to **true** for public repositories.
 - `prompt`: Optional custom prompt to override the default behavior. Use this to customize how OpenCode processes requests.
 - `token`: Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. By default, OpenCode uses the installation access token from the OpenCode GitHub App, so commits, comments, and pull requests appear as coming from the app.
+- `skip_push`: Optional option to prevent the agent from pushing any changes to the remote. Useful when the agent should only review changes without changing anything itself.
 
   Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the OpenCode GitHub App. Just make sure to grant the required permissions in your workflow:
 

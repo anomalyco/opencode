@@ -38,6 +38,11 @@ inputs:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
 
+  skip_push:
+    description: "Skip pushing changes on the active branch to GitHub. Useful when the agent should only review changes without changing anything itself"
+    required: false
+    default: "false"
+
 runs:
   using: "composite"
   steps:
@@ -77,3 +82,4 @@ runs:
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
+        SKIP_PUSH: ${{ inputs.skip_push }}

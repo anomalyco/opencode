@@ -462,6 +462,7 @@ export const GithubRunCommand = effectCmd({
       const runId = normalizeRunId()
       const share = normalizeShare()
       const oidcBaseUrl = normalizeOidcBaseUrl()
+      const skipPush = normalizeSkipPush()
       const { owner, repo } = context.repo
       // For repo events (schedule, workflow_dispatch), payload has no issue/comment data
       const payload = context.payload as
@@ -589,7 +590,7 @@ export const GithubRunCommand = effectCmd({
             // Agent switched branches (likely created its own branch/PR)
             console.log("Agent managed its own branch, skipping infrastructure push/PR")
             console.log("Response:", response)
-          } else if (dirty) {
+          } else if (dirty && !skipPush) {
             const summary = await summarize(response)
             // workflow_dispatch has an actor for co-author attribution, schedule does not
             await pushToNewBranch(summary, branch, uncommittedChanges, isScheduleEvent)
@@ -623,7 +624,7 @@ export const GithubRunCommand = effectCmd({
             if (switched) {
               console.log("Agent managed its own branch, skipping infrastructure push")
             }
-            if (dirty && !switched) {
+            if (dirty && !switched && !skipPush) {
               const summary = await summarize(response)
               await pushToLocalBranch(summary, uncommittedChanges)
             }
@@ -641,7 +642,7 @@ export const GithubRunCommand = effectCmd({
             if (switched) {
               console.log("Agent managed its own branch, skipping infrastructure push")
             }
-            if (dirty && !switched) {
+            if (dirty && !switched && !skipPush) {
               const summary = await summarize(response)
               await pushToForkBranch(summary, prData, uncommittedChanges)
             }
@@ -663,7 +664,7 @@ export const GithubRunCommand = effectCmd({
             // Don't push the stale infrastructure branch — just comment.
             await createComment(`${response}${footer({ image: true })}`)
             await removeReaction(commentType)
-          } else if (dirty) {
+          } else if (dirty && !skipPush) {
             const summary = await summarize(response)
             await pushToNewBranch(summary, branch, uncommittedChanges, false)
             const pr = await createPR(
@@ -738,6 +739,14 @@ export const GithubRunCommand = effectCmd({
         if (value === "true") return true
         if (value === "false") return false
         throw new Error(`Invalid use_github_token value: ${value}. Must be a boolean.`)
+      }
+
+      function normalizeSkipPush() {
+        const value = process.env["SKIP_PUSH"]
+        if (!value) return false
+        if (value === "true") return true
+        if (value === "false") return false
+        throw new Error(`Invalid skip_push value: ${value}. Must be a boolean.`)
       }
 
       function normalizeOidcBaseUrl(): string {
