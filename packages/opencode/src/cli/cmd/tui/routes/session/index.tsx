@@ -81,7 +81,7 @@ import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
-import { nextThinkingMode, reasoningTitle, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
@@ -966,7 +966,14 @@ export function Session() {
 
           if (options.openWithoutSaving) {
             // Just open in editor without saving
-            await Editor.open({ value: transcript, renderer })
+            await Editor.open({
+              value: transcript,
+              renderer,
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                process.cwd(),
+            })
           } else {
             const exportDir = process.cwd()
             const filename = options.filename.trim()
@@ -975,7 +982,14 @@ export function Session() {
             await Filesystem.write(filepath, transcript)
 
             // Open with EDITOR if available
-            const result = await Editor.open({ value: transcript, renderer })
+            const result = await Editor.open({
+              value: transcript,
+              renderer,
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                process.cwd(),
+            })
             if (result !== undefined) {
               await Filesystem.write(filepath, result)
             }
@@ -1620,12 +1634,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     const end = props.part.time.end
     return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
   })
-  // OpenAI / Copilot / opencode-via-OpenAI emit `**Title**\n\n<body>` summary
-  // blocks. Surface the title both while streaming and after settling so the
-  // collapsed line carries real signal, not just a duration.
-  const title = createMemo(() => reasoningTitle(content()))
-  // Keep markdown emphasis for the existing thinking color/concealment, but render it without italics.
-  const syntax = createMemo(() => generateSubtleSyntax(theme, { "markup.italic": { italic: false } }))
+  const summary = createMemo(() => reasoningSummary(content()))
+  const syntax = createMemo(() => generateSubtleSyntax(theme))
 
   const toggle = () => {
     if (!inMinimal()) return
@@ -1634,47 +1644,65 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 
   return (
     <Show when={content()}>
-      <Switch>
-        <Match when={!inMinimal() || expanded()}>
-          {/* Full markdown block: `show` mode, or `hide` after the user opens it. */}
-          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexDirection="column" onMouseUp={toggle}>
+      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexDirection="column" flexShrink={0}>
+        <box onMouseUp={toggle}>
+          <ReasoningHeader
+            toggleable={inMinimal()}
+            open={!inMinimal() || expanded()}
+            done={isDone()}
+            title={summary().title}
+            duration={isDone() ? Locale.duration(duration()) : undefined}
+          />
+        </box>
+        <Show when={(!inMinimal() || expanded()) && summary().body}>
+          <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
-              // `_Thinking:_`/`_Thought:_` still drives markdown emphasis color and conceals the underscores;
-              // the syntax override above removes only the italic attribute from that emphasis token.
-              content={(inMinimal() ? "- " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
+              content={summary().body}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
           </box>
-        </Match>
-        <Match when={isDone()}>
-          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <CollapsedReasoningText title={title()} duration={duration()} />
-          </box>
-        </Match>
-        <Match when={true}>
-          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
-          </box>
-        </Match>
-      </Switch>
+        </Show>
+      </box>
     </Show>
   )
 }
 
-function CollapsedReasoningText(props: { title: string | null; duration: number }) {
+function ReasoningHeader(props: {
+  toggleable: boolean
+  open: boolean
+  done: boolean
+  title: string | null
+  duration?: string
+}) {
   const { theme } = useTheme()
-  const duration = () => Locale.duration(props.duration)
+  const fg = () =>
+    props.open
+      ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
+      : theme.warning
 
   return (
-    <text fg={theme.warning} wrapMode="none">
-      <span style={{ fg: theme.warning }}>
-        {props.title ? "+ Thought: " + props.title + " · " + duration() : "+ Thought: " + duration()}
-      </span>
+    <text fg={fg()} wrapMode="none">
+      <Show when={props.toggleable}>
+        <span>{props.open ? "- " : "+ "}</span>
+      </Show>
+      <span>{props.done ? "Thought" : "Thinking"}</span>
+      <Show when={props.title || props.duration}>
+        <span>: </span>
+      </Show>
+      <Show when={props.title}>
+        <span>{props.title}</span>
+      </Show>
+      <Show when={props.duration}>
+        <span>
+          {props.title ? " · " : ""}
+          {props.duration}
+        </span>
+      </Show>
     </text>
   )
 }

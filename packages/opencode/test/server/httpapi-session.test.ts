@@ -602,6 +602,32 @@ describe("session HttpApi", () => {
         })
         expect(forked.id).not.toBe(created.id)
 
+        const forkedWithoutContentType = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.fork, { sessionID: created.id }),
+          {
+            method: "POST",
+            headers: { "x-opencode-directory": test.directory },
+          },
+        )
+        expect(forkedWithoutContentType.id).not.toBe(created.id)
+
+        const invalidFork = yield* request(pathFor(SessionPaths.fork, { sessionID: created.id }), {
+          method: "POST",
+          headers,
+          body: "{",
+        })
+        expect(invalidFork.status).toBe(400)
+
+        const forkedWhitespace = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.fork, { sessionID: created.id }),
+          {
+            method: "POST",
+            headers,
+            body: "  \n",
+          },
+        )
+        expect(forkedWhitespace.id).not.toBe(created.id)
+
         expect(
           yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: created.id }), {
             method: "POST",

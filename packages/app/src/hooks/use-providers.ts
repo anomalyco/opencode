@@ -1,4 +1,4 @@
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
 import { Iterable, pipe } from "effect"
@@ -17,15 +17,15 @@ export const popularProviders = [
 const popularProviderSet = new Set(popularProviders)
 
 export function useProviders() {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const params = useParams()
   const dir = createMemo(() => decode64(params.dir) ?? "")
   const providers = () => {
     if (dir()) {
-      const [projectStore] = globalSync.child(dir())
+      const [projectStore] = serverSync.child(dir())
       if (projectStore.provider_ready) return projectStore.provider
     }
-    return globalSync.data.provider
+    return serverSync.data.provider
   }
   return {
     all: () => providers().all,

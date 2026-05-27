@@ -727,7 +727,7 @@ DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inferen
 
 OpenCode supports two authentication methods:
 
-- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode auto-creates a Model Access Key and discovers your available Models & Inference Routers.
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
 - **Model Access Key** — Paste an existing key from the DigitalOcean console.
 
 #### OAuth (Recommended)
@@ -751,7 +751,11 @@ OpenCode supports two authentication methods:
 3. Your browser opens to authorize OpenCode. Sign in and approve.
 
    :::note
-   OpenCode creates a Model Access Key named `opencode-oauth-<timestamp>` in your DigitalOcean account. You can rotate or revoke it from the **Model Access Keys** page in the "Manage" section of the DigitalOcean console under Inference.
+   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
+   :::
+
+   :::note
+   Inference Routers only appear in the model picker after OAuth. Pasting a Model Access Key manually does not discover routers.
    :::
 
 4. Run the `/models` command. Your Inference Routers appear as the format `router:` in the model selection.
