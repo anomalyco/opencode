@@ -91,12 +91,19 @@ export const Info = Schema.Struct({
         }),
         timeout: Schema.optional(
           Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
+            description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
+          }),
+        ).annotate({
+          description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
+        }),
+        headerTimeout: Schema.optional(
+          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
             description:
-              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+              "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
           }),
         ).annotate({
           description:
-            "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+            "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
         }),
         chunkTimeout: Schema.optional(PositiveInt).annotate({
           description:

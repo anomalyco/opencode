@@ -11,6 +11,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, onC
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { getScrollAcceleration } from "@tui/util/scroll"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -133,6 +134,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const [activePatchFileIndex, setActivePatchFileIndex] = createSignal<number | undefined>()
   const [selectedFileIndex, setSelectedFileIndex] = createSignal<number | undefined>()
   const [reviewedFileNames, setReviewedFileNames] = createSignal<ReadonlySet<string>>(new Set())
+  const patchScrollAcceleration = createMemo(() => getScrollAcceleration(props.api.tuiConfig))
   const fileRows = createMemo(() => flattenFileTree(fileTree(), expandedFileNodes()))
   const patchFileIndexes = createMemo(() => orderedPatchFileIndexes(flattenFileTree(fileTree())))
   const focusRunner = (input: Record<DiffViewerFocus, () => void>) => () => input[focus()]()
@@ -713,6 +715,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                     ref={(element: ScrollBoxRenderable) => (scroll = element)}
                     flexGrow={1}
                     minHeight={0}
+                    scrollAcceleration={patchScrollAcceleration()}
                     verticalScrollbarOptions={{ visible: false }}
                     horizontalScrollbarOptions={{ visible: false }}
                   >

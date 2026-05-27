@@ -8,8 +8,8 @@ import {
   getSessionPrefetchPromise,
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
-import { createServerSyncContext, useServerSync } from "./server-sync"
-import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk/v2/client"
+import { createServerSyncContext } from "./server-sync"
+import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
@@ -33,6 +33,12 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+const isNotFound = (error: unknown) =>
+  error instanceof Error &&
+  typeof error.cause === "object" &&
+  error.cause !== null &&
+  (error.cause as { status?: unknown }).status === 404
 
 function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   const map = new Map(a.map((item) => [item.id, item] as const))
@@ -347,6 +353,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           })
         })
       })
+      .catch((error) => {
+        if (isNotFound(error) && !tracked(input.directory, input.sessionID)) return
+        throw error
+      })
       .finally(() => {
         setMeta(
           produce((draft) => {
@@ -458,22 +468,27 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           const sessionReq =
             hasSession && !opts?.force
               ? Promise.resolve()
-              : retry(() => client.session.get({ sessionID })).then((session) => {
-                  if (!tracked(directory, sessionID)) return
-                  const data = session.data
-                  if (!data) return
-                  setStore(
-                    "session",
-                    produce((draft) => {
-                      const match = Binary.search(draft, sessionID, (s) => s.id)
-                      if (match.found) {
-                        draft[match.index] = data
-                        return
-                      }
-                      draft.splice(match.index, 0, data)
-                    }),
-                  )
-                })
+              : retry(() => client.session.get({ sessionID }))
+                  .then((session) => {
+                    if (!tracked(directory, sessionID)) return
+                    const data = session.data
+                    if (!data) return
+                    setStore(
+                      "session",
+                      produce((draft) => {
+                        const match = Binary.search(draft, sessionID, (s) => s.id)
+                        if (match.found) {
+                          draft[match.index] = data
+                          return
+                        }
+                        draft.splice(match.index, 0, data)
+                      }),
+                    )
+                  })
+                  .catch((error) => {
+                    if (isNotFound(error) && !tracked(directory, sessionID)) return
+                    throw error
+                  })
 
           const messagesReq =
             cached && !opts?.force
