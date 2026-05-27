@@ -785,6 +785,11 @@ export const layer = Layer.effect(
       const url = remoteURL(mcpName, mcpConfig.url)
       if (!url) throw new Error(`Invalid MCP URL for "${mcpName}"`)
 
+      // Invalidate any stale credentials so the SDK triggers a fresh OAuth flow
+      // instead of reusing tokens that may belong to a different account/API key.
+      yield* auth.remove(mcpName)
+      pendingOAuthTransports.delete(mcpName)
+
       // OAuth config is optional - if not provided, we'll use auto-discovery
       const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
 
