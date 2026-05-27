@@ -5,13 +5,22 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { QuestionID } from "../../src/question/schema"
 import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
-import { SessionID } from "../../src/session/schema"
-import { testEffect } from "../lib/effect"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
+import { Session } from "../../src/session/session"
+import { MessageV2 } from "../../src/session/message-v2"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
 
 const it = testEffect(
   Layer.mergeAll(Question.layer.pipe(Layer.provideMerge(Bus.layer)), CrossSpawnSpawner.defaultLayer),
+)
+
+const persistentIt = testEffect(
+  Layer.mergeAll(
+    Question.layer.pipe(Layer.provideMerge(Layer.mergeAll(Bus.layer, Session.defaultLayer))),
+    CrossSpawnSpawner.defaultLayer,
+  ),
 )
 
 const askEffect = Effect.fn("QuestionTest.ask")(function* (input: {
@@ -59,6 +68,55 @@ const waitForPending = Effect.fn("QuestionTest.waitForPending")(function* (count
     if (pending.length === count) return pending
     yield* Queue.take(asked).pipe(Effect.timeout("2 seconds"))
   }
+})
+
+const createQuestionToolPart = Effect.fn("QuestionTest.createQuestionToolPart")(function* (input?: {
+  request?: Question.Request
+}) {
+  const session = yield* Session.Service
+  const info = yield* session.create({})
+  const messageID = input?.request?.tool?.messageID ?? MessageID.ascending()
+  const partID = PartID.ascending()
+  const callID = input?.request?.tool?.callID ?? "test-question-call"
+
+  yield* session.updateMessage({
+    id: messageID,
+    sessionID: info.id,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "test",
+    model: { providerID: "test", modelID: "test" },
+    tools: {},
+  } as unknown as MessageV2.Info)
+
+  yield* session.updatePart({
+    id: partID,
+    sessionID: info.id,
+    messageID,
+    type: "tool",
+    tool: "question",
+    callID,
+    state: {
+      status: "running",
+      input: { questions: input?.request?.questions ?? [] },
+      metadata: input?.request ? { questionRequest: input.request } : undefined,
+      time: { start: Date.now() },
+    },
+  } satisfies MessageV2.ToolPart)
+
+  return { sessionID: info.id, messageID, partID, callID }
+})
+
+const questionRequestMetadata = Effect.fn("QuestionTest.questionRequestMetadata")(function* (input: {
+  sessionID: SessionID
+  messageID: MessageID
+  partID: PartID
+}) {
+  const session = yield* Session.Service
+  const part = yield* session.getPart(input)
+  if (part?.type !== "tool" || part.state.status !== "running") return undefined
+  const request = part.state.metadata?.questionRequest
+  return request && typeof request === "object" ? (request as Question.Request) : undefined
 })
 
 it.instance(
@@ -452,4 +510,183 @@ it.live("pending question rejects on instance reload", () =>
     expect(Exit.isFailure(exit)).toBe(true)
     if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Question.RejectedError)
   }),
+)
+
+persistentIt.instance(
+  "ask - persists tool-backed question request to tool part metadata",
+  () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const questions = [
+        {
+          question: "Persist me?",
+          header: "Persist",
+          options: [{ label: "Yes", description: "Yes" }],
+        },
+      ]
+      const tool = yield* createQuestionToolPart()
+
+      const fiber = yield* question
+        .ask({
+          sessionID: tool.sessionID,
+          questions,
+          tool: { messageID: tool.messageID, callID: tool.callID },
+        })
+        .pipe(Effect.forkScoped)
+
+      const [pending] = yield* waitForPending(1)
+      const persisted = yield* pollWithTimeout(
+        questionRequestMetadata({
+          sessionID: tool.sessionID,
+          messageID: tool.messageID,
+          partID: tool.partID,
+        }),
+        "timed out waiting for persisted question request",
+      )
+
+      expect(persisted).toMatchObject({
+        id: pending.id,
+        sessionID: tool.sessionID,
+        tool: { messageID: tool.messageID, callID: tool.callID },
+      })
+
+      yield* question.reply({ requestID: pending.id, answers: [["Yes"]] })
+      expect(yield* Fiber.join(fiber)).toEqual([["Yes"]])
+    }),
+  { git: true },
+)
+
+persistentIt.instance(
+  "reply - recovers persisted request when in-memory pending is missing",
+  () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const session = yield* Session.Service
+      const messageID = MessageID.ascending()
+      const request: Question.Request = {
+        id: QuestionID.make("que_persisted_recovery"),
+        sessionID: SessionID.make("ses_placeholder"),
+        questions: [
+          {
+            question: "Recover me?",
+            header: "Recover",
+            options: [{ label: "Yes", description: "Yes" }],
+          },
+        ],
+        tool: { messageID, callID: "test-recover-call" },
+      }
+      const tool = yield* createQuestionToolPart({ request: { ...request, sessionID: request.sessionID } })
+      const persistedRequest = { ...request, sessionID: tool.sessionID, tool: { messageID: tool.messageID, callID: tool.callID } }
+      const part = yield* session.getPart({
+        sessionID: tool.sessionID,
+        messageID: tool.messageID,
+        partID: tool.partID,
+      })
+      if (part?.type !== "tool" || part.state.status !== "running") {
+        return yield* Effect.die(new Error("missing persisted question tool part"))
+      }
+      yield* session.updatePart({
+        ...part,
+        state: {
+          ...part.state,
+          input: { questions: persistedRequest.questions },
+          metadata: { questionRequest: persistedRequest },
+        },
+      })
+
+      const listed = yield* question.list()
+      expect(listed.map((item) => item.id)).toContain(persistedRequest.id)
+
+      yield* question.reply({ requestID: persistedRequest.id, answers: [["Yes"]] })
+      const completed = yield* session.getPart({
+        sessionID: tool.sessionID,
+        messageID: tool.messageID,
+        partID: tool.partID,
+      })
+
+      expect(completed?.type).toBe("tool")
+      if (completed?.type === "tool") {
+        expect(completed.state.status).toBe("completed")
+        if (completed.state.status === "completed") {
+          expect(completed.state.metadata.answers).toEqual([["Yes"]])
+          expect(completed.state.metadata.questionRequest).toBeUndefined()
+          expect(completed.state.output).toContain(`"Recover me?"="Yes"`)
+        }
+      }
+      expect(yield* question.list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+persistentIt.instance(
+  "ask - waits briefly for delayed tool part before persisting request",
+  () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const session = yield* Session.Service
+      const info = yield* session.create({})
+      const messageID = MessageID.ascending()
+      const partID = PartID.ascending()
+      const callID = "test-delayed-question-call"
+      const questions = [
+        {
+          question: "Delayed persist?",
+          header: "Delayed",
+          options: [{ label: "Yes", description: "Yes" }],
+        },
+      ]
+
+      yield* session.updateMessage({
+        id: messageID,
+        sessionID: info.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "test",
+        model: { providerID: "test", modelID: "test" },
+        tools: {},
+      } as unknown as MessageV2.Info)
+
+      const fiber = yield* question
+        .ask({
+          sessionID: info.id,
+          questions,
+          tool: { messageID, callID },
+        })
+        .pipe(Effect.forkScoped)
+
+      yield* Effect.sleep("40 millis")
+      yield* session.updatePart({
+        id: partID,
+        sessionID: info.id,
+        messageID,
+        type: "tool",
+        tool: "question",
+        callID,
+        state: {
+          status: "running",
+          input: { questions },
+          time: { start: Date.now() },
+        },
+      } satisfies MessageV2.ToolPart)
+
+      const [pending] = yield* waitForPending(1)
+      const persisted = yield* pollWithTimeout(
+        questionRequestMetadata({
+          sessionID: info.id,
+          messageID,
+          partID,
+        }),
+        "timed out waiting for delayed persisted question request",
+      )
+
+      expect(persisted).toMatchObject({
+        id: pending.id,
+        sessionID: info.id,
+        tool: { messageID, callID },
+      })
+
+      yield* question.reply({ requestID: pending.id, answers: [["Yes"]] })
+      expect(yield* Fiber.join(fiber)).toEqual([["Yes"]])
+    }),
+  { git: true },
 )

@@ -3,6 +3,7 @@ import { Effect, Fiber, Layer, Queue } from "effect"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Session } from "../../src/session/session"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Truncate } from "@/tool/truncate"
@@ -22,7 +23,7 @@ const ctx = {
 
 const it = testEffect(
   Layer.mergeAll(
-    Question.layer.pipe(Layer.provideMerge(Bus.layer)),
+    Question.layer.pipe(Layer.provideMerge(Layer.mergeAll(Bus.layer, Session.defaultLayer))),
     CrossSpawnSpawner.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
