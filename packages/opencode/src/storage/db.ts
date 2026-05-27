@@ -101,12 +101,17 @@ export const Client = Object.assign(
 
     const db = init(dbPath)
 
-    db.run("PRAGMA journal_mode = WAL")
+    try {
+      db.run("PRAGMA journal_mode = WAL")
+      db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    } catch (err) {
+      log.warn("failed to enable WAL journal mode, falling back to DELETE", { path: dbPath, error: err })
+      db.run("PRAGMA journal_mode = DELETE")
+    }
     db.run("PRAGMA synchronous = NORMAL")
     db.run("PRAGMA busy_timeout = 5000")
     db.run("PRAGMA cache_size = -64000")
     db.run("PRAGMA foreign_keys = ON")
-    db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     // Apply schema migrations
     const entries =

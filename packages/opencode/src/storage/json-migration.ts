@@ -45,7 +45,12 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   // const db = drizzle({ client: sqlite })
 
   // Optimize SQLite for bulk inserts
-  db.run("PRAGMA journal_mode = WAL")
+  try {
+    db.run("PRAGMA journal_mode = WAL")
+  } catch (err) {
+    log.warn("failed to enable WAL journal mode, falling back to DELETE", { path: storageDir, error: err })
+    db.run("PRAGMA journal_mode = DELETE")
+  }
   db.run("PRAGMA synchronous = OFF")
   db.run("PRAGMA cache_size = 10000")
   db.run("PRAGMA temp_store = MEMORY")
