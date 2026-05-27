@@ -1796,7 +1796,10 @@ export const layer = Layer.effect(
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+      // Treat empty `provider: {}` in config as "no override" — otherwise
+      // an empty allowlist filters every provider out and breaks defaultModel().
+      const allowlist = cfg.provider ? Object.keys(cfg.provider) : []
+      const provider = Object.values(s.providers).find((p) => allowlist.length === 0 || allowlist.includes(p.id))
       if (!provider) throw new Error("no providers found")
       const [model] = sort(Object.values(provider.models))
       if (!model) throw new Error("no models found")
