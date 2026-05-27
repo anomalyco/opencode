@@ -14,6 +14,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
+import { BEDROCK_CREDENTIAL_CHAIN_MARKER } from "@/plugin/bedrock"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -30,6 +31,9 @@ import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "provider" })
+
+// Tracks bearer token set by the Bedrock custom handler so it can be cleared on reinit
+let _bedrockBearerSetByInit: string | undefined
 
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
@@ -282,13 +286,20 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
 
+      // Clear bearer token set by a previous init cycle so we re-evaluate from current auth state
+      if (_bedrockBearerSetByInit && process.env.AWS_BEARER_TOKEN_BEDROCK === _bedrockBearerSetByInit) {
+        delete process.env.AWS_BEARER_TOKEN_BEDROCK
+        _bedrockBearerSetByInit = undefined
+      }
+
       // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
       // until the scope of the Env API is clarified (test only or runtime?)
       const awsBearerToken = iife(() => {
         const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
         if (envToken) return envToken
-        if (auth?.type === "api") {
+        if (auth?.type === "api" && auth.key !== BEDROCK_CREDENTIAL_CHAIN_MARKER) {
           process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
+          _bedrockBearerSetByInit = auth.key
           return auth.key
         }
         return undefined
@@ -300,7 +311,19 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
       )
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+      // Allow autoload when explicit config exists or credential chain marker was stored via /connect
+      const hasExplicitConfig = providerConfig !== undefined
+      const hasCredentialChainMarker = auth?.type === "api" && auth.key === BEDROCK_CREDENTIAL_CHAIN_MARKER
+
+      if (
+        !profile &&
+        !awsAccessKeyId &&
+        !awsBearerToken &&
+        !awsWebIdentityTokenFile &&
+        !containerCreds &&
+        !hasExplicitConfig &&
+        !hasCredentialChainMarker
+      )
         return { autoload: false }
 
       const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
@@ -1582,7 +1605,10 @@ export const layer = Layer.effect(
         })
 
         if (baseURL !== undefined) options["baseURL"] = baseURL
-        if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+        // Skip for amazon-bedrock: auth is handled by the custom handler via
+        // process.env.AWS_BEARER_TOKEN_BEDROCK, not via the SDK's apiKey option
+        if (options["apiKey"] === undefined && provider.key && model.providerID !== "amazon-bedrock")
+          options["apiKey"] = provider.key
         if (model.headers)
           options["headers"] = {
             ...options["headers"],
