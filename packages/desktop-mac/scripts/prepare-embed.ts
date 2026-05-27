@@ -1,10 +1,18 @@
 #!/usr/bin/env bun
 /**
- * 为 YunPat.app 内嵌 project-root 生成最小 monorepo 清单并安装依赖。
- * 由 build-dist.sh 调用。
+ * 为 YunPat.app 准备最小化的 sidecar 运行时
+ * 
+ * 策略:
+ * 1. bun build desktop-serve.ts → 单文件 JS bundle（外部化 native/wasm deps）
+ * 2. 生成最小 package.json（仅 native/wasm 依赖）
+ * 3. bun install --production 安装运行时依赖
+ * 4. 复制 .opencode 配置
+ * 
+ * 体积预期: ~200MB（bun bundle ~20MB + native deps ~150MB + config）
  */
 import { cp, mkdir, rm, stat } from "node:fs/promises"
 import path from "node:path"
+import { $ } from "bun"
 
 const scriptDir = path.resolve(import.meta.dir)
 const projectRoot = path.resolve(scriptDir, "../../..")
@@ -15,128 +23,126 @@ if (!embedDir) {
   process.exit(1)
 }
 
-const embedPackages = [
-  "opencode",
-  "core",
-  "plugin",
-  "script",
-  "opencode-patent-plugin",
-  "professional-router-plugin",
-] as const
-
-const rootPkg = await Bun.file(path.join(projectRoot, "package.json")).json()
-
-const embedPkg = {
-  name: "yunpat-embed",
-  private: true,
-  type: "module",
-  packageManager: rootPkg.packageManager,
-  workspaces: {
-    packages: [
-      ...embedPackages.map((p) => `packages/${p}`),
-      "packages/sdk/js",
-    ],
-    catalog: rootPkg.workspaces.catalog,
-  },
-  patchedDependencies: rootPkg.patchedDependencies,
-  overrides: rootPkg.overrides,
-  trustedDependencies: rootPkg.trustedDependencies,
-  scripts: {
-    postinstall: "bun run --cwd packages/opencode fix-node-pty",
-  },
-}
-
-const exclude = new Set([
-  "node_modules",
-  ".turbo",
-  "dist",
-  ".artifacts",
-  ".next",
-  "coverage",
-  ".git",
-])
-
-async function copyPackage(srcRel: string, destRel: string) {
-  const src = path.join(projectRoot, srcRel)
-  const dest = path.join(embedDir, destRel)
-  await mkdir(path.dirname(dest), { recursive: true })
-  const args = [
-    "-a",
-    ...[...exclude].flatMap((x) => ["--exclude", x]),
-    `${src}/`,
-    `${dest}/`,
-  ]
-  const proc = Bun.spawn(["rsync", ...args], { stdout: "inherit", stderr: "inherit" })
-  if ((await proc.exited) !== 0) process.exit(1)
-  console.log(`  copied ${destRel}`)
-}
+const embeddedBun = process.env.EMBEDDED_BUN
+const bun = embeddedBun && (await Bun.file(embeddedBun).exists()) ? embeddedBun : "bun"
 
 console.log(`prepare-embed: ${embedDir}`)
 await rm(embedDir, { recursive: true, force: true })
 await mkdir(embedDir, { recursive: true })
 
-await cp(path.join(projectRoot, "bun.lock"), path.join(embedDir, "bun.lock"))
-const patches = path.join(projectRoot, "patches")
-try {
-  await stat(patches)
-  await cp(patches, path.join(embedDir, "patches"), { recursive: true })
-} catch {
-  // optional
+// ============================================================
+// Step 1: Build desktop-serve.ts into standalone bundle
+// ============================================================
+console.log("[1/5] Building sidecar bundle...")
+
+const buildResult = await Bun.build({
+  entrypoints: [path.join(projectRoot, "packages/opencode/src/desktop-serve.ts")],
+  target: "bun",
+  outdir: embedDir,
+  naming: "sidecar.js",
+  external: [
+    "@lydell/node-pty",
+    "@lydell/node-pty-darwin-arm64",
+    "@lydell/node-pty-darwin-x64",
+    "@lydell/node-pty-linux-arm64",
+    "@lydell/node-pty-linux-x64",
+    "@lydell/node-pty-win32-arm64",
+    "@lydell/node-pty-win32-x64",
+    "@parcel/watcher",
+    "@parcel/watcher-darwin-arm64",
+    "@parcel/watcher-darwin-x64",
+    "tree-sitter",
+    "tree-sitter-bash",
+    "tree-sitter-powershell",
+    "web-tree-sitter",
+    "mammoth",
+    "pdf-parse",
+    "*.node",
+  ],
+  splitting: false,
+  minify: true,
+})
+
+if (!buildResult.success) {
+  for (const log of buildResult.logs) console.error(log)
+  process.exit(1)
 }
 
-await mkdir(path.join(embedDir, "packages"), { recursive: true })
-for (const pkg of embedPackages) {
-  await copyPackage(`packages/${pkg}`, `packages/${pkg}`)
+const bundleSize = (await stat(path.join(embedDir, "sidecar.js"))).size
+console.log(`  sidecar.js: ${(bundleSize / 1024 / 1024).toFixed(1)} MB`)
+
+// ============================================================
+// Step 2: Generate minimal package.json
+// ============================================================
+console.log("[2/5] Generating minimal manifest...")
+
+const rootPkg = await Bun.file(path.join(projectRoot, "package.json")).json() as Record<string, any>
+
+const minimalPkg = {
+  name: "yunpat-sidecar",
+  private: true,
+  type: "module",
+  // Only native/wasm deps needed at runtime
+  dependencies: {
+    "@lydell/node-pty": rootPkg.workspaces?.catalog?.["@lydell/node-pty"] ?? "*",
+    "@parcel/watcher": "^2",
+    "tree-sitter-bash": "*",
+    "tree-sitter-powershell": "*",
+    "web-tree-sitter": "*",
+  },
+  optionalDependencies: {
+    "@lydell/node-pty-darwin-arm64": rootPkg.workspaces?.catalog?.["@lydell/node-pty"] ?? "*",
+    "@lydell/node-pty-darwin-x64": rootPkg.workspaces?.catalog?.["@lydell/node-pty"] ?? "*",
+    "@parcel/watcher-darwin-arm64": "2.5.1",
+    "@parcel/watcher-darwin-x64": "2.5.1",
+  },
+  trustedDependencies: ["@lydell/node-pty", "@parcel/watcher", "tree-sitter", "tree-sitter-bash", "tree-sitter-powershell", "web-tree-sitter"],
 }
-await copyPackage("packages/sdk/js", "packages/sdk/js")
 
-try {
-  await stat(path.join(projectRoot, ".opencode"))
-  const ocDest = path.join(embedDir, ".opencode")
-  await mkdir(ocDest, { recursive: true })
-  for (const dir of ["plugin", "plugins", "skills", "agent"] as const) {
-    const src = path.join(projectRoot, ".opencode", dir)
-    try {
-      await stat(src)
-      await cp(src, path.join(ocDest, dir), { recursive: true })
-    } catch {
-      // optional dir
-    }
-  }
-  const ocPkg = path.join(projectRoot, ".opencode/package.json")
-  if (await Bun.file(ocPkg).exists()) {
-    await cp(ocPkg, path.join(ocDest, "package.json"))
-  }
-} catch {
-  // optional
-}
+await Bun.write(path.join(embedDir, "package.json"), JSON.stringify(minimalPkg, null, 2) + "\n")
 
-await Bun.write(path.join(embedDir, "package.json"), JSON.stringify(embedPkg, null, 2) + "\n")
+// ============================================================
+// Step 3: Install runtime deps
+// ============================================================
+console.log("[3/5] Installing runtime dependencies...")
 
-const embeddedBun = process.env.EMBEDDED_BUN
-const bun = embeddedBun && (await Bun.file(embeddedBun).exists()) ? embeddedBun : "bun"
-
-console.log(`  running ${bun} install in embed root...`)
-const install = Bun.spawn([bun, "install", "--frozen-lockfile"], {
+const install = Bun.spawn([bun, "install", "--production"], {
   cwd: embedDir,
   stdout: "inherit",
   stderr: "inherit",
 })
+if ((await install.exited) !== 0) process.exit(1)
 
-const code = await install.exited
-if (code !== 0) {
-  console.warn("  frozen lockfile install failed, retrying without --frozen-lockfile...")
-  const retry = Bun.spawn([bun, "install"], {
-    cwd: embedDir,
-    stdout: "inherit",
-    stderr: "inherit",
-  })
-  if ((await retry.exited) !== 0) process.exit(1)
-}
+// ============================================================
+// Step 4: Copy .opencode config
+// ============================================================
+console.log("[4/5] Copying .opencode config...")
 
-// 确认桌面 sidecar 入口可加载（不启动长期服务）
-const serveEntry = path.join(embedDir, "packages/opencode/src/desktop-serve.ts")
-const probe = Bun.spawn([bun, "run", "--conditions=browser", serveEntry, "--help"], {
+const ocDest = path.join(embedDir, ".opencode")
+await mkdir(ocDest, { recursive: true })
+
+try {
+  const srcOc = path.join(projectRoot, ".opencode")
+  for (const dir of ["plugin", "plugins", "skills", "agent"] as const) {
+    const src = path.join(srcOc, dir)
+    try {
+      await stat(src)
+      await cp(src, path.join(ocDest, dir), { recursive: true })
+    } catch { /* optional */ }
+  }
+  // Copy opencode.jsonc if exists
+  const configFile = path.join(srcOc, "opencode.jsonc")
+  if (await Bun.file(configFile).exists()) {
+    await cp(configFile, path.join(ocDest, "opencode.jsonc"))
+  }
+} catch { /* optional */ }
+
+// ============================================================
+// Step 5: Verify
+// ============================================================
+console.log("[5/5] Verifying...")
+
+const probe = Bun.spawn([bun, "run", path.join(embedDir, "sidecar.js"), "--help"], {
   cwd: embedDir,
   stdout: "pipe",
   stderr: "pipe",
@@ -144,8 +150,11 @@ const probe = Bun.spawn([bun, "run", "--conditions=browser", serveEntry, "--help
 const probeCode = await probe.exited
 if (probeCode !== 0) {
   const err = await new Response(probe.stderr).text()
-  console.error("prepare-embed: desktop-serve --help failed:\n", err)
+  console.error("sidecar --help failed:\n", err)
   process.exit(1)
 }
 
+const totalSize = (await Bun.spawn(["du", "-sh", embedDir]).exited, 
+  (await new Response(Bun.spawnSync(["du", "-sh", embedDir]).stdout).text()).trim())
+console.log(`  Total: ${totalSize}`)
 console.log("prepare-embed: done")

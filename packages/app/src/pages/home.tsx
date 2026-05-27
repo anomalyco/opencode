@@ -1,18 +1,20 @@
-import { createMemo, For, Match, Switch } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { Button } from "@yunpat/ui/button"
+import { BrandHero } from "@yunpat/ui/brand-hero"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Icon } from "@opencode-ai/ui/icon"
+import { base64Encode } from "@yunpat/core/util/encode"
+import { Icon } from "@yunpat/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@yunpat/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { SetupWizard } from "@/components/setup-wizard"
+import { useProviders } from "@/hooks/use-providers"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -22,7 +24,19 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const language = useLanguage()
+  const providerHook = useProviders()
+  const [showSetup, setShowSetup] = createSignal(false)
+
   const homedir = createMemo(() => sync.data.path.home)
+
+  const setupNeeded = () => {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("yunpat.setup.complete") === "1") return false
+    return providerHook.connected().length === 0
+  }
+
+  const dismissSetup = () => {
+    setShowSetup(false)
+  }
   const recent = createMemo(() => {
     return sync.data.project
       .slice()
@@ -69,8 +83,12 @@ export default function Home() {
   }
 
   return (
-    <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
+    <Show
+      when={!showSetup() && !setupNeeded()}
+      fallback={<SetupWizard onComplete={dismissSetup} />}
+    >
+      <div class="mx-auto mt-55 w-full md:w-auto px-4">
+        <BrandHero size="md" class="w-48 md:w-64 max-w-full rounded-2xl" />
       <Button
         size="large"
         variant="ghost"
@@ -135,5 +153,6 @@ export default function Home() {
         </Match>
       </Switch>
     </div>
+    </Show>
   )
 }

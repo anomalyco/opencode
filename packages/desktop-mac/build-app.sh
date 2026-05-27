@@ -18,7 +18,8 @@ echo ""
 # Step 1: Build SolidJS frontend
 echo "[1/5] Building SolidJS frontend..."
 cd "$PROJECT_ROOT/packages/app"
-bun install --frozen-lockfile 2>/dev/null || bun install
+mkdir -p node_modules/@opencode-ai
+ln -sfn ../../../ipc-bridge node_modules/@opencode-ai/ipc-bridge 2>/dev/null || true
 bun run build:desktop-mac
 echo "  Frontend built to packages/app/dist-desktop-mac/"
 echo ""
@@ -40,6 +41,23 @@ mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 # Copy Swift binary
 cp "$SCRIPT_DIR/.build/release/YunPat" "$APP_BUNDLE/Contents/MacOS/YunPat"
 echo "  Binary: $(du -h "$APP_BUNDLE/Contents/MacOS/YunPat" | cut -f1)"
+
+# Embed Sparkle (auto-update); required at launch — dyld loads @rpath/Sparkle.framework
+SPARKLE_SRC="$SCRIPT_DIR/.build/arm64-apple-macosx/release/Sparkle.framework"
+if [ ! -d "$SPARKLE_SRC" ]; then
+  SPARKLE_SRC="$SCRIPT_DIR/.build/release/Sparkle.framework"
+fi
+if [ -d "$SPARKLE_SRC" ]; then
+  rm -rf "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+  cp -R "$SPARKLE_SRC" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+  # Binary links @rpath/Sparkle; add Frameworks to rpath (in addition to @loader_path)
+  if ! otool -l "$APP_BUNDLE/Contents/MacOS/YunPat" | grep -q '@executable_path/../Frameworks'; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/YunPat"
+  fi
+  echo "  Sparkle: embedded in Contents/Frameworks/"
+else
+  echo "  WARNING: Sparkle.framework not found — run 'swift build -c release' first" >&2
+fi
 
 # Copy frontend assets
 cp -r "$PROJECT_ROOT/packages/app/dist-desktop-mac/"* "$APP_BUNDLE/Contents/Resources/renderer/" 2>/dev/null || true

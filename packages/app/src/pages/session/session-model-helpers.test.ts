@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "@yunpat/sdk/v2"
 import { resetSessionModel, syncSessionModel } from "./session-model-helpers"
 
 const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>

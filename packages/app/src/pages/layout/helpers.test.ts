@@ -6,7 +6,7 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { type Session } from "@yunpat/sdk/v2/client"
 import {
   childSessionOnPath,
   displayName,

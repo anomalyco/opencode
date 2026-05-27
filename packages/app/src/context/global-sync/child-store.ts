@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { OpencodeClient, ProviderListResponse, VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { OpencodeClient, ProviderListResponse, VcsInfo } from "@yunpat/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,

@@ -1,18 +1,19 @@
 import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Mark } from "@opencode-ai/ui/logo"
+import { Tabs } from "@yunpat/ui/tabs"
+import { IconButton } from "@yunpat/ui/icon-button"
+import { TooltipKeybind } from "@yunpat/ui/tooltip"
+import { ResizeHandle } from "@yunpat/ui/resize-handle"
+import { Mark } from "@yunpat/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff, VcsFileDiff } from "@yunpat/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@yunpat/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import { DocumentPreviewPanel, type DocumentFile, WorkflowStepper, type WorkflowStep } from "@/components/document-preview"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
@@ -40,6 +41,9 @@ export function SessionSidePanel(props: {
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  document?: DocumentFile
+  workflowSteps?: WorkflowStep[]
+  workflowName?: string
 }) {
   const layout = useLayout()
   const platform = usePlatform()
@@ -250,6 +254,13 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Show when={props.document || props.workflowSteps}>
+                        <Tabs.Trigger value="document">
+                          <div class="flex items-center gap-1.5">
+                            <div>文档</div>
+                          </div>
+                        </Tabs.Trigger>
+                      </Show>
                       <Show when={contextOpen()}>
                         <Tabs.Trigger
                           value="context"
@@ -307,6 +318,25 @@ export function SessionSidePanel(props: {
                   <Show when={reviewTab() && props.canReview()}>
                     <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                       <Show when={activeTab() === "review"}>{props.reviewPanel()}</Show>
+                    </Tabs.Content>
+                  </Show>
+
+                  <Show when={props.document || props.workflowSteps}>
+                    <Tabs.Content value="document" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "document"}>
+                        <div class="flex flex-col h-full">
+                          <Show when={props.workflowSteps && props.workflowSteps!.length > 0}>
+                            <WorkflowStepper steps={props.workflowSteps!} workflowName={props.workflowName} />
+                            <div class="border-b border-border-weaker-base" />
+                          </Show>
+                          <div class="flex-1 min-h-0">
+                            <DocumentPreviewPanel
+                              file={props.document}
+                              onClose={() => {}}
+                            />
+                          </div>
+                        </div>
+                      </Show>
                     </Tabs.Content>
                   </Show>
 

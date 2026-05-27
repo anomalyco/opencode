@@ -1,4 +1,4 @@
-import type { FileContent } from "@opencode-ai/sdk/v2"
+import type { FileContent } from "@yunpat/sdk/v2"
 
 const MAX_FILE_CONTENT_ENTRIES = 40
 const MAX_FILE_CONTENT_BYTES = 20 * 1024 * 1024

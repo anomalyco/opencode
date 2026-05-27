@@ -6,7 +6,7 @@ import type {
   SessionStatus,
   SnapshotFileDiff,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@yunpat/sdk/v2/client"
 
 export const SESSION_CACHE_LIMIT = 40
 
