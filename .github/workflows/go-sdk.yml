@@ -1,0 +1,41 @@
+name: go-sdk
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "packages/sdk/go/**"
+  pull_request:
+    paths:
+      - "packages/sdk/go/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: go build, vet, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sdk/go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1 -v
