@@ -134,6 +134,15 @@ export function retryable(error: Err, provider: string) {
     }
   }
 
+  // Network termination errors (undici TypeError: terminated, fetch failures)
+  // that were classified as Unknown but should be retried
+  if (error.name === "UnknownError" && typeof msg === "string") {
+    const lower = msg.toLowerCase()
+    if (lower === "terminated" || lower.includes("fetch failed") || lower.includes("connection refused")) {
+      return { message: msg || "Connection error, retrying" }
+    }
+  }
+
   const json = parseJSON(msg)
   if (!json || typeof json !== "object") return undefined
   const code = typeof json.code === "string" ? json.code : ""

@@ -35,6 +35,14 @@ interface FetchDecompressionError extends Error {
   path: string
 }
 
+function isNetworkTermination(e: Error): boolean {
+  if (e instanceof TypeError && e.message === "terminated") return true
+  if (e instanceof TypeError && e.message.toLowerCase().includes("fetch failed")) return true
+  if ((e as SystemError)?.code === "ECONNREFUSED") return true
+  if ((e as SystemError)?.code === "EPIPE") return true
+  return false
+}
+
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
@@ -1178,6 +1186,18 @@ export function fromError(
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
           metadata: parsed.metadata,
+        },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && isNetworkTermination(e):
+      return new APIError(
+        {
+          message: e.message || "Connection terminated",
+          isRetryable: true,
+          metadata: {
+            code: "terminated",
+            message: e.message,
+          },
         },
         { cause: e },
       ).toObject()

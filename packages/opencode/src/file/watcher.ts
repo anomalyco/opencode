@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Context, Schema } from "effect"
+import { Cause, Duration, Effect, Layer, Context, Schema } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
@@ -20,6 +20,8 @@ declare const OPENCODE_LIBC: string | undefined
 
 const log = Log.create({ service: "file.watcher" })
 const SUBSCRIBE_TIMEOUT_MS = 10_000
+const SUBSCRIBE_RETRIES = 3
+const SUBSCRIBE_RETRY_DELAY_MS = 1_000
 
 export const Event = {
   Updated: BusEvent.define(
@@ -119,12 +121,26 @@ export const layer = Layer.effect(
             )
           }
 
+          const subscribeWithRetry = (dir: string, ignore: string[], retries = SUBSCRIBE_RETRIES): Effect.Effect<void> =>
+            subscribe(dir, ignore).pipe(
+              Effect.catchCause((cause) => {
+                if (retries <= 0) {
+                  log.error("failed to subscribe after retries", { dir, cause: Cause.pretty(cause) })
+                  return Effect.void
+                }
+                log.info("retrying subscription", { dir, retriesLeft: retries - 1 })
+                return Effect.sleep(Duration.millis(SUBSCRIBE_RETRY_DELAY_MS)).pipe(
+                  Effect.flatMap(() => subscribeWithRetry(dir, ignore, retries - 1)),
+                )
+              }),
+            )
+
           const cfg = yield* config.get()
           const cfgIgnores = cfg.watcher?.ignore ?? []
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
             yield* Effect.forkScoped(
-              subscribe(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)]),
+              subscribeWithRetry(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)]),
             )
           }
 
@@ -143,7 +159,7 @@ export const layer = Layer.effect(
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )
-              yield* Effect.forkScoped(subscribe(vcsDir, ignore))
+              yield* Effect.forkScoped(subscribeWithRetry(vcsDir, ignore))
             }
           }
         },
