@@ -6,7 +6,7 @@ import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/f
 import { mkdir } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
-import { SessionTable } from "@/session/session.sql"
+import { MessageTable, SessionTable } from "@/session/session.sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
 import { Bus } from "@/bus"
@@ -224,6 +224,44 @@ describe("session.list", () => {
 
         const sessions = yield* SessionNs.use.list({ limit: 2 })
         expect(sessions.length).toBe(2)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "orders limited results by the latest conversation message time",
+    () =>
+      Effect.gen(function* () {
+        const staleSession = yield* withSession({ title: "stale-session-new-message" })
+        const recentSession = yield* withSession({ title: "recent-session" })
+        const olderSession = yield* withSession({ title: "older-session" })
+
+        yield* Effect.sync(() => {
+          Database.use((db) => {
+            db.update(SessionTable).set({ time_updated: 100 }).where(eq(SessionTable.id, staleSession.id)).run()
+            db.update(SessionTable).set({ time_updated: 300 }).where(eq(SessionTable.id, recentSession.id)).run()
+            db.update(SessionTable).set({ time_updated: 200 }).where(eq(SessionTable.id, olderSession.id)).run()
+            db.insert(MessageTable)
+              .values({
+                id: "message-latest" as (typeof MessageTable.$inferInsert)["id"],
+                session_id: staleSession.id,
+                time_created: 400,
+                time_updated: 400,
+                data: {
+                  role: "user",
+                  time: { created: 400 },
+                  agent: "general",
+                  model: { providerID: "test", modelID: "test" },
+                } as (typeof MessageTable.$inferInsert)["data"],
+              })
+              .run()
+          })
+        })
+
+        const sessions = yield* SessionNs.use.list({ roots: true, limit: 2 })
+
+        expect(sessions.map((session) => session.id)).toEqual([staleSession.id, recentSession.id])
+        expect(sessions[0]?.time.updated).toBe(400)
       }),
     { git: true },
   )

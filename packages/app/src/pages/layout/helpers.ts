@@ -83,17 +83,12 @@ export async function waitForMatch<T>(
   }
 }
 
-function sortSessions(now: number) {
-  const oneMinuteAgo = now - 60 * 1000
+function sortSessions(_now: number) {
   return (a: Session, b: Session) => {
     const aUpdated = a.time.updated ?? a.time.created
     const bUpdated = b.time.updated ?? b.time.created
-    const aRecent = aUpdated > oneMinuteAgo
-    const bRecent = bUpdated > oneMinuteAgo
-    if (aRecent && bRecent) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-    if (aRecent && !bRecent) return -1
-    if (!aRecent && bRecent) return 1
-    return bUpdated - aUpdated
+    if (aUpdated !== bUpdated) return bUpdated - aUpdated
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   }
 }
 

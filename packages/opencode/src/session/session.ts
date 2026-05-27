@@ -19,9 +19,10 @@ import { like } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "./session.sql"
+import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
@@ -925,18 +926,21 @@ function* listByProject(
   }
 
   const limit = input.limit ?? 100
+  const lastActivity = sql<number>`max(${SessionTable.time_updated}, coalesce(max(${MessageTable.time_created}), ${SessionTable.time_updated}))`
 
   const rows = Database.use((db) =>
     db
-      .select()
+      .select({ session: SessionTable, lastActivity })
       .from(SessionTable)
+      .leftJoin(MessageTable, eq(MessageTable.session_id, SessionTable.id))
       .where(and(...conditions))
-      .orderBy(desc(SessionTable.time_updated))
+      .groupBy(SessionTable.id)
+      .orderBy(desc(lastActivity), desc(SessionTable.id))
       .limit(limit)
       .all(),
   )
   for (const row of rows) {
-    yield fromRow(row)
+    yield fromRow({ ...row.session, time_updated: row.lastActivity })
   }
 }
 

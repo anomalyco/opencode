@@ -250,6 +250,31 @@ describe("layout workspace helpers", () => {
     expect(result.map((item) => item.id)).toEqual(["workspace", "root"])
   })
 
+  test("sorts recently updated sessions by timestamp before id", () => {
+    const result = sortedProjectSessions(
+      [
+        {
+          path: { directory: "/workspace" },
+          session: [
+            session({
+              id: "a",
+              directory: "/workspace",
+              time: { created: 10, updated: 10, archived: undefined },
+            }),
+            session({
+              id: "b",
+              directory: "/workspace",
+              time: { created: 20, updated: 20, archived: undefined },
+            }),
+          ],
+        },
+      ],
+      60_000,
+    )
+
+    expect(result.map((item) => item.id)).toEqual(["b", "a"])
+  })
+
   test("finds the latest root session inside one workspace only", () => {
     const result = latestWorkspaceSession(
       {
