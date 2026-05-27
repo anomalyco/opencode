@@ -109,6 +109,7 @@ interface TokenResponse {
 interface CodexAuthPluginOptions {
   issuer?: string
   codexApiEndpoint?: string
+  experimentalWebSockets?: boolean
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -405,10 +406,14 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       provider: "openai",
       async loader(getAuth) {
         const auth = await getAuth()
-        const websocketFetch = OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
-        websocketFetches.push(websocketFetch)
-        websocketFetchInstalled = true
-        if (auth.type !== "oauth") return { fetch: websocketFetch }
+        const websocketFetch = options.experimentalWebSockets
+          ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
+          : undefined
+        if (websocketFetch) {
+          websocketFetches.push(websocketFetch)
+          websocketFetchInstalled = true
+        }
+        if (auth.type !== "oauth") return websocketFetch ? { fetch: websocketFetch } : {}
 
         let refreshPromise:
           | Promise<{
@@ -433,7 +438,8 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
             }
 
             const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") return websocketFetch(requestInput, init)
+            if (currentAuth.type !== "oauth")
+              return websocketFetch ? websocketFetch(requestInput, init) : fetch(requestInput, init)
 
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
 
@@ -500,7 +506,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               ...init,
               headers,
             }
-            if (parsed.pathname.includes("/v1/responses")) return websocketFetch(url, requestInit)
+            if (websocketFetch && parsed.pathname.includes("/v1/responses")) return websocketFetch(url, requestInit)
             return fetch(url, OpenAIWebSocketPool.withoutInternalHeaders(requestInit))
           },
         }

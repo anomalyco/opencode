@@ -122,6 +122,24 @@ describe("plugin.codex", () => {
     })
   })
 
+  test("installs websocket transport only when experimental websockets are enabled", async () => {
+    const disabled = await CodexAuthPlugin({} as never)
+    const enabled = await CodexAuthPlugin({} as never, { experimentalWebSockets: true })
+
+    const disabledOptions = await disabled.auth!.loader!(
+      async () => ({ type: "api", key: "sk-test" }) as never,
+      {} as never,
+    )
+    const enabledOptions = await enabled.auth!.loader!(
+      async () => ({ type: "api", key: "sk-test" }) as never,
+      {} as never,
+    )
+
+    expect(disabledOptions.fetch).toBeUndefined()
+    expect(enabledOptions.fetch).toBeFunction()
+    await enabled.dispose?.()
+  })
+
   test("deduplicates concurrent Codex token refreshes", async () => {
     let auth = {
       type: "oauth" as const,
