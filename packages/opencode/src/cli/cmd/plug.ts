@@ -17,6 +17,17 @@ type Spin = {
   stop: (msg: string, code?: number) => void
 }
 
+function ttySpinner(): Spin {
+  if (process.stdout.isTTY) return spinner()
+  return {
+    start: (msg: string) => console.log(msg),
+    stop: (msg: string, code?: number) => {
+      if (code) console.error(msg)
+      else console.log(msg)
+    },
+  }
+}
+
 export type PlugDeps = {
   spinner: () => Spin
   log: {
@@ -45,7 +56,7 @@ export type PlugCtx = {
 }
 
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => ttySpinner(),
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
