@@ -1053,7 +1053,7 @@ export type ProviderConfig = {
      */
     timeout?: number | false
     /**
-     * Timeout in milliseconds to wait for response headers. Defaults to 10000 (10 seconds) for OpenAI and disabled for other providers. Set to false to disable timeout.
+     * Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.
      */
     headerTimeout?: number | false
     chunkTimeout?: number

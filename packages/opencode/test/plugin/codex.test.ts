@@ -198,6 +198,7 @@ describe("plugin.codex", () => {
       },
     )
     const loaded = await hooks.auth!.loader!(async () => auth as never, {} as never)
+    expect(loaded.headerTimeout).toBe(10_000)
 
     const first = loaded.fetch!("https://api.openai.com/v1/responses")
     const second = loaded.fetch!("https://api.openai.com/v1/responses")

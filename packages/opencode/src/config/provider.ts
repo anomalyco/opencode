@@ -100,11 +100,11 @@ export const Info = Schema.Struct({
         headerTimeout: Schema.optional(
           Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
             description:
-              "Timeout in milliseconds to wait for response headers. Defaults to 10000 (10 seconds) for OpenAI and disabled for other providers. Set to false to disable timeout.",
+              "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
           }),
         ).annotate({
           description:
-            "Timeout in milliseconds to wait for response headers. Defaults to 10000 (10 seconds) for OpenAI and disabled for other providers. Set to false to disable timeout.",
+            "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
         }),
         chunkTimeout: Schema.optional(PositiveInt).annotate({
           description:
