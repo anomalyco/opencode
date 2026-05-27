@@ -35,7 +35,8 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
+import { toaster } from "@opencode-ai/ui/toast"
+import { showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { clearWorkspaceTerminals, getTerminalServerScope } from "@/context/terminal"
 import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
@@ -2384,7 +2385,7 @@ export default function Layout(props: ParentProps) {
             </Show>
           </main>
           {import.meta.env.DEV && <DebugBar />}
-          <Toast.Region />
+          <ToastRegion />
         </div>
       }
     >
@@ -2537,9 +2538,8 @@ export default function Layout(props: ParentProps) {
           </div>
           {import.meta.env.DEV && <DebugBar />}
         </div>
-        <Toast.Region />
-      </div>
-    </Show>
+      <ToastRegion />
+    </div>
   )
 }
 
