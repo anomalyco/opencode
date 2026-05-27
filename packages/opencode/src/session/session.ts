@@ -366,6 +366,12 @@ export const Event = {
       error: MessageV2.Assistant.fields.error,
     }),
   ),
+  Activated: BusEvent.define(
+    "session.activated",
+    Schema.Struct({
+      sessionID: SessionID,
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {

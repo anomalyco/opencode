@@ -80,7 +80,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
-      return yield* requireSession(ctx.params.sessionID)
+      const result = yield* requireSession(ctx.params.sessionID)
+      yield* bus.publish(Session.Event.Activated, { sessionID: ctx.params.sessionID })
+      return result
     })
 
     const children = Effect.fn("SessionHttpApi.children")(function* (ctx: { params: { sessionID: SessionID } }) {
