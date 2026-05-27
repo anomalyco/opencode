@@ -163,6 +163,13 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
   })
 
+  test("retries transport timeout errors", () => {
+    const request = wrap("Provider response headers timed out after 10000ms")
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message: "Provider response headers timed out after 10000ms",
+    })
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
