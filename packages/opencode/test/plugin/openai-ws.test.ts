@@ -273,6 +273,44 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("falls back to HTTP after websocket connection limit retries are exhausted", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            status: 400,
+            error: {
+              type: "invalid_request_error",
+              code: "websocket_connection_limit_reached",
+              message: "Responses websocket connection limit reached",
+            },
+          }),
+        )
+      })
+    })
+    let httpRequests = 0
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      connectionLimitRetries: 2,
+      httpFetch: mockFetch(async () => {
+        httpRequests += 1
+        return new Response("http")
+      }),
+    })
+
+    const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
+    const second = await fetch("https://api.openai.com/v1/responses", streamRequest())
+
+    expect(await first.text()).toBe("http")
+    expect(await second.text()).toBe("http")
+    expect(connections).toBe(3)
+    expect(httpRequests).toBe(2)
+    fetch.close()
+  })
+
   test("replays over HTTP when websocket idles before its first event", async () => {
     let connections = 0
     await using server = await createWebSocketServer((socket) => {

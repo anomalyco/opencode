@@ -1,5 +1,6 @@
 import WebSocket from "ws"
 import * as Log from "@opencode-ai/core/util/log"
+import { isRecord } from "@/util/record"
 import { OpenAIWebSocket } from "./ws"
 
 export const TITLE_HEADER = "x-opencode-title"
@@ -130,17 +131,9 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           rejectFirstEvent(error)
         },
         onRetryableTerminal: async (event) => {
-          const error = event.error
-          const connectionLimitReached =
-            event.type === "error" &&
-            error &&
-            typeof error === "object" &&
-            "code" in error &&
-            error.code === CONNECTION_LIMIT_REACHED_CODE
-          if (!connectionLimitReached) {
-            return undefined
-          }
-          if (connectionLimitAttempts >= connectionLimitRetries) return undefined
+          const error = connectionLimitError(event)
+          if (!error) return undefined
+          if (connectionLimitAttempts >= connectionLimitRetries) throw error
 
           connectionLimitAttempts++
           log.warn("websocket connection limit reached", { key, attempt: connectionLimitAttempts })
@@ -194,6 +187,11 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   }
 
   return Object.assign(websocketFetch, { close })
+}
+
+function connectionLimitError(event: Record<string, unknown>) {
+  if (event.type !== "error" || !isRecord(event.error) || event.error.code !== CONNECTION_LIMIT_REACHED_CODE) return
+  return new Error(typeof event.error.message === "string" ? event.error.message : CONNECTION_LIMIT_REACHED_CODE)
 }
 
 async function socket(
