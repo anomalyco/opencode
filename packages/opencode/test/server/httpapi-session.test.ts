@@ -438,6 +438,30 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "lists v2 sessions with archived timestamps",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "archived v2" })
+        const archived = 1779479694402
+        yield* Session.Service.use((svc) => svc.setArchived({ sessionID: session.id, time: archived }))
+
+        const response = yield* request(`/api/session?limit=10`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+
+        const failure = response.status === 200 ? "" : yield* Effect.promise(() => response.clone().text())
+        expect(response.status, failure).toBe(200)
+        const body = yield* responseJson(response)
+        const item = (body as { items: Array<{ id: string; time: { archived?: number } }> }).items.find(
+          (item) => item.id === session.id,
+        )
+        expect(item?.time.archived).toBe(archived)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public not found errors for missing sessions",
     () =>
       Effect.gen(function* () {
