@@ -365,10 +365,10 @@ const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
-const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
+const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string, id?: MessageID) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
-    id: MessageID.ascending(),
+    id: id ?? MessageID.ascending(),
     role: "user",
     sessionID,
     agent: "build",
@@ -385,11 +385,14 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: strin
   return msg
 })
 
-const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { finish?: string }) {
+const seed = Effect.fn("test.seed")(function* (
+  sessionID: SessionID,
+  opts?: { finish?: string; userID?: MessageID; assistantID?: MessageID },
+) {
   const session = yield* Session.Service
-  const msg = yield* user(sessionID, "hello")
+  const msg = yield* user(sessionID, "hello", opts?.userID)
   const assistant: MessageV2.Assistant = {
-    id: MessageID.ascending(),
+    id: opts?.assistantID ?? MessageID.ascending(),
     role: "assistant",
     parentID: msg.id,
     sessionID,
@@ -455,6 +458,24 @@ noLLMServer.instance(
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
     }),
   { config: cfg },
+)
+
+it.instance("loop exits when a client user id sorts after its assistant id", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, {
+      finish: "stop",
+      userID: MessageID.make("msg_000000000002_web"),
+      assistantID: MessageID.make("msg_000000000001_server"),
+    })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.id).toBe(seeded.assistant.id)
+    expect(yield* llm.hits).toHaveLength(0)
+  }),
 )
 
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
