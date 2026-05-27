@@ -212,6 +212,8 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const detach = () => {
+    seq++
+    pending = undefined
     void drop()
     mounted = undefined
     theme = undefined
@@ -220,7 +222,9 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const reset = () => {
     const sessionID = session
-    detach()
+    seq++
+    pending = undefined
+    void drop()
     sync = undefined
     setActiveSync(undefined)
     init = true
