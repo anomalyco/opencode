@@ -1,9 +1,7 @@
 import { Select as Kobalte } from "@kobalte/core/select"
 import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
-import { ButtonV2 } from "../v2/components/button-v2"
 import { Icon as IconV2 } from "../v2/components/icon"
-import { ButtonProps } from "./button"
 import { Icon } from "./icon"
 import "./select-v2.css"
 
@@ -24,7 +22,7 @@ export type SelectV2Props<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" |
   triggerProps?: Record<string, string | number | boolean | undefined>
 }
 
-export function SelectV2<T>(props: SelectV2Props<T> & Omit<ButtonProps, "children" | "variant" | "size">) {
+export function SelectV2<T>(props: SelectV2Props<T> & { disabled?: boolean }) {
   const [local, others] = splitProps(props, [
     "class",
     "classList",
@@ -134,11 +132,10 @@ export function SelectV2<T>(props: SelectV2Props<T> & Omit<ButtonProps, "childre
     >
       <Kobalte.Trigger
         {...local.triggerProps}
+        type="button"
         disabled={props.disabled}
         data-slot="select-select-trigger"
-        as={ButtonV2}
-        size="small"
-        variant="ghost"
+        as="button"
         style={local.triggerStyle}
         classList={{
           ...local.classList,
