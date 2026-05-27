@@ -1,19 +1,33 @@
 #!/bin/sh
 # Container entrypoint for the collab fork.
 #
-# On Fargate we can't bind-mount ~/.claude/.credentials.json from a host,
-# so we ship the credential JSON via Secrets Manager and write it to disk on
-# every container start.  The opencode-claude-auth plugin then reads the file
-# at runtime and treats it as if it were the local Mac credential file.
+# Claude credentials lifecycle:
 #
-# Idempotent: no-op when CLAUDE_CREDENTIALS_JSON is unset (preserves local
-# docker-compose flow that bind-mounts the file instead).
+#   Local dev (docker-compose)
+#       docker-compose.yml bind-mounts ~/.claude/.credentials.json:ro from
+#       the host into /home/opencode/.claude/.credentials.json.  No env var
+#       is set; this script's CLAUDE_CREDENTIALS_JSON branch is skipped.
 #
-# Operator rotation: when Claude credentials rotate (every few weeks),
-# re-dump on a developer Mac with
-#   security find-generic-password -s "Claude Code-credentials" -w
-# and update the Secrets Manager entry collab/<stage>/claude_credentials.
-# The next ECS task replacement picks up the new value.
+#   ECS Fargate
+#       Credentials live on EFS at /home/opencode/.local/share/opencode/
+#       claude-credentials.json (the SQLite volume).  Two seeding paths:
+#         a) First-boot seed from Secrets Manager via
+#            $CLAUDE_CREDENTIALS_JSON.  Used until the file exists on EFS.
+#         b) Any subsequent boot.  The EFS file already has the freshest
+#            tokens (either the plugin refreshed them or an operator
+#            uploaded via the UI), so we don't overwrite it.
+#
+#       The canonical path ~/.claude/.credentials.json is a SYMLINK to the
+#       EFS file, so plugin token-refresh writes land on EFS and survive
+#       container replacement.  Without the symlink, every ECS task would
+#       start with the (potentially stale) Secrets Manager value and lose
+#       any in-process refresh on restart.
+#
+# Operator credential rotation:
+#   1. Use the in-app UI (any unleashlive org member can paste their Mac's
+#      credentials JSON at /collab/new).  Atomic-writes to EFS.
+#   2. OR update the Secrets Manager entry + delete the EFS file (the next
+#      task boot re-seeds from Secrets Manager).
 
 set -eu
 
@@ -23,11 +37,28 @@ set -eu
 # entrypoint logs would show a chown error and the credential write would
 # 500 the auth plugin until ECS replaces the task.
 HOME_DIR="${HOME:-/home/opencode}"
+CANONICAL="$HOME_DIR/.claude/.credentials.json"
+EFS_CREDS="$HOME_DIR/.local/share/opencode/claude-credentials.json"
 
+mkdir -p "$HOME_DIR/.claude" "$(dirname "$EFS_CREDS")"
+
+# ECS path: env var present.  Seed EFS on first boot if empty, then symlink.
+# Local path: env var unset.  Either the bind-mount provides credentials at
+# CANONICAL or the user has no Claude auth (Anthropic API key path).
 if [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
-  mkdir -p "$HOME_DIR/.claude"
-  printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$HOME_DIR/.claude/.credentials.json"
-  chmod 0600 "$HOME_DIR/.claude/.credentials.json"
+  if [ ! -s "$EFS_CREDS" ]; then
+    printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$EFS_CREDS"
+    chmod 0600 "$EFS_CREDS"
+    echo "[entrypoint] seeded $EFS_CREDS from CLAUDE_CREDENTIALS_JSON ($(wc -c < "$EFS_CREDS") bytes)"
+  else
+    echo "[entrypoint] $EFS_CREDS already present ($(wc -c < "$EFS_CREDS") bytes) — keeping existing"
+  fi
+  # Always (re)link CANONICAL → EFS so plugin refresh writes hit the
+  # persistent file.  -L: remove if it's any kind of symlink already;
+  # -f also handles the case where it was a regular file from a prior
+  # entrypoint version.
+  rm -f "$CANONICAL"
+  ln -s "$EFS_CREDS" "$CANONICAL"
 fi
 
 # Git "dubious ownership" workaround.  EFS access points (terraform/opencode-

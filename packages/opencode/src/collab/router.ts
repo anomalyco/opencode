@@ -20,6 +20,8 @@
  *   PUT  /collab/session/:id/participant/:ghId/role → change role
  *   GET  /collab/session/:id/events      → SSE stream of CollabEvents
  *   POST /collab/session/:id/reinit      → Driver retries failed workspace init
+ *   GET  /collab/claude-creds/status     → does the container have Claude auth?
+ *   POST /collab/claude-creds            → upload a fresh Claude credentials JSON
  */
 
 import { randomBytes } from "crypto"
@@ -54,6 +56,7 @@ import { nativeFetch } from "./native-api"
 import { revokeInternalToken } from "./internal-token"
 import { encryptToken, decryptToken, isEncrypted } from "./crypto"
 import { checkRateLimit, callerIp, rateLimitedResponse } from "./rate-limit"
+import { getCredentialsStatus, writeCredentials } from "./claude-credentials"
 
 // Body cap shared by /prompt and /suggest (ADR-0008).  32 KB is well above
 // any sane prompt — guards the LLM token-spend column against accidental
@@ -605,6 +608,46 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
     if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
     const c = cfg()
     return listOrgRepos({ orgName: c.orgName, userToken: sess.githubAccessToken }).then((repos) => json(repos))
+  }
+
+  // GET /collab/claude-creds/status — does the container have a usable Claude
+  // credentials file?  Used by the create-session UI to show a banner +
+  // optionally prompt the Driver to upload their own.  Returns non-sensitive
+  // shape only (presence, mtime, account email if available) — never tokens.
+  if (req.method === "GET" && path === "/collab/claude-creds/status") {
+    const sess = getSession(req)
+    if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
+    return new Response(JSON.stringify(getCredentialsStatus()), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    })
+  }
+
+  // POST /collab/claude-creds — overwrite the container-wide Claude credentials.
+  // Any authenticated org member can upload (the OAuth + org-membership gate
+  // is the trust boundary).  Whoever uploads last wins, container-wide.
+  // Rate-limited per ADR-0008 so a stuck client can't flood the endpoint.
+  if (req.method === "POST" && path === "/collab/claude-creds") {
+    const sess = getSession(req)
+    if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
+    const rl = checkRateLimit(`claude-creds:${sess.githubId}`, 5, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+    const body = (await req.json().catch(() => null)) as { credentialsJson?: string } | null
+    if (!body?.credentialsJson || typeof body.credentialsJson !== "string") {
+      return json({ error: "Body must be { credentialsJson: string }." }, 400)
+    }
+    try {
+      const result = writeCredentials(body.credentialsJson)
+      console.log("[collab.claude-creds] uploaded by", sess.githubLogin, {
+        bytes: result.bytes,
+        email: result.email,
+      })
+      return json({ ok: true, ...getCredentialsStatus() }, 200)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn("[collab.claude-creds] upload rejected for", sess.githubLogin, msg)
+      return json({ error: msg }, 400)
+    }
   }
 
   // GET /collab/me — current authenticated user info
