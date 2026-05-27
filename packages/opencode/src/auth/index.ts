@@ -72,9 +72,11 @@ export const layer = Layer.effect(
 
       const data = yield* fsys.readJson(file).pipe(
         Effect.tapError((err) =>
-          Effect.logWarning(
-            `failed to read auth file at ${file}, treating as empty; run 'opencode auth login' to recover (${String(err)})`,
-          ),
+          err._tag === "FileSystemError"
+            ? Effect.logWarning(
+                `failed to parse auth file at ${file}, treating as empty; run 'opencode auth login' to recover (${String(err.cause)})`,
+              )
+            : Effect.void,
         ),
         Effect.orElseSucceed(() => ({}) as Record<string, unknown>),
       )
