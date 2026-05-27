@@ -1,4 +1,4 @@
-import type { ToolCallContent, ToolCallLocation, ToolKind } from "@agentclientprotocol/sdk"
+import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 
 export type ToolInput = Record<string, unknown>
 
@@ -14,6 +14,19 @@ export type CompletedToolState = {
   readonly output: string
   readonly metadata?: unknown
   readonly attachments?: ReadonlyArray<ToolAttachment>
+}
+
+export type RunningToolState = {
+  readonly status: "running"
+  readonly input: ToolInput
+  readonly title?: string
+}
+
+export type ErrorToolState = {
+  readonly status: "error"
+  readonly input: ToolInput
+  readonly error: string
+  readonly metadata?: unknown
 }
 
 export type ImageAttachment = {
@@ -100,6 +113,104 @@ export function completedToolContent(toolName: string, state: CompletedToolState
   return content
 }
 
+export function pendingToolCall(input: { readonly toolCallId: string; readonly toolName: string }): ToolCall {
+  return {
+    toolCallId: input.toolCallId,
+    title: input.toolName,
+    kind: toToolKind(input.toolName),
+    status: "pending",
+    locations: [],
+    rawInput: {},
+  }
+}
+
+export function runningToolUpdate(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly state: RunningToolState
+  readonly output?: string
+}): ToolCallUpdate {
+  const content = input.output
+    ? [
+        {
+          type: "content" as const,
+          content: {
+            type: "text" as const,
+            text: input.output,
+          },
+        },
+      ]
+    : undefined
+
+  return {
+    toolCallId: input.toolCallId,
+    status: "in_progress",
+    kind: toToolKind(input.toolName),
+    title: input.state.title ?? input.toolName,
+    locations: toLocations(input.toolName, input.state.input),
+    rawInput: input.state.input,
+    ...(content ? { content } : {}),
+  }
+}
+
+export function duplicateRunningToolUpdate(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly state: RunningToolState
+}): ToolCallUpdate {
+  return {
+    toolCallId: input.toolCallId,
+    status: "in_progress",
+    kind: toToolKind(input.toolName),
+    title: input.state.title ?? input.toolName,
+    locations: toLocations(input.toolName, input.state.input),
+    rawInput: input.state.input,
+  }
+}
+
+export function completedToolUpdate(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly state: CompletedToolState & { readonly title: string }
+}): ToolCallUpdate {
+  return {
+    toolCallId: input.toolCallId,
+    status: "completed",
+    kind: toToolKind(input.toolName),
+    title: input.state.title,
+    content: completedToolContent(input.toolName, input.state),
+    rawInput: input.state.input,
+    rawOutput: completedToolRawOutput(input.state),
+  }
+}
+
+export function errorToolUpdate(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly state: ErrorToolState
+}): ToolCallUpdate {
+  return {
+    toolCallId: input.toolCallId,
+    status: "failed",
+    kind: toToolKind(input.toolName),
+    title: input.toolName,
+    rawInput: input.state.input,
+    content: [
+      {
+        type: "content",
+        content: {
+          type: "text",
+          text: input.state.error,
+        },
+      },
+    ],
+    rawOutput: {
+      error: input.state.error,
+      metadata: input.state.metadata,
+    },
+  }
+}
+
 export function completedToolRawOutput(state: CompletedToolState) {
   return {
     output: state.output,
@@ -138,6 +249,11 @@ export const extractLocations = toLocations
 export const buildCompletedToolContent = completedToolContent
 export const buildCompletedRawOutput = completedToolRawOutput
 export const extractShellOutputSnapshot = shellOutputSnapshot
+export const buildPendingToolCall = pendingToolCall
+export const buildRunningToolUpdate = runningToolUpdate
+export const buildDuplicateRunningToolUpdate = duplicateRunningToolUpdate
+export const buildCompletedToolUpdate = completedToolUpdate
+export const buildErrorToolUpdate = errorToolUpdate
 
 function locationFrom(value: unknown): ToolCallLocation[] {
   const path = stringValue(value)
