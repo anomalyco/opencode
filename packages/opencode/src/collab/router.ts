@@ -20,6 +20,8 @@
  *   PUT  /collab/session/:id/participant/:ghId/role → change role
  *   GET  /collab/session/:id/events      → SSE stream of CollabEvents
  *   POST /collab/session/:id/reinit      → Driver retries failed workspace init
+ *   GET  /collab/claude-creds/status     → does the container have Claude auth?
+ *   POST /collab/claude-creds            → upload a fresh Claude credentials JSON
  */
 
 import { randomBytes } from "crypto"
@@ -54,6 +56,7 @@ import { nativeFetch } from "./native-api"
 import { revokeInternalToken } from "./internal-token"
 import { encryptToken, decryptToken, isEncrypted } from "./crypto"
 import { checkRateLimit, callerIp, rateLimitedResponse } from "./rate-limit"
+import { getCredentialsStatus, writeCredentials } from "./claude-credentials"
 
 // Body cap shared by /prompt and /suggest (ADR-0008).  32 KB is well above
 // any sane prompt — guards the LLM token-spend column against accidental
@@ -605,6 +608,46 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
     if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
     const c = cfg()
     return listOrgRepos({ orgName: c.orgName, userToken: sess.githubAccessToken }).then((repos) => json(repos))
+  }
+
+  // GET /collab/claude-creds/status — does the container have a usable Claude
+  // credentials file?  Used by the create-session UI to show a banner +
+  // optionally prompt the Driver to upload their own.  Returns non-sensitive
+  // shape only (presence, mtime, account email if available) — never tokens.
+  if (req.method === "GET" && path === "/collab/claude-creds/status") {
+    const sess = getSession(req)
+    if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
+    return new Response(JSON.stringify(getCredentialsStatus()), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    })
+  }
+
+  // POST /collab/claude-creds — overwrite the container-wide Claude credentials.
+  // Any authenticated org member can upload (the OAuth + org-membership gate
+  // is the trust boundary).  Whoever uploads last wins, container-wide.
+  // Rate-limited per ADR-0008 so a stuck client can't flood the endpoint.
+  if (req.method === "POST" && path === "/collab/claude-creds") {
+    const sess = getSession(req)
+    if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
+    const rl = checkRateLimit(`claude-creds:${sess.githubId}`, 5, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+    const body = (await req.json().catch(() => null)) as { credentialsJson?: string } | null
+    if (!body?.credentialsJson || typeof body.credentialsJson !== "string") {
+      return json({ error: "Body must be { credentialsJson: string }." }, 400)
+    }
+    try {
+      const result = writeCredentials(body.credentialsJson)
+      console.log("[collab.claude-creds] uploaded by", sess.githubLogin, {
+        bytes: result.bytes,
+        email: result.email,
+      })
+      return json({ ok: true, ...getCredentialsStatus() }, 200)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn("[collab.claude-creds] upload rejected for", sess.githubLogin, msg)
+      return json({ error: msg }, 400)
+    }
   }
 
   // GET /collab/me — current authenticated user info
@@ -1534,6 +1577,15 @@ function handleSse(
     }
   }
 
+  // Heartbeat every 20s.  SSE comment lines (": ...\n\n") are ignored by
+  // EventSource but they reset any idle-timeout counter on the path —
+  // critically the ALB's 60s default that would otherwise tear down the
+  // stream during a slow (e.g. 2-minute) repo clone.  Without this,
+  // workspace_ready / native_session_linked events fired DURING the
+  // reconnect gap go to zero listeners and the SPA's iframe gate stays
+  // stuck in "pending" forever.
+  let heartbeat: ReturnType<typeof setInterval> | null = null
+
   const stream = new ReadableStream({
     start(controller) {
       controllerRef = controller
@@ -1546,15 +1598,54 @@ function handleSse(
         }
       }
       pending.length = 0
-      // Send current queue state immediately.
+      // Connect-time state snapshot.  Without this the SPA's iframe gate
+      // would have to wait for a fresh broadcast OR a fetchSession() round-
+      // trip to learn the current init_status.  For slow clones (or any
+      // SSE reconnect), the broadcast may have already fired and the
+      // fetchSession path can race.  Re-emitting the current snapshot
+      // here makes the SSE channel self-sufficient: whatever the SPA's
+      // last-known state was, it gets fully resynced on (re)connect.
       const current = Session.getCollabSession(collabSessionId)
       if (current) {
         ensureQueueRegistered(collabSessionId)
         send({ type: "collab:queue_update", queue: collabDb.getPendingPool(collabSessionId) })
+        // Replay workspace lifecycle so the iframe gate evaluates correctly
+        // even if the original broadcasts were missed during reconnect.
+        if (current.initStatus === "ready") {
+          send({ type: "collab:workspace_ready", collabSessionId })
+        } else if (current.initStatus === "failed") {
+          send({
+            type: "collab:workspace_failed",
+            collabSessionId,
+            error: current.initError ?? "Workspace init failed",
+          })
+        }
+        // Replay the native-session link too — the SPA's nativeSessionDirectory
+        // + sessionId signals only update via this event.  Without the replay,
+        // a missed native_session_linked broadcast would leave the iframe
+        // permanently in PreparingWorkspacePanel even after init completed.
+        if (current.sessionId) {
+          send({
+            type: "collab:native_session_linked",
+            sessionId: current.sessionId,
+            directory: nativeSessionDirectory(collabSessionId, current.repos),
+          })
+        }
       }
       unregister = registerSse(collabSessionId, send)
+
+      heartbeat = setInterval(() => {
+        if (!controllerRef) return
+        try {
+          controllerRef.enqueue(encoder.encode(`: keepalive\n\n`))
+        } catch {
+          // Stream closed under us — clean up; cancel() will run shortly.
+          if (heartbeat) clearInterval(heartbeat)
+        }
+      }, 20_000)
     },
     cancel() {
+      if (heartbeat) clearInterval(heartbeat)
       unregister?.()
       Participant.setOnline(collabSessionId, sess.githubId, false)
       // Clear any lingering "is typing…" indicator from this user — if they

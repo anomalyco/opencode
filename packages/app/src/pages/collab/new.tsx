@@ -306,6 +306,12 @@ export default function NewCollabSession() {
               Signing in…
             </div>
           }>
+            {/* Container-wide Claude credentials banner — shows whether the
+                server has a usable Claude auth file.  Any unleashlive org
+                member can paste a fresh credentials JSON to overwrite it;
+                whoever uploads last wins.  Server-side rate-limited 5/hr. */}
+            <ClaudeCredentialsBanner />
+
             <form onSubmit={handleSubmit} class="space-y-6">
               {/* Session name */}
               <div>
@@ -455,4 +461,229 @@ export default function NewCollabSession() {
       </div>
     </div>
   )
+}
+
+// ── Claude credentials banner ─────────────────────────────────────────────────
+//
+// Surfaces whether the server currently has a usable Claude auth file.  Any
+// authenticated org member can paste a fresh credentials JSON (overwrites
+// container-wide).  Why is this here rather than baked into session creation:
+// the opencode-claude-auth plugin is process-wide — there's exactly one
+// active Claude auth file per container, shared by every collab session.
+// Per-session credentials would require spawning one opencode process per
+// session (large architectural change); the per-container model is the
+// realistic shape.
+//
+// Operator runbook for getting credentials JSON on a Mac:
+//   security find-generic-password -s "Claude Code-credentials" -w
+//
+// The clipboard output of that command is exactly what goes in the textarea.
+
+interface CredentialsStatus {
+  present: boolean
+  email?: string
+  mtime?: number
+  bytes?: number
+}
+
+function ClaudeCredentialsBanner() {
+  const [status, setStatus] = createSignal<CredentialsStatus | null>(null)
+  const [showUpload, setShowUpload] = createSignal(false)
+  const [json, setJson] = createSignal("")
+  const [uploading, setUploading] = createSignal(false)
+  const [uploadErr, setUploadErr] = createSignal<string | null>(null)
+
+  async function refresh() {
+    try {
+      const res = await fetch("/collab/claude-creds/status", { cache: "no-store" })
+      if (!res.ok) {
+        setStatus({ present: false })
+        return
+      }
+      setStatus((await res.json()) as CredentialsStatus)
+    } catch {
+      setStatus({ present: false })
+    }
+  }
+
+  onMount(() => {
+    void refresh()
+  })
+
+  async function upload(e: Event) {
+    e.preventDefault()
+    if (uploading() || !json().trim()) return
+    setUploading(true)
+    setUploadErr(null)
+    try {
+      const res = await fetch("/collab/claude-creds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credentialsJson: json() }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) {
+        setUploadErr(body.error ?? `Server returned ${res.status}`)
+      } else {
+        setJson("")
+        setShowUpload(false)
+        await refresh()
+      }
+    } catch (err) {
+      setUploadErr(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div class="mb-6">
+      <Show
+        when={status() !== null}
+        fallback={
+          <div class="text-xs text-zinc-600 px-3 py-2">Checking Claude auth…</div>
+        }
+      >
+        <Show
+          when={status()!.present}
+          fallback={
+            // No credentials present — gentle warning + paste UI.
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <div class="flex items-start gap-2">
+                <svg class="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-amber-200">No Claude credentials on the server</p>
+                  <p class="text-xs text-amber-300/80 mt-0.5">
+                    Anthropic models won't be available until someone uploads a credentials file.  You can paste yours now, or skip and use a different model (the model picker shows free fallbacks).
+                  </p>
+                  <Show when={!showUpload()}>
+                    <div class="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowUpload(true)}
+                        class="text-xs px-3 py-1.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-100 hover:bg-amber-500/30 transition-colors"
+                      >
+                        Paste credentials
+                      </button>
+                      <span class="text-[11px] text-amber-300/60">or just create a session and skip Anthropic</span>
+                    </div>
+                  </Show>
+                </div>
+              </div>
+
+              <Show when={showUpload()}>
+                <form onSubmit={upload} class="mt-3 space-y-2">
+                  <details class="text-[11px] text-amber-300/80">
+                    <summary class="cursor-pointer hover:text-amber-200">How to get the JSON (Mac)</summary>
+                    <pre class="mt-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-zinc-300 overflow-x-auto">
+{`security find-generic-password -s "Claude Code-credentials" -w`}
+                    </pre>
+                    <p class="mt-1">Copy the entire output and paste below.  It's a small JSON object with <code>access_token</code> and <code>refresh_token</code> fields.  Stored on the server's EFS at <code>~/.local/share/opencode/claude-credentials.json</code>; visible only to the running container.</p>
+                  </details>
+                  <textarea
+                    value={json()}
+                    onInput={(e) => setJson(e.currentTarget.value)}
+                    placeholder='{"access_token":"...","refresh_token":"...","email":"..."}'
+                    rows={5}
+                    class="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-y"
+                    spellcheck={false}
+                    autocomplete="off"
+                  />
+                  <Show when={uploadErr()}>
+                    <p class="text-[11px] text-red-400">{uploadErr()}</p>
+                  </Show>
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={uploading() || !json().trim()}
+                      class="text-xs px-3 py-1.5 rounded-md bg-amber-500/30 border border-amber-400/50 text-amber-50 hover:bg-amber-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {uploading() ? "Uploading…" : "Use these credentials"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowUpload(false); setJson(""); setUploadErr(null) }}
+                      disabled={uploading()}
+                      class="text-xs px-3 py-1.5 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-50"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </form>
+              </Show>
+            </div>
+          }
+        >
+          {/* Credentials present — quiet green confirmation. */}
+          <div class="flex items-center gap-2 text-xs text-emerald-300/90 bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-3 py-2">
+            <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="flex-1">
+              Claude credentials available
+              <Show when={status()!.email}>
+                <span class="text-emerald-400/70"> · {status()!.email}</span>
+              </Show>
+              <Show when={status()!.mtime}>
+                <span class="text-emerald-400/60"> · refreshed {relativeTimeShort(status()!.mtime!)}</span>
+              </Show>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowUpload((v) => !v)}
+              class="text-[11px] text-emerald-400/70 hover:text-emerald-200"
+            >
+              {showUpload() ? "Cancel" : "Replace"}
+            </button>
+          </div>
+
+          <Show when={showUpload()}>
+            {/* Reuse the paste form when overwriting an existing file. */}
+            <form onSubmit={upload} class="mt-2 space-y-2">
+              <textarea
+                value={json()}
+                onInput={(e) => setJson(e.currentTarget.value)}
+                placeholder='{"access_token":"...","refresh_token":"...","email":"..."}'
+                rows={5}
+                class="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-y"
+                spellcheck={false}
+                autocomplete="off"
+              />
+              <Show when={uploadErr()}>
+                <p class="text-[11px] text-red-400">{uploadErr()}</p>
+              </Show>
+              <div class="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={uploading() || !json().trim()}
+                  class="text-xs px-3 py-1.5 rounded-md bg-blue-600/30 border border-blue-500/40 text-blue-100 hover:bg-blue-600/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading() ? "Uploading…" : "Overwrite with these"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowUpload(false); setJson(""); setUploadErr(null) }}
+                  disabled={uploading()}
+                  class="text-xs px-3 py-1.5 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </Show>
+        </Show>
+      </Show>
+    </div>
+  )
+}
+
+/** Cheap relative-time formatter — "5m", "2h", "Jun 14". */
+function relativeTimeShort(mtimeMs: number): string {
+  const diff = (Date.now() - mtimeMs) / 1000
+  if (diff < 60) return "just now"
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return new Date(mtimeMs).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
