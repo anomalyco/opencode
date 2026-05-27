@@ -3,13 +3,11 @@ import { Effect, Context, Layer, Scope } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
+import { ConfigReference } from "@/config/reference"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Git } from "@/git"
-import { parseRepositoryReference, repositoryCachePath, type Reference as RepositoryReference } from "@/util/repository"
+import { parseRepositoryReference, repositoryCachePath, type RemoteReference } from "@/util/repository"
 import { RepositoryCache } from "./repository-cache"
-
-type ReferenceEntry = NonNullable<Config.Info["reference"]>[string]
 
 export type Resolved =
   | {
@@ -21,22 +19,24 @@ export type Resolved =
       name: string
       kind: "git"
       repository: string
-      reference: RepositoryReference
+      reference: RemoteReference
       path: string
       branch?: string
     }
   | {
       name: string
       kind: "invalid"
-      repository: string
+      repository?: string
       message: string
     }
 
 type State = {
   references: Resolved[]
   materializeAll: Effect.Effect<void>
-  materializeByPath: { path: string; run: Effect.Effect<void> }[]
+  materializeByPath: Materializer[]
 }
+
+type Materializer = { path: string; run: Effect.Effect<void> }
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
@@ -90,31 +90,75 @@ function containsReferencePath(referencePath: string, target: string) {
   return AppFileSystem.contains(normalizedTarget(referencePath) ?? referencePath, target)
 }
 
+function uniqueGitReferences(references: Resolved[]) {
+  const seenPath = new Set<string>()
+  return references.filter((reference): reference is Extract<Resolved, { kind: "git" }> => {
+    if (reference.kind !== "git") return false
+    if (seenPath.has(reference.path)) return false
+    seenPath.add(reference.path)
+    return true
+  })
+}
+
+function materializeReference(cache: RepositoryCache.Interface, reference: Extract<Resolved, { kind: "git" }>) {
+  return cache.ensure({ reference: reference.reference, branch: reference.branch, refresh: true }).pipe(
+    Effect.asVoid,
+    Effect.catchCause((cause) =>
+      Effect.logWarning("failed to materialize reference repository").pipe(
+        Effect.annotateLogs({ name: reference.name, cause }),
+      ),
+    ),
+  )
+}
+
+const materializers = Effect.fn("Reference.materializers")(function* (
+  cache: RepositoryCache.Interface,
+  references: Resolved[],
+) {
+  return yield* Effect.forEach(
+    uniqueGitReferences(references),
+    Effect.fnUntraced(function* (reference) {
+      return { path: reference.path, run: yield* Effect.cached(materializeReference(cache, reference)) }
+    }),
+    { concurrency: "unbounded" },
+  )
+})
+
+function materializeAll(input: { flags: RuntimeFlags.Info; materializers: Materializer[] }) {
+  if (!input.flags.experimentalScout) return Effect.void
+  return Effect.forEach(
+    input.materializers,
+    Effect.fnUntraced(function* (item) {
+      yield* item.run
+    }),
+    { concurrency: 4, discard: true },
+  )
+}
+
+function materializeByPath(materializers: Materializer[], target: string) {
+  return materializers.find((item) => containsReferencePath(item.path, target))?.run ?? Effect.void
+}
+
+function containsGitReferencePath(references: Resolved[], target: string) {
+  return references.some((reference) => reference.kind === "git" && containsReferencePath(reference.path, target))
+}
+
 export function resolve(input: {
   name: string
-  reference: ReferenceEntry
+  reference: ConfigReference.NormalizedEntry
   directory: string
   worktree: string
 }): Resolved {
-  if (typeof input.reference === "string") {
-    if (input.reference.startsWith(".") || input.reference.startsWith("/") || input.reference.startsWith("~")) {
-      return { name: input.name, kind: "local", path: referencePath({ ...input, value: input.reference }) }
-    }
-    return resolveGit({ name: input.name, repository: input.reference })
+  if (input.reference.kind === "invalid") {
+    return { name: input.name, kind: "invalid", message: input.reference.message }
   }
-
-  if ("path" in input.reference) {
+  if (input.reference.kind === "local") {
     return { name: input.name, kind: "local", path: referencePath({ ...input, value: input.reference.path }) }
   }
-
   return resolveGit({ name: input.name, repository: input.reference.repository, branch: input.reference.branch })
 }
 
-export function resolveAll(input: {
-  references: NonNullable<Config.Info["reference"]>
-  directory: string
-  worktree: string
-}) {
+export function resolveAll(input: { references: ConfigReference.NormalizedInfo; directory: string; worktree: string }) {
   const seen = new Map<string, { name: string; branch?: string }>()
   return Object.entries(input.references).map(([name, reference]) => {
     const resolved = resolve({ name, reference, directory: input.directory, worktree: input.worktree })
@@ -140,8 +184,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
-    const fs = yield* AppFileSystem.Service
-    const git = yield* Git.Service
+    const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
 
@@ -149,53 +192,14 @@ export const layer = Layer.effect(
       Effect.fn("Reference.state")(function* (ctx) {
         const cfg = yield* config.get()
         const references = resolveAll({
-          references: cfg.reference ?? {},
+          references: ConfigReference.normalize(cfg.reference ?? {}),
           directory: ctx.directory,
           worktree: ctx.worktree,
         })
-        const seenPath = new Set<string>()
-        const gitReferences = references.filter((reference): reference is Extract<Resolved, { kind: "git" }> => {
-          if (reference.kind !== "git") return false
-          if (seenPath.has(reference.path)) return false
-          seenPath.add(reference.path)
-          return true
-        })
-        const materializeByPath = yield* Effect.forEach(
-          gitReferences,
-          Effect.fnUntraced(function* (reference) {
-            const run = yield* Effect.cached(
-              RepositoryCache.ensure(
-                { reference: reference.reference, branch: reference.branch, refresh: true },
-                { fs, git },
-              ).pipe(
-                Effect.asVoid,
-                Effect.catchCause((cause) =>
-                  Effect.logWarning("failed to materialize reference repository").pipe(
-                    Effect.annotateLogs({ name: reference.name, cause }),
-                  ),
-                ),
-              ),
-            )
-            return { path: reference.path, run }
-          }),
-          { concurrency: "unbounded" },
-        )
+        const materializeByPath = yield* materializers(cache, references)
+        const materializeAllCached = yield* Effect.cached(materializeAll({ flags, materializers: materializeByPath }))
 
-        const materializeAll = yield* Effect.cached(
-          flags.experimentalScout
-            ? Effect.gen(function* () {
-                yield* Effect.forEach(
-                  materializeByPath,
-                  Effect.fnUntraced(function* (item) {
-                    yield* item.run
-                  }),
-                  { concurrency: 4, discard: true },
-                )
-              })
-            : Effect.void,
-        )
-
-        return { references, materializeAll, materializeByPath }
+        return { references, materializeAll: materializeAllCached, materializeByPath }
       }),
     )
 
@@ -214,18 +218,13 @@ export const layer = Layer.effect(
         if (!flags.experimentalScout) return
         const full = normalizedTarget(target)
         if (!full) return yield* InstanceState.useEffect(state, (s) => s.materializeAll)
-        return yield* InstanceState.useEffect(
-          state,
-          (s) => s.materializeByPath.find((item) => containsReferencePath(item.path, full))?.run ?? Effect.void,
-        )
+        return yield* InstanceState.useEffect(state, (s) => materializeByPath(s.materializeByPath, full))
       }),
       contains: Effect.fn("Reference.contains")(function* (target?: string) {
         if (!flags.experimentalScout) return false
         const full = normalizedTarget(target)
         if (!full) return false
-        return yield* InstanceState.use(state, (s) =>
-          s.references.some((reference) => reference.kind === "git" && containsReferencePath(reference.path, full)),
-        )
+        return yield* InstanceState.use(state, (s) => containsGitReferencePath(s.references, full))
       }),
     })
   }),
@@ -233,8 +232,7 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Git.defaultLayer),
+  Layer.provide(RepositoryCache.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 

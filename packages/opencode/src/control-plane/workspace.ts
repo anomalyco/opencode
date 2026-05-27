@@ -1,4 +1,5 @@
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@/storage/db"
 import { asc } from "drizzle-orm"
@@ -26,11 +27,11 @@ import { SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
 import { errorData } from "@/util/error"
 import { waitEvent } from "./util"
-import { EffectBridge } from "@/effect/bridge"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { WorkspaceRef } from "@/effect/instance-ref"
 import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
 
 export const Info = Schema.Struct({
   ...WorkspaceInfoSchema.fields,
@@ -160,11 +161,14 @@ export interface Interface {
     workspaceID: WorkspaceID,
     state: Record<string, number>,
     signal?: AbortSignal,
+    timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
   readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
@@ -195,50 +199,6 @@ export const layer = Layer.effect(
         },
       })
     }
-
-    const adapterContext = Effect.gen(function* () {
-      return {
-        instance: yield* InstanceRef,
-        workspaceID: yield* WorkspaceRef,
-      }
-    })
-
-    const adapterTarget = (workspace: Info) =>
-      Effect.gen(function* () {
-        const adapter = getAdapter(workspace.projectID, workspace.type)
-        const context = yield* adapterContext
-        return yield* EffectBridge.fromPromise(() => adapter.target(workspace, context))
-      })
-
-    const adapterConfigure = (adapter: ReturnType<typeof getAdapter>, info: WorkspaceInfo) =>
-      Effect.gen(function* () {
-        const context = yield* adapterContext
-        return yield* EffectBridge.fromPromise(() => adapter.configure(info, context))
-      })
-
-    const adapterCreate = (
-      adapter: ReturnType<typeof getAdapter>,
-      info: WorkspaceInfo,
-      env: Record<string, string | undefined>,
-      from?: WorkspaceInfo,
-    ) =>
-      Effect.gen(function* () {
-        const context = yield* adapterContext
-        return yield* EffectBridge.fromPromise(() => adapter.create(info, env, from, context))
-      })
-
-    const adapterList = (adapter: ReturnType<typeof getAdapter>) =>
-      Effect.gen(function* () {
-        const context = yield* adapterContext
-        return yield* EffectBridge.fromPromise(() => Promise.resolve(adapter.list?.(context) ?? []))
-      })
-
-    const adapterRemove = (info: Info, type: string) =>
-      Effect.gen(function* () {
-        const adapter = getAdapter(info.projectID, type)
-        const context = yield* adapterContext
-        return yield* EffectBridge.fromPromise(() => adapter.remove(info, context))
-      })
 
     const connectSSE = Effect.fn("Workspace.connectSSE")(function* (
       url: URL | string,
@@ -325,7 +285,7 @@ export const layer = Layer.effect(
         const workspace = yield* get(input.workspaceID)
         if (!workspace) return input.fallback
 
-        const target = yield* adapterTarget(workspace)
+        const target = yield* WorkspaceAdapterRuntime.target(workspace)
 
         if (target.type === "local") {
           const store = yield* InstanceStore.Service
@@ -438,7 +398,7 @@ export const layer = Layer.effect(
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
-      const target = yield* adapterTarget(space)
+      const target = yield* WorkspaceAdapterRuntime.target(space)
 
       if (target.type === "local") return
 
@@ -521,7 +481,7 @@ export const layer = Layer.effect(
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
       if (!flags.experimentalWorkspaces) return
 
-      const target = yield* adapterTarget(space).pipe(
+      const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catch((error) =>
           Effect.sync(() => {
             setStatus(space.id, "error")
@@ -572,7 +532,7 @@ export const layer = Layer.effect(
     const create = Effect.fn("Workspace.create")(function* (input: CreateInput) {
       const id = WorkspaceID.ascending(input.id)
       const adapter = getAdapter(input.projectID, input.type)
-      const config = yield* adapterConfigure(adapter, {
+      const config = yield* WorkspaceAdapterRuntime.configure(adapter, {
         ...input,
         id,
         name: Slug.create(),
@@ -615,7 +575,7 @@ export const layer = Layer.effect(
         OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
       }
 
-      yield* adapterCreate(adapter, config, env)
+      yield* WorkspaceAdapterRuntime.create(adapter, config, env)
       yield* Effect.all(
         [
           waitEvent({
@@ -654,7 +614,7 @@ export const layer = Layer.effect(
         if (current?.workspaceID) {
           const previous = yield* get(current.workspaceID)
           if (previous) {
-            const target = yield* adapterTarget(previous)
+            const target = yield* WorkspaceAdapterRuntime.target(previous)
 
             if (target.type === "remote") {
               yield* syncHistory(previous, target.url, target.headers).pipe(
@@ -732,7 +692,7 @@ export const layer = Layer.effect(
             workspaceID,
           })
 
-        const target = yield* adapterTarget(space)
+        const target = yield* WorkspaceAdapterRuntime.target(space)
 
         if (target.type === "local") {
           yield* sync.run(Session.Event.Updated, {
@@ -885,16 +845,14 @@ export const layer = Layer.effect(
       const discovered = yield* Effect.forEach(
         registeredAdapters(project.id),
         ([type, adapter]) =>
-          adapter.list
-            ? adapterList(adapter).pipe(
-                Effect.catchCause((error) =>
-                  Effect.sync(() => {
-                    log.warn("workspace adapter list failed", { type, error })
-                    return []
-                  }),
-                ),
-              )
-            : Effect.succeed([]),
+          WorkspaceAdapterRuntime.list(adapter).pipe(
+            Effect.catchCause((error) =>
+              Effect.sync(() => {
+                log.warn("workspace adapter list failed", { type, error })
+                return []
+              }),
+            ),
+          ),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((items) => items.flat()))
 
@@ -967,7 +925,7 @@ export const layer = Layer.effect(
       const info = fromRow(row)
       yield* Effect.catchCause(
         Effect.gen(function* () {
-          yield* adapterRemove(info, row.type)
+          yield* WorkspaceAdapterRuntime.remove(info)
         }),
         () =>
           Effect.sync(() => {
@@ -992,12 +950,13 @@ export const layer = Layer.effect(
       workspaceID: WorkspaceID,
       state: Record<string, number>,
       signal?: AbortSignal,
+      timeout = TIMEOUT,
     ) {
       if (synced(state)) return
 
       yield* Effect.catch(
         waitEvent({
-          timeout: TIMEOUT,
+          timeout,
           signal,
           fn(event) {
             if (event.workspace !== workspaceID && event.payload.type !== "sync") {
