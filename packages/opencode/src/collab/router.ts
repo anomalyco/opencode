@@ -1577,6 +1577,15 @@ function handleSse(
     }
   }
 
+  // Heartbeat every 20s.  SSE comment lines (": ...\n\n") are ignored by
+  // EventSource but they reset any idle-timeout counter on the path —
+  // critically the ALB's 60s default that would otherwise tear down the
+  // stream during a slow (e.g. 2-minute) repo clone.  Without this,
+  // workspace_ready / native_session_linked events fired DURING the
+  // reconnect gap go to zero listeners and the SPA's iframe gate stays
+  // stuck in "pending" forever.
+  let heartbeat: ReturnType<typeof setInterval> | null = null
+
   const stream = new ReadableStream({
     start(controller) {
       controllerRef = controller
@@ -1589,15 +1598,54 @@ function handleSse(
         }
       }
       pending.length = 0
-      // Send current queue state immediately.
+      // Connect-time state snapshot.  Without this the SPA's iframe gate
+      // would have to wait for a fresh broadcast OR a fetchSession() round-
+      // trip to learn the current init_status.  For slow clones (or any
+      // SSE reconnect), the broadcast may have already fired and the
+      // fetchSession path can race.  Re-emitting the current snapshot
+      // here makes the SSE channel self-sufficient: whatever the SPA's
+      // last-known state was, it gets fully resynced on (re)connect.
       const current = Session.getCollabSession(collabSessionId)
       if (current) {
         ensureQueueRegistered(collabSessionId)
         send({ type: "collab:queue_update", queue: collabDb.getPendingPool(collabSessionId) })
+        // Replay workspace lifecycle so the iframe gate evaluates correctly
+        // even if the original broadcasts were missed during reconnect.
+        if (current.initStatus === "ready") {
+          send({ type: "collab:workspace_ready", collabSessionId })
+        } else if (current.initStatus === "failed") {
+          send({
+            type: "collab:workspace_failed",
+            collabSessionId,
+            error: current.initError ?? "Workspace init failed",
+          })
+        }
+        // Replay the native-session link too — the SPA's nativeSessionDirectory
+        // + sessionId signals only update via this event.  Without the replay,
+        // a missed native_session_linked broadcast would leave the iframe
+        // permanently in PreparingWorkspacePanel even after init completed.
+        if (current.sessionId) {
+          send({
+            type: "collab:native_session_linked",
+            sessionId: current.sessionId,
+            directory: nativeSessionDirectory(collabSessionId, current.repos),
+          })
+        }
       }
       unregister = registerSse(collabSessionId, send)
+
+      heartbeat = setInterval(() => {
+        if (!controllerRef) return
+        try {
+          controllerRef.enqueue(encoder.encode(`: keepalive\n\n`))
+        } catch {
+          // Stream closed under us — clean up; cancel() will run shortly.
+          if (heartbeat) clearInterval(heartbeat)
+        }
+      }, 20_000)
     },
     cancel() {
+      if (heartbeat) clearInterval(heartbeat)
       unregister?.()
       Participant.setOnline(collabSessionId, sess.githubId, false)
       // Clear any lingering "is typing…" indicator from this user — if they
