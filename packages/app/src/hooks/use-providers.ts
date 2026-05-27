@@ -4,8 +4,8 @@ import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
-export const popularProviders = [...AgentBrand.popularProviders]
-const popularProviderSet = new Set(popularProviders)
+export const popularProviders: readonly string[] = [...AgentBrand.popularProviders]
+const popularProviderSet = new Set<string>(popularProviders)
 
 export function useProviders() {
   const globalSync = useGlobalSync()
