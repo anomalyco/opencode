@@ -28,8 +28,10 @@ import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ProviderError } from "./error"
 
 const log = Log.create({ service: "provider" })
+const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
   if (!match) return false
@@ -86,10 +88,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 
 function timeoutController(ms: number) {
   const ctl = new AbortController()
-  const id = setTimeout(
-    () => ctl.abort(new DOMException(`Provider response headers timed out after ${ms}ms`, "TimeoutError")),
-    ms,
-  )
+  const id = setTimeout(() => ctl.abort(new ProviderError.HeaderTimeoutError(ms)), ms)
   return {
     signal: ctl.signal,
     clear: () => clearTimeout(id),
@@ -205,7 +204,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: {},
+        options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
     xai: () =>
       Effect.succeed({
