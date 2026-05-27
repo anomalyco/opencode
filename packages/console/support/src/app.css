@@ -1,0 +1,133 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: #0d0d0d;
+  color: #e6e6e6;
+}
+
+main[data-page="support"] {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+main[data-page="support"] h1 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+form[data-component="lookup"] {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+form[data-component="lookup"] input[type="text"] {
+  flex: 1;
+  min-width: 280px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #2a2a2a;
+  background: #161616;
+  color: #e6e6e6;
+  border-radius: 4px;
+  font: inherit;
+}
+
+form[data-component="lookup"] label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #b0b0b0;
+}
+
+form[data-component="lookup"] button {
+  padding: 0.6rem 1rem;
+  border: 1px solid #3a3a3a;
+  background: #1f1f1f;
+  color: #e6e6e6;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+form[data-component="lookup"] button:hover {
+  background: #2a2a2a;
+}
+
+form[data-component="lookup"] button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-component="error"] {
+  color: #ff6b6b;
+  background: #2a1414;
+  border: 1px solid #4a1f1f;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+[data-component="section"] {
+  margin-bottom: 2rem;
+}
+
+[data-component="section"] h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #b0b0b0;
+  border-bottom: 1px solid #2a2a2a;
+  padding-bottom: 0.4rem;
+}
+
+[data-component="section"] h3 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #888;
+}
+
+[data-component="section"] h3:first-of-type {
+  margin-top: 0;
+}
+
+[data-component="section"] table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+[data-component="section"] th,
+[data-component="section"] td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #1f1f1f;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+[data-component="section"] th {
+  color: #888;
+  font-weight: 500;
+  background: #141414;
+}
+
+[data-component="section"] td a {
+  color: #6ea8fe;
+}
+
+[data-component="section"] [data-empty] {
+  color: #666;
+  font-style: italic;
+  padding: 0.4rem 0;
+}

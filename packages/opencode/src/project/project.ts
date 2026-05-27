@@ -1,6 +1,5 @@
-import { and } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@/storage/db"
-import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { PermissionTable, SessionTable } from "../session/session.sql"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
@@ -220,7 +219,10 @@ export const layer = Layer.effect(
               d.update(PermissionTable).set({ project_id: newID }).where(eq(PermissionTable.project_id, oldID)).run()
             }
 
-            d.update(SessionTable).set({ project_id: newID }).where(eq(SessionTable.project_id, oldID)).run()
+            d.update(SessionTable)
+              .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
+              .where(eq(SessionTable.project_id, oldID))
+              .run()
             d.update(WorkspaceTable).set({ project_id: newID }).where(eq(WorkspaceTable.project_id, oldID)).run()
 
             if (oldProject) d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()

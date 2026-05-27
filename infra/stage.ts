@@ -5,6 +5,8 @@ export const domain = (() => {
 })()
 
 export const zoneID = "430ba34c138cfb5360826c4909f99be8"
+export const awsStage = $app.stage === "production" ? "production" : "dev"
+export const deployAws = $app.stage === awsStage
 
 new cloudflare.RegionalHostname("RegionalHostname", {
   hostname: domain,

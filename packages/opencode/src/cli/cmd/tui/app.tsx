@@ -3,7 +3,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
 import * as TuiAudio from "@tui/util/audio"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import { createCliRenderer, MouseButton, type CliRenderer, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
@@ -18,7 +18,7 @@ import {
   Show,
   on,
 } from "solid-js"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -51,7 +51,7 @@ import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
+import { createExit, ExitProvider, useExit, type Exit } from "./context/exit"
 import { Session as SessionApi } from "@/session/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
@@ -123,7 +123,7 @@ const appBindingCommands = [
   "app.toggle.session_directory_filter",
 ] as const
 
-function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
+export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
   return {
@@ -146,6 +146,34 @@ function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   }
 }
 
+export function createTuiRenderer(config: TuiConfig.Resolved) {
+  return createCliRenderer(tuiRendererConfig(config))
+}
+
+export type TuiHandle = {
+  ready: Promise<void>
+  done: Promise<void>
+  exit: Exit
+}
+
+type TuiInput = {
+  url: string
+  args: Args
+  config: TuiConfig.Resolved
+  renderer: CliRenderer
+  onSnapshot?: () => Promise<string[]>
+  directory?: string
+  fetch?: typeof fetch
+  headers?: RequestInit["headers"]
+  events?: EventSource
+}
+
+type TuiLifecycle = {
+  exit: Exit
+  exited: Promise<void>
+  fail(error: unknown): Promise<never>
+}
+
 function errorMessage(error: unknown) {
   const formatted = FormatError(error)
   if (formatted !== undefined) return formatted
@@ -163,105 +191,175 @@ function errorMessage(error: unknown) {
   return FormatUnknownError(error)
 }
 
-export function tui(input: {
-  url: string
-  args: Args
-  config: TuiConfig.Resolved
-  onSnapshot?: () => Promise<string[]>
-  directory?: string
-  fetch?: typeof fetch
-  headers?: RequestInit["headers"]
-  events?: EventSource
-}) {
-  // promise to prevent immediate exit
-  // oxlint-disable-next-line no-async-promise-executor -- intentional: async executor used for sequential setup before resolve
-  return new Promise<void>(async (resolve) => {
-    const unguard = win32InstallCtrlCGuard()
-    win32DisableProcessedInput()
+export function tui(input: TuiInput): TuiHandle {
+  const unguard = win32InstallCtrlCGuard()
+  win32DisableProcessedInput()
 
-    const onExit = async () => {
-      unguard?.()
-      resolve()
-    }
-    const onBeforeExit = async () => {
-      offKeymap()
+  const renderer = input.renderer
+  const keymap = createDefaultOpenTuiKeymap(renderer)
+  const unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.config)
+  const lifecycle = createTuiLifecycle({
+    renderer,
+    unguard,
+    cleanup: async () => {
+      unregisterKeymap()
       await TuiPluginRuntime.dispose()
       TuiAudio.dispose()
-    }
-
-    const renderer = await createCliRenderer(rendererConfig(input.config))
-    // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
-    void renderer.getPalette({ size: 16 }).catch(() => undefined)
-    const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
-
-    const keymap = createDefaultOpenTuiKeymap(renderer)
-    const offKeymap = registerOpencodeKeymap(keymap, renderer, input.config)
-
-    await render(() => {
-      return (
-        <ErrorBoundary
-          fallback={(error, reset) => (
-            <ErrorComponent error={error} reset={reset} onBeforeExit={onBeforeExit} onExit={onExit} mode={mode} />
-          )}
-        >
-          <OpencodeKeymapProvider keymap={keymap}>
-            <ArgsProvider {...input.args}>
-              <ExitProvider onBeforeExit={onBeforeExit} onExit={onExit}>
-                <KVProvider>
-                  <ToastProvider>
-                    <RouteProvider
-                      initialRoute={
-                        input.args.continue
-                          ? {
-                              type: "session",
-                              sessionID: "dummy",
-                            }
-                          : undefined
-                      }
-                    >
-                      <TuiConfigProvider config={input.config}>
-                        <SDKProvider
-                          url={input.url}
-                          directory={input.directory}
-                          fetch={input.fetch}
-                          headers={input.headers}
-                          events={input.events}
-                        >
-                          <ProjectProvider>
-                            <SyncProvider>
-                              <SyncProviderV2>
-                                <ThemeProvider mode={mode}>
-                                  <LocalProvider>
-                                    <PromptStashProvider>
-                                      <DialogProvider>
-                                        <FrecencyProvider>
-                                          <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <EditorContextProvider>
-                                                <App onSnapshot={input.onSnapshot} />
-                                              </EditorContextProvider>
-                                            </PromptRefProvider>
-                                          </PromptHistoryProvider>
-                                        </FrecencyProvider>
-                                      </DialogProvider>
-                                    </PromptStashProvider>
-                                  </LocalProvider>
-                                </ThemeProvider>
-                              </SyncProviderV2>
-                            </SyncProvider>
-                          </ProjectProvider>
-                        </SDKProvider>
-                      </TuiConfigProvider>
-                    </RouteProvider>
-                  </ToastProvider>
-                </KVProvider>
-              </ExitProvider>
-            </ArgsProvider>
-          </OpencodeKeymapProvider>
-        </ErrorBoundary>
-      )
-    }, renderer)
+    },
   })
+  const ready = mountTui({ ...input, keymap, exit: lifecycle.exit }).catch((error) => lifecycle.fail(error))
+  const done = waitUntilDone(ready, lifecycle.exited)
+
+  return { ready, done, exit: lifecycle.exit }
+}
+
+async function mountTui(input: TuiInput & { keymap: ReturnType<typeof createDefaultOpenTuiKeymap>; exit: Exit }) {
+  const renderer = input.renderer
+  // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
+  void renderer.getPalette({ size: 16 }).catch(() => undefined)
+  const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
+  if (renderer.isDestroyed) return
+
+  await render(() => {
+    return (
+      <ErrorBoundary
+        fallback={(error, reset) => <ErrorComponent error={error} reset={reset} exit={input.exit} mode={mode} />}
+      >
+        <OpencodeKeymapProvider keymap={input.keymap}>
+          <ArgsProvider {...input.args}>
+            <ExitProvider exit={input.exit}>
+              <KVProvider>
+                <ToastProvider>
+                  <RouteProvider
+                    initialRoute={
+                      input.args.continue
+                        ? {
+                            type: "session",
+                            sessionID: "dummy",
+                          }
+                        : undefined
+                    }
+                  >
+                    <TuiConfigProvider config={input.config}>
+                      <SDKProvider
+                        url={input.url}
+                        directory={input.directory}
+                        fetch={input.fetch}
+                        headers={input.headers}
+                        events={input.events}
+                      >
+                        <ProjectProvider>
+                          <SyncProvider>
+                            <SyncProviderV2>
+                              <ThemeProvider mode={mode}>
+                                <LocalProvider>
+                                  <PromptStashProvider>
+                                    <DialogProvider>
+                                      <FrecencyProvider>
+                                        <PromptHistoryProvider>
+                                          <PromptRefProvider>
+                                            <EditorContextProvider>
+                                              <App onSnapshot={input.onSnapshot} />
+                                            </EditorContextProvider>
+                                          </PromptRefProvider>
+                                        </PromptHistoryProvider>
+                                      </FrecencyProvider>
+                                    </DialogProvider>
+                                  </PromptStashProvider>
+                                </LocalProvider>
+                              </ThemeProvider>
+                            </SyncProviderV2>
+                          </SyncProvider>
+                        </ProjectProvider>
+                      </SDKProvider>
+                    </TuiConfigProvider>
+                  </RouteProvider>
+                </ToastProvider>
+              </KVProvider>
+            </ExitProvider>
+          </ArgsProvider>
+        </OpencodeKeymapProvider>
+      </ErrorBoundary>
+    )
+  }, renderer)
+}
+
+function createTuiLifecycle(input: {
+  renderer: CliRenderer
+  unguard?: () => void
+  cleanup: () => Promise<void>
+}): TuiLifecycle {
+  let resolveExited!: () => void
+  const exited = new Promise<void>((resolve) => {
+    resolveExited = resolve
+  })
+  let exitCompleted = false
+  let exiting = false
+  let cleanupTask: Promise<void> | undefined
+
+  const completeExit = () => {
+    if (exitCompleted) return
+    exitCompleted = true
+    resolveExited()
+  }
+
+  const cleanup = () => {
+    cleanupTask ??= (async () => {
+      process.off("SIGHUP", onSighup)
+      try {
+        await input.cleanup()
+      } finally {
+        input.unguard?.()
+      }
+    })()
+    return cleanupTask
+  }
+
+  const exit = createExit(async (reason, message) => {
+    exiting = true
+    await cleanup()
+    if (!input.renderer.isDestroyed) {
+      input.renderer.setTerminalTitle("")
+      input.renderer.destroy()
+    }
+    win32FlushInputBuffer()
+    if (reason) {
+      const formatted = FormatError(reason) ?? FormatUnknownError(reason)
+      if (formatted) process.stderr.write(formatted + "\n")
+    }
+    const text = message()
+    if (text) process.stdout.write(text + "\n")
+    completeExit()
+  })
+  const onSighup = () => {
+    void exit()
+  }
+
+  input.renderer.once("destroy", () => {
+    if (exiting) return
+    void cleanup().finally(() => {
+      win32FlushInputBuffer()
+      completeExit()
+    })
+  })
+  process.on("SIGHUP", onSighup)
+
+  return {
+    exit,
+    exited,
+    async fail(error) {
+      exiting = true
+      await cleanup().catch(() => {})
+      if (!input.renderer.isDestroyed) input.renderer.destroy()
+      completeExit()
+      throw error
+    },
+  }
+}
+
+async function waitUntilDone(ready: Promise<void>, exited: Promise<void>) {
+  await ready
+  await exited
 }
 
 function App(props: { onSnapshot?: () => Promise<string[]> }) {
