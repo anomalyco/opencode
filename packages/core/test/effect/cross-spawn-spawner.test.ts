@@ -286,6 +286,29 @@ describe("cross-spawn spawner", () => {
     )
   })
 
+  describe("background children", () => {
+    fx.effect(
+      "exitCode resolves promptly when child backgrounds a long-lived grandchild",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        // Regression for https://github.com/anomalyco/opencode/issues/20902.
+        // The grandchild `sleep 30` inherits the parent shell's stdout/stderr
+        // and survives the parent. Settling on `close` would wait for those
+        // fds to drain (i.e. ~30s); settling on `exit` returns promptly.
+        const start = Date.now()
+        const handle = yield* ChildProcess.make("bash", ["-c", "sleep 30 & disown; echo parent-done"])
+        const code = yield* handle.exitCode
+        const elapsed = Date.now() - start
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        // Before the fix this took ~30s (until `close` fired). Allow generous
+        // headroom for slow CI while still being well under the grandchild's
+        // 30s lifetime.
+        expect(elapsed).toBeLessThan(2_000)
+      }),
+      10_000,
+    )
+  })
+
   describe("error handling", () => {
     fx.effect(
       "fails for invalid command",
