@@ -13588,7 +13588,20 @@
                     "enum": [false]
                   }
                 ],
-                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout."
+                "description": "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout."
+              },
+              "headerTimeout": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  }
+                ],
+                "description": "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout."
               },
               "chunkTimeout": {
                 "type": "integer",

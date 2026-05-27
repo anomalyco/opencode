@@ -45,8 +45,6 @@ const OPEN_APPS = [
   "sublime-text",
 ] as const
 
-const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
-
 type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
 
@@ -157,11 +155,11 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
-  const isDesktopV2 = platform.platform === "desktop" && USE_V2_TITLEBAR
-  const search = createMemo(() => (isDesktopV2 ? settings.general.showSearch() : true))
-  const tree = createMemo(() => (isDesktopV2 ? settings.general.showFileTree() : true))
-  const term = createMemo(() => (isDesktopV2 ? settings.general.showTerminal() : true))
-  const status = createMemo(() => (isDesktopV2 ? settings.general.showStatus() : true))
+  const isDesktopV2 = createMemo(() => platform.platform === "desktop" && settings.general.newLayoutDesigns())
+  const search = createMemo(() => (isDesktopV2() ? settings.general.showSearch() : true))
+  const tree = createMemo(() => (isDesktopV2() ? settings.general.showFileTree() : true))
+  const term = createMemo(() => (isDesktopV2() ? settings.general.showTerminal() : true))
+  const status = createMemo(() => (isDesktopV2() ? settings.general.showStatus() : true))
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
