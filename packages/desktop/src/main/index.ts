@@ -9,9 +9,13 @@ import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
-
 import contextMenu from "electron-context-menu"
-contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+
+contextMenu({
+  showSaveImageAs: true,
+  showLookUpSelection: false,
+  showSearchWithGoogle: false,
+})
 
 // on macOS apps run in `/` which can cause issues with ripgrep
 try {

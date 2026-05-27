@@ -16,7 +16,15 @@
     "302ai",
     "qiniu-ai"
   ],
-  "provider": {},
+  "model": "deepseek/deepseek-v4-pro",
+  "small_model": "deepseek/deepseek-v4-flash",
+  "provider": {
+    "deepseek": {
+      "options": {
+        "baseURL": "https://api.deepseek.com"
+      }
+    }
+  },
   "permission": {
     "edit": {
       "packages/opencode/migration/*": "deny",

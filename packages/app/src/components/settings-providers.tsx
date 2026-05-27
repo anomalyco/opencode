@@ -17,6 +17,7 @@ type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
 const PROVIDER_NOTES = [
+  { match: (id: string) => id === "deepseek", key: "dialog.provider.deepseek.note" },
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
@@ -25,6 +26,16 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
   { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
   { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
+  { match: (id: string) => id === "alibaba-cn" || id === "alibaba", key: "dialog.provider.alibaba.note" },
+  { match: (id: string) => id === "moonshotai-cn" || id === "moonshotai", key: "dialog.provider.moonshot.note" },
+  { match: (id: string) => id === "zhipuai" || id === "zai", key: "dialog.provider.zhipuai.note" },
+  {
+    match: (id: string) => id === "siliconflow-cn" || id === "siliconflow",
+    key: "dialog.provider.siliconflow.note",
+  },
+  { match: (id: string) => id === "minimax-cn" || id === "minimax", key: "dialog.provider.minimax.note" },
+  { match: (id: string) => id === "302ai", key: "dialog.provider.302ai.note" },
+  { match: (id: string) => id === "qiniu-ai", key: "dialog.provider.qiniu.note" },
 ] as const
 
 export const SettingsProviders: Component = () => {
@@ -183,6 +194,9 @@ export const SettingsProviders: Component = () => {
                     <div class="flex items-center gap-x-3">
                       <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong">{item.name}</span>
+                      <Show when={item.id === "deepseek"}>
+                        <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                      </Show>
                       <Show when={item.id === "opencode"}>
                         <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                       </Show>

@@ -52,6 +52,20 @@ function mergeConfig(target: Info, source: Info): Info {
   return mergeDeep(target, source) as Info
 }
 
+function applyYunpatDefaults(config: Info): Info {
+  if (config.enabled_providers === undefined) {
+    config.enabled_providers = [...AgentBrand.defaultEnabledProviders]
+  }
+  if (config.model === undefined) {
+    config.model = AgentBrand.defaultModel
+  }
+  if (config.small_model === undefined) {
+    config.small_model = AgentBrand.defaultSmallModel
+  }
+  config.provider = mergeDeep(AgentBrand.defaultProviderConfig, config.provider ?? {}) as Info["provider"]
+  return config
+}
+
 function mergeConfigConcatArrays(target: Info, source: Info): Info {
   const merged = mergeConfig(target, source)
   if (target.instructions && source.instructions) {
@@ -740,9 +754,7 @@ export const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
-        if (result.enabled_providers === undefined) {
-          result.enabled_providers = [...AgentBrand.defaultEnabledProviders]
-        }
+        applyYunpatDefaults(result)
 
         return {
           config: result,

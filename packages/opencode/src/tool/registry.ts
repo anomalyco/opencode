@@ -379,9 +379,25 @@ export const layer: Layer.Layer<
   }),
 )
 
+/** Extra ToolRegistry deps not covered by the main server layer stack. */
+export const supportLayers = Layer.mergeAll(
+  Instruction.defaultLayer,
+  CrossSpawnSpawner.defaultLayer,
+  PatentDocument.defaultLayer,
+  PatentDrawing.defaultLayer,
+  PatentKG.layer,
+  PatentLaw.defaultLayer,
+  PatentKnowledge.defaultLayer,
+  PatentIPC.defaultLayer,
+  PatentSearch.defaultLayer,
+  PatentQuality.defaultLayer,
+  Trademark.defaultLayer,
+  SlopDetector.defaultLayer,
+)
+
 export const defaultLayer = Layer.suspend(() =>
   Layer.mergeAll(
-    layer,
+    layer.pipe(Layer.provide(supportLayers)),
     Config.defaultLayer,
     Plugin.defaultLayer,
     Question.defaultLayer,
@@ -391,24 +407,12 @@ export const defaultLayer = Layer.suspend(() =>
     Session.defaultLayer,
     Provider.defaultLayer,
     LSP.defaultLayer,
-    Instruction.defaultLayer,
     AppFileSystem.defaultLayer,
     Bus.layer,
     FetchHttpClient.layer,
     Format.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
     Ripgrep.defaultLayer,
     Truncate.defaultLayer,
-    PatentDocument.defaultLayer,
-    PatentDrawing.defaultLayer,
-    PatentKG.layer,
-    PatentLaw.defaultLayer,
-    PatentKnowledge.defaultLayer,
-    PatentIPC.defaultLayer,
-    PatentSearch.defaultLayer,
-    PatentQuality.defaultLayer,
-    Trademark.defaultLayer,
-    SlopDetector.defaultLayer,
   ),
 )
 

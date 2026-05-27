@@ -2,6 +2,10 @@ import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@yunpat/app/vite"
 import * as fs from "node:fs/promises"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const desktopDir = path.dirname(fileURLToPath(import.meta.url))
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -10,6 +14,7 @@ const channel = (() => {
 })()
 
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const OPENCODE_SERVER_ENTRY = path.resolve(desktopDir, OPENCODE_SERVER_DIST, "node.js")
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
@@ -53,15 +58,18 @@ export default defineConfig({
         name: "opencode:virtual-server-module",
         enforce: "pre",
         resolveId(id) {
-          if (id === "virtual:opencode-server") return this.resolve(`${OPENCODE_SERVER_DIST}/node.js`)
+          if (id === "virtual:opencode-server") return { id: OPENCODE_SERVER_ENTRY, external: true }
         },
       },
       {
         name: "opencode:copy-server-assets",
         async writeBundle() {
-          for (const l of await fs.readdir(OPENCODE_SERVER_DIST)) {
-            if (!l.endsWith(".wasm")) continue
-            await fs.writeFile(`./out/main/chunks/${l}`, await fs.readFile(`${OPENCODE_SERVER_DIST}/${l}`))
+          const assetsDir = path.resolve(desktopDir, OPENCODE_SERVER_DIST)
+          const outChunks = path.resolve(desktopDir, "out/main/chunks")
+          await fs.mkdir(outChunks, { recursive: true })
+          for (const name of await fs.readdir(assetsDir)) {
+            if (!name.endsWith(".wasm")) continue
+            await fs.writeFile(path.join(outChunks, name), await fs.readFile(path.join(assetsDir, name)))
           }
         },
       },

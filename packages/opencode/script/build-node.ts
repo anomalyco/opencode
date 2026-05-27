@@ -43,13 +43,28 @@ const migrations = await Promise.all(
 )
 console.log(`Loaded ${migrations.length} migrations`)
 
+const bunSqliteShim = path.join(dir, "src/storage/bun-sqlite.node-shim.ts")
+
 await Bun.build({
   target: "node",
+  conditions: ["node"],
   entrypoints: ["./src/node.ts"],
   outdir: "./dist/node",
   format: "esm",
   sourcemap: "linked",
   external: ["jsonc-parser", "@lydell/node-pty"],
+  alias: {
+    "drizzle-orm/bun-sqlite": "drizzle-orm/node-sqlite",
+    "drizzle-orm/bun-sqlite/migrator": "drizzle-orm/node-sqlite/migrator",
+  },
+  plugins: [
+    {
+      name: "resolve-bun-sqlite",
+      setup(build) {
+        build.onResolve({ filter: /^bun:sqlite$/ }, () => ({ path: bunSqliteShim }))
+      },
+    },
+  ],
   define: {
     OPENCODE_MIGRATIONS: JSON.stringify(migrations),
     OPENCODE_CHANNEL: `'${Script.channel}'`,

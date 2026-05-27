@@ -104,6 +104,10 @@ function prepareSidecarEnv(password: string, userDataPath: string) {
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
+    // Desktop sidecar uses the stable Hono backend until effect-httpapi startup
+    // layer ordering is fixed for bundled node builds (see ToolRegistry in httpapi/server).
+    OPENCODE_EXPERIMENTAL_HTTPAPI: "false",
+    YUNPAT_EXPERIMENTAL_HTTPAPI: "false",
   })
 }
 
