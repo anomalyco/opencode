@@ -50,6 +50,7 @@ const APP_IDS: Record<string, string> = {
   prod: "ai.opencode.desktop",
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
+const REMOTE_ONLY = process.env.VITE_REMOTE_ONLY === "true"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
@@ -225,6 +226,7 @@ const main = Effect.gen(function* () {
     killSidecar: () => killSidecar(),
     awaitInitialization: Effect.fnUntraced(
       function* (sendStep) {
+        if (REMOTE_ONLY) return null
         sendStep(initStep)
         const listener = (step: InitStep) => sendStep(step)
         initEmitter.on("step", listener)
@@ -284,92 +286,94 @@ const main = Effect.gen(function* () {
   })()
   let overlay: BrowserWindow | null = null
 
-  const port = yield* Effect.gen(function* () {
-    const fromEnv = process.env.OPENCODE_PORT
-    if (fromEnv) {
-      const parsed = Number.parseInt(fromEnv, 10)
-      if (!Number.isNaN(parsed)) return parsed
-    }
-
-    const res = yield* Deferred.make<number, unknown>()
-    const server = createServer()
-    server.on("error", (e) => Deferred.failSync(res, () => e))
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      if (typeof address !== "object" || !address) {
-        server.close()
-        Deferred.failSync(res, () => new Error("Failed to get port"))
-        return
+  if (!REMOTE_ONLY) {
+    const port = yield* Effect.gen(function* () {
+      const fromEnv = process.env.OPENCODE_PORT
+      if (fromEnv) {
+        const parsed = Number.parseInt(fromEnv, 10)
+        if (!Number.isNaN(parsed)) return parsed
       }
-      const port = address.port
-      server.close(() => Effect.runSync(Deferred.succeed(res, port)))
+
+      const res = yield* Deferred.make<number, unknown>()
+      const server = createServer()
+      server.on("error", (e) => Deferred.failSync(res, () => e))
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address()
+        if (typeof address !== "object" || !address) {
+          server.close()
+          Deferred.failSync(res, () => new Error("Failed to get port"))
+          return
+        }
+        const port = address.port
+        server.close(() => Effect.runSync(Deferred.succeed(res, port)))
+      })
+
+      return yield* Deferred.await(res)
     })
+    const hostname = "127.0.0.1"
+    const url = `http://${hostname}:${port}`
+    const password = randomUUID()
 
-    return yield* Deferred.await(res)
-  })
-  const hostname = "127.0.0.1"
-  const url = `http://${hostname}:${port}`
-  const password = randomUUID()
+    const loadingTask = yield* Effect.gen(function* () {
+      logger.log("sidecar connection started", { url })
 
-  const loadingTask = yield* Effect.gen(function* () {
-    logger.log("sidecar connection started", { url })
+      initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
+        setInitStep({ phase: "sqlite_waiting" })
+        if (overlay) sendSqliteMigrationProgress(overlay, progress)
+        if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
+      })
 
-    initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
-      setInitStep({ phase: "sqlite_waiting" })
-      if (overlay) sendSqliteMigrationProgress(overlay, progress)
-      if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
-    })
+      ensureLoopbackNoProxy()
+      useEnvProxy()
 
-    ensureLoopbackNoProxy()
-    useEnvProxy()
-
-    logger.log("spawning sidecar", { url })
-    const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
-        needsMigration,
-        userDataPath: app.getPath("userData"),
-        onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
-        onStdout: (message) => writeLog("server", "stdout", { message }),
-        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
-        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-      }),
-    )
-    server = listener
-    yield* Deferred.succeed(serverReady, {
-      url,
-      username: "opencode",
-      password,
-    })
-
-    yield* Effect.promise(() => health.wait).pipe(
-      Effect.timeout("30 seconds"),
-      Effect.catch((e) =>
-        Effect.sync(() => {
-          logger.error("sidecar health check failed", e.toString())
+      logger.log("spawning sidecar", { url })
+      const { listener, health } = yield* Effect.promise(() =>
+        spawnLocalServer(hostname, port, password, {
+          needsMigration,
+          userDataPath: app.getPath("userData"),
+          onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+          onStdout: (message) => writeLog("server", "stdout", { message }),
+          onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+          onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
         }),
-      ),
-    )
+      )
+      server = listener
+      yield* Deferred.succeed(serverReady, {
+        url,
+        username: "opencode",
+        password,
+      })
 
-    logger.log("loading task finished")
-  }).pipe(Effect.forkChild)
+      yield* Effect.promise(() => health.wait).pipe(
+        Effect.timeout("30 seconds"),
+        Effect.catch((e) =>
+          Effect.sync(() => {
+            logger.error("sidecar health check failed", e.toString())
+          }),
+        ),
+      )
 
-  if (needsMigration) {
-    const show = yield* loadingTask.pipe(
-      Fiber.await,
-      Effect.timeout("1 second"),
-      Effect.as(false),
-      Effect.catch(() => Effect.succeed(true)),
-    )
-    if (show) {
-      overlay = createLoadingWindow()
-      yield* Effect.sleep("1 second")
+      logger.log("loading task finished")
+    }).pipe(Effect.forkChild)
+
+    if (needsMigration) {
+      const show = yield* loadingTask.pipe(
+        Fiber.await,
+        Effect.timeout("1 second"),
+        Effect.as(false),
+        Effect.catch(() => Effect.succeed(true)),
+      )
+      if (show) {
+        overlay = createLoadingWindow()
+        yield* Effect.sleep("1 second")
+      }
     }
+
+    yield* Fiber.await(loadingTask)
+    if (overlay) yield* Deferred.await(loadingComplete)
   }
 
-  yield* Fiber.await(loadingTask)
   setInitStep({ phase: "done" })
-
-  if (overlay) yield* Deferred.await(loadingComplete)
 
   mainWindow = createMainWindow()
   if (mainWindow) {

@@ -156,21 +156,24 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 if (root instanceof HTMLElement) {
   const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
   clearAuthToken()
-  const server: ServerConnection.Http = {
-    type: "http",
-    authToken: !!auth,
-    http: {
-      url: getCurrentUrl(),
-      ...auth,
-    },
-  }
+  const isRemoteOnly = import.meta.env.VITE_REMOTE_ONLY
+  const server: ServerConnection.Http | undefined = isRemoteOnly
+    ? undefined
+    : {
+        type: "http",
+        authToken: !!auth,
+        http: {
+          url: getCurrentUrl(),
+          ...auth,
+        },
+      }
   render(
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
           <AppInterface
-            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-            servers={[server]}
+            defaultServer={isRemoteOnly ? undefined : ServerConnection.Key.make(getDefaultUrl())}
+            servers={server ? [server] : undefined}
             disableHealthCheck
           />
         </AppBaseProviders>

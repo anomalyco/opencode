@@ -1569,12 +1569,14 @@ export default function Layout(props: ParentProps) {
       .then((x) => x.data ?? [])
       .catch(() => [])
 
-    clearWorkspaceTerminals(
-      directory,
-      sessions.map((s) => s.id),
-      platform,
-      getTerminalServerScope(server.current, server.key),
-    )
+    if (server.key) {
+      clearWorkspaceTerminals(
+        directory,
+        sessions.map((s) => s.id),
+        platform,
+        getTerminalServerScope(server.current, server.key),
+      )
+    }
     await serverSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await serverSDK.client.worktree

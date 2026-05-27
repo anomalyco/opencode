@@ -691,7 +691,7 @@ function LegacyHome() {
   })
 
   const serverDotClass = createMemo(() => {
-    const healthy = servers.health[server.key]?.healthy
+    const healthy = server.key ? servers.health[server.key]?.healthy : undefined
     if (healthy === true) return "bg-icon-success-base"
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"

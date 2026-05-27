@@ -318,8 +318,12 @@ render(() => {
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
+  const isRemoteOnly = import.meta.env.VITE_REMOTE_ONLY
+
   // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+  const [sidecar] = createResource(() =>
+    isRemoteOnly ? undefined : window.api.awaitInitialization(() => undefined),
+  )
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {
@@ -329,6 +333,7 @@ render(() => {
   const [locale] = createResource(loadLocale)
 
   const servers = () => {
+    if (isRemoteOnly) return []
     const data = sidecar()
     if (!data) return []
     const server: ServerConnection.Sidecar = {
@@ -391,11 +396,11 @@ render(() => {
         >
           {(_) => {
             return (
-              <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                servers={servers()}
-                router={MemoryRouter}
-              >
+          <AppInterface
+            defaultServer={isRemoteOnly ? undefined : (defaultServer.latest ?? ServerConnection.Key.make("sidecar"))}
+            servers={servers()}
+            router={MemoryRouter}
+          >
                 <Inner />
               </AppInterface>
             )

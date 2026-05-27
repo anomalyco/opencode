@@ -20,14 +20,15 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(key: ServerConnection.Key) {
+function projectsKey(key: ServerConnection.Key | undefined) {
   if (!key) return ""
   if (key === "sidecar") return "local"
   if (isLocalHost(key)) return "local"
   return key
 }
 
-function isLocalHost(url: string) {
+function isLocalHost(url: string | undefined) {
+  if (!url) return undefined
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
@@ -127,7 +128,7 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
+  init: (props: { defaultServer?: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
@@ -178,7 +179,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     }
 
-    const isReady = createMemo(() => ready() && !!state.active)
+    const isReady = createMemo(() => ready())
 
     const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])

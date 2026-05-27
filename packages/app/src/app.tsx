@@ -1,7 +1,7 @@
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
+import { DialogProvider, useDialog } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/ui/file"
@@ -22,6 +22,7 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  onMount,
   type ParentProps,
   Show,
   Suspense,
@@ -45,6 +46,7 @@ import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
+import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCheckServerHealth } from "./utils/server-health"
 import { ServersProvider } from "./context/servers"
 
@@ -126,17 +128,6 @@ function SessionProviders(props: ParentProps) {
         </PromptProvider>
       </FileProvider>
     </TerminalProvider>
-  )
-}
-
-function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
-  return (
-    <AppShellProviders>
-      {/*<Suspense fallback={<Loading />}>*/}
-      {props.appChildren}
-      {props.children}
-      {/*</Suspense>*/}
-    </AppShellProviders>
   )
 }
 
@@ -285,18 +276,54 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   )
 }
 
-function ServerKey(props: ParentProps) {
+function RemoteOnlyFallback() {
+  const dialog = useDialog()
+  const language = useLanguage()
+
+  onMount(() => {
+    const id = setTimeout(() => {
+      dialog.show(() => <DialogSelectServer />)
+    }, 100)
+    return () => clearTimeout(id)
+  })
+
+  return (
+    <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base gap-6 p-6">
+      <div class="flex flex-col items-center max-w-md text-center gap-4">
+        <Splash class="w-12 h-15 mb-4" />
+        <p class="text-14-regular text-text-base">{language.t("dialog.server.title")}</p>
+        <p class="text-12-regular text-text-weak">{language.t("dialog.server.description")}</p>
+        <button
+          type="button"
+          class="mt-2 px-4 py-2 rounded-md bg-surface-base text-text-strong text-14-regular hover:bg-surface-raised-base-hover transition-colors"
+          onClick={() => dialog.show(() => <DialogSelectServer />)}
+        >
+          {language.t("dialog.server.add.button")}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AppRouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const server = useServer()
   return (
-    <Show when={server.key} keyed>
-      {props.children}
+    <Show when={server.key} keyed fallback={<RemoteOnlyFallback />}>
+      <ServerSDKProvider>
+        <ServerSyncProvider>
+          <AppShellProviders>
+            {props.appChildren}
+            {props.children}
+          </AppShellProviders>
+        </ServerSyncProvider>
+      </ServerSDKProvider>
     </Show>
   )
 }
 
 export function AppInterface(props: {
   children?: JSX.Element
-  defaultServer: ServerConnection.Key
+  defaultServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
@@ -305,24 +332,18 @@ export function AppInterface(props: {
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
       <ServersProvider>
         <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-          <ServerKey>
-            <QueryProvider>
-              <ServerSDKProvider>
-                <ServerSyncProvider>
-                  <Dynamic
-                    component={props.router ?? Router}
-                    root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                  >
-                    <Route path="/" component={HomeRoute} />
-                    <Route path="/:dir" component={DirectoryLayout}>
-                      <Route path="/" component={() => <Navigate href="session" />} />
-                      <Route path="/session/:id?" component={SessionRoute} />
-                    </Route>
-                  </Dynamic>
-                </ServerSyncProvider>
-              </ServerSDKProvider>
-            </QueryProvider>
-          </ServerKey>
+          <QueryProvider>
+            <Dynamic
+              component={props.router ?? Router}
+              root={(routerProps) => <AppRouterRoot appChildren={props.children}>{routerProps.children}</AppRouterRoot>}
+            >
+              <Route path="/" component={HomeRoute} />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={() => <Navigate href="session" />} />
+                <Route path="/session/:id?" component={SessionRoute} />
+              </Route>
+            </Dynamic>
+          </QueryProvider>
         </ConnectionGate>
       </ServersProvider>
     </ServerProvider>
