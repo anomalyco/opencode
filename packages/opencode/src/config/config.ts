@@ -73,13 +73,13 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
-function stripUnknownKeys(data: unknown): unknown {
+function stripUnknownKeys(data: unknown, source: string): unknown {
   if (typeof data !== "object" || data === null || Array.isArray(data)) return data
   const known = new Set(Info.ast.propertySignatures.map((p) => String(p.name)))
   const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(data)) {
     if (known.has(key)) result[key] = value
-    else log.warn("config key is not recognized and will be ignored", { key })
+    else log.warn("config key is not recognized and will be ignored", { key, source })
   }
   return result
 }
@@ -437,7 +437,7 @@ export const layer = Layer.effect(
       let parsedOk = false
       const data = yield* Effect.sync(() => {
         const parsed = ConfigParse.jsonc(expanded, source)
-        const cleaned = stripUnknownKeys(normalizeLoadedConfig(parsed, source))
+        const cleaned = stripUnknownKeys(normalizeLoadedConfig(parsed, source), source)
         const result = ConfigParse.schema(Info, cleaned, source)
         parsedOk = true
         return result
