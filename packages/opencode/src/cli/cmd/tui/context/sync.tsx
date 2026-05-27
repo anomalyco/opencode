@@ -117,6 +117,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
       if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
+      if (project.data.project.id === "global" && project.data.instance.path.directory === project.data.instance.path.home) {
+        return { scope: "project" }
+      }
       return {
         path: path
           .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
