@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Bus } from "@/bus"
 import { Project } from "@/project/project"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
@@ -10,8 +10,8 @@ import { ProjectID } from "../../src/project/schema"
 import { Effect, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@yunpat/core/filesystem"
+import { CrossSpawnSpawner } from "@yunpat/core/cross-spawn-spawner"
 
 void Log.init({ print: false })
 

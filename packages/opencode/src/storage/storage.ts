@@ -1,9 +1,9 @@
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { Global } from "@yunpat/core/global"
+import { NamedError } from "@yunpat/core/util/error"
 import z from "zod"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { NonNegativeInt } from "@/util/schema"
 import { Git } from "@/git"
@@ -65,7 +65,7 @@ export interface Interface {
   readonly list: (prefix: string[]) => Effect.Effect<string[][], AppFileSystem.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Storage") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Storage") {}
 
 function file(dir: string, key: string[]) {
   return path.join(dir, ...key) + ".json"

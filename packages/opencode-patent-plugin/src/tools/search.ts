@@ -5,7 +5,7 @@
  * 接入真实数据源：patent_db (7500万+ 中国专利)
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"
 import { createSharedAgentContext } from "../utils/agent-factory.js"

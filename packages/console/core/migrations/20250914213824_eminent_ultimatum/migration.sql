@@ -1,1 +1,0 @@
-ALTER TABLE `billing` ADD `time_reload_locked_till` timestamp(3);

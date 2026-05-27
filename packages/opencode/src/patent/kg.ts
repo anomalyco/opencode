@@ -11,7 +11,7 @@ export interface Interface {
   readonly fullTextSearch: (query: string) => Effect.Effect<KGNode[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentKG") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentKG") {}
 
 const KGNodeSchema = Schema.Struct({
   id: Schema.String,

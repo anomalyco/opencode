@@ -4,14 +4,14 @@ import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
 import { LocalContext } from "@/util/local-context"
 import { lazy } from "../util/lazy"
-import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { Global } from "@yunpat/core/global"
+import * as Log from "@yunpat/core/util/log"
+import { NamedError } from "@yunpat/core/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, existsSync } from "fs"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { readFileSync, readdirSync, existsSync, renameSync } from "fs"
+import { Flag } from "@yunpat/core/flag/flag"
+import { InstallationChannel } from "@yunpat/core/installation/version"
 import { InstanceState } from "@/effect/instance-state"
 import { iife } from "@/util/iife"
 import { init } from "#db"
@@ -28,10 +28,22 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export function getChannelPath() {
-  if (["latest", "beta", "prod"].includes(InstallationChannel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
-    return path.join(Global.Path.data, "opencode.db")
+  if (["latest", "beta", "prod"].includes(InstallationChannel) || Flag.OPENCODE_DISABLE_CHANNEL_DB) {
+    migrateDbName("opencode.db", "yunpat.db")
+    return path.join(Global.Path.data, "yunpat.db")
+  }
   const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
-  return path.join(Global.Path.data, `opencode-${safe}.db`)
+  migrateDbName(`opencode-${safe}.db`, `yunpat-${safe}.db`)
+  return path.join(Global.Path.data, `yunpat-${safe}.db`)
+}
+
+function migrateDbName(oldName: string, newName: string) {
+  const oldPath = path.join(Global.Path.data, oldName)
+  const newPath = path.join(Global.Path.data, newName)
+  if (existsSync(oldPath) && !existsSync(newPath)) {
+    log.info("migrating database", { from: oldName, to: newName })
+    renameSync(oldPath, newPath)
+  }
 }
 
 export const Path = iife(() => {

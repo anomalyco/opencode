@@ -3,7 +3,7 @@ import { SessionID } from "@/session/schema"
 import { SyncEvent } from "@/sync"
 import { Effect, Layer, Scope, Context } from "effect"
 import { Config } from "@/config/config"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import * as ShareNext from "./share-next"
 
 export interface Interface {
@@ -12,7 +12,7 @@ export interface Interface {
   readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionShare") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/SessionShare") {}
 
 export const layer = Layer.effect(
   Service,

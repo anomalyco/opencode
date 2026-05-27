@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { Context, Effect, Layer, Option, Schema, Exit } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Config } from "@/config/config"
 import path from "path"
 
@@ -27,7 +27,7 @@ export interface Interface {
   readonly getLawContent: (id: string) => Effect.Effect<string, AppFileSystem.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentLaw") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentLaw") {}
 
 export const layer = Layer.effect(
   Service,

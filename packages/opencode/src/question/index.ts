@@ -4,7 +4,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID } from "@/session/schema"
 import { zod } from "@/util/effect-zod"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { withStatics } from "@/util/schema"
 import { QuestionID } from "./schema"
 
@@ -127,7 +127,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Question") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Question") {}
 
 export const layer = Layer.effect(
   Service,

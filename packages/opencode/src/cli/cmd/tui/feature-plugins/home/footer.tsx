@@ -1,6 +1,6 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@yunpat/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@yunpat/core/global"
 
 const id = "internal:home-footer"
 

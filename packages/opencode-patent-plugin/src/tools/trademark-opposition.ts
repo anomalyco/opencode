@@ -5,7 +5,7 @@
  * 动作：parse → analyze → oppose/defend → evidence
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { getTrademarkKBData } from "../utils/trademark-kb.js"

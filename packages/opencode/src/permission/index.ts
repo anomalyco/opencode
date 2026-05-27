@@ -8,7 +8,7 @@ import { PermissionTable } from "@/session/session.sql"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { zod } from "@/util/effect-zod"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { withStatics } from "@/util/schema"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
@@ -147,7 +147,7 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Rules
   return evalRule(permission, pattern, ...rulesets)
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Permission") {}
 
 export const layer = Layer.effect(
   Service,

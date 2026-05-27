@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/ui",
+  "name": "@yunpat/ui",
   "version": "1.14.40",
   "type": "module",
   "license": "MIT",
@@ -21,7 +21,8 @@
     "./icons/file-type": "./src/components/file-icons/types.ts",
     "./icons/app": "./src/components/app-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
-    "./audio/*": "./src/assets/audio/*"
+    "./audio/*": "./src/assets/audio/*",
+    "./assets/brand/*": "./src/assets/brand/*"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
@@ -45,8 +46,8 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/core": "workspace:*",
+    "@yunpat/sdk": "workspace:*",
+    "@yunpat/core": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",

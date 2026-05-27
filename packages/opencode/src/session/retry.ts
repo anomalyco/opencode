@@ -1,4 +1,4 @@
-import type { NamedError } from "@opencode-ai/core/util/error"
+import type { NamedError } from "@yunpat/core/util/error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"

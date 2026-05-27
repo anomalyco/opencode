@@ -4,7 +4,10 @@ import npa from "npm-package-arg"
 import semver from "semver"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@yunpat/core/npm"
+import * as Log from "@yunpat/core/util/log"
+
+const log = Log.create({ service: "plugin" })
 
 // Old npm package names for plugins that are now built-in
 export const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
@@ -16,7 +19,9 @@ export function isDeprecatedPlugin(spec: string) {
 function parse(spec: string) {
   try {
     return npa(spec)
-  } catch {}
+  } catch (e) {
+    log.warn("failed to parse package specifier", { spec, error: e })
+  }
 }
 
 export function parsePluginSpecifier(spec: string) {

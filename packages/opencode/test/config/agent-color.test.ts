@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@yunpat/core/cross-spawn-spawner"
 import path from "path"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { Config } from "@/config/config"

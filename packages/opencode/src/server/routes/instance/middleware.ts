@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono"
 import { WithInstance } from "@/project/with-instance"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { WorkspaceID } from "@/control-plane/schema"
 

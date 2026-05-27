@@ -4,7 +4,7 @@
  * 封装 YunPat 专利分析能力为 OpenCode Plugin Tools
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"
 import { createSharedAgentContext } from "../utils/agent-factory.js"

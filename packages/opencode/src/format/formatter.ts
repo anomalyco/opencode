@@ -1,9 +1,9 @@
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@yunpat/core/npm"
 import type { InstanceContext } from "../project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { which } from "../util/which"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 
 export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {}
 

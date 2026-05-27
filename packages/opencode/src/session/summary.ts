@@ -70,7 +70,7 @@ export interface Interface {
   readonly computeDiff: (input: { messages: MessageV2.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/SessionSummary") {}
 
 export const layer = Layer.effect(
   Service,

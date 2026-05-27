@@ -4,7 +4,7 @@
  * 将 YunPat 知识产权智能体能力封装为 OpenCode Plugin
  */
 
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@yunpat/plugin"
 import { createDefaultLLM } from "./adapters/llm.js"
 import { registerResearchTools } from "./tools/research.js"
 import { registerDraftTools } from "./tools/draft.js"

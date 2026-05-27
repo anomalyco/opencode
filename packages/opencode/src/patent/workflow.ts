@@ -85,7 +85,7 @@ export interface Interface {
   readonly reset: (sessionId: string) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentWorkflow") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentWorkflow") {}
 
 export const layer = Layer.effect(
   Service,

@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@yunpat/plugin/tui"
 import { useSyncV2 } from "@tui/context/sync-v2"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
@@ -24,7 +24,7 @@ import type {
   SessionMessageUser,
   ToolFileContent,
   ToolTextContent,
-} from "@opencode-ai/sdk/v2"
+} from "@yunpat/sdk/v2"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 
 const id = "internal:session-v2-debug"

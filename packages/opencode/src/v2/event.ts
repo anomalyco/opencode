@@ -1,7 +1,7 @@
 import { Identifier } from "@/id/id"
 import { SyncEvent } from "@/sync"
 import { withStatics } from "@/util/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import * as Schema from "effect/Schema"
 
 export const ID = Schema.String.pipe(

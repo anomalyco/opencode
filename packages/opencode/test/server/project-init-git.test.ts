@@ -5,7 +5,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
 import { Server } from "../../src/server/server"
 import { Filesystem } from "@/util/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 

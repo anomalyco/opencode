@@ -2,7 +2,7 @@
  * 专利检索结果侧边栏面板
  */
 
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@yunpat/plugin/tui"
 import { createMemo, Show, For } from "solid-js"
 
 interface Props {

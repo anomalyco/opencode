@@ -5,7 +5,7 @@
  * 用于读取技术交底书、对比文件等专利业务文档。
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import * as fs from "fs"
 import * as path from "path"
 import type { PatentPluginContext } from "../types.js"

@@ -2,7 +2,8 @@ import { intro, log, outro, spinner } from "@clack/prompts"
 import { Effect } from "effect"
 
 import { ConfigPaths } from "@/config/paths"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@yunpat/core/global"
+import { AgentBrand } from "@yunpat/core/brand"
 import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
 import { resolvePluginTarget } from "../../plugin/shared"
 import { errorMessage } from "../../util/error"
@@ -28,7 +29,7 @@ export type PlugDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "opencode" | "tui") => string[]
+  files: (dir: string, name: typeof AgentBrand.configBasename | "tui") => string[]
   global: string
 }
 

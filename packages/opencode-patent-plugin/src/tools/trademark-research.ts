@@ -4,7 +4,7 @@
  * 查询 Obsidian 知识库中的商标法规、司法解释、实务指南。
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { queryTrademarkLaw, queryTrademarkExamGuide, queryTrademarkPractice } from "../utils/obsidian-kb.js"

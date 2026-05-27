@@ -1,12 +1,12 @@
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@yunpat/core/global"
 import path from "path"
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Installation } from "../installation"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Flock } from "@opencode-ai/core/util/flock"
-import { Hash } from "@opencode-ai/core/util/hash"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flag } from "@yunpat/core/flag/flag"
+import { Flock } from "@yunpat/core/util/flock"
+import { Hash } from "@yunpat/core/util/hash"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const Cost = Schema.Struct({
@@ -94,7 +94,7 @@ export interface Interface {
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/ModelsDev") {}
 
 export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClient.HttpClient> = Layer.effect(
   Service,

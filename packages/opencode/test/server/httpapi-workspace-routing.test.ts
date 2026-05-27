@@ -1,5 +1,5 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue } from "effect"
 import {

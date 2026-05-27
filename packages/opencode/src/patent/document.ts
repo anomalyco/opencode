@@ -17,7 +17,7 @@ export interface Interface {
   readonly supportedFormats: () => Effect.Effect<string[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentDocument") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentDocument") {}
 
 const supportedFormatsList = [".txt", ".md", ".docx", ".pdf", ".png", ".jpg", ".jpeg"]
 

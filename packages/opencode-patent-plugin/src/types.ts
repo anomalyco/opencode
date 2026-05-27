@@ -2,7 +2,7 @@
  * YunPat Patent Plugin 共享类型
  */
 
-import type { createOpencodeClient } from "@opencode-ai/sdk"
+import type { createOpencodeClient } from "@yunpat/sdk"
 import type { OpenCodeLLMAdapter } from "./adapters/llm.js"
 
 /**

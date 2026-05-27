@@ -2,8 +2,8 @@ import { generateSpecs } from "hono-openapi"
 import { Hono } from "hono"
 import { adapter } from "#hono"
 import { lazy } from "@/util/lazy"
-import * as Log from "@opencode-ai/core/util/log"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import * as Log from "@yunpat/core/util/log"
+import { Flag } from "@yunpat/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
@@ -174,9 +174,9 @@ export async function openapiHono() {
   const result = await generateSpecs(app, {
     documentation: {
       info: {
-        title: "opencode",
+        title: "yunpat",
         version: "1.0.0",
-        description: "opencode api",
+        description: "yunpat api",
       },
       openapi: "3.1.1",
     },

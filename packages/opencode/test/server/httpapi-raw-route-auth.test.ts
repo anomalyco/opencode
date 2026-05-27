@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
@@ -9,7 +9,7 @@ import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/http
 import { PtyID } from "../../src/pty/schema"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 
 void Log.init({ print: false })
 

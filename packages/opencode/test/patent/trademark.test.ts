@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Trademark } from "@/patent/trademark"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Config } from "@/config/config"
 import { testEffect } from "../lib/effect"
 

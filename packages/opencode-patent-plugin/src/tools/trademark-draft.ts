@@ -4,7 +4,7 @@
  * 5 步骤编排：理解 → 检索 → 商标说明 → 商品分类 → 整合
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { queryTrademarkExamGuide } from "../utils/obsidian-kb.js"

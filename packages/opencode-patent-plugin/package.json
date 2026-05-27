@@ -18,8 +18,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@yunpat/plugin": "workspace:*",
+    "@yunpat/sdk": "workspace:*",
     "effect": "catalog:",
     "mammoth": "1.12.0",
     "pdf-parse": "2.4.5",

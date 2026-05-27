@@ -1,4 +1,4 @@
-import type { Provider } from "@opencode-ai/sdk/v2"
+import type { Provider } from "@yunpat/sdk/v2"
 
 export function index(list: Provider[] | undefined) {
   return new Map((list ?? []).map((item) => [item.id, item] as const))

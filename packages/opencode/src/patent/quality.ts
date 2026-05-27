@@ -38,7 +38,7 @@ export interface Interface {
   readonly autoFix: (input: QualityCheckInput, report: QualityReport) => Effect.Effect<string>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentQuality") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentQuality") {}
 
 const calculateDimensionScore = (content: string, dimension: typeof DIMENSIONS[number]): DimensionScore => {
   const lines = content.split("\n").length

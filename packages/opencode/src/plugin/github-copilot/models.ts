@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { Model } from "@opencode-ai/sdk/v2"
+import type { Model } from "@yunpat/sdk/v2"
 
 export const schema = z.object({
   data: z.array(

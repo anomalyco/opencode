@@ -4,7 +4,7 @@
  * 将工具产出（撰写稿、答辩书、分析报告等）保存到工作目录文件中。
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import * as fs from "fs"
 import * as path from "path"
 import { createHash } from "crypto"

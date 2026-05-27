@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { SlopDetector } from "@/patent/slop"
 import { Config } from "@/config/config"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { testEffect } from "../lib/effect"
 
 const layer = SlopDetector.defaultLayer.pipe(

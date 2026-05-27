@@ -7,7 +7,7 @@
  * - 文件写入/撰写/修改操作 → 需要审批
  */
 
-import type { Permission } from "@opencode-ai/sdk"
+import type { Permission } from "@yunpat/sdk"
 
 /**
  * 创建 permission.ask 钩子

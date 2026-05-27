@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@yunpat/sdk",
   "version": "1.14.40",
   "type": "module",
   "license": "MIT",

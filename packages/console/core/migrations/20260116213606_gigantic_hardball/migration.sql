@@ -1,1 +1,0 @@
-ALTER TABLE `billing` ADD `subscription` json;

@@ -15,7 +15,7 @@ export interface Interface {
   readonly searchInvalidation: (topic: string) => Effect.Effect<string>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentKnowledge") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentKnowledge") {}
 
 export const layer = Layer.effect(
   Service,

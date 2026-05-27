@@ -1,4 +1,4 @@
-import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
+import type { AuthOAuthResult, Hooks } from "@yunpat/plugin"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
 import { zod } from "@/util/effect-zod"
@@ -104,7 +104,7 @@ interface State {
   pending: Map<ProviderID, AuthOAuthResult>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/ProviderAuth") {}
 
 export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
   Service,

@@ -1,6 +1,6 @@
 import yargs from "yargs"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@yunpat/core/installation/version"
 import { hideBin } from "yargs/helpers"
 import { Log } from "./node"
 
@@ -10,7 +10,7 @@ Log.init({
 
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName("yunpat")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")

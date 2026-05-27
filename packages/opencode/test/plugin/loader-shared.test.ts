@@ -13,7 +13,7 @@ const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Bus } = await import("../../src/bus")
-const { Npm } = await import("@opencode-ai/core/npm")
+const { Npm } = await import("@yunpat/core/npm")
 const { TestConfig } = await import("../fixture/config")
 
 afterAll(() => {

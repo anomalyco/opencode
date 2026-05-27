@@ -8,13 +8,13 @@ import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { Git } from "@/git"
 import { lazy } from "@/util/lazy"
 import { Config } from "@/config/config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -62,7 +62,7 @@ export interface Interface {
   readonly init: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/FileWatcher") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/FileWatcher") {}
 
 export const layer = Layer.effect(
   Service,
@@ -113,7 +113,7 @@ export const layer = Layer.effect(
               Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
               Effect.catchCause((cause) => {
                 log.error("failed to subscribe", { dir, cause: Cause.pretty(cause) })
-                pending.then((s) => s.unsubscribe()).catch(() => {})
+                pending.then((s) => s.unsubscribe()).catch((e) => log.warn("unsubscribe failed", { error: String(e) }))
                 return Effect.void
               }),
             )
@@ -134,7 +134,10 @@ export const layer = Layer.effect(
             })
             const vcsDir = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
             if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
-              const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
+              const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch((e) => {
+                log.warn("failed to read vcs dir", { vcsDir, error: String(e) })
+                return []
+              }))).filter(
                 (entry) => entry !== "HEAD",
               )
               yield* Effect.forkScoped(subscribe(vcsDir, ignore))

@@ -5,7 +5,7 @@
  */
 
 import type { RouterContext } from "../types/index.js"
-import type { Permission } from "@opencode-ai/sdk"
+import type { Permission } from "@yunpat/sdk"
 
 export function createPermissionHandler(context: RouterContext) {
   return async (

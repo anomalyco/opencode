@@ -5,7 +5,7 @@
  * - 解析目标专利 → 无效理由分析 → 撰写无效宣告请求书 / 答辩意见
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { searchLegalRules, searchPatentJudgments, searchPatents } from "../utils/db.js"

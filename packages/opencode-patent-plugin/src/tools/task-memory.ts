@@ -5,7 +5,7 @@
  * 实现"做过的事不需要重复指导"的能力。
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { getCaseStore, type TaskType } from "../utils/case-store.js"

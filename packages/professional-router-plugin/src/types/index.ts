@@ -2,7 +2,7 @@
  * 路由决策结果类型
  */
 
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from "@yunpat/sdk"
 
 export type Domain = "patent" | "trademark" | "legal" | "copyright" | "general"
 

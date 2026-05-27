@@ -12,7 +12,7 @@ export interface Interface {
   readonly extractDrawingElements: (image: Buffer | string) => Effect.Effect<string[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentDrawing") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentDrawing") {}
 
 export const layer: Layer.Layer<
   Service,

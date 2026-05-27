@@ -16,8 +16,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@yunpat/plugin": "workspace:*",
+    "@yunpat/sdk": "workspace:*",
     "effect": "catalog:",
     "zod": "catalog:"
   },

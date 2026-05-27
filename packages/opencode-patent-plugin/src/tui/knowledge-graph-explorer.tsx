@@ -2,7 +2,7 @@
  * 知识图谱探索器命令
  */
 
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@yunpat/plugin/tui"
 
 export function registerKGCommand(api: TuiPluginApi) {
   api.ui.dialog.replace(() => (

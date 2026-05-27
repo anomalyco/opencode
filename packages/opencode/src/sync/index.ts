@@ -8,7 +8,7 @@ import type { InstanceContext } from "@/project/instance"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
 import { zodObject } from "@/util/effect-zod"
 import type { DeepMutable } from "@/util/schema"
@@ -67,7 +67,7 @@ export interface Interface {
   readonly remove: (aggregateID: string) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SyncEvent") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/SyncEvent") {}
 
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { Bonjour } from "bonjour-service"
 
 const log = Log.create({ service: "mdns" })
@@ -36,7 +36,9 @@ export function publish(port: number, domain?: string) {
     if (bonjour) {
       try {
         bonjour.destroy()
-      } catch {}
+      } catch (e) {
+        log.debug("failed to destroy bonjour during cleanup", { error: e })
+      }
     }
     bonjour = undefined
     currentPort = undefined

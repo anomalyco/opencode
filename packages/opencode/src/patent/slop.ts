@@ -40,7 +40,7 @@ export interface Interface {
   readonly filter: (content: string) => Effect.Effect<{ text: string; report: SlopReport }>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SlopDetector") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/SlopDetector") {}
 
 export const layer = Layer.effect(
   Service,

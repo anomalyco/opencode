@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"

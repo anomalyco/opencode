@@ -1,1 +1,0 @@
-ALTER TABLE `usage` RENAME COLUMN `data` TO `enrichment`;

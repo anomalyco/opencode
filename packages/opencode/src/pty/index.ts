@@ -3,11 +3,11 @@ import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
-import { lazy } from "@opencode-ai/core/util/lazy"
+import { lazy } from "@yunpat/core/util/lazy"
 import { Plugin } from "@/plugin"
 import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { zod } from "@/util/effect-zod"
@@ -112,7 +112,7 @@ export interface Interface {
   ) => Effect.Effect<{ onMessage: (message: string | ArrayBuffer) => void; onClose: () => void } | undefined>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Pty") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Pty") {}
 
 export const layer = Layer.effect(
   Service,
@@ -124,11 +124,15 @@ export const layer = Layer.effect(
     function teardown(session: Active) {
       try {
         session.process.kill()
-      } catch {}
+      } catch (e) {
+        log.debug("failed to kill process", { error: e })
+      }
       for (const [sub, ws] of session.subscribers.entries()) {
         try {
           if (sock(ws) === sub) ws.close()
-        } catch {}
+        } catch (e) {
+          log.debug("failed to close subscriber socket", { error: e })
+        }
       }
       session.subscribers.clear()
     }
@@ -242,7 +246,8 @@ export const layer = Layer.effect(
           }
           try {
             ws.send(chunk)
-          } catch {
+          } catch (e) {
+            log.debug("failed to send chunk to subscriber", { error: e })
             session.subscribers.delete(key)
           }
         }
@@ -329,7 +334,8 @@ export const layer = Layer.effect(
           for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
             ws.send(data.slice(i, i + BUFFER_CHUNK))
           }
-        } catch {
+        } catch (e) {
+          log.debug("failed to send buffered data to client", { error: e })
           cleanup()
           ws.close()
           return
@@ -338,7 +344,8 @@ export const layer = Layer.effect(
 
       try {
         ws.send(meta(end))
-      } catch {
+      } catch (e) {
+        log.debug("failed to send cursor meta to client", { error: e })
         cleanup()
         ws.close()
         return

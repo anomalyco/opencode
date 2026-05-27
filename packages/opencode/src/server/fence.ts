@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { HEADER, diff, load } from "./shared/fence"
 
 const log = Log.create({ service: "fence-middleware" })

@@ -1,8 +1,8 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import type { Model } from "@opencode-ai/sdk/v2"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import type { Hooks, PluginInput } from "@yunpat/plugin"
+import type { Model } from "@yunpat/sdk/v2"
+import { InstallationVersion } from "@yunpat/core/installation/version"
 import { iife } from "@/util/iife"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { setTimeout as sleep } from "node:timers/promises"
 import { CopilotModels } from "./models"
 import { MessageV2 } from "@/session/message-v2"
@@ -143,8 +143,10 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     isAgent: !(last?.role === "user" && hasNonToolCalls) || imgMsg(last),
                   }
                 }
-              } catch {}
-              return { isVision: false, isAgent: false }
+              } catch (e) {
+                log.error("failed to parse request body for copilot headers", { error: e })
+                return { isVision: false, isAgent: false }
+              }
             })
 
             const headers: Record<string, string> = {
@@ -203,7 +205,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`)
                   if (!url.hostname) return "Please enter a valid URL or domain"
                   return undefined
-                } catch {
+                } catch (e) {
+                  log.error("invalid URL in enterprise URL validation", { value, error: e })
                   return "Please enter a valid URL (e.g., company.ghe.com or https://company.ghe.com)"
                 }
               },

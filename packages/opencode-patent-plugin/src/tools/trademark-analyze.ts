@@ -4,7 +4,7 @@
  * 6 种分析类型：显著性、近似、混淆可能性、侵权、驰名、商品类似
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { getTrademarkKBData } from "../utils/trademark-kb.js"

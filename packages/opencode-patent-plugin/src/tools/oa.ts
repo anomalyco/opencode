@@ -5,7 +5,7 @@
  * 接入真实数据源：legal_world_model + Obsidian 知识库
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"

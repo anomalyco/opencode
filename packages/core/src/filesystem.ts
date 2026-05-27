@@ -37,7 +37,7 @@ export namespace AppFileSystem {
     readonly globMatch: (pattern: string, filepath: string) => boolean
   }
 
-  export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
+  export class Service extends Context.Service<Service, Interface>()("@yunpat/FileSystem") {}
 
   export const layer = Layer.effect(
     Service,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package",
-  "name": "@opencode-ai/script",
+  "name": "@yunpat/script",
   "license": "MIT",
   "dependencies": {
     "semver": "^7.6.3"

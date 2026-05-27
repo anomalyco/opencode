@@ -10,7 +10,7 @@ export interface Interface {
   readonly remove: (key: string) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Env") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Env") {}
 
 export const layer = Layer.effect(
   Service,

@@ -3,10 +3,10 @@ import * as Context from "effect/Context"
 import { Instance } from "@/project/instance"
 import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
-import * as Observability from "@opencode-ai/core/effect/observability"
+import * as Observability from "@yunpat/core/effect/observability"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import type { InstanceContext } from "@/project/instance"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { memoMap } from "@yunpat/core/effect/memo-map"
 
 type Refs = {
   instance?: InstanceContext

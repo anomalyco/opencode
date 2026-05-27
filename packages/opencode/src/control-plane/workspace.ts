@@ -11,11 +11,11 @@ import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable, EventTable } from "@/sync/event.sql"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@yunpat/core/flag/flag"
+import * as Log from "@yunpat/core/util/log"
 import { Filesystem } from "@/util/filesystem"
 import { ProjectID } from "@/project/schema"
-import { Slug } from "@opencode-ai/core/util/slug"
+import { Slug } from "@yunpat/core/util/slug"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdapter } from "./adapters"
 import { type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
@@ -157,7 +157,7 @@ export interface Interface {
   readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Workspace") {}
 
 export const layer = Layer.effect(
   Service,

@@ -1,5 +1,5 @@
 import type { ParsedKey } from "@opentui/core"
-import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@opencode-ai/plugin/tui"
+import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@yunpat/plugin/tui"
 import type { useCommandDialog } from "@tui/component/dialog-command"
 import type { useEvent } from "@tui/context/event"
 import type { useKeybind } from "@tui/context/keybind"
@@ -18,7 +18,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@yunpat/core/installation/version"
 
 type RouteEntry = {
   key: symbol

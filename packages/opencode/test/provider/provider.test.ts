@@ -3,7 +3,7 @@ import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@yunpat/core/global"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Plugin } from "../../src/plugin/index"
@@ -60,7 +60,7 @@ async function markPluginDependenciesReady(dir: string) {
   await mkdir(path.join(dir, "node_modules"), { recursive: true })
   await Bun.write(
     path.join(dir, "package-lock.json"),
-    JSON.stringify({ packages: { "": { dependencies: { "@opencode-ai/plugin": "0.0.0" } } } }),
+    JSON.stringify({ packages: { "": { dependencies: { "@yunpat/plugin": "0.0.0" } } } }),
   )
 }
 

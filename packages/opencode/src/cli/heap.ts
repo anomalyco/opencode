@@ -1,8 +1,8 @@
 import path from "path"
 import { writeHeapSnapshot } from "node:v8"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@yunpat/core/flag/flag"
+import { Global } from "@yunpat/core/global"
+import * as Log from "@yunpat/core/util/log"
 
 const log = Log.create({ service: "heap" })
 const MINUTE = 60_000

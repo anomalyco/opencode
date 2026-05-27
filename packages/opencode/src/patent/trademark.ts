@@ -34,7 +34,7 @@ export interface Interface {
   readonly analyzeDistinctiveness: (markName: string, goodsServices: string) => Effect.Effect<TrademarkAnalysis>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Trademark") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Trademark") {}
 
 export const layer = Layer.effect(
   Service,

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun test *)",
+      "Bash(networksetup -getwebproxy Wi-Fi)",
+      "Bash(networksetup -getsecurewebproxy Wi-Fi)",
+      "Bash(networksetup -getsocksfirewallproxy Wi-Fi)",
+      "Bash(git -c http.proxy=http://127.0.0.1:9981 -c https.proxy=http://127.0.0.1:9981 push origin dev)",
+      "Bash(awk '{print $1}')"
+    ]
+  }
+}

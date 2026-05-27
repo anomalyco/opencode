@@ -6,7 +6,7 @@ import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 
 function spawnFakeServer() {
   const { spawn } = require("child_process")

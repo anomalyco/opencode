@@ -1,9 +1,12 @@
 import path from "path"
 import { Effect, Layer, Option, Schema, Context, SynchronizedRef } from "effect"
-import { Identifier } from "@opencode-ai/core/util/identifier"
+import { Identifier } from "@yunpat/core/util/identifier"
 import { NonNegativeInt, withStatics } from "@/util/schema"
-import { Global } from "@opencode-ai/core/global"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Global } from "@yunpat/core/global"
+import { AppFileSystem } from "@yunpat/core/filesystem"
+import * as Log from "@yunpat/core/util/log"
+
+const log = Log.create({ service: "auth" })
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -98,7 +101,7 @@ export interface Interface {
   readonly forService: (serviceID: ServiceID) => Effect.Effect<Account[], AuthError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Auth") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/v2/Auth") {}
 
 export const layer = Layer.effect(
   Service,
@@ -111,7 +114,9 @@ export const layer = Layer.effect(
       if (process.env.OPENCODE_AUTH_CONTENT) {
         try {
           return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
-        } catch {}
+        } catch (e) {
+          log.warn("failed to parse OPENCODE_AUTH_CONTENT env", { error: e })
+        }
       }
 
       const raw = yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => null))

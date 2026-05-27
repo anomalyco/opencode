@@ -8,7 +8,7 @@
  * - 连接到专业技能触发
  */
 
-import type { Plugin, PluginInput, PluginOptions } from "@opencode-ai/plugin"
+import type { Plugin, PluginInput, PluginOptions } from "@yunpat/plugin"
 import type { RouterContext } from "./types/index.js"
 import { RoutingDecisionStore } from "./types/index.js"
 import { createMessageHandler } from "./hooks/message-handler.js"

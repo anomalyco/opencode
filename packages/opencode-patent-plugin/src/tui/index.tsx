@@ -2,7 +2,7 @@
  * OpenCode Patent Plugin - TUI 扩展
  */
 
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@yunpat/plugin/tui"
 import { PatentSearchPanel } from "./patent-search-panel.js"
 import { registerCompareCommand } from "./compare-matrix.js"
 import { registerKGCommand } from "./knowledge-graph-explorer.js"

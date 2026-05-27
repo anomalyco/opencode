@@ -1,5 +1,5 @@
 import { LocalContext } from "@/util/local-context"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import type * as Project from "./project"
 
 export interface InstanceContext {

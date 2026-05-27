@@ -4,7 +4,7 @@
  * 提供案件状态查询、列表、状态转换、历史查看等功能
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { getCaseStore, type CaseStatus } from "../utils/case-store.js"

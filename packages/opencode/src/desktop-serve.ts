@@ -61,8 +61,8 @@ const cli = yargs(args)
     Heap.start()
 
     process.env.AGENT = "1"
-    process.env.OPENCODE = "1"
-    process.env.OPENCODE_PID = String(process.pid)
+    process.env.YUNPAT = "1"
+    process.env.YUNPAT_PID = String(process.pid)
 
     Log.Default.info("yunpat-serve", {
       version: InstallationVersion,
@@ -71,7 +71,7 @@ const cli = yargs(args)
       run_id: processMetadata.runID,
     })
 
-    const marker = path.join(Global.Path.data, "opencode.db")
+    const marker = path.join(Global.Path.data, "yunpat.db")
     if (!(await Filesystem.exists(marker))) {
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       await JsonMigration.run(drizzle({ client: Database.Client().$client }), {

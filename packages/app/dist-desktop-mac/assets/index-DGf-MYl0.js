@@ -1,0 +1,2 @@
+import{av as h,a_ as d,a9 as p,a6 as l,be as g,bG as w}from"./desktop-mac-aMdCRWNQ.js";function M(t,n){const e=new ResizeObserver(t);return w(e.disconnect.bind(e)),{observe:s=>e.observe(s,n),unobserve:e.unobserve.bind(e)}}function m(t,n,e){const s=new WeakMap,{observe:v,unobserve:f}=M(a=>{for(const r of a){const{contentRect:o,target:i}=r,b=Math.round(o.width),u=Math.round(o.height),c=s.get(i);(!c||c.width!==b||c.height!==u)&&(n(o,i,r),s.set(i,{width:b,height:u}))}},e);h(a=>{const r=d(p(l(t)));return g(r,a,v,f),r},[])}export{m as c};
+//# sourceMappingURL=index-DGf-MYl0.js.map

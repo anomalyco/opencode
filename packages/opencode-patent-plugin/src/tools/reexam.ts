@@ -5,7 +5,7 @@
  * - 解析驳回决定 → 分析驳回理由 → 撰写复审请求书
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"

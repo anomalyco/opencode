@@ -2,7 +2,7 @@
  * 专利对比矩阵命令
  */
 
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@yunpat/plugin/tui"
 
 export function registerCompareCommand(api: TuiPluginApi) {
   api.ui.dialog.replace(() => (

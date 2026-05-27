@@ -1,0 +1,71 @@
+name: Build macOS Desktop
+
+on:
+  push:
+    branches: [dev, beta]
+    paths:
+      - 'packages/desktop-mac/**'
+      - 'packages/app/**'
+      - 'packages/opencode/**'
+      - 'packages/ipc-bridge/**'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Release channel'
+        type: choice
+        options: [dev, beta, prod]
+        default: 'dev'
+
+concurrency:
+  group: desktop-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build frontend
+        run: |
+          cd packages/app
+          bun run build:desktop-mac
+
+      - name: Build Swift native shell
+        run: |
+          cd packages/desktop-mac
+          swift build -c release
+
+      - name: Build distributable app
+        run: |
+          cd packages/desktop-mac
+          bash build-dist.sh
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YunPat-macOS-${{ github.sha }}
+          path: packages/desktop-mac/.build/dist/*.dmg
+          retention-days: 7
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YunPat-macOS-app-${{ github.sha }}
+          path: packages/desktop-mac/.build/dist/YunPat.app
+          retention-days: 7

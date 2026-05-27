@@ -5,7 +5,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "./models"
 import { iife } from "@/util/iife"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -56,34 +56,29 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
-// TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
-  const sanitizeToolResultOutput = (content: ToolResultPart) => {
-    if (content.output.type === "text" || content.output.type === "error-text") {
-      content.output.value = sanitizeSurrogates(content.output.value)
-    }
-    if (content.output.type === "content") {
-      content.output.value = content.output.value.map((item) => {
-        if (item.type === "text") {
-          item.text = sanitizeSurrogates(item.text)
-        }
-        return item
-      })
-    }
-    return content
-  }
-
   msgs = msgs.map((msg) => {
     switch (msg.role) {
       case "tool":
         if (!Array.isArray(msg.content)) return msg
         msg.content = msg.content.map((content) => {
           if (content.type === "tool-result") {
-            return sanitizeToolResultOutput(content)
+            if (content.output.type === "text" || content.output.type === "error-text") {
+              content.output.value = sanitizeSurrogates(content.output.value)
+            }
+            if (content.output.type === "content") {
+              content.output.value = content.output.value.map((item) => {
+                if (item.type === "text") {
+                  item.text = sanitizeSurrogates(item.text)
+                }
+                return item
+              })
+            }
+            return content
           }
           return content
         })
@@ -115,7 +110,18 @@ function normalizeMessages(
               content.text = sanitizeSurrogates(content.text)
             }
             if (content.type === "tool-result") {
-              return sanitizeToolResultOutput(content)
+              if (content.output.type === "text" || content.output.type === "error-text") {
+                content.output.value = sanitizeSurrogates(content.output.value)
+              }
+              if (content.output.type === "content") {
+                content.output.value = content.output.value.map((item) => {
+                  if (item.type === "text") {
+                    item.text = sanitizeSurrogates(item.text)
+                  }
+                  return item
+                })
+              }
+              return content
             }
             return content
           })

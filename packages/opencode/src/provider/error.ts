@@ -1,6 +1,9 @@
 import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import * as Log from "@yunpat/core/util/log"
+
+const log = Log.create({ service: "provider-error" })
 import type { ProviderID } from "./schema"
 
 // Adapted from overflow detection patterns in:
@@ -68,7 +71,9 @@ function message(providerID: ProviderID, e: APICallError) {
       if (errMsg && typeof errMsg === "string") {
         return `${msg}: ${errMsg}`
       }
-    } catch {}
+    } catch (e) {
+      log.debug("failed to parse error response body as JSON", { error: e })
+    }
 
     // If responseBody is HTML (e.g. from a gateway or proxy error page),
     // provide a human-readable message instead of dumping raw markup

@@ -1,11 +1,11 @@
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@yunpat/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart, FilePart, TextPart } from "@yunpat/sdk/v2"
 
 export type PromptInfo = {
   input: string

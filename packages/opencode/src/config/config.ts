@@ -332,7 +332,7 @@ export interface Interface {
   readonly waitForDependencies: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Config") {}
 
 function globalConfigFile() {
   const candidates = [`${AgentBrand.configBasename}.jsonc`, `${AgentBrand.configBasename}.json`, "config.json"].map((file) =>

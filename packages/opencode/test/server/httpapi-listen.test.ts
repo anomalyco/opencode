@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@yunpat/core/flag/flag"
+import * as Log from "@yunpat/core/util/log"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"

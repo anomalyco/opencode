@@ -27,7 +27,7 @@ export interface Interface {
   readonly isAvailable: () => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentSearch") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentSearch") {}
 
 export const layer = Layer.effect(
   Service,

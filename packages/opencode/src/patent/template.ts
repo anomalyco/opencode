@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Config } from "@/config/config"
 import path from "node:path"
 
@@ -9,7 +9,7 @@ export interface Interface {
   readonly getOATemplate: () => Effect.Effect<string>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentTemplate") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentTemplate") {}
 
 const templateContent = {
   specification: `# {{发明名称}}

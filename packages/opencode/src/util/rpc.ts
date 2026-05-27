@@ -1,5 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Definition constraint must be loose for JSON-serialized RPC
 type Definition = {
-  [method: string]: (input: any) => any
+  [method: string]: (...args: any[]) => any
 }
 
 export function listen(rpc: Definition) {
@@ -18,10 +19,10 @@ export function emit(event: string, data: unknown) {
 
 export function client<T extends Definition>(target: {
   postMessage: (data: string) => void | null
-  onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null
+  onmessage: ((this: Worker, ev: MessageEvent) => unknown) | null
 }) {
-  const pending = new Map<number, (result: any) => void>()
-  const listeners = new Map<string, Set<(data: any) => void>>()
+  const pending = new Map<number, (result: unknown) => void>()
+  const listeners = new Map<string, Set<(data: unknown) => void>>()
   let id = 0
   target.onmessage = async (evt) => {
     const parsed = JSON.parse(evt.data)
@@ -42,10 +43,10 @@ export function client<T extends Definition>(target: {
     }
   }
   return {
-    call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
+    call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<Awaited<ReturnType<T[Method]>>> {
       const requestId = id++
       return new Promise((resolve) => {
-        pending.set(requestId, resolve)
+        pending.set(requestId, resolve as (result: unknown) => void)
         target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
       })
     },
@@ -55,9 +56,9 @@ export function client<T extends Definition>(target: {
         handlers = new Set()
         listeners.set(event, handlers)
       }
-      handlers.add(handler)
+      handlers.add(handler as (data: unknown) => void)
       return () => {
-        handlers!.delete(handler)
+        handlers!.delete(handler as (data: unknown) => void)
       }
     },
   }

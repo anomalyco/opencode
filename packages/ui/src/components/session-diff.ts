@@ -1,6 +1,6 @@
 import { parseDiffFromFile, type FileDiffMetadata } from "@pierre/diffs"
 import { formatPatch, parsePatch, structuredPatch } from "diff"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff, VcsFileDiff } from "@yunpat/sdk/v2"
 
 type LegacyDiff = {
   file: string

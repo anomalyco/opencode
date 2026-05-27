@@ -4,7 +4,7 @@
  * 检索商标审查审理指南中的审查实例，辅助近似判断。
  */
 
-import { tool } from "@opencode-ai/plugin/tool"
+import { tool } from "@yunpat/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { queryTrademarkExamGuide } from "../utils/obsidian-kb.js"

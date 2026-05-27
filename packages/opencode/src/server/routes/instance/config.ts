@@ -8,7 +8,7 @@ import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { jsonRequest, runRequest } from "./trace"
 import { Effect } from "effect"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 
 const log = Log.create({ service: "server.config" })
 

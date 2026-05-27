@@ -1,5 +1,5 @@
 import fs from "node:fs/promises"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import { ProxyUtil } from "../proxy-util"

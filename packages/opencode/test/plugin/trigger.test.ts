@@ -1,6 +1,6 @@
 import { afterAll, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@yunpat/core/cross-spawn-spawner"
 import path from "path"
 import { pathToFileURL } from "url"
 import { ModelID, ProviderID } from "../../src/provider/schema"

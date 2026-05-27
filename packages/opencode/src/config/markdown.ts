@@ -1,5 +1,8 @@
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@yunpat/core/util/error"
+import * as Log from "@yunpat/core/util/log"
 import matter from "gray-matter"
+
+const log = Log.create({ service: "config.markdown" })
 import { z } from "zod"
 import { Filesystem } from "@/util/filesystem"
 
@@ -73,7 +76,8 @@ export async function parse(filePath: string) {
   try {
     const md = matter(template)
     return md
-  } catch {
+  } catch (e) {
+    log.warn("failed to parse frontmatter, trying fallback", { path: filePath, error: e })
     try {
       return matter(fallbackSanitization(template))
     } catch (err) {

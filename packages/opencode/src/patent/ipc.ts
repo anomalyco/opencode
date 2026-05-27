@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { Context, Effect, Layer, Option, Schema, Exit } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Config } from "@/config/config"
 import path from "path"
 
@@ -27,7 +27,7 @@ export interface Interface {
   readonly getStatistics: (code: string) => Effect.Effect<{ invalidation_rate: number; total_cases: number } | null>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/PatentIPC") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/PatentIPC") {}
 
 export const layer = Layer.effect(
   Service,

@@ -17,7 +17,7 @@ import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Command } from "@/command"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -25,7 +25,7 @@ import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@yunpat/core/util/error"
 import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
@@ -335,7 +335,7 @@ export const SessionRoutes = lazy(() =>
           return yield* session.get(sessionID)
         }),
     )
-    // TODO(v2): remove this dedicated route and rely on the normal `/init` command flow.
+    // Kept as a dedicated API route because the generated SDK client and httpapi exercise depend on it.
     .post(
       "/:sessionID/init",
       describeRoute({

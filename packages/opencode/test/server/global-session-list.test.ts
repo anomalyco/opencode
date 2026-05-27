@@ -5,7 +5,7 @@ import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Project } from "@/project/project"
 import { Session as SessionNs } from "@/session/session"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })

@@ -1,5 +1,5 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flag } from "@yunpat/core/flag/flag"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"

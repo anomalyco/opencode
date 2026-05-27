@@ -5,7 +5,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
 
@@ -251,7 +251,7 @@ interface State {
   root: Git.Base | undefined
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Vcs") {}
 
 export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Layer.effect(
   Service,

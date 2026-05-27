@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 

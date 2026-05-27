@@ -1,6 +1,6 @@
 import z from "zod"
-import { NamedError } from "@opencode-ai/core/util/error"
-import { Global } from "@opencode-ai/core/global"
+import { NamedError } from "@yunpat/core/util/error"
+import { Global } from "@yunpat/core/global"
 import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
@@ -8,8 +8,8 @@ import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
-import * as Log from "@opencode-ai/core/util/log"
-import { Slug } from "@opencode-ai/core/util/slug"
+import * as Log from "@yunpat/core/util/log"
+import { Slug } from "@yunpat/core/util/slug"
 import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -17,9 +17,9 @@ import { Git } from "@/git"
 import { Effect, Layer, Path, Schema, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@yunpat/core/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { zod as effectZod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
@@ -153,7 +153,7 @@ export interface Interface {
   readonly reset: (input: ResetInput) => Effect.Effect<boolean>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Worktree") {}
+export class Service extends Context.Service<Service, Interface>()("@yunpat/Worktree") {}
 
 type GitResult = { code: number; text: string; stderr: string }
 

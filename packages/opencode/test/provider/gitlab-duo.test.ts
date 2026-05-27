@@ -12,7 +12,7 @@ export {}
 import { WithInstance } from "../../src/project/with-instance"
 // import { Provider } from "@/provider/provider"
 // import { Env } from "../../src/env"
-// import { Global } from "@opencode-ai/core/global"
+// import { Global } from "@yunpat/core/global"
 // import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 
 // test("GitLab Duo: loads provider with API key from environment", async () => {

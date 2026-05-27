@@ -8,7 +8,7 @@ import { HttpApiProxy } from "./proxy"
 import * as Fence from "@/server/shared/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/shared/workspace-routing"
 import { NotFoundError } from "@/storage/storage"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
 import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -34,7 +34,7 @@ export class WorkspaceRouteContext extends Context.Service<
     readonly directory: string
     readonly workspaceID?: WorkspaceID
   }
->()("@opencode/ExperimentalHttpApiWorkspaceRouteContext") {}
+>()("@yunpat/ExperimentalHttpApiWorkspaceRouteContext") {}
 
 export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
   WorkspaceRoutingMiddleware,
@@ -42,7 +42,7 @@ export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
     provides: WorkspaceRouteContext
     requires: Session.Service
   }
->()("@opencode/ExperimentalHttpApiWorkspaceRouting") {}
+>()("@yunpat/ExperimentalHttpApiWorkspaceRouting") {}
 
 function requestURL(request: HttpServerRequest.HttpServerRequest): URL {
   return new URL(request.url, "http://localhost")

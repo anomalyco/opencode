@@ -1,5 +1,8 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@yunpat/plugin"
+import * as Log from "@yunpat/core/util/log"
 import { rename, writeFile } from "node:fs/promises"
+
+const log = Log.create({ service: "debug-workspace" })
 import { randomInt } from "node:crypto"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -16,7 +19,9 @@ async function waitForHealth(port: number) {
       if (response.ok) {
         return
       }
-    } catch {}
+    } catch (e) {
+      log.debug("health check request failed", { error: e })
+    }
 
     await sleep(250)
   }

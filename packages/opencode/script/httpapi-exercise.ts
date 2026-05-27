@@ -21,7 +21,7 @@
 import { Cause, ConfigProvider, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@yunpat/core/flag/flag"
 import { TestLLMServer } from "../test/lib/llm-server"
 import type { Config } from "../src/config/config"
 import { MessageID, PartID, type SessionID } from "../src/session/schema"
@@ -50,7 +50,7 @@ const exerciseDatabasePath =
 process.env.OPENCODE_DB = exerciseDatabasePath
 Flag.OPENCODE_DB = exerciseDatabasePath
 
-void (await import("@opencode-ai/core/util/log")).init({ print: false })
+void (await import("@yunpat/core/util/log")).init({ print: false })
 
 const OpenApiMethods = ["get", "post", "put", "delete", "patch"] as const
 const Methods = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const

@@ -13,7 +13,7 @@ const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
 // full handler, so a downstream failure can make the next auth alternative run
 // and remap an authorized NotFound into Unauthorized.
 export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
-  "@opencode/ExperimentalHttpApiAuthorization",
+  "@yunpat/ExperimentalHttpApiAuthorization",
   {
     error: HttpApiError.UnauthorizedNoContent,
   },
