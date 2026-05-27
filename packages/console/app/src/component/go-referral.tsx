@@ -65,6 +65,7 @@ function rewardDescriptionKey(source: GoReferralReward["source"]) {
 
 function rewardActionKey(reward: GoReferralReward, hasActiveGo: boolean) {
   if (reward.status === "applied") return "workspace.referral.reward.action.applied" as const
+  if (reward.status === "pending" && reward.source === "inviter") return "workspace.referral.reward.source.pendingInviter" as const
   if (reward.status === "pending" || !hasActiveGo) return "workspace.referral.reward.action.subscribeUnlock" as const
   return "workspace.referral.reward.action.view" as const
 }
