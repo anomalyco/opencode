@@ -137,12 +137,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
 
   const tools = resolveTools(input)
-  if (
-    input.model.providerID.includes("github-copilot") &&
-    Object.keys(tools).length === 0 &&
-    hasToolCalls(input.messages)
-  ) {
-    // Copilot needs a tools field when replaying prior tool calls, even if no tools are currently enabled.
+  if (requiresNoopTool(input.model) && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    // Some provider gateways need a tools field when replaying prior tool calls,
+    // even if no tools are currently enabled.
     tools["_noop"] = aiTool({
       description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
       inputSchema: jsonSchema({
@@ -191,6 +188,21 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+function requiresNoopTool(model: Provider.Model) {
+  if (model.providerID.includes("github-copilot")) return true
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
+  if (model.providerID.toLowerCase().includes("bedrock")) return true
+  if (model.api.npm !== "@ai-sdk/openai-compatible") return false
+  return model.providerID.toLowerCase().includes("litellm") && isBedrockModelID(model.api.id.toLowerCase())
+}
+
+function isBedrockModelID(id: string) {
+  const parts = id.split(".")
+  const first = parts[0]
+  const vendor = ["us", "eu", "global", "apac", "au", "ca", "sa"].includes(first) ? parts[1] : first
+  return ["amazon", "anthropic", "meta", "mistral", "minimax", "openai"].includes(vendor ?? "")
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {

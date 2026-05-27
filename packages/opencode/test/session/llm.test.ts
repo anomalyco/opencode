@@ -909,6 +909,97 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "sends compatibility tool for LiteLLM Bedrock history with disabled tools",
+    () =>
+      Effect.gen(function* () {
+        const providerID = ProviderID.make("litellm-bedrock")
+        const modelID = ModelID.make("us.anthropic.claude-opus-4-6-v1")
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(providerID, modelID)
+        const sessionID = SessionID.make("session-test-litellm-bedrock-noop")
+        const agent = {
+          name: "test",
+          mode: "subagent",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "deny" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-litellm-bedrock-noop"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID, modelID: resolved.id },
+          } satisfies MessageV2.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Use the external tool." },
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool-call",
+                  toolCallId: "call-litellm-bedrock",
+                  toolName: "mcp_lookup",
+                  input: { query: "status" },
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  toolCallId: "call-litellm-bedrock",
+                  toolName: "mcp_lookup",
+                  output: { type: "text", value: "ok" },
+                },
+              ],
+            },
+            { role: "user", content: "Continue." },
+          ],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const tools = capture.body.tools as Array<{ function?: { name?: string } }> | undefined
+        expect(tools?.some((item) => item.function?.name === "_noop")).toBe(true)
+      }),
+    {
+      config: () => ({
+        enabled_providers: ["litellm-bedrock"],
+        provider: {
+          "litellm-bedrock": {
+            name: "LiteLLM Bedrock",
+            npm: "@ai-sdk/openai-compatible",
+            env: [],
+            models: {
+              "us.anthropic.claude-opus-4-6-v1": {
+                name: "Claude Opus 4.6 via Bedrock",
+                tool_call: true,
+                limit: { context: 200000, output: 32000 },
+              },
+            },
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
     "sends responses API payload for OpenAI models",
     () =>
       Effect.gen(function* () {
