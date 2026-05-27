@@ -36,6 +36,7 @@ import * as Session from "./session"
 import * as Participant from "./participant"
 import * as Invite from "./invite"
 import * as Queue from "@opencode-ai/collab"
+import { collabId } from "@opencode-ai/collab"
 import * as Room from "./room"
 import { runCollabMigrations } from "./migrate"
 import { collabDb } from "./db-impl"
@@ -57,6 +58,8 @@ import { revokeInternalToken } from "./internal-token"
 import { encryptToken, decryptToken, isEncrypted } from "./crypto"
 import { checkRateLimit, callerIp, rateLimitedResponse } from "./rate-limit"
 import { getCredentialsStatus, writeCredentials } from "./claude-credentials"
+import { resolveBranchName } from "./branch-resolve"
+import { disposeAllInstances } from "@/project/instance-runtime"
 
 // Body cap shared by /prompt and /suggest (ADR-0008).  32 KB is well above
 // any sane prompt — guards the LLM token-spend column against accidental
@@ -707,6 +710,30 @@ async function handleClaudeCredsUpload(req: Request): Promise<Response> {
       bytes: result.bytes,
       email: result.email,
     })
+
+    // Force the upstream opencode-claude-auth plugin to pick up the new
+    // file.  The plugin uses module-level closures for its accounts list,
+    // active source, and cached credentials — these are populated ONCE
+    // during plugin init() and never re-read from disk thereafter (see
+    // issue #15 + the analysis in DEPLOYMENT.md).
+    //
+    // disposeAllInstances() tears down every workspace's InstanceStore;
+    // the next request to any workspace re-runs the plugin init() chain,
+    // which reads the now-updated credentials file.  Effect on the
+    // operator: ~1 second blip on active iframes (their SSE streams
+    // close + auto-reconnect), no container restart needed.
+    disposeAllInstances()
+      .then(() =>
+        console.log(
+          "[collab.claude-creds] disposed all instances to activate new creds (uploader=" +
+            sess.githubLogin +
+            ")",
+        ),
+      )
+      .catch((err) => {
+        console.warn("[collab.claude-creds] dispose-all failed after upload:", err)
+      })
+
     return json({ ok: true, ...getCredentialsStatus() }, 200)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -998,15 +1025,60 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       queueMode?: string
       branch?: string
     }
+
+    // Pre-generate the session id so the branch collision probe sees the
+    // same id-suffix that lands in the DB.  Pass the id back into
+    // createCollabSession via idOverride.
+    const id = collabId("cs")
+    const repos = body.repos ?? []
+    const userTypedBranch = body.branch?.trim()
+    const proposed = userTypedBranch || Session.defaultBranchName(body.name, id)
+
+    // Probe each linked repo for a refs/heads/<firstSegment> collision and
+    // decide what branch name we'll actually use.  See ./branch-resolve.ts
+    // for the algorithm.  Errors here MUST surface to the user (502); a
+    // half-created session with an unverified branch name is worse than no
+    // session at all.
+    const resolved = await resolveBranchName({
+      proposed,
+      isUserTyped: Boolean(userTypedBranch),
+      repos,
+      userToken: sess.githubAccessToken,
+    })
+    if (!resolved.ok) {
+      if (resolved.code === "conflict") {
+        return json(
+          {
+            error:
+              `The branch '${proposed}' would conflict with an existing leaf ` +
+              `branch on one of the linked repositories.  Git can't create ` +
+              `'refs/heads/${proposed.split("/")[0]}/...' while ` +
+              `'refs/heads/${proposed.split("/")[0]}' exists as a branch.`,
+            suggestedBranch: resolved.suggestedBranch,
+          },
+          409,
+        )
+      }
+      return json(
+        {
+          error:
+            `Could not verify branch availability on GitHub — please retry. ` +
+            `Details: ${resolved.message}`,
+        },
+        502,
+      )
+    }
+
     const created = Session.createCollabSession({
+      idOverride: id,
       name: body.name,
       ownerGithubId: sess.githubId,
       ownerGithubLogin: sess.githubLogin,
       ownerAvatarUrl: sess.githubAvatarUrl,
-      repos: body.repos ?? [],
+      repos,
       visibilityMode: (body.visibilityMode as any) ?? "typing",
       queueMode: (body.queueMode as any) ?? "fifo",
-      branch: body.branch,
+      branch: resolved.resolved,
     })
     // Register queue executor — handles dispatch + "submitted" status tracking
     registerQueueExecutor(created.id)

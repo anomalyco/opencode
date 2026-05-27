@@ -17,18 +17,37 @@ export interface CreateCollabSessionInput {
   queueMode?: QueueMode
   /** Git branch to create/check out in every linked repo. */
   branch?: string
+  /**
+   * Caller-supplied collab session id.  Used by the router so the branch
+   * collision probe (resolveBranchName in ./branch-resolve.ts) can produce
+   * a stable name BEFORE this insert runs — the probe needs the same id
+   * that lands in the DB to build a deterministic branch suffix.  Omit
+   * to let createCollabSession mint its own id (legacy path).
+   */
+  idOverride?: string
 }
 
 /**
  * Build a git-safe branch name from a free-text session name.
- * Lowercases, replaces non [a-z0-9-/_] with "-", trims dashes, caps length.
+ * Lowercases, replaces non [a-z0-9-_] with "-", trims dashes, caps length.
  * Refs can't be empty / start with - / contain ".." / end with ".lock".
+ *
+ * Returns `collab/<slug>-<id-suffix>` by default.  The leading slash makes
+ * the branch land under `refs/heads/collab/` in git, which is fine UNLESS
+ * the target repo already has a leaf branch named exactly `collab`
+ * (`refs/heads/collab` as a *file*).  Git refuses to create
+ * `refs/heads/collab/...` in that case — see resolveBranchName below for
+ * the collision probe + slash-flattened fallback (`collab-<slug>-<id>`).
+ *
+ * The slug-allow regex deliberately excludes `/` — we control the prefix;
+ * a user-typed session NAME shouldn't be able to introduce additional
+ * slashes that would multiply the collision surface.
  */
-function defaultBranchName(sessionName: string, sessionId: string): string {
+export function defaultBranchName(sessionName: string, sessionId: string): string {
   const slug = sessionName
     .toLowerCase()
-    .replace(/[^a-z0-9-_/]+/g, "-")
-    .replace(/^[-./]+|[-./]+$/g, "")
+    .replace(/[^a-z0-9-_]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
     .replace(/\.lock$/i, "")
     .slice(0, 40)
   const suffix = sessionId.slice(-6)
@@ -36,7 +55,7 @@ function defaultBranchName(sessionName: string, sessionId: string): string {
 }
 
 export function createCollabSession(input: CreateCollabSessionInput): CollabSession {
-  const id = collabId("cs")
+  const id = input.idOverride ?? collabId("cs")
   const now = Date.now()
   const branch = (input.branch?.trim() || defaultBranchName(input.name, id)).slice(0, 100)
 

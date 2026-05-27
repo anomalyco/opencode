@@ -112,8 +112,8 @@ function ensureCanonicalSymlink(): void {
 }
 
 export interface CredentialsStatus {
-  /** True iff a credentials file exists and parses as JSON with at least the
-   *  fields opencode-claude-auth expects (`access_token`, `refresh_token`). */
+  /** True iff a credentials file exists and parses as one of the accepted
+   *  Claude credentials shapes (see `normalizeClaudeCreds`). */
   readonly present: boolean
   /** Logged-in account email, when the file carries one.  Useful breadcrumb
    *  for operators choosing whether to overwrite. */
@@ -125,6 +125,88 @@ export interface CredentialsStatus {
   readonly bytes?: number
 }
 
+interface NormalizedCreds {
+  /** OAuth bearer token used in `Authorization: Bearer <accessToken>`. */
+  readonly accessToken: string
+  /** OAuth refresh token; written back when the plugin refreshes. */
+  readonly refreshToken: string
+  /** Optional account email — pulled from any of the accepted shapes. */
+  readonly email?: string
+  /** True iff input was the Mac keychain nested shape (so `writeCredentials`
+   *  can preserve the full payload — `mcpOAuth`, `expiresAt`, `scopes`,
+   *  `subscriptionType`, etc.). */
+  readonly wasKeychainShape: boolean
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null && !Array.isArray(x)
+}
+
+/**
+ * Recognise a Claude credentials payload in any of three shapes the user
+ * might paste from `security find-generic-password -s "Claude Code-credentials" -w`:
+ *
+ *   1. Mac keychain nested shape (full dump):
+ *        `{ "claudeAiOauth": { "accessToken": "...", "refreshToken": "...", ...},
+ *           "mcpOAuth": {...} }`
+ *      The plugin proves it accepts this shape (it's what the entrypoint
+ *      seeds from `CLAUDE_CREDENTIALS_JSON` env, and the plugin loads
+ *      successfully).  Preserve as-is.
+ *
+ *   2. Flat camelCase:
+ *        `{ "accessToken": "...", "refreshToken": "..." }`
+ *      Equivalent to (1) with the wrapping unwrapped.  Will be re-wrapped
+ *      in keychain shape for on-disk storage.
+ *
+ *   3. Flat snake_case (legacy / OAuth-spec):
+ *        `{ "access_token": "...", "refresh_token": "..." }`
+ *      Accepted for backwards compatibility; will also be re-wrapped.
+ *
+ * Returns `null` when none of the three shapes match — caller throws a
+ * descriptive error that names all three.
+ */
+function normalizeClaudeCreds(input: unknown): NormalizedCreds | null {
+  if (!isRecord(input)) return null
+
+  // Shape 1: Mac keychain nested.
+  if (isRecord(input.claudeAiOauth)) {
+    const inner = input.claudeAiOauth
+    if (typeof inner.accessToken === "string" && typeof inner.refreshToken === "string") {
+      return {
+        accessToken: inner.accessToken,
+        refreshToken: inner.refreshToken,
+        email: typeof inner.email === "string" ? inner.email : undefined,
+        wasKeychainShape: true,
+      }
+    }
+  }
+
+  // Shape 2: flat camelCase.
+  if (typeof input.accessToken === "string" && typeof input.refreshToken === "string") {
+    return {
+      accessToken: input.accessToken,
+      refreshToken: input.refreshToken,
+      email: typeof input.email === "string" ? input.email : undefined,
+      wasKeychainShape: false,
+    }
+  }
+
+  // Shape 3: flat snake_case.
+  if (typeof input.access_token === "string" && typeof input.refresh_token === "string") {
+    return {
+      accessToken: input.access_token,
+      refreshToken: input.refresh_token,
+      email: typeof input.email === "string" ? input.email : undefined,
+      wasKeychainShape: false,
+    }
+  }
+
+  return null
+}
+
+/** Exported for testing only. */
+export const _normalizeClaudeCredsForTest = normalizeClaudeCreds
+
 export function getCredentialsStatus(): CredentialsStatus {
   const path = credentialsPath()
   if (!existsSync(path)) return { present: false }
@@ -132,12 +214,17 @@ export function getCredentialsStatus(): CredentialsStatus {
     const stat = statSync(path)
     if (!stat.isFile() || stat.size === 0) return { present: false, bytes: stat.size }
     const raw = readFileSync(path, "utf8")
-    const parsed = JSON.parse(raw) as { access_token?: string; refresh_token?: string; email?: string }
-    const valid = typeof parsed.access_token === "string" && typeof parsed.refresh_token === "string"
-    if (!valid) return { present: false, mtime: stat.mtimeMs, bytes: stat.size }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return { present: false, mtime: stat.mtimeMs, bytes: stat.size }
+    }
+    const normalized = normalizeClaudeCreds(parsed)
+    if (!normalized) return { present: false, mtime: stat.mtimeMs, bytes: stat.size }
     return {
       present: true,
-      email: typeof parsed.email === "string" ? parsed.email : undefined,
+      email: normalized.email,
       mtime: stat.mtimeMs,
       bytes: stat.size,
     }
@@ -148,40 +235,77 @@ export function getCredentialsStatus(): CredentialsStatus {
 }
 
 /**
- * Atomically write a fresh credentials JSON to the EFS path.  Validates the
- * payload parses + has the two fields the plugin needs.  Returns true on
- * success; throws on any validation failure so the caller can surface the
- * specific reason to the uploader.
+ * Atomically write a fresh credentials JSON to the EFS path.
+ *
+ * Accepts any of three shapes — see `normalizeClaudeCreds` for the matrix.
+ * Throws on any validation failure so the caller can surface the specific
+ * reason to the uploader.
+ *
+ * On-disk format is always the Mac keychain nested shape
+ * (`{claudeAiOauth: {...}}`) because that's what the upstream
+ * `opencode-claude-auth` plugin proves it accepts (the entrypoint's
+ * env-seed path uses this shape and the plugin loads it successfully).
+ *
+ *   - Keychain input → written as-is (preserves `mcpOAuth`, `expiresAt`,
+ *     `scopes`, `subscriptionType`, etc.).
+ *   - Flat input → wrapped minimally into `{claudeAiOauth: {accessToken,
+ *     refreshToken}}`.
  *
  * Auditing: the caller is expected to log who uploaded + how big the file
  * was.  We intentionally do NOT log the file content.
  */
 export function writeCredentials(jsonString: string): { email?: string; bytes: number } {
-  let parsed: { access_token?: unknown; refresh_token?: unknown; email?: unknown }
-  try {
-    parsed = JSON.parse(jsonString) as typeof parsed
-  } catch (err) {
-    throw new Error(
-      "Could not parse credentials as JSON.  Paste the full file contents from " +
-        "`security find-generic-password -s \"Claude Code-credentials\" -w` (Mac) " +
-        "or the equivalent on your machine.",
-    )
-  }
-  if (typeof parsed.access_token !== "string" || parsed.access_token.length < 8) {
-    throw new Error("JSON parsed but no `access_token` field — this doesn't look like a Claude credentials file.")
-  }
-  if (typeof parsed.refresh_token !== "string" || parsed.refresh_token.length < 8) {
-    throw new Error("JSON parsed but no `refresh_token` field — credentials would expire on first use.")
-  }
   // Hard cap so a runaway paste can't fill the disk.  Real files are a few KB.
   if (jsonString.length > 64 * 1024) {
     throw new Error("Credentials payload exceeds 64 KB — refusing to write.")
   }
 
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonString)
+  } catch (err) {
+    throw new Error(
+      "Could not parse credentials as JSON.  Paste the output from one of:\n" +
+        "  - Mac:   security find-generic-password -s \"Claude Code-credentials\" -w\n" +
+        "  - Linux: cat ~/.claude/.credentials.json",
+    )
+  }
+
+  const normalized = normalizeClaudeCreds(parsed)
+  if (!normalized) {
+    throw new Error(
+      "JSON parsed but it doesn't look like a Claude credentials file.  Accepted shapes:\n" +
+        "  - Mac keychain dump: {\"claudeAiOauth\": {\"accessToken\": \"sk-ant-...\", \"refreshToken\": \"sk-ant-...\", ...}}\n" +
+        "  - Flat camelCase:    {\"accessToken\": \"sk-ant-...\", \"refreshToken\": \"sk-ant-...\"}\n" +
+        "  - Flat snake_case:   {\"access_token\": \"sk-ant-...\", \"refresh_token\": \"sk-ant-...\"}",
+    )
+  }
+  if (normalized.accessToken.length < 8) {
+    throw new Error("`accessToken` is too short to be a valid Claude credential.")
+  }
+  if (normalized.refreshToken.length < 8) {
+    throw new Error("`refreshToken` is too short — credentials would expire on first use.")
+  }
+
+  // Compute the on-disk payload:
+  //   - Keychain input → write the original JSON unchanged so `mcpOAuth`,
+  //     `expiresAt`, `scopes`, `subscriptionType`, `rateLimitTier`, etc.
+  //     are all preserved.
+  //   - Flat input → wrap minimally.
+  const onDiskString = normalized.wasKeychainShape
+    ? jsonString
+    : JSON.stringify({
+        claudeAiOauth: {
+          accessToken: normalized.accessToken,
+          refreshToken: normalized.refreshToken,
+          ...(normalized.email ? { email: normalized.email } : {}),
+        },
+      })
+
   const path = credentialsPath()
   mkdirSync(dirname(path), { recursive: true })
   const tmp = path + ".tmp"
-  writeFileSync(tmp, jsonString, { mode: 0o600 })
+  writeFileSync(tmp, onDiskString, { mode: 0o600 })
   renameSync(tmp, path) // atomic on the same filesystem
 
   // Make the file immediately visible to the opencode-claude-auth plugin by
@@ -193,7 +317,7 @@ export function writeCredentials(jsonString: string): { email?: string; bytes: n
   ensureCanonicalSymlink()
 
   return {
-    email: typeof parsed.email === "string" ? parsed.email : undefined,
-    bytes: jsonString.length,
+    email: normalized.email,
+    bytes: onDiskString.length,
   }
 }

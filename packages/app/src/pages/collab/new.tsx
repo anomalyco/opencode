@@ -29,6 +29,15 @@ export default function NewCollabSession() {
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [authed, setAuthed] = createSignal(false)
+  // 409-conflict modal state.  Server returns this when the user typed a
+  // branch name like `collab/feature-x` and a linked repo already has a
+  // `collab` leaf branch (refs/heads layout collision — see
+  // packages/opencode/src/collab/branch-resolve.ts).
+  const [branchConflict, setBranchConflict] = createSignal<{
+    proposed: string
+    suggested: string
+    message: string
+  } | null>(null)
 
   // Check auth immediately on mount — redirect to GitHub OAuth if not logged in
   onMount(async () => {
@@ -96,6 +105,15 @@ export default function NewCollabSession() {
     if (!name().trim()) return
     setSubmitting(true)
     setError(null)
+    setBranchConflict(null)
+    await submitCreate(branch().trim() || undefined)
+  }
+
+  /** Inner submit — extracted so the 409 conflict modal can resubmit with the
+   *  server-suggested branch name without re-running the form-validation
+   *  guards. */
+  async function submitCreate(branchOverride: string | undefined) {
+    setSubmitting(true)
     try {
       const res = await fetch("/collab/session", {
         method: "POST",
@@ -105,11 +123,39 @@ export default function NewCollabSession() {
           repos: selectedRepos(),
           visibilityMode: visibilityMode(),
           queueMode: queueMode(),
-          branch: branch().trim() || undefined,
+          branch: branchOverride,
         }),
       })
       if (res.status === 401) {
         window.location.href = "/collab/auth/github?next=/collab/new"
+        return
+      }
+      if (res.status === 409) {
+        // Branch collision on a user-typed name.  Surface the suggestion
+        // modal so the user can accept the auto-rewrite or edit their
+        // branch input.
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string
+          suggestedBranch?: string
+        }
+        if (body.suggestedBranch) {
+          setBranchConflict({
+            proposed: branchOverride ?? "",
+            suggested: body.suggestedBranch,
+            message: body.error ?? "Branch name conflicts with an existing branch.",
+          })
+          return
+        }
+        setError(body.error ?? "Branch name conflict.")
+        return
+      }
+      if (res.status === 502) {
+        // GitHub API probe failed.  No DB row was created; user can retry.
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(
+          body.error ??
+            "Could not reach GitHub to verify the branch name.  Please retry in a moment.",
+        )
         return
       }
       if (!res.ok) {
@@ -124,6 +170,15 @@ export default function NewCollabSession() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  /** Driver clicked "Use suggested" in the conflict modal. */
+  async function acceptSuggestedBranch() {
+    const conflict = branchConflict()
+    if (!conflict) return
+    setBranchConflict(null)
+    setBranch(conflict.suggested)
+    await submitCreate(conflict.suggested)
   }
 
   function toggleRepo(fullName: string) {
@@ -459,6 +514,57 @@ export default function NewCollabSession() {
           </Show>
         </div>
       </div>
+
+      {/* Branch-collision modal: opens when POST /collab/session returns 409.
+          The user typed a custom branch name with `/` that conflicts with an
+          existing leaf branch in one of the linked repos.  Offer the
+          server-suggested slash-flattened name (collab/foo → collab-foo)
+          OR let the user edit the input and try again. */}
+      <Show when={branchConflict()}>
+        {(conflict) => (
+          <div
+            class="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            style="z-index:99999"
+            onClick={() => setBranchConflict(null)}
+          >
+            <div
+              class="border border-border-weak-base rounded-xl p-6 w-full max-w-md shadow-2xl bg-background-base"
+              style="position:relative;z-index:100000"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 class="text-base font-semibold text-text-strong mb-3">Branch name conflict</h2>
+              <p class="text-sm text-text-weak mb-3 whitespace-pre-wrap">{conflict().message}</p>
+              <p class="text-sm text-text-strong mb-4">
+                Use{" "}
+                <code class="px-1.5 py-0.5 rounded bg-background-stronger text-text-strong">
+                  {conflict().suggested}
+                </code>{" "}
+                instead?
+              </p>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void acceptSuggestedBranch()}
+                  disabled={submitting()}
+                  class="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white transition-colors"
+                >
+                  {submitting() ? "Creating…" : "Use suggested"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBranch(conflict().proposed)
+                    setBranchConflict(null)
+                  }}
+                  class="flex-1 py-2 rounded-lg text-sm font-medium bg-background-strong hover:bg-background-stronger text-text-strong transition-colors"
+                >
+                  Edit branch name
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
@@ -580,12 +686,35 @@ function ClaudeCredentialsBanner() {
                     <pre class="mt-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-zinc-300 overflow-x-auto">
 {`security find-generic-password -s "Claude Code-credentials" -w`}
                     </pre>
-                    <p class="mt-1">Copy the entire output and paste below.  It's a small JSON object with <code>access_token</code> and <code>refresh_token</code> fields.  Stored on the server's EFS at <code>~/.local/share/opencode/claude-credentials.json</code>; visible only to the running container.</p>
+                    <p class="mt-1">
+                      Copy the entire output and paste below.  Three shapes are
+                      accepted: Mac keychain dump (nested <code>claudeAiOauth</code>),
+                      flat camelCase <code>{`{accessToken, refreshToken}`}</code>, or
+                      flat snake_case <code>{`{access_token, refresh_token}`}</code>.
+                      Stored on the server's EFS at <code>~/.local/share/opencode/claude-credentials.json</code>;
+                      visible only to the running container.
+                    </p>
                   </details>
+                  <div class="bg-amber-500/15 border border-amber-500/30 rounded px-2 py-1.5 text-[11px] text-amber-100">
+                    <strong>Shared across all collab sessions.</strong>  These
+                    credentials authenticate every collab session on this
+                    server.  LLM usage will be billed to your Claude account
+                    until someone else uploads their own.  Per-session
+                    isolation is tracked in{" "}
+                    <a
+                      href="https://github.com/unleashlive/opencode/issues/15"
+                      target="_blank"
+                      rel="noreferrer"
+                      class="underline hover:text-amber-200"
+                    >
+                      issue #15
+                    </a>
+                    .
+                  </div>
                   <textarea
                     value={json()}
                     onInput={(e) => setJson(e.currentTarget.value)}
-                    placeholder='{"access_token":"...","refresh_token":"...","email":"..."}'
+                    placeholder='{"claudeAiOauth":{"accessToken":"sk-ant-...","refreshToken":"sk-ant-..."}}'
                     rows={5}
                     class="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-y"
                     spellcheck={false}
