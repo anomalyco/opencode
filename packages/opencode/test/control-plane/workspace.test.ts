@@ -1399,6 +1399,68 @@ describe("workspace sync state", () => {
     })
   })
 
+  it.live("sync history decodes a serialized next event before projection", () => {
+    let historySessionID: SessionID | undefined
+    let historyNextSeq = 0
+    return Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/history-decoded-next/global/event") {
+            return HttpServerResponse.fromWeb(eventStreamResponse())
+          }
+          if (url.pathname === "/history-decoded-next/sync/history") {
+            return HttpServerResponse.fromWeb(
+              Response.json([
+                {
+                  id: `evt_${unique("history-decoded-agent")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq,
+                  type: "session.next.agent.switched.1",
+                  data: {
+                    sessionID: historySessionID!,
+                    timestamp: "2026-05-26T21:48:56.202Z",
+                    agent: "build",
+                  },
+                },
+              ]),
+            )
+          }
+          return HttpServerResponse.text("unexpected", { status: 500 })
+        }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* Workspace.Service
+            const sessionSvc = yield* SessionNs.Service
+            const instance = yield* requireInstance
+            const type = unique("history-decoded-next")
+            const info = workspaceInfo(instance.project.id, type)
+            insertWorkspace(info)
+            registerAdapter(instance.project.id, type, remoteAdapter(`${url}/history-decoded-next`).adapter)
+            const session = yield* sessionSvc.create({})
+            attachSessionToWorkspace(session.id, info.id)
+            historySessionID = session.id
+            historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
+
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect(sessionSequence(session.id)).toBe(historyNextSeq)
+                expect((yield* sessionSvc.get(session.id).pipe(Effect.orDie)).agent).toBe("build")
+              }),
+            )
+            yield* workspace.remove(info.id)
+          }),
+        { git: true },
+      )
+    })
+  })
+
   it.live("sync history replays serialized next events before subsequent legacy events", () => {
     let historySessionID: SessionID | undefined
     let historyNextSeq = 0
@@ -1554,7 +1616,7 @@ describe("workspace sync state", () => {
     }),
   )
 
-  it.live("SSE sync events are replayed and forwarded", () => {
+  it.live("SSE serialized next events are replayed and forwarded", () => {
     let sseSessionID: SessionID | undefined
     let sseNextSeq = 0
     return Effect.gen(function* () {
@@ -1575,8 +1637,12 @@ describe("workspace sync state", () => {
                         id: `evt_${unique("sse")}`,
                         aggregateID: sseSessionID!,
                         seq: sseNextSeq,
-                        type: sessionUpdatedType(),
-                        data: { sessionID: sseSessionID!, info: { title: "from sse" } },
+                        type: "session.next.agent.switched.1",
+                        data: {
+                          sessionID: sseSessionID!,
+                          timestamp: "2026-05-26T21:48:58.202Z",
+                          agent: "build",
+                        },
                       },
                     },
                   },
@@ -1610,7 +1676,8 @@ describe("workspace sync state", () => {
 
               yield* eventuallyEffect(
                 Effect.gen(function* () {
-                  expect((yield* sessionSvc.get(session.id).pipe(Effect.orDie)).title).toBe("from sse")
+                  expect(sessionSequence(session.id)).toBe(sseNextSeq)
+                  expect((yield* sessionSvc.get(session.id).pipe(Effect.orDie)).agent).toBe("build")
                 }),
               )
               expect(

@@ -1,4 +1,4 @@
-import { describe, expect, beforeEach, afterAll } from "bun:test"
+import { describe, expect, beforeEach, afterAll, test } from "bun:test"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -11,6 +11,8 @@ import { MessageID } from "../../src/session/schema"
 import { initProjectors } from "../../src/server/projectors"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2 } from "@opencode-ai/core/event"
+import nextProjectors from "../../src/session/projectors-next"
 
 const it = testEffect(
   Layer.mergeAll(
@@ -21,6 +23,25 @@ const it = testEffect(
     CrossSpawnSpawner.defaultLayer,
   ),
 )
+
+describe("session next projectors", () => {
+  test("covers every versioned next session event", () => {
+    const definitions = EventV2.registry
+      .values()
+      .flatMap((definition) =>
+        definition.type.startsWith("session.next.") && definition.version !== undefined && definition.aggregate !== undefined
+          ? [SyncEvent.versionedType(definition.type, definition.version)]
+          : [],
+      )
+      .toArray()
+      .sort()
+    const projected = nextProjectors
+      .map(([definition]) => SyncEvent.versionedType(definition.type, definition.version))
+      .sort()
+
+    expect(projected).toEqual(definitions)
+  })
+})
 
 beforeEach(() => {
   Database.close()
