@@ -31,8 +31,8 @@ import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { useServers } from "@/context/servers"
+import { useSettings } from "@/context/settings"
 
-const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
@@ -52,8 +52,12 @@ type HomeSessionGroup = {
 }
 
 export default function Home() {
-  if (USE_HOME_DESIGN) return <HomeDesign />
-  return <LegacyHome />
+  const settings = useSettings()
+  return (
+    <Show when={settings.general.newLayoutDesigns()} fallback={<LegacyHome />}>
+      <HomeDesign />
+    </Show>
+  )
 }
 
 function HomeDesign() {
