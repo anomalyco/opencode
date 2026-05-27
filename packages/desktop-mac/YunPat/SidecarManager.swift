@@ -56,24 +56,27 @@ class SidecarManager {
             return
         }
 
-        guard findServeEntry() != nil || findCoreEntry() != nil else {
+        guard let (entry, isBundled) = findServeEntry() ?? findCoreEntry() else {
             print("SidecarManager: serve entry missing under projectRoot \(projectRoot.path)")
             completion(.failure(SidecarError.coreNotFound))
             return
         }
 
-        // Ensure plugin re-export files exist for engine discovery
-        ensurePluginsAvailable()
+        // Ensure plugin re-export files exist for engine discovery (source mode only)
+        if !isBundled { ensurePluginsAvailable() }
 
         print("SidecarManager: starting core engine")
         print("  bun: \(bunPath.path)")
-        let entry = findServeEntry() ?? findCoreEntry()!
-        print("  entry: \(entry.path)")
+        print("  entry: \(entry.path) (bundled: \(isBundled))")
         print("  port: \(port)")
 
         let proc = Process()
         proc.executableURL = bunPath
-        proc.arguments = ["run", "--conditions=browser", entry.path, "serve", "--port", "\(port)"]
+        // Bundled js doesn't need --conditions=browser
+        let args = isBundled
+            ? ["run", entry.path, "serve", "--port", "\(port)"]
+            : ["run", "--conditions=browser", entry.path, "serve", "--port", "\(port)"]
+        proc.arguments = args
         proc.environment = createSidecarEnv()
         proc.currentDirectoryURL = projectRoot
 
@@ -135,7 +138,7 @@ class SidecarManager {
     ]
 
     private func ensurePluginsAvailable() {
-        let pluginDir = projectRoot.appendingPathComponent(".opencode/plugin")
+        let pluginDir = projectRoot.appendingPathComponent(".yunpat-agent/plugin")
         let fm = FileManager.default
 
         do {
@@ -162,28 +165,38 @@ class SidecarManager {
     // MARK: - Discovery
 
     private static func findProjectRoot() -> URL {
-        // Development mode: relative to build output
-        let buildDir = Bundle.main.bundleURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-
-        // Check if this looks like the monorepo root
-        let check = buildDir.appendingPathComponent("packages/opencode/package.json")
-        if FileManager.default.fileExists(atPath: check.path) {
-            return buildDir
+        if let embedded = embeddedProjectRoot() {
+            return embedded
         }
 
-        // Production: look for embedded project root
-        if let resourcePath = Bundle.main.resourcePath {
-            let embedded = URL(fileURLWithPath: resourcePath).appendingPathComponent("project-root")
-            if FileManager.default.fileExists(atPath: embedded.appendingPathComponent("packages/opencode/package.json").path) {
-                return embedded
+        var dir = Bundle.main.bundleURL
+        for _ in 0..<8 {
+            if isMonorepoRoot(dir) {
+                return dir
             }
+            dir = dir.deletingLastPathComponent()
         }
 
-        // Fallback: use current working directory
-        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        if isMonorepoRoot(cwd) {
+            return cwd
+        }
+
+        return cwd
+    }
+
+    private static func isMonorepoRoot(_ dir: URL) -> Bool {
+        let marker = dir.appendingPathComponent("packages/opencode/package.json")
+        return FileManager.default.fileExists(atPath: marker.path)
+    }
+
+    private static func embeddedProjectRoot() -> URL? {
+        guard let resourcePath = Bundle.main.resourcePath else { return nil }
+        let embedded = URL(fileURLWithPath: resourcePath).appendingPathComponent("project-root")
+        if isMonorepoRoot(embedded) {
+            return embedded
+        }
+        return nil
     }
 
     private func findBunExecutable() -> URL? {
@@ -209,7 +222,15 @@ class SidecarManager {
         return nil
     }
 
-    private func findServeEntry() -> URL? {
+    /// Returns (entryURL, isBundled). Bundled sidecar.js is preferred for production.
+    private func findServeEntry() -> (URL, Bool)? {
+        // Pre-built bundle (production)
+        let bundledPath = projectRoot.appendingPathComponent("sidecar.js")
+        if FileManager.default.fileExists(atPath: bundledPath.path) {
+            return (bundledPath, true)
+        }
+
+        // Source entry (development)
         let servePath = projectRoot
             .appendingPathComponent("packages")
             .appendingPathComponent("opencode")
@@ -217,12 +238,12 @@ class SidecarManager {
             .appendingPathComponent("desktop-serve.ts")
 
         if FileManager.default.fileExists(atPath: servePath.path) {
-            return servePath
+            return (servePath, false)
         }
         return nil
     }
 
-    private func findCoreEntry() -> URL? {
+    private func findCoreEntry() -> (URL, Bool)? {
         let corePath = projectRoot
             .appendingPathComponent("packages")
             .appendingPathComponent("opencode")
@@ -230,7 +251,7 @@ class SidecarManager {
             .appendingPathComponent("index.ts")
 
         if FileManager.default.fileExists(atPath: corePath.path) {
-            return corePath
+            return (corePath, false)
         }
 
         return nil

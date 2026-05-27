@@ -1,9 +1,10 @@
 export * as ConfigCommand from "./command"
 
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@yunpat/core/util/log"
+import { AgentBrand } from "@yunpat/core/brand"
 import { Schema } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
-import { Glob } from "@opencode-ai/core/util/glob"
+import { NamedError } from "@yunpat/core/util/error"
+import { Glob } from "@yunpat/core/util/glob"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
@@ -43,7 +44,7 @@ export async function load(dir: string) {
     })
     if (!md) continue
 
-    const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+    const patterns = [`/${AgentBrand.projectDir}/command/`, `/${AgentBrand.projectDir}/commands/`, "/command/", "/commands/"]
     const name = configEntryNameFromPath(item, patterns)
 
     const config = {

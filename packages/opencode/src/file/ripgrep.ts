@@ -1,15 +1,16 @@
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Cause, Context, Effect, Fiber, Layer, Queue, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
-import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
+import { CrossSpawnSpawner } from "@yunpat/core/cross-spawn-spawner"
+import { Global } from "@yunpat/core/global"
+import { AgentBrand } from "@yunpat/core/brand"
+import * as Log from "@yunpat/core/util/log"
+import { sanitizedProcessEnv } from "@yunpat/core/util/opencode-process"
 import { which } from "@/util/which"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
@@ -437,7 +438,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
 
         const root: Node = { name: "", children: new Map() }
         for (const file of list) {
-          if (file.includes(".opencode")) continue
+          if (file.includes(AgentBrand.projectDir)) continue
           const parts = file.split(path.sep)
           if (parts.length < 2) continue
           let node = root

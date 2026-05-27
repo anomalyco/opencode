@@ -21,7 +21,7 @@
 
 ### 作为 OpenCode Plugin 安装
 
-在 `.opencode/opencode.jsonc` 中添加：
+在 `.yunpat-agent/yunpat-agent.jsonc` 中添加：
 
 ```jsonc
 {
@@ -34,7 +34,7 @@
 
 ### 配置
 
-在 `~/.opencode/config/global-settings.json` 中配置专业模式：
+在 `~/.config/yunpat-agent/yunpat-agent.jsonc` 中配置专业模式：
 
 ```json
 {

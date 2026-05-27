@@ -619,7 +619,7 @@ export const dict = {
   "sidebar.project.viewAllSessions": "Tüm oturumları görüntüle",
   "sidebar.project.clearNotifications": "Bildirimleri temizle",
 
-  "app.name.desktop": "OpenCode Masaüstü",
+  "app.name.desktop": "yunpat",
 
   "settings.section.desktop": "Masaüstü",
   "settings.section.server": "Sunucu",

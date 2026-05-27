@@ -1,15 +1,15 @@
 /**
  * Pre-authorized app grants persistence.
  *
- * Stores user-approved app grants in ~/.opencode/computer-use-grants.json
+ * Stores user-approved app grants in the yunpat-agent data directory
  * so they survive restarts without re-approval.
  */
 
 import fs from "fs/promises"
 import path from "path"
-import os from "os"
+import { Global } from "@yunpat/core/global"
 
-const GRANTS_FILE = path.join(os.homedir(), ".opencode", "computer-use-grants.json")
+const GRANTS_FILE = path.join(Global.Path.data, "computer-use-grants.json")
 
 export interface AppGrant {
   bundleId: string

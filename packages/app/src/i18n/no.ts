@@ -616,7 +616,7 @@ export const dict = {
   "sidebar.project.viewAllSessions": "Vis alle sesjoner",
   "sidebar.project.clearNotifications": "Fjern varsler",
 
-  "app.name.desktop": "OpenCode Desktop",
+  "app.name.desktop": "yunpat",
 
   "settings.section.desktop": "Skrivebord",
   "settings.section.server": "Server",

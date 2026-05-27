@@ -5,8 +5,9 @@ import os from "os"
 import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
+import { AgentBrand } from "./brand"
 
-const app = "opencode"
+const app = AgentBrand.xdgAppName
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)

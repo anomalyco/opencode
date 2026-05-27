@@ -1,7 +1,7 @@
 /**
  * Python Bridge — manages the Python runtime for screen capture.
  *
- * Auto-creates a venv under ~/.opencode/runtime/, installs deps via pip,
+ * Auto-creates a venv under ~/.config/yunpat-agent/runtime/ (via Global.Path.data), installs deps via pip,
  * and provides `callPythonHelper()` to invoke mac_helper.py commands.
  */
 import { execFile } from "child_process"
@@ -9,10 +9,11 @@ import fs from "fs/promises"
 import path from "path"
 import os from "os"
 import crypto from "crypto"
+import { Global } from "@yunpat/core/global"
 
 // ── Paths ────────────────────────────────────────────────────────────
 
-const RUNTIME_DIR = path.join(os.homedir(), ".opencode", "runtime")
+const RUNTIME_DIR = path.join(Global.Path.data, "runtime")
 const VENV_DIR = path.join(RUNTIME_DIR, "venv")
 const REQUIREMENTS_HASH_FILE = path.join(RUNTIME_DIR, "requirements.sha256")
 const PYTHON_BIN = path.join(VENV_DIR, "bin", "python3")

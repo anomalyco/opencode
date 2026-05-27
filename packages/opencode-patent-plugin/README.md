@@ -20,7 +20,7 @@ YunPat 知识产权智能体 Plugin for OpenCode
 ### 方式 1：作为 OpenCode Plugin 安装（推荐）
 
 ```bash
-# 在 .opencode/opencode.jsonc 中添加：
+# 在 .yunpat-agent/yunpat-agent.jsonc 中添加：
 {
   "plugin": [
     ["/path/to/opencode-patent-plugin", {
@@ -54,7 +54,7 @@ YunPat 提供独立的 MCP Server，可被任何 MCP 客户端使用：
 
 ### Plugin 配置
 
-在 `.opencode/opencode.jsonc` 中添加：
+在 `.yunpat-agent/yunpat-agent.jsonc` 中添加：
 
 ```jsonc
 {

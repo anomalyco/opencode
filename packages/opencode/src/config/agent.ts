@@ -4,9 +4,10 @@ import { Exit, Schema, SchemaGetter } from "effect"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
 import { PositiveInt, withStatics } from "@/util/schema"
-import * as Log from "@opencode-ai/core/util/log"
-import { NamedError } from "@opencode-ai/core/util/error"
-import { Glob } from "@opencode-ai/core/util/glob"
+import * as Log from "@yunpat/core/util/log"
+import { AgentBrand } from "@yunpat/core/brand"
+import { NamedError } from "@yunpat/core/util/error"
+import { Glob } from "@yunpat/core/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
@@ -126,7 +127,7 @@ export async function load(dir: string) {
     })
     if (!md) continue
 
-    const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+    const patterns = [`/${AgentBrand.projectDir}/agent/`, `/${AgentBrand.projectDir}/agents/`, "/agent/", "/agents/"]
     const name = configEntryNameFromPath(item, patterns)
 
     const config = {

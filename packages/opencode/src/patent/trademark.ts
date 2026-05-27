@@ -1,7 +1,8 @@
 import { Context, Effect, Layer, Option } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@yunpat/core/filesystem"
 import { Config } from "@/config/config"
 import path from "path"
+import { Global } from "@yunpat/core/global"
 import { Database } from "bun:sqlite"
 
 export interface TrademarkRecord {
@@ -43,7 +44,7 @@ export const layer = Layer.effect(
 
     const getDataDir = Effect.fnUntraced(function* () {
       const cfg = yield* config.get()
-      return cfg.patent?.dataDir ?? path.join(process.env.HOME ?? "", ".opencode", "patent")
+      return cfg.patent?.dataDir ?? path.join(Global.Path.data, "patent")
     })
 
     const search = Effect.fn("Trademark.search")(
