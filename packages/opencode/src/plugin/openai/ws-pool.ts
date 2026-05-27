@@ -1,7 +1,10 @@
 import WebSocket from "ws"
+import * as Log from "@opencode-ai/core/util/log"
 import { OpenAIWebSocket } from "./ws"
 
 export const TITLE_HEADER = "x-opencode-title"
+
+const log = Log.create({ service: "plugin.openai.ws" })
 
 export interface CreateWebSocketFetchOptions {
   httpFetch?: typeof globalThis.fetch
@@ -19,7 +22,7 @@ interface PoolEntry {
   fallback: boolean
 }
 
-const DEFAULT_CONNECT_TIMEOUT = 10_000
+const DEFAULT_CONNECT_TIMEOUT = 15_000
 const DEFAULT_IDLE_TIMEOUT = 5 * 60 * 1000
 const DEFAULT_MAX_CONNECTION_AGE = 55 * 60 * 1000
 
@@ -46,16 +49,27 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     const body = parseBody(init?.body)
     if (!body?.stream) return httpFetch(input, httpInit)
     if (internalHeaders[TITLE_HEADER] === "true") {
+      log.debug("http fallback", { reason: "title" })
       return httpFetch(input, httpInit)
     }
 
     const key = poolKey(internalHeaders)
-    if (!key) return httpFetch(input, httpInit)
+    if (!key) {
+      log.debug("http fallback", { reason: "missing_session" })
+      return httpFetch(input, httpInit)
+    }
 
     const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false }
     pool.set(key, entry)
 
-    if (entry.fallback || entry.busy) return httpFetch(input, httpInit)
+    if (entry.fallback) {
+      log.debug("http fallback", { key, reason: "fallback_active" })
+      return httpFetch(input, httpInit)
+    }
+    if (entry.busy) {
+      log.debug("http fallback", { key, reason: "busy" })
+      return httpFetch(input, httpInit)
+    }
 
     try {
       entry.socket = await socket(
@@ -75,14 +89,19 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
-          if (event.type !== "response.completed" && event.type !== "response.done") invalidate(entry)
+          if (event.type !== "response.completed" && event.type !== "response.done") {
+            log.warn("websocket terminal failure", { key, type: event.type })
+            invalidate(entry)
+          }
         },
-        onConnectionInvalid: () => {
+        onConnectionInvalid: (error) => {
+          log.warn("websocket invalidated", { key, error: errorMessage(error) })
           entry.busy = false
           entry.fallback = true
           invalidate(entry)
         },
         onAbort: () => {
+          log.debug("websocket aborted", { key })
           entry.busy = false
           entry.lastUsedAt = Date.now()
           invalidate(entry)
@@ -95,6 +114,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       }
 
       entry.fallback = true
+      log.warn("websocket setup failed", { key, error: errorMessage(error), fallback: "http" })
       invalidate(entry)
       return httpFetch(input, httpInit)
     }
@@ -105,12 +125,14 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     for (const [key, entry] of pool) {
       if (entry.busy) continue
       if (now - entry.lastUsedAt < idleTimeout) continue
+      log.debug("websocket idle prune", { key })
       invalidate(entry)
       pool.delete(key)
     }
   }
 
   function close() {
+    log.debug("websocket pool close", { count: pool.size })
     clearInterval(pruneTimer)
     for (const entry of pool.values()) invalidate(entry)
     pool.clear()
@@ -195,6 +217,10 @@ function parseBody(body: BodyInit | null | undefined): Record<string, unknown> |
   } catch {
     return undefined
   }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export * as OpenAIWebSocketPool from "./ws-pool"
