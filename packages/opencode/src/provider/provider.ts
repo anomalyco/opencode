@@ -7,13 +7,12 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
-import * as ModelsDev from "@opencode-ai/core/models"
+import * as ModelsDev from "@opencode-ai/core/models-dev"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -28,9 +27,11 @@ import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ProviderError } from "./error"
 
 const log = Log.create({ service: "provider" })
-
+const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
   if (!match) return false
@@ -83,6 +84,22 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
     status: res.status,
     statusText: res.statusText,
   })
+}
+
+function timeoutController(ms: number) {
+  const ctl = new AbortController()
+  const id = setTimeout(() => ctl.abort(new ProviderError.HeaderTimeoutError(ms)), ms)
+  return {
+    signal: ctl.signal,
+    clear: () => clearTimeout(id),
+  }
+}
+
+function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
+  if (!project) return
+  if (location !== "eu" && location !== "us") return
+  // Continental multi-regions require Regional Endpoint Platform domains.
+  return `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
 }
 
 type BundledSDK = {
@@ -187,7 +204,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: {},
+        options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
     xai: () =>
       Effect.succeed({
@@ -428,13 +445,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    nvidia: () =>
+    nvidia: (provider) =>
       Effect.succeed({
-        autoload: false,
+        autoload: provider.source === "config",
         options: {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
+            "X-BILLING-INVOKE-ORIGIN": "OpenCode",
           },
         },
       }),
@@ -506,11 +524,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+      const baseURL = googleVertexAnthropicBaseURL(project, location)
       return {
         autoload: true,
         options: {
           project,
           location,
+          ...(baseURL && { baseURL }),
         },
         async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
@@ -975,7 +995,31 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
   }
 }
 
-export type Error = ModelNotFoundError
+export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderInitError", {
+  providerID: ProviderID,
+  cause: Schema.optional(Schema.Defect),
+}) {
+  static isInstance(input: unknown): input is InitError {
+    return input instanceof InitError
+  }
+}
+
+export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>()("ProviderNoProvidersError", {}) {
+  static isInstance(input: unknown): input is NoProvidersError {
+    return input instanceof NoProvidersError
+  }
+}
+
+export class NoModelsError extends Schema.TaggedErrorClass<NoModelsError>()("ProviderNoModelsError", {
+  providerID: ProviderID,
+}) {
+  static isInstance(input: unknown): input is NoModelsError {
+    return input instanceof NoModelsError
+  }
+}
+
+export type DefaultModelError = ModelNotFoundError | NoProvidersError | NoModelsError
+export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModelsError
 
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
@@ -987,7 +1031,7 @@ export interface Interface {
     query: string[],
   ) => Effect.Effect<{ providerID: ProviderID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderID) => Effect.Effect<Model | undefined>
-  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
+  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }, DefaultModelError>
 }
 
 interface State {
@@ -1000,6 +1044,8 @@ interface State {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+
+export const use = serviceUse(Service)
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
@@ -1119,18 +1165,18 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function suggestionModelIDs(provider: Info | undefined) {
+function suggestionModelIDs(provider: Info | undefined, enableExperimentalModels: boolean) {
   if (!provider) return []
   return Object.keys(provider.models).filter((id) => {
     const model = provider.models[id]
     if (model.status === "deprecated") return false
-    if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) return false
+    if (model.status === "alpha" && !enableExperimentalModels) return false
     return true
   })
 }
 
-function modelSuggestions(provider: Info | undefined, modelID: ModelID) {
-  const available = suggestionModelIDs(provider)
+function modelSuggestions(provider: Info | undefined, modelID: ModelID, enableExperimentalModels: boolean) {
+  const available = suggestionModelIDs(provider, enableExperimentalModels)
   const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
   if (fuzzy.length) return fuzzy
   const query = modelID
@@ -1151,7 +1197,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ModelID) {
     .map((item) => item.id)
 }
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
@@ -1160,6 +1206,7 @@ const layer = Layer.effect(
     const env = yield* Env.Service
     const plugin = yield* Plugin.Service
     const modelsDevSvc = yield* ModelsDev.Service
+    const runtimeFlags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
@@ -1452,7 +1499,7 @@ const layer = Layer.effect(
               (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
             )
               delete provider.models[modelID]
-            if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
+            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) delete provider.models[modelID]
             if (model.status === "deprecated") delete provider.models[modelID]
             if (
               (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
@@ -1503,6 +1550,18 @@ const layer = Layer.effect(
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
 
+        if (
+          model.providerID === "google-vertex" &&
+          model.api.npm === "@ai-sdk/google-vertex/anthropic" &&
+          !options.baseURL
+        ) {
+          const baseURL = googleVertexAnthropicBaseURL(
+            typeof options.project === "string" ? options.project : undefined,
+            typeof options.location === "string" ? options.location : undefined,
+          )
+          if (baseURL) options.baseURL = baseURL
+        }
+
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch
         }
@@ -1552,16 +1611,21 @@ const layer = Layer.effect(
 
         const customFetch = options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
+        const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
+        delete options["headerTimeout"]
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+          const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
+          const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
           const signals: AbortSignal[] = []
 
           if (opts.signal) signals.push(opts.signal)
           if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+          if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
           if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
             signals.push(AbortSignal.timeout(options["timeout"]))
 
@@ -1590,7 +1654,7 @@ const layer = Layer.effect(
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
-          })
+          }).finally(() => headerTimeoutCtl?.clear())
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
@@ -1634,7 +1698,7 @@ const layer = Layer.effect(
         s.sdk.set(key, loaded)
         return loaded as SDK
       } catch (e) {
-        throw new InitError({ providerID: model.providerID }, { cause: e })
+        throw new InitError({ providerID: model.providerID, cause: e })
       }
     }
 
@@ -1648,7 +1712,7 @@ const layer = Layer.effect(
       if (!provider) {
         const catalogProvider = s.catalog[providerID]
         const suggestions = catalogProvider
-          ? modelSuggestions(catalogProvider, modelID)
+          ? modelSuggestions(catalogProvider, modelID, runtimeFlags.enableExperimentalModels)
           : fuzzysort
               .go(providerID, Object.keys({ ...s.catalog, ...s.providers }), { limit: 3, threshold: -10000 })
               .map((m) => m.target)
@@ -1657,8 +1721,10 @@ const layer = Layer.effect(
 
       const info = provider.models[modelID]
       if (!info) {
-        const current = modelSuggestions(provider, modelID)
-        const suggestions = current.length ? current : modelSuggestions(s.catalog[providerID], modelID)
+        const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
+        const suggestions = current.length
+          ? current
+          : modelSuggestions(s.catalog[providerID], modelID, runtimeFlags.enableExperimentalModels)
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
       return info
@@ -1785,9 +1851,9 @@ const layer = Layer.effect(
       }
 
       const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
-      if (!provider) throw new Error("no providers found")
+      if (!provider) return yield* new NoProvidersError()
       const [model] = sort(Object.values(provider.models))
-      if (!model) throw new Error("no models found")
+      if (!model) return yield* new NoModelsError({ providerID: provider.id })
       return {
         providerID: provider.id,
         modelID: model.id,
@@ -1806,6 +1872,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
 
@@ -1826,9 +1893,5 @@ export function parseModel(model: string) {
     modelID: ModelID.make(rest.join("/")),
   }
 }
-
-export const InitError = NamedError.create("ProviderInitError", {
-  providerID: ProviderID,
-})
 
 export * as Provider from "./provider"

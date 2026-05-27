@@ -1,10 +1,12 @@
 import { Effect, Layer, Context, Schema } from "effect"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import path from "path"
 import { mergeDeep } from "remeda"
 import { Config } from "@/config/config"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import * as Formatter from "./formatter"
@@ -26,11 +28,14 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Format") {}
 
+export const use = serviceUse(Service)
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
     const appProcess = yield* AppProcess.Service
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("Format.state")(function* (ctx) {
@@ -40,7 +45,7 @@ export const layer = Layer.effect(
         async function getCommand(item: Formatter.Info) {
           let cmd = commands[item.name]
           if (cmd === false || cmd === undefined) {
-            cmd = await item.enabled(ctx)
+            cmd = await item.enabled({ ...ctx, experimentalOxfmt: flags.experimentalOxfmt })
             commands[item.name] = cmd
           }
           return cmd
@@ -198,6 +203,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(AppProcess.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Config.defaultLayer),
+  Layer.provide(AppProcess.defaultLayer),
+  Layer.provide(RuntimeFlags.defaultLayer),
+)
 
 export * as Format from "."

@@ -41,7 +41,10 @@ test("replace slot mounts plugin content once", async () => {
     )
   }
 
-  await testRender(() => <App />)
-
-  expect(mounts).toBe(1)
+  const app = await testRender(() => <App />)
+  try {
+    expect(mounts).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
 })

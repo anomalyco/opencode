@@ -106,6 +106,24 @@ describe("schema-rejection wire shape", () => {
   )
 
   it.instance(
+    "v2 query schema rejection returns InvalidRequestError JSON",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const res = yield* Effect.promise(async () =>
+          Server.Default().app.request("/api/session?limit=0", {
+            headers: { "x-opencode-directory": test.directory },
+          }),
+        )
+        const parsed = JSON.parse(yield* Effect.promise(async () => res.text()))
+        expect(res.status).toBe(400)
+        expect(parsed).toMatchObject({ _tag: "InvalidRequestError", kind: "Query" })
+        expect(parsed.message).toEqual(expect.any(String))
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "rejected request body never echoes back unbounded — message is capped",
     // Defense against DoS-amplification + secret-echo: Effect's Issue formatter
     // dumps the rejected `actual` verbatim. A multi-MB invalid array would

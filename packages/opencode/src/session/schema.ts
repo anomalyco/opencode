@@ -1,15 +1,10 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
+import { Session as CoreSession } from "@opencode-ai/core/session"
 import { withStatics } from "@opencode-ai/core/schema"
 
-export const SessionID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
-  Schema.brand("SessionID"),
-  withStatics((s) => ({
-    descending: (id?: string) => s.make(Identifier.descending("session", id)),
-  })),
-)
-
+export const SessionID = CoreSession.ID
 export type SessionID = Schema.Schema.Type<typeof SessionID>
 
 export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(

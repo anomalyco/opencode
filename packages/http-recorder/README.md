@@ -166,11 +166,11 @@ import { Effect } from "effect"
 
 const audit = Effect.gen(function* () {
   const cassettes = yield* HttpRecorder.Cassette.Service
-  const entries = yield* cassettes.list()
-  const issues = yield* Effect.forEach(entries, (entry) =>
+  const names = yield* cassettes.list()
+  const issues = yield* Effect.forEach(names, (name) =>
     cassettes
-      .read(entry.name)
-      .pipe(Effect.map((interactions) => ({ name: entry.name, findings: HttpRecorder.secretFindings(interactions) }))),
+      .read(name)
+      .pipe(Effect.map((interactions) => ({ name, findings: HttpRecorder.secretFindings(interactions) }))),
   )
   return issues.filter((i) => i.findings.length > 0)
 })
@@ -196,14 +196,13 @@ type RecordReplayOptions = {
 
 ## Layout
 
-| File           | Purpose                                                                          |
-| -------------- | -------------------------------------------------------------------------------- |
-| `effect.ts`    | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.                   |
-| `websocket.ts` | `makeWebSocketExecutor` — WebSocket record/replay.                               |
-| `cassette.ts`  | `Cassette.Service` — reads/writes cassette files, accumulates state.             |
-| `recorder.ts`  | Shared transport plumbing: `UnsafeCassetteError`, `appendOrFail`, `ReplayState`. |
-| `redactor.ts`  | Composable `Redactor` — headers, url, body redaction.                            |
-| `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.                    |
-| `schema.ts`    | Effect Schema definitions for the cassette JSON format.                          |
-| `storage.ts`   | Path resolution, JSON encode/decode, sync existence check.                       |
-| `matching.ts`  | Request matcher, canonicalization, sequential cursor, mismatch diagnostics.      |
+| File           | Purpose                                                                     |
+| -------------- | --------------------------------------------------------------------------- |
+| `effect.ts`    | `cassetteLayer` / `recordingLayer` — the `HttpClient` adapter.              |
+| `websocket.ts` | `makeWebSocketExecutor` — WebSocket record/replay.                          |
+| `cassette.ts`  | `Cassette.Service` — `fileSystem` / `memory` adapters, error types.         |
+| `recorder.ts`  | Shared transport plumbing: `resolveAutoMode`, `ReplayState`.                |
+| `redactor.ts`  | Composable `Redactor` — headers, url, body redaction.                       |
+| `redaction.ts` | Lower-level header/URL primitives + secret pattern detection.               |
+| `schema.ts`    | Effect Schema definitions for the cassette JSON format.                     |
+| `matching.ts`  | Request matcher, canonicalization, sequential cursor, mismatch diagnostics. |

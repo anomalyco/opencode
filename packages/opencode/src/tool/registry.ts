@@ -24,6 +24,7 @@ import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
+import { RepositoryCache } from "@/reference/repository-cache"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -38,6 +39,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
@@ -49,6 +51,7 @@ import { Git } from "@/git"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
+import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "tool.registry" })
@@ -86,8 +89,10 @@ export const layer: Layer.Layer<
   | Agent.Service
   | Skill.Service
   | Session.Service
+  | BackgroundJob.Service
   | Provider.Service
   | Git.Service
+  | RepositoryCache.Service
   | Reference.Service
   | LSP.Service
   | Instruction.Service
@@ -136,9 +141,12 @@ export const layer: Layer.Layer<
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
           // Plugin tools still expose Zod args publicly; keep that compatibility
           // boxed at the registry boundary and give the LLM the original JSON Schema.
-          const entries = Object.entries(def.args)
+          // Normalize missing args to `{}` once — pre-1.14.49 the code was
+          // `z.object(def.args)` and Zod silently tolerated undefined (#27451, #27630).
+          const args = def.args ?? {}
+          const entries = Object.entries(args)
           const allZod = entries.every((entry) => isZodType(entry[1]))
-          const zodParams = allZod ? z.object(def.args) : undefined
+          const zodParams = allZod ? z.object(args) : undefined
           const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
           const parameters = zodParams
             ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
@@ -150,9 +158,12 @@ export const layer: Layer.Layer<
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
+                // Bridge the host's Effect-based `ask` into a Promise-returning
+                // function for the plugin to make sure context persists
+                const bridge = yield* EffectBridge.make()
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
-                  ask: (req) => toolCtx.ask(req),
+                  ask: (req) => bridge.promise(toolCtx.ask(req)),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
@@ -195,7 +206,8 @@ export const layer: Layer.Layer<
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
-          for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+          for (const [id, def] of Object.entries(mod)) {
+            if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
           }
         }
@@ -358,32 +370,38 @@ export const layer: Layer.Layer<
 )
 
 export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Question.defaultLayer),
-    Layer.provide(Todo.defaultLayer),
-    Layer.provide(Skill.defaultLayer),
-    Layer.provide(Agent.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Git.defaultLayer),
-    Layer.provide(Reference.defaultLayer),
-    Layer.provide(LSP.defaultLayer),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Bus.layer),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(Format.defaultLayer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Truncate.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
-  ),
+  layer
+    .pipe(
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(Question.defaultLayer),
+      Layer.provide(Todo.defaultLayer),
+      Layer.provide(Skill.defaultLayer),
+      Layer.provide(Agent.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(BackgroundJob.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
+      Layer.provide(Layer.mergeAll(Git.defaultLayer, RepositoryCache.defaultLayer)),
+      Layer.provide(Reference.defaultLayer),
+      Layer.provide(LSP.defaultLayer),
+      Layer.provide(Instruction.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Bus.layer),
+      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(Format.defaultLayer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Truncate.defaultLayer),
+    )
+    .pipe(Layer.provide(RuntimeFlags.defaultLayer)),
 )
 
 function isZodType(value: unknown): value is z.ZodType {
   return typeof value === "object" && value !== null && "_zod" in value
+}
+
+function isPluginTool(value: unknown): value is ToolDefinition {
+  return typeof value === "object" && value !== null && "args" in value && "description" in value && "execute" in value
 }
 
 function isJsonSchemaDefinition(value: unknown): value is JSONSchema7Definition {
@@ -402,12 +420,38 @@ function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
 }
 
 function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
-  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input" }))
+  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input", metadata: zodMetadataRegistry(schema) }))
   if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
   const { $defs, ...rest } = result
   return (
     $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
   ) as JSONSchema7
+}
+
+function zodMetadataRegistry(schema: z.ZodType) {
+  const registry = z.registry<Record<string, unknown>>()
+  const seen = new WeakSet<object>()
+  const collect = (value: unknown) => {
+    if (typeof value !== "object" || value === null) return
+    if (seen.has(value)) return
+    seen.add(value)
+
+    if (isZodType(value)) {
+      const metadata = typeof value.meta === "function" ? value.meta() : undefined
+      const description = typeof value.description === "string" ? value.description : undefined
+      const merged = {
+        ...(metadata && typeof metadata === "object" ? metadata : {}),
+        ...(description ? { description } : {}),
+      }
+      if (Object.keys(merged).length) registry.add(value, merged)
+      collect(value._zod.def)
+      return
+    }
+
+    for (const item of Object.values(value)) collect(item)
+  }
+  collect(schema)
+  return registry
 }
 
 function normalizeZodJsonSchema(value: unknown): unknown {

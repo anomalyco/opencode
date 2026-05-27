@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
-import type { InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"

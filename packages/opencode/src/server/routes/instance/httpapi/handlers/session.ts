@@ -34,6 +34,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
+import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
 const tryParseJson = (text: string) =>
@@ -57,11 +58,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const summary = yield* SessionSummary.Service
     const bus = yield* Bus.Service
     const scope = yield* Scope.Scope
-
-    const mapBusy = <A, R>(
-      effect: Effect.Effect<A, Session.BusyError, R>,
-    ): Effect.Effect<A, HttpApiError.BadRequest, R> =>
-      effect.pipe(Effect.catchTag("SessionBusyError", () => Effect.fail(new HttpApiError.BadRequest({}))))
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       return yield* session.list({
@@ -164,9 +160,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       if (body.trim().length === 0) return yield* create({})
 
       const json = yield* tryParseJson(body)
-      const payload = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
+      const decoded = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
+      const payload = decoded
+        ? {
+            ...decoded,
+            permission: decoded.permission ? [...decoded.permission] : undefined,
+          }
+        : decoded
       return yield* create({ payload })
     })
 
@@ -334,7 +336,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof ShellPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* mapBusy(promptSvc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID }))
+      return yield* SessionError.mapBusy(promptSvc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID }))
     })
 
     const revert = Effect.fn("SessionHttpApi.revert")(function* (ctx: {
@@ -342,12 +344,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof RevertPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* mapBusy(revertSvc.revert({ sessionID: ctx.params.sessionID, ...ctx.payload }))
+      return yield* SessionError.mapBusy(revertSvc.revert({ sessionID: ctx.params.sessionID, ...ctx.payload }))
     })
 
     const unrevert = Effect.fn("SessionHttpApi.unrevert")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* mapBusy(revertSvc.unrevert({ sessionID: ctx.params.sessionID }))
+      return yield* SessionError.mapBusy(revertSvc.unrevert({ sessionID: ctx.params.sessionID }))
     })
 
     const permissionRespond = Effect.fn("SessionHttpApi.permissionRespond")(function* (ctx: {
@@ -355,7 +357,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof PermissionResponsePayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response })
+      yield* permissionSvc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }).pipe(
+        Effect.catchTag("Permission.NotFoundError", (error) =>
+          Effect.fail(
+            new PermissionNotFoundError({
+              requestID: String(error.requestID),
+              message: `Permission request not found: ${error.requestID}`,
+            }),
+          ),
+        ),
+      )
       return true
     })
 
@@ -363,7 +374,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* mapBusy(runState.assertNotBusy(ctx.params.sessionID))
+      yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
       yield* session.removeMessage(ctx.params)
       return true
     })
