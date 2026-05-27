@@ -138,7 +138,7 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
           const event = parseEvent(text)
           if (!event) return
 
-          if (event.type === "response.completed") {
+          if (event.type === "response.completed" || event.type === "response.done") {
             completed = true
             options.onComplete?.(event)
             options.onTerminal?.(event)
