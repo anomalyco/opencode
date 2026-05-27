@@ -145,6 +145,18 @@ export function Waitlist({ variant = "full", id }: WaitlistProps) {
                   送信に失敗しました。時間をおいて再度お試しください。
                 </p>
               )}
+              <p className="mt-2 text-[10px] leading-relaxed text-sc-text-dim">
+                登録をもって
+                <a
+                  href={PRIVACY_POLICY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-sc-ember"
+                >
+                  プライバシーポリシー
+                </a>
+                に同意したものとみなします。
+              </p>
             </form>
           )}
         </div>
