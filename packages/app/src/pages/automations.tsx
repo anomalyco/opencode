@@ -18,7 +18,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { showToast } from "@opencode-ai/ui/toast"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -245,6 +245,7 @@ export default function AutomationsPage() {
   const language = useLanguage()
   const sync = useSync()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams<{ new?: string }>()
 
   const currentModel = createMemo(() => {
     const model = local.model.current()
@@ -370,6 +371,12 @@ export default function AutomationsPage() {
       setForm(reconcile(defaultForm(currentModel())))
     })
   }
+
+  createEffect(() => {
+    if (searchParams.new !== "1") return
+    newAutomation()
+    setSearchParams({ ...searchParams, new: undefined })
+  })
 
   const buildPayload = (): AutomationCreateInput | undefined => {
     const title = form.title.trim()

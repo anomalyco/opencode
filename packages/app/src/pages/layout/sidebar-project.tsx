@@ -24,6 +24,7 @@ export type ProjectSidebarContext = {
   onProjectFocus: (worktree: string) => void
   onHoverOpenChanged: (worktree: string, hovered: boolean) => void
   navigateToProject: (directory: string) => void
+  navigateToProjectAutomations: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
@@ -64,6 +65,7 @@ const ProjectTile = (props: {
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
+  navigateToProjectAutomations: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
@@ -150,6 +152,13 @@ const ProjectTile = (props: {
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-automations"
+            data-project={base64Encode(props.project.worktree)}
+            onSelect={() => props.navigateToProjectAutomations(props.project.worktree)}
+          >
+            <ContextMenu.ItemLabel>Automations</ContextMenu.ItemLabel>
           </ContextMenu.Item>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
@@ -328,6 +337,7 @@ export const SortableProject = (props: {
       onProjectMouseLeave={props.ctx.onProjectMouseLeave}
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
+      navigateToProjectAutomations={props.ctx.navigateToProjectAutomations}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
