@@ -1,5 +1,6 @@
 import { describe, expect, spyOn } from "bun:test"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Deferred, Effect, Layer } from "effect"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
@@ -110,6 +111,32 @@ describe("lsp.spawn", () => {
           yield* lsp.touchFile(file)
           yield* awaitWithTimeout(Deferred.await(updated), "lsp.updated event was not published")
         }),
+      {
+        config: {
+          lsp: {
+            fake: {
+              command: [process.execPath, fakeServerPath],
+              extensions: [".repro"],
+            },
+          },
+        },
+      },
+    ),
+  )
+
+  it.live("opens documents before requesting document symbols", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const file = path.join(dir, "sample.repro")
+            yield* Effect.promise(() => Bun.write(file, "function test() {}\n"))
+
+            const result = yield* lsp.documentSymbol(pathToFileURL(file).href)
+
+            expect(result).toContainEqual(expect.objectContaining({ name: "FakeDocumentSymbol" }))
+          }),
+        ),
       {
         config: {
           lsp: {

@@ -10,6 +10,7 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 void Log.init({ print: false })
 
 const context = Context.empty() as Context.Context<unknown>
+const fakeServerPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
 
 function request(route: string, directory: string, query?: Record<string, string>) {
   const url = new URL(`http://localhost${route}`)
@@ -72,5 +73,25 @@ describe("file HttpApi", () => {
 
     expect(symbols.status).toBe(200)
     expect(await symbols.json()).toEqual([])
+  })
+
+  test("serves workspace symbols through configured LSP", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        lsp: {
+          fake: {
+            command: [process.execPath, fakeServerPath],
+            extensions: [".repro"],
+          },
+        },
+      },
+    })
+    await Bun.write(path.join(tmp.path, "hello.repro"), "function HelloSymbol() {}\n")
+
+    const symbols = await request(FilePaths.findSymbol, tmp.path, { query: "HelloSymbol" })
+
+    expect(symbols.status).toBe(200)
+    expect(await symbols.json()).toContainEqual(expect.objectContaining({ name: "HelloSymbol" }))
   })
 })

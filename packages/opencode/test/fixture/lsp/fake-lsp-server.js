@@ -6,6 +6,7 @@ let lastChange = null
 let initializeParams = null
 let diagnosticRequestCount = 0
 let registeredCapability = false
+const openedDocuments = new Set()
 const pendingClientRequests = new Map()
 let pullConfig = {
   delayMs: 0,
@@ -139,12 +140,14 @@ function handle(raw) {
   }
 
   if (data.method === "textDocument/didOpen") {
+    if (data.params?.textDocument?.uri) openedDocuments.add(data.params.textDocument.uri)
     maybeRegister("didOpen")
     return
   }
 
   if (data.method === "textDocument/didChange") {
     lastChange = data.params
+    if (data.params?.textDocument?.uri) openedDocuments.add(data.params.textDocument.uri)
     maybeRegister("didChange")
     return
   }
@@ -232,6 +235,51 @@ function handle(raw) {
         items: workspaceDiagnosticsForIdentifier(data.params?.identifier ?? ""),
       },
       workspaceDelayForIdentifier(data.params?.identifier ?? ""),
+    )
+    return
+  }
+
+  if (data.method === "textDocument/documentSymbol") {
+    if (!openedDocuments.has(data.params?.textDocument?.uri)) {
+      sendResponse(data.id, [])
+      return
+    }
+    sendResponse(data.id, [
+      {
+        name: "FakeDocumentSymbol",
+        kind: 12,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 18 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 18 },
+        },
+      },
+    ])
+    return
+  }
+
+  if (data.method === "workspace/symbol") {
+    const firstDocument = Array.from(openedDocuments)[0]
+    sendResponse(
+      data.id,
+      firstDocument
+        ? [
+            {
+              name: data.params?.query || "FakeWorkspaceSymbol",
+              kind: 12,
+              location: {
+                uri: firstDocument,
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 18 },
+                },
+              },
+            },
+          ]
+        : [],
     )
     return
   }

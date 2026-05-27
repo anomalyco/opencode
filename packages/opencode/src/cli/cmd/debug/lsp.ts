@@ -1,4 +1,5 @@
 import { LSP } from "@/lsp/lsp"
+import { LSPWorkspaceSymbol } from "@/lsp/workspace-symbol"
 import { Effect } from "effect"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
@@ -34,7 +35,7 @@ export const SymbolsCommand = effectCmd({
   builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
   handler: Effect.fn("Cli.debug.lsp.symbols")(function* (args) {
     using _ = Log.Default.time("symbols")
-    const results = yield* LSP.Service.use((lsp) => lsp.workspaceSymbol(args.query))
+    const results = yield* LSPWorkspaceSymbol.search(args.query)
     process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   }),
 })
