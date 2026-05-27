@@ -105,7 +105,14 @@ export const layer = Layer.effect(Service)(
       // full Effect context, so the forked publish + GlobalBus emit run with
       // the right state without a per-call attachWith.
       const bridge = yield* EffectBridge.make()
-      process(def, event, {
+      const v2 = EventV2.registry.get(def.type)
+      const replayed = v2
+        ? {
+            ...event,
+            data: EffectSchema.decodeUnknownSync(EffectSchema.toCodecJson(EffectSchema.toType(v2.data)))(event.data),
+          }
+        : event
+      process(def, replayed, {
         bus,
         bridge,
         publish,

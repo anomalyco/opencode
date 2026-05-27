@@ -1399,6 +1399,89 @@ describe("workspace sync state", () => {
     })
   })
 
+  it.live("sync history replays serialized next events before subsequent legacy events", () => {
+    let historySessionID: SessionID | undefined
+    let historyNextSeq = 0
+    return Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/history-next/global/event") return HttpServerResponse.fromWeb(eventStreamResponse())
+          if (url.pathname === "/history-next/sync/history") {
+            return HttpServerResponse.fromWeb(
+              Response.json([
+                {
+                  id: `evt_${unique("history-next-agent")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq,
+                  type: "session.next.agent.switched.1",
+                  data: {
+                    sessionID: historySessionID!,
+                    timestamp: "2026-05-26T21:48:56.202Z",
+                    agent: "build",
+                  },
+                },
+                {
+                  id: `evt_${unique("history-after-next")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq + 1,
+                  type: "session.next.tool.progress.1",
+                  data: {
+                    sessionID: historySessionID!,
+                    timestamp: "2026-05-26T21:48:57.202Z",
+                    callID: "call_history",
+                    structured: {},
+                    content: [],
+                  },
+                },
+                {
+                  id: `evt_${unique("history-after-next")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq + 2,
+                  type: sessionUpdatedType(),
+                  data: { sessionID: historySessionID!, info: { title: "after next history" } },
+                },
+              ]),
+            )
+          }
+          return HttpServerResponse.text("unexpected", { status: 500 })
+        }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* Workspace.Service
+            const sessionSvc = yield* SessionNs.Service
+            const instance = yield* requireInstance
+            const type = unique("history-next-replay")
+            const info = workspaceInfo(instance.project.id, type)
+            insertWorkspace(info)
+            registerAdapter(instance.project.id, type, remoteAdapter(`${url}/history-next`).adapter)
+            const session = yield* sessionSvc.create({ title: "before next history" })
+            attachSessionToWorkspace(session.id, info.id)
+            historySessionID = session.id
+            historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
+
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect(sessionSequence(session.id)).toBe(historyNextSeq + 2)
+                expect(yield* sessionSvc.get(session.id).pipe(Effect.orDie)).toMatchObject({
+                  agent: "build",
+                  title: "after next history",
+                })
+              }),
+            )
+            yield* workspace.remove(info.id)
+          }),
+        { git: true },
+      )
+    })
+  })
+
   it.live("SSE forwards non-heartbeat events and ignores heartbeats", () =>
     Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
