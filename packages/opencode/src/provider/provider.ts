@@ -32,8 +32,6 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
-import { Bus } from "@/bus"
-import { TuiEvent } from "@/cli/cmd/tui/event"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -345,21 +343,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             return await rawProvider()
           } catch (e) {
             if (e instanceof Error && e.name === "CredentialsProviderError") {
-              void Bus.publish(TuiEvent.ToastShow, {
-                variant: "warning",
-                message: "AWS SSO session expired — re-authenticating...",
-                duration: 5000,
-              })
+              // AWS SSO session expired - attempt re-authentication
               await new Promise<void>((resolve, reject) => {
                 const args = ["sso", "login", ...(profile ? ["--profile", profile] : [])]
                 const child = spawn("aws", args, { stdio: "pipe" })
                 child.on("exit", (code) => {
                   if (code === 0) {
-                    void Bus.publish(TuiEvent.ToastShow, {
-                      variant: "success",
-                      message: "AWS SSO re-authentication successful",
-                      duration: 5000,
-                    })
                     resolve()
                   } else {
                     reject(e)
