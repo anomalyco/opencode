@@ -1259,7 +1259,12 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
 }
 
 export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
-  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+  if (model.limit.output > 0) {
+    return outputTokenMax !== OUTPUT_TOKEN_MAX
+      ? Math.min(model.limit.output, outputTokenMax)
+      : model.limit.output
+  }
+  return outputTokenMax
 }
 
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {

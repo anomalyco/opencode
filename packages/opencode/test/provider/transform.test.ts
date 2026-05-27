@@ -3810,3 +3810,49 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.maxOutputTokens", () => {
+  const baseModel = {
+    id: "test/model",
+    providerID: "test",
+    api: { id: "model", url: "https://test.com", npm: "@ai-sdk/openai-compatible" },
+    name: "Test Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    status: "active",
+    options: {},
+    headers: {},
+  }
+
+  const modelWithOutput = (output: number) =>
+    ({ ...baseModel, limit: { context: 200_000, input: 0, output } }) as any
+
+  test("respects configured limit.output when set", () => {
+    expect(ProviderTransform.maxOutputTokens(modelWithOutput(384_000))).toBe(384_000)
+  })
+
+  test("falls back to OUTPUT_TOKEN_MAX when limit.output is 0", () => {
+    expect(ProviderTransform.maxOutputTokens(modelWithOutput(0))).toBe(32_000)
+  })
+
+  test("respects env var ceiling when set", () => {
+    expect(ProviderTransform.maxOutputTokens(modelWithOutput(384_000), 100_000)).toBe(100_000)
+  })
+
+  test("uses env var as fallback when limit.output is 0", () => {
+    expect(ProviderTransform.maxOutputTokens(modelWithOutput(0), 64_000)).toBe(64_000)
+  })
+
+  test("env var ceiling does not raise above configured limit", () => {
+    // When limit.output < env var ceiling, limit.output wins
+    expect(ProviderTransform.maxOutputTokens(modelWithOutput(50_000), 100_000)).toBe(50_000)
+  })
+})
