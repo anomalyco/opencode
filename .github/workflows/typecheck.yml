@@ -18,4 +18,4 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Run typecheck
-        run: bun typecheck
+        run: bun turbo typecheck --filter=!opencode

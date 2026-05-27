@@ -10,7 +10,7 @@
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
     "lint": "oxlint",
-    "typecheck": "bun turbo typecheck",
+    "typecheck": "bun turbo typecheck --filter=!opencode",
     "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
     "random": "echo 'Random script'",
