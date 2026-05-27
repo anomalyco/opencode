@@ -1,6 +1,8 @@
 import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { Bus } from "@/bus"
+import { Session } from "@/session/session"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
@@ -887,6 +889,91 @@ Nested agent prompt`,
         mode: "subagent",
         prompt: "Nested agent prompt",
       })
+    },
+  })
+})
+
+test("invalid agent file is reported and does not block valid agents", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "good.md"),
+        `---
+model: test/model
+---
+Good agent prompt`,
+      )
+
+      await Filesystem.write(
+        path.join(agentDir, "broken.md"),
+        `---
+temperature: "not a number"
+---
+Broken agent prompt`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const errors: string[] = []
+      Bus.subscribe(Session.Event.Error, (evt) => {
+        const data = evt.properties.error?.data
+        if (data && "message" in data && typeof data.message === "string") errors.push(data.message)
+      })
+      await Bun.sleep(10)
+      const config = await load()
+      await Bun.sleep(10)
+      // The valid agent still loads even though a sibling file is invalid.
+      expect(config.agent?.["good"]).toMatchObject({ name: "good", model: "test/model" })
+      expect(config.agent?.["broken"]).toBeUndefined()
+      // The invalid file is reported rather than crashing the load.
+      expect(errors.some((m) => m.includes("broken.md"))).toBe(true)
+    },
+  })
+})
+
+test("invalid mode file is reported instead of being silently dropped", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const modeDir = path.join(dir, ".opencode", "mode")
+      await fs.mkdir(modeDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(modeDir, "good.md"),
+        `---
+model: test/model
+---
+Good mode prompt`,
+      )
+
+      await Filesystem.write(
+        path.join(modeDir, "broken.md"),
+        `---
+temperature: "not a number"
+---
+Broken mode prompt`,
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const errors: string[] = []
+      Bus.subscribe(Session.Event.Error, (evt) => {
+        const data = evt.properties.error?.data
+        if (data && "message" in data && typeof data.message === "string") errors.push(data.message)
+      })
+      await Bun.sleep(10)
+      const config = await load()
+      await Bun.sleep(10)
+      expect(config.agent?.["good"]).toMatchObject({ name: "good", mode: "primary" })
+      expect(config.agent?.["broken"]).toBeUndefined()
+      // Previously the invalid mode vanished with no error; now it must be reported.
+      expect(errors.some((m) => m.includes("broken.md"))).toBe(true)
     },
   })
 })

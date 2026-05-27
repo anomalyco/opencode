@@ -9,7 +9,6 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
-import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
 
 const log = Log.create({ service: "config" })
@@ -104,6 +103,18 @@ export const Info = AgentSchema.pipe(
 ).annotate({ identifier: "AgentConfig" })
 export type Info = Schema.Schema.Type<typeof Info>
 
+// Surface a config-loading failure to the user and log it, so an invalid file is
+// reported instead of crashing the whole load (load) or vanishing silently (loadMode).
+// Publishing requires an instance context that isn't always present (e.g. tests), so a
+// publish failure is swallowed — the log line is the durable record, the event is best-effort.
+async function report(label: string, item: string, message: string, err: unknown) {
+  log.error(`failed to load ${label}`, { [label]: item, err })
+  const { Session } = await import("@/session/session")
+  await Promise.resolve()
+    .then(() => Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+    .catch(() => {})
+}
+
 export async function load(dir: string) {
   const result: Record<string, Info> = {}
   for (const item of await Glob.scan("{agent,agents}/**/*.md", {
@@ -113,25 +124,24 @@ export async function load(dir: string) {
     symlink: true,
   })) {
     const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-      log.error("failed to load agent", { agent: item, err })
+      const message = ConfigMarkdown.FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse agent ${item}`
+      await report("agent", item, message, err)
       return undefined
     })
     if (!md) continue
 
     const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-    const name = configEntryNameFromPath(item, patterns)
-
     const config = {
-      name,
+      name: configEntryNameFromPath(item, patterns),
       ...md.data,
       prompt: md.content.trim(),
     }
-    result[config.name] = ConfigParse.schema(Info, config, item)
+    const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
+    if (Exit.isFailure(parsed)) {
+      await report("agent", item, `Failed to parse agent ${item}`, parsed.cause)
+      continue
+    }
+    result[config.name] = parsed.value
   }
   return result
 }
@@ -145,12 +155,8 @@ export async function loadMode(dir: string) {
     symlink: true,
   })) {
     const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-      log.error("failed to load mode", { mode: item, err })
+      const message = ConfigMarkdown.FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse mode ${item}`
+      await report("mode", item, message, err)
       return undefined
     })
     if (!md) continue
@@ -161,11 +167,13 @@ export async function loadMode(dir: string) {
       prompt: md.content.trim(),
     }
     const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
-    if (Exit.isSuccess(parsed)) {
-      result[config.name] = {
-        ...parsed.value,
-        mode: "primary" as const,
-      }
+    if (Exit.isFailure(parsed)) {
+      await report("mode", item, `Failed to parse mode ${item}`, parsed.cause)
+      continue
+    }
+    result[config.name] = {
+      ...parsed.value,
+      mode: "primary" as const,
     }
   }
   return result
