@@ -2,8 +2,11 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Auth } from "../../src/auth"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Global } from "@opencode-ai/core/global"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import fs from "fs/promises"
+import path from "path"
 
 const node = CrossSpawnSpawner.defaultLayer
 
@@ -83,4 +86,97 @@ describe("Auth", () => {
       }),
     ),
   )
+
+  it.live("all() returns empty object when auth.json is corrupted JSON instead of throwing", () =>
+    // Regression: a half-written or otherwise corrupted auth.json used to crash Auth.all().
+    // The fix routes the JSON.parse defect through readJson's Effect error channel so the
+    // subsequent Effect.orElseSucceed recovers to an empty record.
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        const file = path.join(Global.Path.data, "auth.json")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(file, "{ \"anthropic\": { \"type\": \"api\", \"key\":"))
+
+        const data = yield* auth.all()
+        expect(data).toEqual({})
+      }),
+    ),
+  )
+
+  it.live("all() returns empty object when auth.json contains binary garbage", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        const file = path.join(Global.Path.data, "auth.json")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(file, Buffer.from([0x00, 0xff, 0x00, 0xff, 0x42, 0x42])))
+
+        const data = yield* auth.all()
+        expect(data).toEqual({})
+      }),
+    ),
+  )
+
+  it.live("get() returns undefined when auth.json is corrupted (does not throw)", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        const file = path.join(Global.Path.data, "auth.json")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(file, "not json at all"))
+
+        const got = yield* auth.get("anthropic")
+        expect(got).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.live("set() recovers from corrupted auth.json and writes a valid file", () =>
+    // After corruption, the user should still be able to log in and have writes persist.
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        const file = path.join(Global.Path.data, "auth.json")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(file, "\0\0corrupted\0\0"))
+
+        yield* auth.set("anthropic", { type: "api", key: "sk-test" })
+
+        const data = yield* auth.all()
+        expect(data["anthropic"]).toBeDefined()
+        const entry = data["anthropic"]!
+        expect(entry.type).toBe("api")
+        if (entry.type === "api") expect(entry.key).toBe("sk-test")
+
+        // and the file on disk should now be valid JSON
+        const written = yield* Effect.promise(() => fs.readFile(file, "utf8"))
+        expect(() => JSON.parse(written)).not.toThrow()
+      }),
+    ),
+  )
+
+  it.live("all() ignores invalid OPENCODE_AUTH_CONTENT env var", () =>
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          // Wipe any auth.json left behind by previous tests in this process, since
+          // Global.Path.data is shared across tests.
+          const file = path.join(Global.Path.data, "auth.json")
+          yield* Effect.promise(() => fs.rm(file, { force: true }))
+  
+          const previous = process.env.OPENCODE_AUTH_CONTENT
+          process.env.OPENCODE_AUTH_CONTENT = "{ not valid json at all"
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
+              else process.env.OPENCODE_AUTH_CONTENT = previous
+            }),
+          )
+  
+          const auth = yield* Auth.Service
+          const data = yield* auth.all()
+          expect(data).toEqual({})
+        }),
+      ),
+    )
 })
