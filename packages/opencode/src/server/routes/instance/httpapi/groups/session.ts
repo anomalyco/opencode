@@ -78,6 +78,7 @@ export const SessionPaths = {
   list: root,
   status: `${root}/status`,
   get: `${root}/:sessionID`,
+  getStatus: `${root}/:sessionID/status`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
   diff: `${root}/:sessionID/diff`,
@@ -138,6 +139,18 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.get",
             summary: "Get session",
             description: "Retrieve detailed information about a specific OpenCode session.",
+          }),
+        ),
+        HttpApiEndpoint.get("getStatus", SessionPaths.getStatus, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(SessionStatus.Info, "Get session status"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.getStatus",
+            summary: "Get session status",
+            description: "Retrieve the current runtime status for a specific OpenCode session.",
           }),
         ),
         HttpApiEndpoint.get("children", SessionPaths.children, {

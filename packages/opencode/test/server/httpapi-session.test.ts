@@ -275,6 +275,10 @@ describe("session HttpApi", () => {
         expect(get.status).toBe(404)
         expect(yield* responseJson(get)).toEqual(missingSessionBody)
 
+        const status = yield* request(pathFor(SessionPaths.getStatus, { sessionID: missingSession }), { headers })
+        expect(status.status).toBe(404)
+        expect(yield* responseJson(status)).toEqual(missingSessionBody)
+
         const children = yield* request(pathFor(SessionPaths.children, { sessionID: missingSession }), { headers })
         expect(children.status).toBe(404)
         expect(yield* responseJson(children)).toEqual(missingSessionBody)
@@ -344,6 +348,12 @@ describe("session HttpApi", () => {
         expect(
           yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: parent.id }), { headers }),
         ).toMatchObject({ id: parent.id, title: "parent" })
+
+        expect(
+          yield* requestJson<Record<string, unknown>>(pathFor(SessionPaths.getStatus, { sessionID: parent.id }), {
+            headers,
+          }),
+        ).toEqual({ type: "idle" })
 
         expect(
           (yield* requestJson<Session.Info[]>(pathFor(SessionPaths.children, { sessionID: parent.id }), {

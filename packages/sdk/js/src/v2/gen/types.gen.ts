@@ -7003,6 +7003,40 @@ export type SessionUpdateResponses = {
 
 export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses]
 
+export type SessionGetStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/status"
+}
+
+export type SessionGetStatusErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionGetStatusError = SessionGetStatusErrors[keyof SessionGetStatusErrors]
+
+export type SessionGetStatusResponses = {
+  /**
+   * Get session status
+   */
+  200: SessionStatus
+}
+
+export type SessionGetStatusResponse = SessionGetStatusResponses[keyof SessionGetStatusResponses]
+
 export type SessionChildrenData = {
   body?: never
   path: {

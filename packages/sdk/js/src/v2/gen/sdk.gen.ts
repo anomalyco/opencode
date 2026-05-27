@@ -177,6 +177,8 @@ import type {
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
+  SessionGetStatusErrors,
+  SessionGetStatusResponses,
   SessionInitErrors,
   SessionInitResponses,
   SessionListErrors,
@@ -3289,6 +3291,38 @@ export class Session2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get session status
+   *
+   * Retrieve the current runtime status for a specific OpenCode session.
+   */
+  public getStatus<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionGetStatusResponses, SessionGetStatusErrors, ThrowOnError>({
+      url: "/session/{sessionID}/status",
+      ...options,
+      ...params,
     })
   }
 
