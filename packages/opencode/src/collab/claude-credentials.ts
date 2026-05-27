@@ -31,7 +31,16 @@ import { existsSync, lstatSync, mkdirSync, renameSync, statSync, symlinkSync, un
 import { dirname, join } from "path"
 import { homedir } from "os"
 
-/** Canonical EFS path for the credentials file.  Override via env for tests. */
+/**
+ * Where credentials get atomic-written.  scripts/entrypoint.sh probes EFS
+ * writability at boot and exports CLAUDE_CREDENTIALS_PATH pointing at
+ * either the EFS path (persistent) or the local canonical path (fallback
+ * when EFS isn't writable from uid 10001 — ADR-0003 access-point migration
+ * pending).  Either way the opencode-claude-auth plugin reads the canonical
+ * path and gets the right bytes.
+ *
+ * Tests can override via env.
+ */
 export function credentialsPath(): string {
   if (process.env["CLAUDE_CREDENTIALS_PATH"]) return process.env["CLAUDE_CREDENTIALS_PATH"]
   return join(
@@ -54,22 +63,30 @@ function canonicalPluginPath(): string {
 }
 
 /**
- * Ensure the canonical plugin path is a symlink to the EFS file.  Idempotent:
+ * Ensure the canonical plugin path is a symlink to the storage file.
  *
- *   - If already symlinked correctly → no-op.
- *   - If a stale symlink points elsewhere → repoint.
- *   - If a regular file exists (e.g. local docker-compose bind-mount) → leave
- *     it alone.  Local dev runs the bind-mount path; we must not clobber it.
- *   - If absent → create the directory + symlink.
+ *   - **EFS-fallback mode** (credentialsPath() === canonicalPluginPath()):
+ *     `writeCredentials` wrote DIRECTLY to the canonical path, so no
+ *     symlink is needed.  Early-return.
+ *   - **Persistent mode** (credentialsPath() !== canonicalPluginPath()):
+ *       - Already-correct symlink → repoint (cheap; saves a readlink).
+ *       - Regular file (local docker-compose bind-mount, or a prior
+ *         entrypoint local-fallback seed) → leave alone.
+ *       - Absent → create the directory + symlink.
  *
- * Called by writeCredentials so the very first UI upload makes the file
- * visible to the plugin without requiring a container restart.  Also a
- * defence-in-depth backstop if scripts/entrypoint.sh's setup missed (e.g.
- * unrecognised env-var combinations).
+ * Called by writeCredentials so the first UI upload is immediately visible
+ * to the plugin without a container restart.  Also a defence-in-depth
+ * backstop for any path the entrypoint missed.
  */
 function ensureCanonicalSymlink(): void {
   const target = credentialsPath()
   const canonical = canonicalPluginPath()
+
+  // Self-link guard: when the entrypoint detected EFS as unwritable it
+  // pointed CLAUDE_CREDENTIALS_PATH at the canonical path itself.  Writing
+  // already happened at canonical — no symlink work to do.
+  if (target === canonical) return
+
   try {
     mkdirSync(dirname(canonical), { recursive: true })
     let existing: ReturnType<typeof lstatSync> | null = null
@@ -84,8 +101,8 @@ function ensureCanonicalSymlink(): void {
       // unlink + relink — saves an extra syscall and is idempotent.)
       unlinkSync(canonical)
     } else if (existing?.isFile()) {
-      // Regular file (local docker-compose bind-mount) — DO NOT TOUCH.
-      // The bind-mount provides credentials directly from the host.
+      // Regular file (local docker-compose bind-mount, OR the entrypoint's
+      // local-fallback seed when EFS is unwritable) — DO NOT TOUCH.
       return
     }
     symlinkSync(target, canonical)
