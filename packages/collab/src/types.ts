@@ -16,6 +16,17 @@ export type QueueMode = "fifo" | "vote"
 /** "submitted" means the prompt has been dispatched to the LLM; it is no longer in the approved queue. */
 export type SuggestionStatus = "pending" | "approved" | "rejected" | "submitted"
 
+/**
+ * Server-side workspace lifecycle state.
+ *   "pending"  — initSessionWorkspace is in flight (cloning repos, checking
+ *                out the collab branch, pre-warming the native session).
+ *   "ready"    — workspace is fully populated and the native session is
+ *                created.  Iframe is safe to mount.
+ *   "failed"   — initSessionWorkspace threw and recovery wasn't possible.
+ *                A Driver can POST /collab/session/:id/reinit to retry.
+ */
+export type WorkspaceInitStatus = "pending" | "ready" | "failed"
+
 export interface CollabSession {
   id: string
   name: string
@@ -38,6 +49,15 @@ export interface CollabSession {
   participants: Participant[]
   createdAt: Date
   deletedAt: Date | null
+  /**
+   * Server-side workspace init state.  See WorkspaceInitStatus.
+   * Optional in the wire format because legacy clients/servers predate it;
+   * absence is interpreted as "ready" (legacy sessions are by definition
+   * already initialised by the time you see them).
+   */
+  initStatus?: WorkspaceInitStatus
+  /** Short human-readable error message — set when initStatus === "failed". */
+  initError?: string | null
 }
 
 export interface Participant {
@@ -123,3 +143,16 @@ export type CollabEvent =
     }
   | { type: "collab:note_added"; note: CollabNote }
   | { type: "collab:repos_added"; repos: string[]; addedBy: string }
+  /**
+   * The collab session's server-side workspace (git clone + branch checkout +
+   * native opencode session pre-warm) is fully ready.  The iframe SHOULD NOT
+   * mount before this fires — see docs/adr/0001 and pages/collab/session.tsx
+   * for the gating logic.
+   */
+  | { type: "collab:workspace_ready"; collabSessionId: string }
+  /**
+   * Workspace init failed.  Carries a short human-readable reason so the
+   * recovery panel can display it.  Driver can re-trigger via
+   * POST /collab/session/:id/reinit.
+   */
+  | { type: "collab:workspace_failed"; collabSessionId: string; error: string }

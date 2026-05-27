@@ -939,6 +939,13 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // directory.  Sequencing matters: opencode needs the repo on disk before
     // InstanceStore.load — otherwise the file tree, git status, and diff/review
     // pane all start empty.
+    //
+    // Workspace state machine (fix/session):
+    //   - new row inserts with init_status='pending' (schema default)
+    //   - on success → setInitStatus(ready) + broadcast collab:workspace_ready
+    //   - on failure → setInitStatus(failed, err) + broadcast collab:workspace_failed
+    // The iframe is gated on workspace_ready; on workspace_failed the SPA
+    // shows a recovery panel with a Driver retry button.
     const warmupDirectory = nativeSessionDirectory(created.id, created.repos)
     if (created.repos.length > 0) {
       // Pass the session name + branch so initSessionWorkspace can check out
@@ -947,13 +954,29 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       // which gets baked into the clone URL.  Subsequent push/pull operations
       // reuse it via .git/config.  See ADR-0005 Option B.
       initSessionWorkspace(created.id, created.repos, sess.githubAccessToken, created.name, created.branch)
-        .then(() => preWarmNativeSession(created.id, warmupDirectory))
+        .then(() => {
+          Session.setInitStatus(created.id, "ready")
+          broadcastSse(created.id, { type: "collab:workspace_ready", collabSessionId: created.id })
+          preWarmNativeSession(created.id, warmupDirectory)
+        })
         .catch((err) => {
-          console.error("[collab] workspace init failed:", err)
-          // Still pre-warm against the workspace root so the iframe at least loads
-          preWarmNativeSession(created.id, sessionWorkspacePath(created.id))
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[collab] workspace init failed:", msg)
+          Session.setInitStatus(created.id, "failed", msg)
+          broadcastSse(created.id, {
+            type: "collab:workspace_failed",
+            collabSessionId: created.id,
+            error: msg,
+          })
+          // Do NOT pre-warm against a broken workspace — that's the bug
+          // we're fixing.  The recovery panel offers a Driver retry via
+          // POST /collab/session/:id/reinit.
         })
     } else {
+      // No repos → workspace is trivially "ready"; the iframe gate will
+      // still require sessionId, which preWarmNativeSession provides.
+      Session.setInitStatus(created.id, "ready")
+      broadcastSse(created.id, { type: "collab:workspace_ready", collabSessionId: created.id })
       preWarmNativeSession(created.id, warmupDirectory)
     }
 

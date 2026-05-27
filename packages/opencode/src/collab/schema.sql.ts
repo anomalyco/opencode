@@ -11,6 +11,15 @@ export const CollabSessionTable = sqliteTable("collab_session", {
   session_id: text(),
   /** Git branch name created/used by this collab session in every linked repo. */
   branch: text(),
+  /**
+   * Workspace init lifecycle ("pending" | "ready" | "failed").
+   * Iframe is gated on this becoming "ready".  See WorkspaceInitStatus in
+   * @opencode-ai/collab and docs/adr/0001 for the rationale.
+   * Legacy rows are backfilled to "ready" in runCollabMigrations.
+   */
+  init_status: text().notNull().default("pending"),
+  /** Short human-readable error message when init_status === "failed". */
+  init_error: text(),
   created_at: integer({ mode: "timestamp_ms" }).notNull(),
   deleted_at: integer({ mode: "timestamp_ms" }),
 })

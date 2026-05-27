@@ -15,6 +15,8 @@ const SQL = `
     queue_mode TEXT NOT NULL DEFAULT 'fifo',
     session_id TEXT,
     branch TEXT,
+    init_status TEXT NOT NULL DEFAULT 'pending',
+    init_error TEXT,
     created_at INTEGER NOT NULL,
     deleted_at INTEGER
   );
@@ -107,6 +109,16 @@ export function runCollabMigrations() {
     const cols = db.$client.prepare("PRAGMA table_info(collab_session)").all() as Array<{ name: string }>
     if (!cols.some((c) => c.name === "branch")) {
       db.$client.exec("ALTER TABLE collab_session ADD COLUMN branch TEXT")
+    }
+    // init_status / init_error were added in the "fix/session" pass — gate
+    // the iframe on explicit workspace readiness.  Legacy rows are by
+    // definition already past initialization; backfill them as "ready" so
+    // the new gate doesn't trap them in the placeholder.
+    if (!cols.some((c) => c.name === "init_status")) {
+      db.$client.exec("ALTER TABLE collab_session ADD COLUMN init_status TEXT NOT NULL DEFAULT 'ready'")
+    }
+    if (!cols.some((c) => c.name === "init_error")) {
+      db.$client.exec("ALTER TABLE collab_session ADD COLUMN init_error TEXT")
     }
 
     // ADR-0004 — one-shot re-encryption of legacy plaintext access tokens.
