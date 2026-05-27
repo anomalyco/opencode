@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect/instance-state"
+import { Plugin } from "@/plugin"
 import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
@@ -145,6 +146,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const plugin = yield* Plugin.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         const row = Database.use((db) =>
@@ -171,10 +173,44 @@ export const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+
+      // Fire the `permission.ask` plugin hook against the config-only ruleset
+      // before the session-level "always allow" approvals are applied. Plugins
+      // (notably securecode's permission-policy) may raise an `allow` to `ask`.
+      // `deny` is never relaxed here: we only invoke the hook on patterns that
+      // resolved to `allow` from the config ruleset.
+      //
+      // The escalation rules built here are evaluated AFTER `ruleset` but
+      // BEFORE `approved`, so an in-session "always allow" still wins over the
+      // hook-raised `ask`.
+      const escalation: Rule[] = []
+      for (const pattern of request.patterns) {
+        const configStatus = evaluate(request.permission, pattern, ruleset).action
+        if (configStatus !== "allow") continue
+        const hookOutput = yield* plugin.trigger(
+          "permission.ask",
+          {
+            id: PermissionID.ascending(),
+            type: request.permission,
+            pattern,
+            sessionID: request.sessionID,
+            messageID: request.tool?.messageID ?? "",
+            callID: request.tool?.callID,
+            title: "",
+            metadata: request.metadata,
+            time: { created: Date.now() },
+          },
+          { status: "allow" as "ask" | "deny" | "allow" },
+        )
+        if (hookOutput.status === "allow") continue
+        if (escalation.some((r) => r.pattern === pattern)) continue
+        escalation.push({ permission: request.permission, pattern, action: hookOutput.status })
+      }
+
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = evaluate(request.permission, pattern, ruleset, escalation, approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new DeniedError({
@@ -307,6 +343,12 @@ export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
   return PermissionV2.disabled(tools, ruleset)
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+// `Layer.suspend` defers the read of `Plugin.defaultLayer` until the layer is
+// actually built, breaking the module-load-time circular import between
+// permission and plugin (plugin → session → permission). Without it, the RHS
+// runs at import time and hits a TDZ violation on `Plugin.defaultLayer`.
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer)),
+)
 
 export * as Permission from "."

@@ -5,6 +5,7 @@ import { Bus } from "../../src/bus"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
+import { Plugin } from "../../src/plugin"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
@@ -13,8 +14,20 @@ import { MessageID, SessionID } from "../../src/session/schema"
 
 const bus = Bus.layer
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+// No-op Plugin.Service for permission tests: `Permission.layer` now invokes
+// `plugin.trigger("permission.ask", ...)` from inside `ask`, but these tests
+// exercise the ruleset/approval machinery, not the plugin escalation path —
+// we stub `trigger` so it returns the output unchanged.
+const noopPlugin = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    trigger: (_name, _input, output) => Effect.succeed(output) as any,
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  }),
+)
 const env = Layer.mergeAll(
-  Permission.layer.pipe(Layer.provide(bus)),
+  Permission.layer.pipe(Layer.provide(bus), Layer.provide(noopPlugin)),
   bus,
   CrossSpawnSpawner.defaultLayer,
   InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
