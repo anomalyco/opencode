@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
-import type { BunShell, BunShellPromise, BunShellOutput } from "@opencode-ai/plugin/shell"
+import type { BunShell, BunShellPromise, BunShellOutput } from "@opencode-ai/plugin"
 
 const execFileAsync = promisify(execFile)
 
@@ -149,12 +149,13 @@ class ShellPromise implements BunShellPromise {
 
   async arrayBuffer(): Promise<ArrayBuffer> {
     const result = await this.getPromise()
-    return result.stdout.buffer.slice(result.stdout.byteOffset, result.stdout.byteOffset + result.stdout.byteLength)
+    const buf = result.stdout.buffer.slice(result.stdout.byteOffset, result.stdout.byteOffset + result.stdout.byteLength)
+    return buf as ArrayBuffer
   }
 
   async blob(): Promise<Blob> {
     const result = await this.getPromise()
-    return new Blob([result.stdout])
+    return new Blob([Uint8Array.from(result.stdout)])
   }
 
   nothrow(): this {

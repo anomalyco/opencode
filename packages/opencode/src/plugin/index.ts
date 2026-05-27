@@ -148,7 +148,6 @@ export const layer = Layer.effect(
           get serverUrl(): URL {
             return Server.url ?? new URL("http://localhost:4096")
           },
-          // @ts-expect-error - In Bun, use native Bun.$; otherwise use polyfill
           $: typeof Bun === "undefined" ? createShellPolyfill() : Bun.$,
         }
 
