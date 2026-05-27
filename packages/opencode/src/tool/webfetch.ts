@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
@@ -9,15 +9,22 @@ import { isImageAttachment } from "@/util/media"
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
+const Format = Schema.Literals(["text", "markdown", "html"]).annotate({
+  description: "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+  default: "markdown",
+})
 
 export const Parameters = Schema.Struct({
   url: Schema.String.annotate({ description: "The URL to fetch content from" }),
-  format: Schema.Literals(["text", "markdown", "html"])
-    .annotate({
-      description: "The format to return the content in (text, markdown, or html). Defaults to markdown.",
-      default: "markdown",
-    })
-    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("markdown" as const))),
+  format: Schema.NullOr(Format)
+    .pipe(
+      Schema.optional,
+      Schema.withDecodingDefaultType(Effect.succeed(null)),
+      Schema.decodeTo(Schema.Literals(["text", "markdown", "html"]), {
+        decode: SchemaGetter.transform((format) => format ?? "markdown"),
+        encode: SchemaGetter.passthrough({ strict: false }),
+      }),
+    ),
   timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in seconds (max 120)" }),
 })
 

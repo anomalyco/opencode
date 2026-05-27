@@ -37,6 +37,13 @@ const exec = Effect.fn("WebFetchToolTest.exec")(function* (args: Tool.InferParam
   return yield* tool.execute(args, ctx)
 })
 
+const execRaw = Effect.fn("WebFetchToolTest.execRaw")(function* (args: unknown) {
+  const info = yield* WebFetchTool
+  const tool = yield* info.init()
+  const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
+  return yield* execute(args, ctx)
+})
+
 describe("tool.webfetch", () => {
   it.instance("returns image responses as file attachments", () =>
     Effect.gen(function* () {
@@ -87,6 +94,22 @@ describe("tool.webfetch", () => {
         Effect.gen(function* () {
           const result = yield* exec({ url: new URL("/file.txt", url).toString(), format: "text" })
           expect(result.output).toBe("hello from webfetch")
+          expect(result.attachments).toBeUndefined()
+        }),
+    ),
+  )
+
+  it.instance("treats null format as the default markdown format", () =>
+    withFetch(
+      () =>
+        new Response("<html><body><h1>Hello</h1></body></html>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* execRaw({ url: new URL("/page.html", url).toString(), format: null })
+          expect(result.output).toContain("# Hello")
           expect(result.attachments).toBeUndefined()
         }),
     ),

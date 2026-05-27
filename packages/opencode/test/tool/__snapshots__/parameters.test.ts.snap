@@ -398,14 +398,21 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
     "format": {
       "anyOf": [
         {
-          "default": "markdown",
-          "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
-          "enum": [
-            "text",
-            "markdown",
-            "html",
+          "anyOf": [
+            {
+              "default": "markdown",
+              "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+              "enum": [
+                "text",
+                "markdown",
+                "html",
+              ],
+              "type": "string",
+            },
+            {
+              "type": "null",
+            },
           ],
-          "type": "string",
         },
         {
           "type": "null",
