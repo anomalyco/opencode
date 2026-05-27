@@ -249,8 +249,9 @@ export async function handler(
     if (!isStream || [400, 404, 429].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
-      if (json.usage) {
-        const usageInfo = providerInfo.normalizeUsage(json.usage)
+      const usage = providerInfo.extractUsage(json)
+      if (usage) {
+        const usageInfo = providerInfo.normalizeUsage(usage)
         const costInfo = calculateCost(modelInfo, usageInfo)
         await trialLimiter?.track(usageInfo)
         await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
@@ -482,27 +483,29 @@ export async function handler(
     modelTpsLimits: Record<string, boolean> | undefined,
   ) {
     const modelProvider = (() => {
+      const allProviders = modelInfo.providers.filter((provider) => !provider.disabled)
+
       // Byok is top priority b/c if user set their own API key, we should use it
       // instead of using the sticky provider for the same session
       if (authInfo?.provider?.credentials) {
-        return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
+        return allProviders.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
       // Always use the same provider for the same session
       if (stickyProvider) {
-        const provider = modelInfo.providers.find((provider) => provider.id === stickyProvider)
+        const provider = allProviders.find((provider) => provider.id === stickyProvider)
         if (provider) return provider
       }
 
       if (trialProviders) {
         const trialProvider = trialProviders[Math.floor(Math.random() * trialProviders.length)]
-        const provider = modelInfo.providers.find((provider) => provider.id === trialProvider)
+        const provider = allProviders.find((provider) => provider.id === trialProvider)
         if (provider) return provider
       }
 
       if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
         let topPriority = Infinity
-        const providers = modelInfo.providers
+        const providers = allProviders
           .filter((provider) => !provider.disabled)
           .filter((provider) => provider.weight !== 0)
           .filter((provider) => !retry.excludeProviders.includes(provider.id))
@@ -535,7 +538,7 @@ export async function handler(
       }
 
       // fallback provider
-      return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+      return allProviders.find((provider) => provider.id === modelInfo.fallbackProvider)
     })()
 
     if (!modelProvider) throw new ModelError(t("zen.api.error.noProviderAvailable"))

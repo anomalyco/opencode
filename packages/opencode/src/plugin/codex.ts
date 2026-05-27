@@ -638,7 +638,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       if (input.model.providerID !== "openai") return
       output.headers.originator = "opencode"
       output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
-      output.headers.session_id = input.sessionID
+      output.headers["session-id"] = input.sessionID
     },
     "chat.params": async (input, output) => {
       if (input.model.providerID !== "openai") return
