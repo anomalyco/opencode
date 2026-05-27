@@ -35,6 +35,7 @@
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/ipc-bridge": "workspace:*",
         "@sentry/solid": "catalog:",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/active-element": "2.1.3",
@@ -96,6 +97,7 @@
         "@opencode-ai/console-mail": "workspace:*",
         "@opencode-ai/console-resource": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/ipc-bridge": "workspace:*",
         "@smithy/eventstream-codec": "4.2.7",
         "@smithy/util-utf8": "4.2.0",
         "@solidjs/meta": "catalog:",
@@ -245,6 +247,7 @@
         "@lydell/node-pty": "catalog:",
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/ipc-bridge": "workspace:*",
         "@sentry/solid": "catalog:",
         "@sentry/vite-plugin": "catalog:",
         "@solid-primitives/i18n": "2.2.1",
@@ -287,6 +290,7 @@
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/ipc-bridge": "workspace:*",
         "@pierre/diffs": "catalog:",
         "@solidjs/meta": "catalog:",
         "@solidjs/router": "catalog:",
@@ -326,6 +330,11 @@
         "typescript": "catalog:",
       },
     },
+    "packages/ipc-bridge": {
+      "name": "@opencode-ai/ipc-bridge",
+      "version": "0.0.1",
+    },
+
     "packages/opencode": {
       "name": "opencode",
       "version": "1.14.40",
@@ -580,6 +589,7 @@
       "name": "@opencode-ai/storybook",
       "devDependencies": {
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/ipc-bridge": "workspace:*",
         "@solidjs/meta": "catalog:",
         "@storybook/addon-a11y": "^10.2.13",
         "@storybook/addon-docs": "^10.2.13",
@@ -1597,6 +1607,7 @@
     "@openauthjs/openauth": ["@openauthjs/openauth@0.0.0-20250322224806", "https://registry.npmmirror.com/@openauthjs/openauth/-/openauth-0.0.0-20250322224806.tgz", { "dependencies": { "@standard-schema/spec": "1.0.0-beta.3", "aws4fetch": "1.0.20", "jose": "5.9.6" }, "peerDependencies": { "arctic": "^2.2.2", "hono": "^4.0.0" } }, "sha512-p5IWSRXvABcwocH2dNI0w8c1QJelIOFulwhKk+aLLFfUbs8u1pr7kQbYe8yCSM2+bcLHiwbogpUQc2ovrGwCuw=="],
 
     "@opencode-ai/app": ["@opencode-ai/app@workspace:packages/app"],
+    "@opencode-ai/ipc-bridge": ["@opencode-ai/ipc-bridge@workspace:packages/ipc-bridge"],
 
     "@opencode-ai/console-app": ["@opencode-ai/console-app@workspace:packages/console/app"],
 

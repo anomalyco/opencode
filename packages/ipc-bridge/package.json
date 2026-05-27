@@ -1,0 +1,17 @@
+{
+  "name": "@opencode-ai/ipc-bridge",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo -b"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  }
+}

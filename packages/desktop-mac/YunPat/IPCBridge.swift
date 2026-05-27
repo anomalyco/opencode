@@ -1,10 +1,13 @@
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import WebKit
 import UserNotifications
 
 class IPCBridge: NSObject, WKScriptMessageHandler {
     private var webView: WKWebView?
     private var userContentController: WKUserContentController?
+    private var serverURL: String = ""
 
     deinit {
         userContentController?.removeAllScriptMessageHandlers()
@@ -15,21 +18,27 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
     }
 
     func createWebView(serverURL: String) -> WKWebView {
+        self.serverURL = serverURL
+
         let config = WKWebViewConfiguration()
         let controller = config.userContentController
         self.userContentController = controller
 
-        // Use single unified handler for all messages
         controller.add(self, name: "yunpat")
 
-        // Inject server URL and native bridge marker
         let escapedServerURL = serverURL
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\"", with: "\\\"")
+
         let script = WKUserScript(
             source: """
-            window.__YUNPAT_NATIVE__ = true;
+            window.__YUNPAT_NATIVE__ = {
+              postMessage: function(payload) {
+                var body = typeof payload === 'string' ? JSON.parse(payload) : payload;
+                window.webkit.messageHandlers.yunpat.postMessage(body);
+              }
+            };
             window.__YUNPAT_SERVER_URL__ = "\(escapedServerURL)";
             """,
             injectionTime: .atDocumentStart,
@@ -47,31 +56,33 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
     }
 
     private func loadContent(into webView: WKWebView) {
-        // Development mode: load from vite dev server
         if let devURL = ProcessInfo.processInfo.environment["ELECTRON_RENDERER_URL"],
            let url = URL(string: devURL) {
             webView.load(URLRequest(url: url))
             return
         }
 
-        // Production mode: load from app bundle
-        if let resourcePath = Bundle.main.resourcePath {
-            let htmlPath = "\(resourcePath)/renderer/index.html"
+        guard let resourcePath = Bundle.main.resourcePath else { return }
+        let rendererDir = "\(resourcePath)/renderer"
+        let rendererURL = URL(fileURLWithPath: rendererDir, isDirectory: true)
+
+        let candidates = ["desktop-mac.html", "index.html"]
+        for name in candidates {
+            let htmlPath = "\(rendererDir)/\(name)"
             if FileManager.default.fileExists(atPath: htmlPath) {
                 let url = URL(fileURLWithPath: htmlPath)
-                webView.loadFileURL(url, allowingReadAccessTo: URL(fileURLWithPath: resourcePath))
+                webView.loadFileURL(url, allowingReadAccessTo: rendererURL)
                 return
             }
         }
 
-        // Fallback: load from development build
         let devPath = (Bundle.main.bundleURL.deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("packages/app/dist/index.html")).path
+            .appendingPathComponent("packages/app/dist-desktop-mac/desktop-mac.html")).path
         if FileManager.default.fileExists(atPath: devPath) {
-            webView.loadFileURL(URL(fileURLWithPath: devPath),
-                                allowingReadAccessTo: URL(fileURLWithPath: devPath).deletingLastPathComponent())
+            let url = URL(fileURLWithPath: devPath)
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         }
     }
 
@@ -80,15 +91,11 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController,
                                 didReceive message: WKScriptMessage) {
         guard message.name == "yunpat" else { return }
-
-        // Unified message handler: { callId, method, args }
-        guard let body = message.body as? [String: Any],
-              let method = body["method"] as? String,
-              let callId = body["callId"] as? Int else { return }
+        guard let body = parseMessageBody(message.body),
+              let method = body["method"] as? String else { return }
 
         let args = body["args"] as? [Any] ?? []
 
-        // Fire-and-forget methods
         if method == "openLink" {
             if let url = args.first as? String, let nsurl = URL(string: url) {
                 NSWorkspace.shared.open(nsurl)
@@ -103,23 +110,58 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
             NSApp.terminate(nil)
             return
         }
+        if method == "showNotification" {
+            let title = args[safe: 0] as? String ?? "YunPat"
+            let bodyText = args[safe: 1] as? String
+            let levelStr = args[safe: 2] as? String
+            let level = levelStr.flatMap(NotificationLevel.init) ?? .info
+            let action = args[safe: 3] as? String
+            NotificationManager.shared.send(level: level, title: title, body: bodyText, action: action)
+            return
+        }
+        if method == "showProgressNotification" {
+            let title = args[safe: 0] as? String ?? "YunPat"
+            let step = args[safe: 1] as? Int ?? 0
+            let total = args[safe: 2] as? Int ?? 0
+            let currentStep = args[safe: 3] as? String ?? ""
+            NotificationManager.shared.sendProgress(title: title, step: step, totalSteps: total, currentStep: currentStep)
+            return
+        }
+
+        guard let callId = body["callId"] as? Int else { return }
 
         handleMethod(method: method, args: args) { [weak self] result in
             self?.sendResult(callId: callId, result: result)
         }
     }
 
+    private func parseMessageBody(_ body: Any) -> [String: Any]? {
+        if let dict = body as? [String: Any] { return dict }
+        if let str = body as? String,
+           let data = str.data(using: .utf8),
+           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return dict
+        }
+        return nil
+    }
+
     private func handleMethod(method: String, args: [Any], completion: @escaping (Result<Any?, Error>) -> Void) {
         switch method {
+        case "awaitInitialization":
+            completion(.success([
+                "url": serverURL,
+                "username": NSNull(),
+                "password": NSNull(),
+            ]))
         case "openFilePicker":
-            let result = showFilePicker(multiple: args.first as? Bool ?? false)
-            completion(.success(result))
+            let opts = pickerOptions(args)
+            completion(.success(showFilePicker(multiple: opts.multiple, title: opts.title, extensions: opts.extensions)))
         case "openDirectoryPicker":
-            let result = showDirectoryPicker(multiple: args.first as? Bool ?? false)
-            completion(.success(result))
+            let opts = pickerOptions(args)
+            completion(.success(showDirectoryPicker(multiple: opts.multiple, title: opts.title)))
         case "saveFilePicker":
-            let result = showSavePicker(defaultPath: args.first as? String)
-            completion(.success(result))
+            let opts = savePickerOptions(args)
+            completion(.success(showSavePicker(title: opts.title, defaultPath: opts.defaultPath)))
         case "readClipboardImage":
             completion(.success(readClipboardImage()))
         case "storeGet":
@@ -150,8 +192,13 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
         case "killSidecar":
             completion(.success(nil))
         case "getDefaultServerUrl":
-            completion(.success(nil))
+            completion(.success(UserDefaults.standard.string(forKey: "yunpat:lastServerURL")))
         case "setDefaultServerUrl":
+            if let url = args.first as? String {
+                UserDefaults.standard.set(url, forKey: "yunpat:lastServerURL")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "yunpat:lastServerURL")
+            }
             completion(.success(nil))
         case "getWindowFocused":
             completion(.success(NSApp.keyWindow?.isKeyWindow ?? false))
@@ -165,21 +212,6 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
         case "getZoomFactor":
             completion(.success(1.0))
         case "setZoomFactor":
-            completion(.success(nil))
-        case "showNotification":
-            let title = args[0] as? String ?? "YunPat"
-            let body = args[1] as? String
-            let levelStr = args[2] as? String
-            let level = levelStr.flatMap(NotificationLevel.init) ?? .info
-            let action = args[3] as? String
-            NotificationManager.shared.send(level: level, title: title, body: body, action: action)
-            completion(.success(nil))
-        case "showProgressNotification":
-            let title = args[0] as? String ?? "YunPat"
-            let step = args[1] as? Int ?? 0
-            let total = args[2] as? Int ?? 0
-            let currentStep = args[3] as? String ?? ""
-            NotificationManager.shared.sendProgress(title: title, step: step, totalSteps: total, currentStep: currentStep)
             completion(.success(nil))
         case "getAppState":
             let state = WindowState.shared.state
@@ -212,7 +244,6 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
         guard let webView = webView else { return }
         switch result {
         case .success(let value):
-            // Use JSONSerialization for safe JS encoding
             let payload: [String: Any] = ["callId": callId, "result": value ?? NSNull()]
             if let jsonData = try? JSONSerialization.data(withJSONObject: payload, options: []),
                let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -235,29 +266,76 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
         }
     }
 
+    // MARK: - Picker options
+
+    private struct PickerOpts {
+        var multiple: Bool = false
+        var title: String?
+        var extensions: [String]?
+    }
+
+    private struct SaveOpts {
+        var title: String?
+        var defaultPath: String?
+    }
+
+    private func pickerOptions(_ args: [Any]) -> PickerOpts {
+        if let dict = args.first as? [String: Any] {
+            return PickerOpts(
+                multiple: dict["multiple"] as? Bool ?? false,
+                title: dict["title"] as? String,
+                extensions: dict["extensions"] as? [String]
+            )
+        }
+        return PickerOpts(multiple: args.first as? Bool ?? false)
+    }
+
+    private func savePickerOptions(_ args: [Any]) -> SaveOpts {
+        if let dict = args.first as? [String: Any] {
+            return SaveOpts(
+                title: dict["title"] as? String,
+                defaultPath: dict["defaultPath"] as? String
+            )
+        }
+        return SaveOpts(defaultPath: args.first as? String)
+    }
+
     // MARK: - Native Capabilities
 
-    private func showFilePicker(multiple: Bool) -> String? {
+    private func showFilePicker(multiple: Bool, title: String?, extensions: [String]?) -> String? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = multiple
+        if let title { panel.title = title }
+        if let extensions, !extensions.isEmpty {
+            panel.allowedContentTypes = extensions.compactMap { ext in
+                let normalized = ext.hasPrefix(".") ? String(ext.dropFirst()) : ext
+                return UTType(filenameExtension: normalized)
+            }
+        }
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return nil }
         return multiple ? panel.urls.map { $0.path }.joined(separator: ":") : panel.urls.first?.path
     }
 
-    private func showDirectoryPicker(multiple: Bool) -> String? {
+    private func showDirectoryPicker(multiple: Bool, title: String?) -> String? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = multiple
+        if let title { panel.title = title }
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return nil }
         return multiple ? panel.urls.map { $0.path }.joined(separator: ":") : panel.urls.first?.path
     }
 
-    private func showSavePicker(defaultPath: String?) -> String? {
+    private func showSavePicker(title: String?, defaultPath: String?) -> String? {
         let panel = NSSavePanel()
-        if let path = defaultPath { panel.directoryURL = URL(fileURLWithPath: path) }
+        if let title { panel.title = title }
+        if let path = defaultPath {
+            let url = URL(fileURLWithPath: path)
+            panel.directoryURL = url.deletingLastPathComponent()
+            panel.nameFieldStringValue = url.lastPathComponent
+        }
         guard panel.runModal() == .OK else { return nil }
         return panel.url?.path
     }
@@ -301,5 +379,11 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
 
     private func storeLength(name: String) -> Int {
         return storeKeys(name: name).count
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

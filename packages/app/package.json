@@ -21,7 +21,8 @@
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report e2e/playwright-report"
+    "test:e2e:report": "playwright show-report e2e/playwright-report",
+    "build:desktop-mac": "vite build --config vite.desktop-mac.config.ts"
   },
   "license": "MIT",
   "devDependencies": {
@@ -74,6 +75,7 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@opencode-ai/ipc-bridge": "workspace:*"
   }
 }

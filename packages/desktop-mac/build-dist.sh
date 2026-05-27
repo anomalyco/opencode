@@ -44,10 +44,10 @@ echo ""
 
 # Step 4: Build frontend (if not already built)
 echo "[4/7] Ensuring frontend is built..."
-if [ ! -f "$APP_BUNDLE/Contents/Resources/renderer/index.html" ]; then
+if [ ! -f "$APP_BUNDLE/Contents/Resources/renderer/desktop-mac.html" ]; then
     cd "$PROJECT_ROOT/packages/app"
-    bun run build
-    cp -r "$PROJECT_ROOT/packages/app/dist/"* "$APP_BUNDLE/Contents/Resources/renderer/"
+    bun run build:desktop-mac
+    cp -r "$PROJECT_ROOT/packages/app/dist-desktop-mac/"* "$APP_BUNDLE/Contents/Resources/renderer/"
 fi
 echo ""
 

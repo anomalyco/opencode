@@ -16,8 +16,8 @@ echo ""
 echo "[1/5] Building SolidJS frontend..."
 cd "$PROJECT_ROOT/packages/app"
 bun install --frozen-lockfile 2>/dev/null || bun install
-bun run build
-echo "  Frontend built to packages/app/dist/"
+bun run build:desktop-mac
+echo "  Frontend built to packages/app/dist-desktop-mac/"
 echo ""
 
 # Step 2: Build Swift native shell
@@ -39,7 +39,7 @@ cp "$SCRIPT_DIR/.build/release/YunPat" "$APP_BUNDLE/Contents/MacOS/YunPat"
 echo "  Binary: $(du -h "$APP_BUNDLE/Contents/MacOS/YunPat" | cut -f1)"
 
 # Copy frontend assets
-cp -r "$PROJECT_ROOT/packages/app/dist/"* "$APP_BUNDLE/Contents/Resources/renderer/" 2>/dev/null || true
+cp -r "$PROJECT_ROOT/packages/app/dist-desktop-mac/"* "$APP_BUNDLE/Contents/Resources/renderer/" 2>/dev/null || true
 echo "  Renderer: $(find "$APP_BUNDLE/Contents/Resources/renderer" | wc -l | tr -d ' ') files"
 
 # Copy Info.plist

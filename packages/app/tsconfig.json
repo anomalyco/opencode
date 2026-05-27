@@ -18,9 +18,11 @@
     "outDir": "node_modules/.ts-dist",
     "isolatedModules": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@opencode-ai/ipc-bridge": ["../ipc-bridge/src/index.ts"]
     }
   },
+  "references": [{ "path": "../ipc-bridge" }],
   "include": ["src", "package.json"],
   "exclude": ["dist", "ts-dist"]
 }
