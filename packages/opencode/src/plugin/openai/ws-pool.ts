@@ -20,7 +20,7 @@ interface PoolEntry {
 }
 
 const DEFAULT_CONNECT_TIMEOUT = 10_000
-const DEFAULT_IDLE_TIMEOUT = 10 * 60 * 1000
+const DEFAULT_IDLE_TIMEOUT = 5 * 60 * 1000
 const DEFAULT_MAX_CONNECTION_AGE = 55 * 60 * 1000
 
 export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
