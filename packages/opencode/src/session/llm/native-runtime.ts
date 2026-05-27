@@ -6,9 +6,9 @@ import { isRecord } from "@/util/record"
 import { asSchema, type ModelMessage, type Tool } from "ai"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient, Headers } from "effect/unstable/http"
 import { tool as nativeTool, ToolFailure, type JsonSchema, type LLMEvent } from "@opencode-ai/llm"
-import type { LLMClientShape } from "@opencode-ai/llm/route"
+import { Auth as RouteAuth, type LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
 export type RuntimeStatus =
@@ -33,6 +33,7 @@ type StreamInput = {
   readonly providerOptions?: Record<string, any>
   readonly headers: Record<string, string>
   readonly abort: AbortSignal
+  readonly experimentalOpenAIWebSocket?: boolean
 }
 
 export function status(input: Pick<StreamInput, "model" | "provider" | "auth">): RuntimeStatus {
@@ -82,7 +83,9 @@ export function stream(input: StreamInput): StreamResult {
     request: LLMNative.request({
       model: input.model,
       apiKey: current.apiKey,
-      baseURL: current.baseURL,
+      baseURL: openAIWebSocketBaseURL(input) ?? current.baseURL,
+      routeAuth: openAIWebSocketAuth(input),
+      useOpenAIWebSocket: shouldUseOpenAIWebSocket(input),
       messages: ProviderTransform.message(input.messages, input.model, input.providerOptions ?? {}),
       toolChoice: input.toolChoice,
       temperature: input.temperature,
@@ -99,6 +102,49 @@ export function stream(input: StreamInput): StreamResult {
     ...current,
     stream: fetch ? stream.pipe(Stream.provideService(FetchHttpClient.Fetch, fetch)) : stream,
   }
+}
+
+
+function shouldUseOpenAIWebSocket(input: Pick<StreamInput, "model" | "provider" | "auth" | "experimentalOpenAIWebSocket">) {
+  if (!input.experimentalOpenAIWebSocket) return false
+  if (input.model.providerID !== "openai" || input.model.api.npm !== "@ai-sdk/openai") return false
+  if (input.auth?.type === "oauth" && !codexWebSocket(input.provider.options)) return false
+  return true
+}
+
+function codexWebSocket(options: Record<string, unknown>):
+  | {
+      readonly baseURL?: string
+      readonly headers?: (headers?: Headers.Headers) => Promise<Record<string, string>>
+    }
+  | undefined {
+  const value = options["codexWebSocket"]
+  if (!isRecord(value)) return undefined
+  const headers = value.headers
+  if (headers !== undefined && typeof headers !== "function") return undefined
+  return {
+    baseURL: typeof value.baseURL === "string" ? value.baseURL : undefined,
+    headers:
+      typeof headers === "function"
+        ? (headers as (headers?: Headers.Headers) => Promise<Record<string, string>>)
+        : undefined,
+  }
+}
+
+function openAIWebSocketBaseURL(input: Pick<StreamInput, "model" | "provider" | "auth" | "experimentalOpenAIWebSocket">) {
+  if (!shouldUseOpenAIWebSocket(input)) return undefined
+  return codexWebSocket(input.provider.options)?.baseURL
+}
+
+function openAIWebSocketAuth(input: Pick<StreamInput, "model" | "provider" | "auth" | "experimentalOpenAIWebSocket">) {
+  if (!shouldUseOpenAIWebSocket(input)) return undefined
+  const helper = codexWebSocket(input.provider.options)
+  if (!helper?.headers) return undefined
+  return RouteAuth.custom((authInput) =>
+    Effect.promise(() => helper.headers?.(authInput.headers) ?? Promise.resolve({})).pipe(
+      Effect.map((headers) => Headers.setAll(authInput.headers, headers)),
+    ),
+  )
 }
 
 function providerFetch(input: Pick<StreamInput, "provider" | "auth">): typeof globalThis.fetch | undefined {

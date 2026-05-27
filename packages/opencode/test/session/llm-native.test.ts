@@ -372,6 +372,83 @@ describe("session.llm-native.request", () => {
     expect(openrouter.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
   })
 
+  test("selects OpenAI Responses WebSocket route when requested", () => {
+    const request = LLMNative.request({
+      model: baseModel,
+      apiKey: "test-openai-key",
+      messages: [{ role: "user", content: "hello" }],
+      useOpenAIWebSocket: true,
+    })
+
+    expect(request.model).toMatchObject({
+      id: "gpt-5-mini",
+      provider: "openai",
+      route: { id: "openai-responses-websocket" },
+    })
+  })
+
+  test("streams Codex OAuth requests through OpenAI Responses WebSocket when enabled", async () => {
+    const opened: Array<{ url: string; headers: Record<string, string>; message: string }> = []
+    const webSocketLayer = Layer.succeed(
+      WebSocketExecutor.Service,
+      WebSocketExecutor.Service.of({
+        open: (input) =>
+          Effect.succeed({
+            sendText: (message) =>
+              Effect.sync(() => {
+                opened.push({ url: input.url, headers: input.headers, message })
+              }),
+            messages: Stream.empty,
+            close: Effect.void,
+          }),
+      }),
+    )
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const llmClient = yield* LLMClient.Service
+        const native = LLMNativeRuntime.stream({
+          model: baseModel,
+          provider: {
+            ...providerInfo,
+            options: {
+              apiKey: OAUTH_DUMMY_KEY,
+              fetch: async () => new Response(),
+              codexWebSocket: {
+                baseURL: "https://chatgpt.test/backend-api/codex",
+                async headers(headers?: Record<string, string>) {
+                  return { ...headers, authorization: "Bearer access", "ChatGPT-Account-Id": "acc-123" }
+                },
+              },
+            },
+          },
+          auth: { type: "oauth", refresh: "refresh", access: "access", expires: Date.now() + 60_000 },
+          llmClient,
+          messages: [{ role: "user", content: "hello" }],
+          tools: {},
+          headers: {},
+          abort: new AbortController().signal,
+          experimentalOpenAIWebSocket: true,
+        })
+        expect(native.type).toBe("supported")
+        if (native.type === "unsupported") throw new Error(native.reason)
+        yield* native.stream.pipe(Stream.runCollect)
+      }).pipe(
+        Effect.provide(LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, webSocketLayer)))),
+      ),
+    )
+
+    expect(opened).toHaveLength(1)
+    expect(opened[0]?.url).toBe("wss://chatgpt.test/backend-api/codex/responses")
+    expect(opened[0]?.headers.authorization).toBe("Bearer access")
+    expect(opened[0]?.headers["ChatGPT-Account-Id"] ?? opened[0]?.headers["chatgpt-account-id"]).toBe("acc-123")
+    expect(JSON.parse(opened[0]?.message ?? "{}")).toMatchObject({
+      type: "response.create",
+      model: "gpt-5-mini",
+      input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+    })
+  })
+
   test("fails fast for unsupported provider packages", () => {
     expect(() =>
       LLMNative.request({

@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Random, Ref } from "effect"
+import { Effect, Fiber, Layer, Logger, Random, Ref, References } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM, LLMError } from "../src"
-import { LLMClient, RequestExecutor } from "../src/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "../src/route"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { dynamicResponse } from "./lib/http"
 import { deltaChunk } from "./lib/openai-chunks"
@@ -73,6 +73,49 @@ const expectLLMError = (error: unknown) => {
 const errorHttp = (error: LLMError) => ("http" in error.reason ? error.reason.http : undefined)
 
 describe("RequestExecutor", () => {
+  it.effect("redacts sensitive WebSocket URL query params in open logs", () =>
+    Effect.gen(function* () {
+      class OpenWebSocket {
+        static readonly OPEN = 1
+        static readonly CLOSING = 2
+        static readonly CLOSED = 3
+        readyState = OpenWebSocket.OPEN
+        addEventListener() {}
+        removeEventListener() {}
+        send() {}
+        close() {
+          this.readyState = OpenWebSocket.CLOSED
+        }
+      }
+
+      const annotations: Array<Record<string, unknown>> = []
+      const logger = Logger.make((options) => {
+        annotations.push(options.fiber.getRef(References.CurrentLogAnnotations))
+      })
+
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const original = globalThis.WebSocket
+          globalThis.WebSocket = OpenWebSocket as unknown as typeof globalThis.WebSocket
+          return original
+        }),
+        () =>
+          WebSocketExecutor.open({
+            url: "wss://provider.test/realtime?api_key=query-secret-123&key=short-secret&debug=1",
+            headers: Headers.empty,
+          }).pipe(Effect.flatMap((connection) => connection.close)),
+        (original) =>
+          Effect.sync(() => {
+            globalThis.WebSocket = original
+          }),
+      ).pipe(Effect.provide(Logger.layer([logger])))
+
+      expect(annotations.find((item) => item["llm.websocket.url"])?.["llm.websocket.url"]).toBe(
+        "wss://provider.test/realtime?api_key=%3Credacted%3E&key=%3Credacted%3E&debug=1",
+      )
+    }),
+  )
+
   it.effect("returns redacted diagnostics for retryable rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

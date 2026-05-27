@@ -63,6 +63,7 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
       expect(flags.experimentalNativeLlm).toBe(false)
+      expect(flags.experimentalOpenAIWebSocket).toBe(false)
       expect(flags.client).toBe("desktop")
     }),
   )
@@ -91,6 +92,18 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  it.effect("enables OpenAI WebSocket via dedicated flag only", () =>
+    Effect.gen(function* () {
+      const explicit = yield* readFlags.pipe(
+        Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_OPENAI_WEBSOCKET: "true" })),
+      )
+      const umbrella = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL: "true" })))
+
+      expect(explicit.experimentalOpenAIWebSocket).toBe(true)
+      expect(umbrella.experimentalOpenAIWebSocket).toBe(false)
+    }),
+  )
+
   it.effect("layer accepts partial test overrides and fills defaults from Config definitions", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -110,6 +123,7 @@ describe("RuntimeFlags", () => {
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.experimentalOpenAIWebSocket).toBe(false)
       expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBe(1_000)
       expect(flags.enableExperimentalModels).toBe(false)
@@ -355,6 +369,7 @@ describe("RuntimeFlags", () => {
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.experimentalOpenAIWebSocket).toBe(false)
       expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBeUndefined()
       expect(flags.client).toBe("cli")

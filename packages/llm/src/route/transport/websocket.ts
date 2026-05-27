@@ -1,6 +1,7 @@
 import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { LLMError, TransportReason } from "../../schema"
+import { redactUrl } from "../redaction"
 import * as HttpTransport from "./http"
 import type { Transport } from "./index"
 
@@ -123,15 +124,21 @@ const webSocketUrl = (value: string) =>
   })
 
 export const open = (input: WebSocketRequest) =>
-  Effect.try({
-    try: () =>
-      new (globalThis.WebSocket as unknown as WebSocketConstructorWithHeaders)(input.url, { headers: input.headers }),
-    catch: (error) =>
-      transportError("open", error instanceof Error ? error.message : "Failed to construct WebSocket", {
-        url: input.url,
-        kind: "open",
+  Effect.logInfo("llm websocket open").pipe(
+    Effect.annotateLogs({ "llm.websocket.url": redactUrl(input.url) }),
+    Effect.andThen(
+      Effect.try({
+        try: () =>
+          new (globalThis.WebSocket as unknown as WebSocketConstructorWithHeaders)(input.url, { headers: input.headers }),
+        catch: (error) =>
+          transportError("open", error instanceof Error ? error.message : "Failed to construct WebSocket", {
+            url: input.url,
+            kind: "open",
+          }),
       }),
-  }).pipe(Effect.flatMap((ws) => fromWebSocket(ws, input)))
+    ),
+    Effect.flatMap((ws) => fromWebSocket(ws, input)),
+  )
 
 export const layer: Layer.Layer<Service> = Layer.succeed(Service, Service.of({ open }))
 
