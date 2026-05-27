@@ -1,6 +1,8 @@
 import { type ChildProcess } from "child_process"
 import launch from "cross-spawn"
 import { buffer } from "node:stream/consumers"
+import { existsSync } from "node:fs"
+import * as path from "node:path"
 import { errorMessage } from "./error"
 
 export type Stdio = "inherit" | "pipe" | "ignore"
@@ -58,6 +60,15 @@ export type Child = ChildProcess & { exited: Promise<number> }
 export function spawn(cmd: string[], opts: Options = {}): Child {
   if (cmd.length === 0) throw new Error("Command is required")
   opts.abort?.throwIfAborted()
+
+  if (typeof opts.shell === "string") {
+    if (!path.isAbsolute(opts.shell)) {
+      throw new Error(`Shell path must be absolute: ${opts.shell}`)
+    }
+    if (!existsSync(opts.shell)) {
+      throw new Error(`Shell not found: ${opts.shell}`)
+    }
+  }
 
   const proc = launch(cmd[0], cmd.slice(1), {
     cwd: opts.cwd,

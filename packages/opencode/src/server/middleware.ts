@@ -89,3 +89,34 @@ export const CompressionMiddleware: MiddlewareHandler = (c, next) => {
   if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return next()
   return zipped(c, next)
 }
+
+const SSE_PATHS = new Set(["/event", "/global/event"])
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 100
+
+function cleanupRateLimitBuckets() {
+  const now = Date.now()
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (now > bucket.resetAt) rateLimitBuckets.delete(key)
+  }
+}
+
+export const RateLimitMiddleware: MiddlewareHandler = async (c, next) => {
+  if (SSE_PATHS.has(c.req.path)) return next()
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown"
+  const key = `${ip}:${c.req.path}`
+  const now = Date.now()
+  let bucket = rateLimitBuckets.get(key)
+  if (!bucket || now > bucket.resetAt) {
+    cleanupRateLimitBuckets()
+    bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS }
+    rateLimitBuckets.set(key, bucket)
+  }
+  bucket.count++
+  if (bucket.count > RATE_LIMIT_MAX) {
+    return c.json({ error: "Too many requests" }, { status: 429 })
+  }
+  return next()
+}

@@ -19,7 +19,7 @@
     "isolatedModules": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@opencode-ai/ipc-bridge": ["../ipc-bridge/src/index.ts"]
+      "@yunpat/ipc-bridge": ["../ipc-bridge/src/index.ts"]
     }
   },
   "references": [{ "path": "../ipc-bridge" }],

@@ -104,7 +104,7 @@ export const AppLayer = Layer.mergeAll(
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
-).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
+).pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

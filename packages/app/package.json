@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/app",
+  "name": "@yunpat/app",
   "version": "1.14.40",
   "description": "",
   "type": "module",
@@ -76,6 +76,6 @@
     "tailwindcss": "catalog:",
     "virtua": "catalog:",
     "zod": "catalog:",
-    "@opencode-ai/ipc-bridge": "workspace:*"
+    "@yunpat/ipc-bridge": "workspace:*"
   }
 }

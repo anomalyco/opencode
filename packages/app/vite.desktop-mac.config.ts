@@ -16,7 +16,7 @@ export default defineConfig({
   plugins: appPlugin,
   resolve: {
     alias: {
-      "@opencode-ai/ipc-bridge": ipcBridge,
+      "@yunpat/ipc-bridge": ipcBridge,
     },
   },
   define: {

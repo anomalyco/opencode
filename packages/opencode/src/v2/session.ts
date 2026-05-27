@@ -1,9 +1,10 @@
 import { SessionMessageTable, SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { WorkspaceID } from "@/control-plane/schema"
+import { ProjectID } from "@/project/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "./session-message"
 import type { Prompt } from "./session-prompt"
 import { EventV2 } from "./event"
@@ -143,8 +144,33 @@ export const layer = Layer.effect(
     }
 
     const result: Interface = {
-      create: Effect.fn("V2Session.create")(function* (_input) {
-        return {} as any
+      create: Effect.fn("V2Session.create")(function* (input) {
+        const id = SessionID.descending()
+        const now = Date.now()
+        const projectID = input?.workspaceID ? ProjectID.global : ProjectID.global
+
+        Database.use((db) =>
+          db.insert(SessionTable).values({
+            id,
+            project_id: projectID,
+            workspace_id: input?.workspaceID,
+            parent_id: input?.parentID,
+            slug: id,
+            directory: "",
+            title: "New Session",
+            version: "1",
+            time_created: now,
+            time_updated: now,
+            agent: input?.agent,
+            model: input?.model
+              ? { id: input.model.id, providerID: input.model.providerID, variant: input.model.variant }
+              : undefined,
+          }),
+        )
+
+        return fromRow(
+          Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())!,
+        )
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())
@@ -263,8 +289,39 @@ export const layer = Layer.effect(
         })
         return rows.map((row) => decode(row))
       }),
-      prompt: Effect.fn("V2Session.prompt")(function* (_input) {
-        return {} as any
+      prompt: Effect.fn("V2Session.prompt")(function* (input) {
+        const messageID = SessionMessage.ID.ascending()
+        const now = Date.now()
+
+        const message: SessionMessage.User = new SessionMessage.User({
+          id: messageID,
+          sessionID: input.sessionID,
+          type: "user",
+          text: input.prompt.text,
+          files: input.prompt.files ?? [],
+          agents: input.prompt.agents ?? [],
+          time: { created: DateTime.makeUnsafe(now) },
+          metadata: input.id ? { traceId: input.id } : undefined,
+        })
+
+        Database.use((db) =>
+          db.insert(SessionMessageTable).values({
+            id: messageID,
+            session_id: input.sessionID,
+            type: "user",
+            time_created: now,
+            time_updated: now,
+            data: { ...Schema.encodeSync(SessionMessage.User)(message), id: messageID, type: "user" },
+          }),
+        )
+
+        EventV2.run(SessionEvent.Prompted.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(now),
+          prompt: input.prompt,
+        })
+
+        return message
       }),
       shell: Effect.fn("V2Session.shell")(function* (_input) {}),
       skill: Effect.fn("V2Session.skill")(function* (_input) {}),

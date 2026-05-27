@@ -18,6 +18,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var autoUpdater: AutoUpdater?
     var socketServer: SocketServer?
     let windowState = WindowState.shared
+    private var sidecarRestartCount = 0
+    private let maxSidecarRestarts = 3
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Setup auto-updater
@@ -42,6 +44,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let manager = SidecarManager()
         self.sidecarManager = manager
+        manager.onProcessDied = { [weak self] error in
+            self?.handleSidecarDeath(error: error)
+        }
 
         manager.start { [weak self] result in
             DispatchQueue.main.async {
@@ -105,5 +110,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "退出")
         alert.runModal()
         NSApp.terminate(nil)
+    }
+
+    private func handleSidecarDeath(error: Error) {
+        guard sidecarRestartCount < maxSidecarRestarts else {
+            DispatchQueue.main.async {
+                self.showErrorAndQuit("核心引擎多次崩溃，无法自动恢复。\n\(error.localizedDescription)")
+            }
+            return
+        }
+
+        sidecarRestartCount += 1
+        let delaySeconds = min(pow(2.0, Double(sidecarRestartCount)), 30.0)
+        print("AppDelegate: sidecar died (restart \(sidecarRestartCount)/\(maxSidecarRestarts)), retrying in \(delaySeconds)s")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds) { [weak self] in
+            guard let self, let manager = self.sidecarManager else { return }
+            manager.start { [weak self] result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let serverInfo):
+                        self?.sidecarRestartCount = 0
+                        self?.windowState.state.lastServerURL = serverInfo.url
+                        if let window = self?.mainWindow {
+                            self?.loadWebView(in: window, serverURL: serverInfo.url)
+                        }
+                    case .failure:
+                        // Will trigger another onProcessDied or show error on next attempt
+                        break
+                    }
+                }
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 {
-  "name": "@opencode-ai/ipc-bridge",
-  "version": "0.0.1",
+  "name": "@yunpat/ipc-bridge",
+  "version": "1.14.40",
   "private": true,
   "type": "module",
   "exports": {

@@ -138,7 +138,15 @@ function setupApp() {
     void killSidecar()
   })
 
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on("unhandledRejection", (e) => {
+    logger.error("unhandled rejection", { error: String(e) })
+  })
+
+  process.on("uncaughtException", (e) => {
+    logger.error("uncaught exception", { error: e instanceof Error ? e.stack : String(e) })
+  })
+
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
       void killSidecar().finally(() => app.exit(0))
     })

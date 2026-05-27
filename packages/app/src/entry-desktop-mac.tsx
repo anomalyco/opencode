@@ -11,8 +11,8 @@ import {
   type Platform,
   PlatformProvider,
   ServerConnection,
-} from "@opencode-ai/app"
-import { createNativeAPI } from "@opencode-ai/ipc-bridge"
+} from "@yunpat/app"
+import { createNativeAPI } from "@yunpat/ipc-bridge"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"

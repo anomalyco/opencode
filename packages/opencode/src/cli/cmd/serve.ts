@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { Server } from "../../server/server"
 import { effectCmd } from "../effect-cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "../network"
 import { Flag } from "@yunpat/core/flag/flag"
 
 export const ServeCommand = effectCmd({
@@ -15,7 +15,10 @@ export const ServeCommand = effectCmd({
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
-    const opts = yield* resolveNetworkOptions(args)
+    // resolveNetworkOptionsNoConfig avoids Config.Service dependency
+    // which may not be available in all Effect contexts (e.g. when
+    // InstanceLayer constructs InstanceBootstrap that needs Config)
+    const opts = resolveNetworkOptionsNoConfig(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 

@@ -36,11 +36,25 @@ class SidecarManager {
     private let startupTimeout: TimeInterval = 60
     private let stopTimeout: TimeInterval = 6
 
+    // Health monitoring
+    private var healthTimer: Timer?
+    private let healthInterval: TimeInterval = 30
+    private var consecutiveFailures = 0
+    private let maxConsecutiveFailures = 3
+
+    // Auto-restart
+    private var restartCount = 0
+    private let maxRestartCount = 3
+    private let autoRestartEnabled: Bool
+
+    var onProcessDied: ((Error) -> Void)?
+
     /// Project root directory (contains packages/opencode)
     private let projectRoot: URL
 
     init(projectRoot: URL? = nil) {
         self.projectRoot = projectRoot ?? SidecarManager.findProjectRoot()
+        self.autoRestartEnabled = ProcessInfo.processInfo.environment["YUNPAT_AUTO_RESTART"] != "false"
     }
 
     func start(completion: @escaping (Result<ServerInfo, Error>) -> Void) {
@@ -98,8 +112,15 @@ class SidecarManager {
     }
 
     func stop() {
-        guard let process = process, process.isRunning else { return }
+        stopHealthMonitor()
 
+        guard let process = process, process.isRunning else {
+            self.process = nil
+            self.stderrPipe = nil
+            return
+        }
+
+        // 1. Graceful termination (SIGTERM via terminate())
         process.terminate()
 
         let deadline = Date().addingTimeInterval(stopTimeout)
@@ -107,8 +128,18 @@ class SidecarManager {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
 
+        // 2. Force kill if still running
         if process.isRunning {
-            process.interrupt()
+            kill(process.processIdentifier, SIGKILL)
+            let killDeadline = Date().addingTimeInterval(2)
+            while process.isRunning && Date() < killDeadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+        }
+
+        // 3. Close stderr pipe
+        if let pipe = stderrPipe {
+            try? pipe.fileHandleForReading.close()
         }
 
         self.process = nil
@@ -265,9 +296,69 @@ class SidecarManager {
         env["YUNPAT_EXPERIMENTAL_FILEWATCHER"] = "true"
         env["OPENCODE_CLIENT"] = "desktop"
         env["OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"] = "true"
+        env["OPENCODE_EXPERIMENTAL_HTTPAPI"] = "false"
         env["OPENCODE_EXPERIMENTAL_FILEWATCHER"] = "true"
         env.removeValue(forKey: "DEBUG")
         return env
+    }
+
+    // MARK: - Health Monitoring
+
+    private func startHealthMonitor() {
+        stopHealthMonitor()
+        consecutiveFailures = 0
+        restartCount = 0
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.healthTimer = Timer.scheduledTimer(withTimeInterval: self.healthInterval, repeats: true) { [weak self] _ in
+                self?.performHealthCheck()
+            }
+        }
+    }
+
+    private func stopHealthMonitor() {
+        DispatchQueue.main.async { [weak self] in
+            self?.healthTimer?.invalidate()
+            self?.healthTimer = nil
+        }
+    }
+
+    private func performHealthCheck() {
+        guard let process, process.isRunning else {
+            handleProcessDeath()
+            return
+        }
+
+        guard let url = URL(string: "\(serverURL)/global/health") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+            guard let self else { return }
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                self.consecutiveFailures = 0
+            } else {
+                self.consecutiveFailures += 1
+                if self.consecutiveFailures >= self.maxConsecutiveFailures {
+                    self.handleProcessDeath()
+                }
+            }
+        }.resume()
+    }
+
+    private func handleProcessDeath() {
+        stopHealthMonitor()
+        let detail = readStderrTail()
+        let error = SidecarError.processExited(
+            code: process?.terminationStatus ?? -1,
+            detail: detail
+        )
+        self.process = nil
+        self.stderrPipe = nil
+        onProcessDied?(error)
     }
 
     // MARK: - Health Check
@@ -297,6 +388,7 @@ class SidecarManager {
             URLSession.shared.dataTask(with: request) { _, response, _ in
                 if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
                     print("SidecarManager: core engine ready at \(self.serverURL)")
+                    self.startHealthMonitor()
                     completion(.success(ServerInfo(url: self.serverURL, port: self.port)))
                 } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
