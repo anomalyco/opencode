@@ -16,8 +16,7 @@ import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 
-// Composes `normalizeForSnapshot` (CRLF + tmpdir) with two help-specific
-// rules:
+// Composes `normalizeForSnapshot` (CRLF + tmpdir) with help-specific rules:
 //
 //   1. The harness's `oc-cli-XXX` subdir under TMPDIR collapses to `<HOME>`.
 //      `PATH_SEP` matches `/` and `\\` so the rule works on POSIX + Windows.
@@ -26,6 +25,13 @@ import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 //      pre-normalized default's character length, so different random home
 //      path widths produce different leading-whitespace counts (or even
 //      line-wraps onto a fresh line on Windows). `\s+` matches both forms.
+//
+//   3. The first invocation per fresh home runs the JSON→SQLite migration in
+//      `src/index.ts` and prints `Performing one time database migration...`
+//      / `sqlite-migration:<N>` / `Database migration complete.` to stderr.
+//      Each spawn here uses a fresh tmpdir as HOME, so every help capture
+//      includes this prologue. Strip it so the snapshot stays focused on
+//      yargs help text only.
 function normalize(text: string): string {
   return normalizeForSnapshot(text, {
     pathReplacements: [
@@ -34,32 +40,31 @@ function normalize(text: string): string {
       // hood). A `[a-z0-9]+` regex would leave uppercase chars trailing.
       [new RegExp(`<TMPDIR>${PATH_SEP}oc-cli-[A-Za-z0-9]+`, "g"), "<HOME>"],
       [/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]'],
+      [/^Performing one time database migration[^\n]*\n/m, ""],
+      [/^sqlite-migration:[^\n]*\n/gm, ""],
+      [/^Database migration complete\.[^\n]*\n/m, ""],
     ],
   })
 }
 
-// Top-level commands. Order matches what `opencode --help` prints today;
+// Top-level commands. Order matches what `securecode --help` prints today;
 // keep it in that order so the snapshot file reads as a table of contents.
 // `completion` is intentionally excluded — it's a yargs built-in that emits
 // top-level help on `--help` and exits 1; not a real opencode command.
+// `acp` / `upgrade` / `uninstall` / `web` / `github` / `pr` were removed in
+// securecode (see #71), so they fall through to top-level help if listed.
 const TOP_LEVEL = [
-  "acp",
   "mcp",
   "attach",
   "run",
   "debug",
   "providers", // aliased to `auth`
   "agent",
-  "upgrade",
-  "uninstall",
   "serve",
-  "web",
   "models",
   "stats",
   "export",
   "import",
-  "github",
-  "pr",
   "session",
   "plugin",
   "db",
@@ -80,15 +85,18 @@ const SUBCOMMANDS = [
   ["agent", "list"],
   ["session", "list"],
   ["session", "delete"],
-  ["github", "install"],
-  ["github", "run"],
   ["db", "path"],
 ] as const
 
 // Fixed wrap width so a developer's terminal doesn't affect snapshots.
 // yargs honors COLUMNS; CI runners typically default to 80 which produces
 // different wraps from a 200-col local terminal.
-const SNAPSHOT_ENV = { COLUMNS: "120" }
+//
+// LANG is pinned to a deterministic locale because yargs localizes its
+// built-in labels (`Commands:`, `Positionals:`, `Options:`, `[boolean]`,
+// `[default: ...]`, etc.) via `process.env.LANG`. A developer on
+// `ja_JP.UTF-8` would otherwise produce a Japanese snapshot that fails CI.
+const SNAPSHOT_ENV = { COLUMNS: "120", LANG: "C.UTF-8" }
 
 describe("opencode CLI help-text snapshots", () => {
   // Single test, parallel spawns. Each command's help fires under
