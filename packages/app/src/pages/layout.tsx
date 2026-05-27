@@ -34,6 +34,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
+import { useMinBreakpoint } from "@/hooks/use-breakpoint"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { clearWorkspaceTerminals, getTerminalServerScope } from "@/context/terminal"
@@ -128,6 +129,7 @@ export default function Layout(props: ParentProps) {
   const theme = useTheme()
   const language = useLanguage()
   const newDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const isDesktopSidebarShown = useMinBreakpoint("xl")
   const initialDirectory = decode64(params.dir)
   const location = useLocation()
   const route = createMemo(() => {
@@ -349,6 +351,14 @@ export default function Layout(props: ParentProps) {
     clearSidebarHoverState()
     navigate(href)
     layout.mobileSidebar.hide()
+  }
+
+  const toggleSidebar = () => {
+    if (isDesktopSidebarShown()) {
+      layout.sidebar.toggle()
+    } else {
+      layout.mobileSidebar.toggle()
+    }
   }
 
   function cycleTheme(direction = 1) {
@@ -1004,7 +1014,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.sidebar.toggle"),
         category: language.t("command.category.view"),
         keybind: "mod+b",
-        onSelect: () => layout.sidebar.toggle(),
+        onSelect: toggleSidebar,
       },
       {
         id: "project.open",
