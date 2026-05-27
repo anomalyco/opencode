@@ -20,9 +20,17 @@ function eventData(data: unknown): Sse.Event {
   return {
     _tag: "Event",
     event: "message",
-    id: undefined,
+    id: eventID(data),
     data: JSON.stringify(data),
   }
+}
+
+function eventID(data: unknown) {
+  if (!data || typeof data !== "object" || !("payload" in data)) return undefined
+  const payload = data.payload
+  return payload && typeof payload === "object" && "id" in payload && typeof payload.id === "string"
+    ? payload.id
+    : undefined
 }
 
 function parseBody(body: string) {

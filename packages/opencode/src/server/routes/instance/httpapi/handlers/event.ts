@@ -13,9 +13,13 @@ function eventData(data: unknown): Sse.Event {
   return {
     _tag: "Event",
     event: "message",
-    id: undefined,
+    id: eventID(data),
     data: JSON.stringify(data),
   }
+}
+
+function eventID(data: unknown) {
+  return data && typeof data === "object" && "id" in data && typeof data.id === "string" ? data.id : undefined
 }
 
 function eventResponse(bus: Bus.Interface) {
