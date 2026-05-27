@@ -909,6 +909,70 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "does not force required tool_choice for structured output on thinking openai-compatible models",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture("opencode", "deepseek-v4-flash-free")
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(ProviderID.make("opencode"), ModelID.make(fixture.model.id))
+        const sessionID = SessionID.make("session-test-structured-thinking")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-structured-thinking"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("opencode"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["Return structured output."],
+          messages: [{ role: "user", content: "Describe the repo as JSON" }],
+          tools: {
+            StructuredOutput: tool({
+              description: "Capture structured output",
+              inputSchema: z.object({ description: z.string() }),
+              execute: async () => ({ output: "" }),
+            }),
+          },
+          toolChoice: "required",
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const body = capture.body
+        expect(body.model).toBe(resolved.api.id)
+        expect(body.tool_choice).toBe("auto")
+      }),
+    {
+      config: () => ({
+        enabled_providers: ["opencode"],
+        provider: {
+          opencode: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
     "sends responses API payload for OpenAI models",
     () =>
       Effect.gen(function* () {

@@ -111,6 +111,7 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      const toolChoice = compatibleToolChoice(input, prepared.params.options)
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -225,7 +226,7 @@ const live: Layer.Layer<
           llmClient,
           messages: prepared.messages,
           tools: prepared.tools,
-          toolChoice: input.toolChoice,
+          toolChoice,
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
@@ -302,7 +303,7 @@ const live: Layer.Layer<
           providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
           activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
           tools: prepared.tools,
-          toolChoice: input.toolChoice,
+          toolChoice,
           maxOutputTokens: prepared.params.maxOutputTokens,
           abortSignal: input.abort,
           headers: prepared.headers,
@@ -384,6 +385,32 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
+
+function compatibleToolChoice(input: StreamRequest, options: Record<string, any>) {
+  if (input.toolChoice !== "required") return input.toolChoice
+  if (!hasThinkingToolChoiceConflict(input.model, options)) return input.toolChoice
+  return "auto" as const
+}
+
+function hasThinkingToolChoiceConflict(model: Provider.Model, options: Record<string, any>) {
+  if (!model.capabilities.reasoning) return false
+  if (hasThinkingOptions(options)) return true
+  if (model.providerID.startsWith("opencode")) return true
+  return (
+    model.api.npm === "@ai-sdk/openai-compatible" ||
+    model.api.npm === "@ai-sdk/anthropic" ||
+    model.api.npm === "@openrouter/ai-sdk-provider"
+  )
+}
+
+function hasThinkingOptions(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false
+  if (Array.isArray(value)) return value.some(hasThinkingOptions)
+  const record = value as Record<string, unknown>
+  if ("thinking" in record || "thinkingConfig" in record || record.enable_thinking === true) return true
+  if (record.chat_template_args && hasThinkingOptions(record.chat_template_args)) return true
+  return Object.values(record).some(hasThinkingOptions)
+}
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
 
