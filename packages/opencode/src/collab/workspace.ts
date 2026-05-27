@@ -94,22 +94,39 @@ export async function initSessionWorkspace(
     const repoName = repo.split("/").pop() ?? repo
     const dest = join(root, repoName)
 
-    if (existsSync(dest)) {
-      // Already cloned — pull latest (non-blocking)
-      await runAsync("git", ["-C", dest, "pull", "--ff-only"], { env }).catch((err) =>
-        console.error("[collab] git pull failed:", err),
+    if (isHealthyClone(dest)) {
+      // Already cloned — fetch latest from origin (shallow so the clone
+      // stays bounded).  Non-blocking: a fetch failure shouldn't take down
+      // session init; the local checkout still works.
+      await runAsync("git", ["-C", dest, "fetch", "--depth", "1", "origin"], { env }).catch(
+        (err) => console.error("[collab] git fetch failed:", err),
       )
     } else {
+      // Half-clone recovery.  Previous attempt may have left an empty / partial
+      // dir (e.g. network blip mid-clone).  Wipe and start fresh — `git clone`
+      // refuses to clone into a non-empty directory.
+      if (existsSync(dest)) {
+        console.warn("[collab] half-clone detected at", dest, "— wiping and re-cloning")
+        rmSync(dest, { recursive: true, force: true })
+      }
       const cloneUrl = userAccessToken
         ? `https://x-access-token:${userAccessToken}@github.com/${repo}.git`
         : `https://github.com/${repo}.git`
 
-      await runAsync("git", ["clone", "--depth", "100", cloneUrl, dest], { env })
+      // Shallow clone: depth=1 of the default branch only.  Trades full git
+      // history for:
+      //   - faster init (seconds vs minutes for large repos)
+      //   - lower disk footprint per session
+      //   - fewer flaky-network failure surfaces
+      // History is fine to lose because the collab branch is anchored to a
+      // single tip commit; nothing in the workflow depends on `git log`
+      // beyond what GitHub PRs already render.
+      await runAsync("git", ["clone", "--depth", "1", cloneUrl, dest], { env })
     }
 
     // Check out the collab branch.  Try to switch to an existing local or
     // remote branch first; otherwise create a fresh one off the current HEAD
-    // (which is the repo's default branch after a fresh clone).
+    // (which is the repo's default-branch tip from the shallow clone).
     if (branch) {
       await checkoutCollabBranch(dest, branch, env)
     }
@@ -121,13 +138,30 @@ export async function initSessionWorkspace(
 }
 
 /**
+ * A clone is "healthy" when both the destination dir exists AND has a `.git`
+ * subdirectory.  Without this check, a previous half-completed clone (network
+ * blip, OOM-killed git, etc.) leaves an empty dir; the next session-init pass
+ * sees `existsSync(dest)` and short-circuits to `git pull` against a repo with
+ * no remotes — the pull silently fails and the workspace is permanently broken.
+ */
+function isHealthyClone(dest: string): boolean {
+  return existsSync(dest) && existsSync(join(dest, ".git"))
+}
+
+/**
  * Check out the given branch in `repoPath`.  Tries, in order:
- *   1. Switch to an existing local branch with that name
- *   2. Switch to / create a tracking branch from origin/<name>
- *   3. Create a fresh branch off the current HEAD
+ *   1. Already on this branch → no-op.
+ *   2. Existing local branch with that name → `git checkout <branch>`.
+ *   3. Shallow-fetch the branch from `origin` → create a tracking branch.
+ *   4. Create a fresh branch off the current HEAD (the default-branch tip
+ *      from the shallow clone).
  *
  * Errors at every stage are logged but non-fatal — we don't want a stale
  * checkout to take down the entire collab session creation.
+ *
+ * Step 3 uses an explicit refspec so the fetched tip ends up at
+ * `refs/remotes/origin/<branch>` (a bare `git fetch origin <branch>` would
+ * leave it at `FETCH_HEAD`, which can't be used with `checkout -b … origin/<branch>`).
  */
 async function checkoutCollabBranch(
   repoPath: string,
@@ -146,14 +180,26 @@ async function checkoutCollabBranch(
     return
   } catch { /* fall through */ }
 
-  // Try tracking remote
+  // Try tracking remote (shallow fetch of just this branch's tip)
   try {
-    await runAsync("git", ["-C", repoPath, "fetch", "origin", branch], { env })
+    await runAsync(
+      "git",
+      [
+        "-C",
+        repoPath,
+        "fetch",
+        "--depth",
+        "1",
+        "origin",
+        `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+      ],
+      { env },
+    )
     await runAsync("git", ["-C", repoPath, "checkout", "-b", branch, `origin/${branch}`], { env })
     return
   } catch { /* fall through */ }
 
-  // Create new branch off current HEAD
+  // Create new branch off current HEAD (shallow-clone tip of default branch)
   try {
     await runAsync("git", ["-C", repoPath, "checkout", "-b", branch], { env })
     console.log("[collab] created new branch", branch, "in", repoPath)
