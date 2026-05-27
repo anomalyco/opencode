@@ -156,27 +156,31 @@ describe("Auth", () => {
     ),
   )
 
-  it.live("all() ignores invalid OPENCODE_AUTH_CONTENT env var", () =>
-      provideTmpdirInstance(() =>
-        Effect.gen(function* () {
-          // Wipe any auth.json left behind by previous tests in this process, since
-          // Global.Path.data is shared across tests.
-          const file = path.join(Global.Path.data, "auth.json")
-          yield* Effect.promise(() => fs.rm(file, { force: true }))
-  
-          const previous = process.env.OPENCODE_AUTH_CONTENT
-          process.env.OPENCODE_AUTH_CONTENT = "{ not valid json at all"
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
-              else process.env.OPENCODE_AUTH_CONTENT = previous
-            }),
-          )
-  
-          const auth = yield* Auth.Service
-          const data = yield* auth.all()
-          expect(data).toEqual({})
-        }),
-      ),
-    )
+  it.live("all() honors OPENCODE_AUTH_CONTENT env var with valid JSON", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        // Wipe any auth.json from previous tests so the env-var path is the only source.
+        const file = path.join(Global.Path.data, "auth.json")
+        yield* Effect.promise(() => fs.rm(file, { force: true }))
+
+        const previous = process.env.OPENCODE_AUTH_CONTENT
+        process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({
+          anthropic: { type: "api", key: "sk-from-env" },
+        })
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
+            else process.env.OPENCODE_AUTH_CONTENT = previous
+          }),
+        )
+
+        const auth = yield* Auth.Service
+        const data = yield* auth.all()
+        const entry = data["anthropic"]
+        expect(entry).toBeDefined()
+        expect(entry!.type).toBe("api")
+        if (entry!.type === "api") expect(entry!.key).toBe("sk-from-env")
+      }),
+    ),
+  )
 })
