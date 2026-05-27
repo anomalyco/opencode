@@ -28,6 +28,8 @@ export const BrandConfig = Schema.Struct({
     logoPath: Schema.optional(Schema.String),
     iconPath: Schema.optional(Schema.String),
   }),
+  popularProviders: Schema.Array(Schema.String),
+  defaultEnabledProviders: Schema.Array(Schema.String),
 }).pipe(withStatics(() => ({})))
 export type BrandConfig = Schema.Schema.Type<typeof BrandConfig>
 
