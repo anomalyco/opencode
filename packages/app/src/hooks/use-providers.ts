@@ -1,18 +1,10 @@
+import { AgentBrand } from "@yunpat/core/brand"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
-export const popularProviders = [
-  "opencode",
-  "opencode-go",
-  "anthropic",
-  "github-copilot",
-  "openai",
-  "google",
-  "openrouter",
-  "vercel",
-]
+export const popularProviders = [...AgentBrand.popularProviders]
 const popularProviderSet = new Set(popularProviders)
 
 export function useProviders() {

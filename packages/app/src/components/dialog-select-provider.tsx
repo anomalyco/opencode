@@ -1,10 +1,10 @@
 import { Component, Show } from "solid-js"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@yunpat/ui/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Tag } from "@opencode-ai/ui/tag"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Dialog } from "@yunpat/ui/dialog"
+import { List } from "@yunpat/ui/list"
+import { Tag } from "@yunpat/ui/tag"
+import { ProviderIcon } from "@yunpat/ui/provider-icon"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { useLanguage } from "@/context/language"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -24,6 +24,16 @@ export const DialogSelectProvider: Component = () => {
     if (id === "openai") return language.t("dialog.provider.openai.note")
     if (id.startsWith("github-copilot")) return language.t("dialog.provider.copilot.note")
     if (id === "opencode-go") return language.t("dialog.provider.opencodeGo.tagline")
+    if (id === "deepseek") return language.t("dialog.provider.deepseek.note")
+    if (id === "alibaba-cn" || id === "alibaba") return language.t("dialog.provider.alibaba.note")
+    if (id === "moonshotai-cn" || id === "moonshotai") return language.t("dialog.provider.moonshot.note")
+    if (id === "zhipuai" || id === "zai") return language.t("dialog.provider.zhipuai.note")
+    if (id === "siliconflow-cn" || id === "siliconflow") return language.t("dialog.provider.siliconflow.note")
+    if (id === "minimax-cn" || id === "minimax") return language.t("dialog.provider.minimax.note")
+    if (id === "openrouter") return language.t("dialog.provider.openrouter.note")
+    if (id === "google") return language.t("dialog.provider.google.note")
+    if (id === "302ai") return language.t("dialog.provider.302ai.note")
+    if (id === "qiniu-ai") return language.t("dialog.provider.qiniu.note")
   }
 
   return (

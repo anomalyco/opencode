@@ -55,6 +55,8 @@ export const YUNPAT: BrandConfig = {
     logoPath: "packages/ui/src/assets/brand/hero-lg.webp",
     iconPath: "packages/ui/src/assets/brand/mark-96.png",
   },
+  popularProviders: [...AgentBrand.popularProviders],
+  defaultEnabledProviders: [...AgentBrand.defaultEnabledProviders],
 }
 
 export * as ConfigBrand from "./brand"

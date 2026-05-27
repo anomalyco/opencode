@@ -1,5 +1,21 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": [
+    "deepseek",
+    "alibaba-cn",
+    "moonshotai-cn",
+    "zhipuai",
+    "siliconflow-cn",
+    "openai",
+    "anthropic",
+    "google",
+    "openrouter",
+    "minimax-cn",
+    "siliconflow",
+    "github-copilot",
+    "302ai",
+    "qiniu-ai"
+  ],
   "provider": {},
   "permission": {
     "edit": {

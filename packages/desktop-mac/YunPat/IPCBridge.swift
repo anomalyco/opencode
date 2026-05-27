@@ -96,6 +96,12 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
 
         let args = body["args"] as? [Any] ?? []
 
+        if method == "saveFirstRunConfig" {
+            if let json = args.first as? String {
+                saveFirstRunConfig(json)
+            }
+            return
+        }
         if method == "openLink" {
             if let url = args.first as? String, let nsurl = URL(string: url) {
                 NSWorkspace.shared.open(nsurl)
@@ -108,6 +114,14 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
             task.arguments = []
             try? task.run()
             NSApp.terminate(nil)
+            return
+        }
+        if method == "showProgressNotification" {
+            let title = args[safe: 0] as? String ?? "YunPat"
+            let step = args[safe: 1] as? Int ?? 0
+            let total = args[safe: 2] as? Int ?? 0
+            let currentStep = args[safe: 3] as? String ?? ""
+            NotificationManager.shared.sendProgress(title: title, step: step, totalSteps: total, currentStep: currentStep)
             return
         }
         if method == "showNotification" {
@@ -189,7 +203,22 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
         case "storeLength":
             let name = args[0] as? String ?? ""
             completion(.success(storeLength(name: name)))
+        case "openPath":
+            let path = args[0] as? String ?? ""
+            let app = args.count > 1 ? (args[1] as? String) : nil
+            let url = URL(fileURLWithPath: path)
+            if let app = app, !app.isEmpty {
+                let config = NSWorkspace.OpenConfiguration()
+                NSWorkspace.shared.open([url], withApplicationAt: URL(fileURLWithPath: app), configuration: config) { _, _ in }
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+            completion(.success(nil))
         case "killSidecar":
+            // The sidecar is managed by SidecarManager via AppDelegate
+            if let appDelegate = NSApp.delegate as? AppDelegate {
+                appDelegate.sidecarManager?.stop()
+            }
             completion(.success(nil))
         case "getDefaultServerUrl":
             completion(.success(UserDefaults.standard.string(forKey: "yunpat:lastServerURL")))
@@ -210,8 +239,11 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
             NSApp.activate(ignoringOtherApps: true)
             completion(.success(nil))
         case "getZoomFactor":
-            completion(.success(1.0))
+            completion(.success(Double(webView?.magnification ?? 1.0)))
         case "setZoomFactor":
+            if let factor = args.first as? Double {
+                webView?.magnification = factor
+            }
             completion(.success(nil))
         case "getAppState":
             let state = WindowState.shared.state
@@ -263,6 +295,116 @@ class IPCBridge: NSObject, WKScriptMessageHandler {
                 .replacingOccurrences(of: "\r", with: "\\r")
             let js = "document.dispatchEvent(new CustomEvent('yunpat-event',{detail:{type:'reject',data:{callId:\(callId),error:'\(escaped)'}}})"
             webView.evaluateJavaScript(js)
+        }
+    }
+
+    // MARK: - First Run Config
+
+    /// Writes first-run config to the embedded project-root `.yunpat-agent/` directory.
+    /// This is isolated from the system-wide agent config (~/.config/yunpat-agent/).
+    private func saveFirstRunConfig(_ json: String) {
+        guard let resourcePath = Bundle.main.resourcePath else { return }
+        let projectRoot = URL(fileURLWithPath: resourcePath).appendingPathComponent("project-root")
+        let configDir = projectRoot.appendingPathComponent(".yunpat-agent")
+        let configFile = configDir.appendingPathComponent("yunpat-agent.jsonc")
+
+        do {
+            try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+
+            guard let data = json.data(using: .utf8),
+                  let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let provider = config["provider"] as? String,
+                  let apiKey = config["apiKey"] as? String else {
+                return
+            }
+
+            let baseUrl = config["baseUrl"] as? String ?? ""
+            let model = config["model"] as? String ?? ""
+            let providerName: String
+            let envVar: String
+
+            switch provider {
+            case "openai":
+                providerName = "openai"
+                envVar = "OPENAI_API_KEY"
+            case "deepseek":
+                providerName = "deepseek"
+                envVar = "DEEPSEEK_API_KEY"
+            case "anthropic":
+                providerName = "anthropic"
+                envVar = "ANTHROPIC_API_KEY"
+            case "google":
+                providerName = "google"
+                envVar = "GOOGLE_API_KEY"
+            case "openrouter":
+                providerName = "openrouter"
+                envVar = "OPENROUTER_API_KEY"
+            case "zhipu", "zhipuai":
+                providerName = "zhipuai"
+                envVar = "ZHIPU_API_KEY"
+            case "moonshot", "moonshotai-cn":
+                providerName = "moonshotai-cn"
+                envVar = "MOONSHOT_API_KEY"
+            case "qwen", "alibaba-cn":
+                providerName = "alibaba-cn"
+                envVar = "DASHSCOPE_API_KEY"
+            case "siliconflow-cn":
+                providerName = "siliconflow-cn"
+                envVar = "SILICONFLOW_CN_API_KEY"
+            case "siliconflow":
+                providerName = "siliconflow"
+                envVar = "SILICONFLOW_API_KEY"
+            case "minimax-cn":
+                providerName = "minimax-cn"
+                envVar = "MINIMAX_API_KEY"
+            case "302ai":
+                providerName = "302ai"
+                envVar = "302AI_API_KEY"
+            case "qiniu-ai":
+                providerName = "qiniu-ai"
+                envVar = "QINIU_API_KEY"
+            default:
+                providerName = provider
+                envVar = "\(provider.uppercased())_API_KEY"
+            }
+
+            var providerConfig: [String: Any] = [
+                "name": providerName,
+                "env": [envVar],
+            ]
+            if !baseUrl.isEmpty { providerConfig["baseUrl"] = baseUrl }
+            if !model.isEmpty { providerConfig["defaultModel"] = model }
+
+            let enabledProviders = [
+                "deepseek", "alibaba-cn", "moonshotai-cn", "zhipuai", "siliconflow-cn",
+                "openai", "anthropic", "google", "openrouter", "minimax-cn",
+                "siliconflow", "github-copilot", "302ai", "qiniu-ai",
+            ]
+
+            let configContent: [String: Any] = [
+                "$schema": "https://opencode.ai/config.json",
+                "enabled_providers": enabledProviders,
+                "provider": [providerName: providerConfig],
+            ]
+
+            let configData = try JSONSerialization.data(withJSONObject: configContent, options: .prettyPrinted)
+            var configStr = String(data: configData, encoding: .utf8) ?? "{}"
+            configStr.append("\n")
+            try configStr.write(to: configFile, atomically: true, encoding: .utf8)
+
+            // Set the API key in environment for the sidecar
+            setenv(envVar, apiKey, 1)
+
+            print("IPCBridge: first-run config saved to embedded project-root")
+            print("  provider=\(providerName) model=\(model)")
+
+            // Notify app to reload with main interface
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: NSNotification.Name("YunPatConfigSaved"), object: nil)
+            }
+
+        } catch {
+            print("IPCBridge: failed to save first-run config: \(error)")
         }
     }
 

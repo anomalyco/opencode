@@ -740,6 +740,10 @@ export const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
+        if (result.enabled_providers === undefined) {
+          result.enabled_providers = [...AgentBrand.defaultEnabledProviders]
+        }
+
         return {
           config: result,
           directories,
