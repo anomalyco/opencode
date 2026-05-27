@@ -151,7 +151,7 @@ function invalidate(entry: PoolEntry) {
 }
 
 function poolKey(headers: Record<string, string>) {
-  const sessionID = headers["x-session-affinity"] ?? headers["session_id"]
+  const sessionID = headers["x-session-affinity"] ?? headers["session-id"]
   if (!sessionID) return undefined
 
   return [

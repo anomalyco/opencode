@@ -66,9 +66,10 @@ Trenutna lista modela uključuje:
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
-- **MiniMax M2.7**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -98,6 +99,7 @@ Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca kori
 | MiMo-V2.5-Pro      | 1,290              | 3,225             | 6,450             |
 | MiniMax M2.7       | 3,400              | 8,500             | 17,000            |
 | MiniMax M2.5       | 6,300              | 15,900            | 31,800            |
+| Qwen3.7 Max        | 950                | 2,390             | 4,770             |
 | Qwen3.6 Plus       | 3,300              | 8,200             | 16,300            |
 | Qwen3.5 Plus       | 10,200             | 25,200            | 50,500            |
 | DeepSeek V4 Pro    | 3,450              | 8,550             | 17,150            |
@@ -110,8 +112,9 @@ Procjene se zasnivaju na zapaženim prosječnim obrascima zahtjeva:
 - DeepSeek V4 Pro — 750 ulaznih, 82,000 keširanih, 290 izlaznih tokena po zahtjevu
 - DeepSeek V4 Flash — 790 ulaznih, 68,000 keširanih, 280 izlaznih tokena po zahtjevu
 - MiniMax M2.7/M2.5 — 300 ulaznih, 55,000 keširanih, 125 izlaznih tokena po zahtjevu
-- Qwen3.5 Plus — 410 ulaznih, 47,000 keširanih, 140 izlaznih tokena po zahtjevu
+- Qwen3.7 Max — 420 ulaznih, 66,000 keširanih, 200 izlaznih tokena po zahtjevu
 - Qwen3.6 Plus — 500 ulaznih, 57,000 keširanih, 190 izlaznih tokena po zahtjevu
+- Qwen3.5 Plus — 410 ulaznih, 47,000 keširanih, 140 izlaznih tokena po zahtjevu
 - MiMo-V2.5 — 1000 ulaznih, 60,000 keširanih, 140 izlaznih tokena po zahtjevu
 - MiMo-V2.5-Pro — 350 ulaznih, 41,000 keširanih, 250 izlaznih tokena po zahtjevu
 
@@ -149,6 +152,7 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 

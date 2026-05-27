@@ -644,7 +644,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       if (input.model.providerID !== "openai") return
       output.headers.originator = "opencode"
       output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
-      output.headers.session_id = input.sessionID
+      output.headers["session-id"] = input.sessionID
       // Temporary fetch-layer hack: title generation currently shares the conversation
       // session ID, so the OpenAI plugin marks it for HTTP fallback until transport
       // context can be passed directly instead of smuggled through headers.

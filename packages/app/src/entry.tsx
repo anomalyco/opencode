@@ -168,7 +168,11 @@ if (root instanceof HTMLElement) {
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface defaultServer={ServerConnection.Key.make(getDefaultUrl())} servers={[server]} />
+          <AppInterface
+            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
+            servers={[server]}
+            disableHealthCheck
+          />
         </AppBaseProviders>
       </PlatformProvider>
     ),

@@ -1,9 +1,11 @@
 import { describe, expect } from "bun:test"
 import type {
   AuthenticateResponse,
+  CloseSessionResponse,
   InitializeResponse,
   LoadSessionResponse,
   NewSessionResponse,
+  ResumeSessionResponse,
   SessionNotification,
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
@@ -31,7 +33,10 @@ describe("opencode acp-next (subprocess)", () => {
         expect(initialized.agentCapabilities?.mcpCapabilities?.http).toBe(true)
         expect(initialized.agentCapabilities?.mcpCapabilities?.sse).toBe(true)
         expect(initialized.agentCapabilities?.loadSession).toBe(true)
-        expect(initialized.agentCapabilities?.sessionCapabilities).toBeUndefined()
+        expect(initialized.agentCapabilities?.sessionCapabilities?.close).toEqual({})
+        expect(initialized.agentCapabilities?.sessionCapabilities?.fork).toEqual({})
+        expect(initialized.agentCapabilities?.sessionCapabilities?.list).toEqual({})
+        expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})
         expect(initialized.agentInfo?.name).toBe("OpenCode")
         expect(initialized.authMethods?.[0]?.id).toBe("opencode-login")
         expect(initialized.authMethods?.[0]?._meta?.["terminal-auth"]).toBeDefined()
@@ -155,6 +160,55 @@ describe("opencode acp-next (subprocess)", () => {
         )
 
         expect(selectConfigOption(updated.configOptions, "effort")?.currentValue).toBe(nextEffort)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "advertises and supports close behind OPENCODE_ACP_NEXT",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const acp = createAcpClient(
+          yield* opencode.acp({
+            env: {
+              OPENCODE_ACP_NEXT: "1",
+              OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)),
+            },
+          }),
+        )
+        const initialized = expectOk(yield* acp.request<InitializeResponse>("initialize", { protocolVersion: 1 }))
+        expect(initialized.agentCapabilities?.sessionCapabilities?.close).toEqual({})
+        const session = expectOk(yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] }))
+
+        expectOk(yield* acp.request<CloseSessionResponse>("session/close", { sessionId: session.sessionId }))
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "advertises and supports resume behind OPENCODE_ACP_NEXT",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const acp = createAcpClient(
+          yield* opencode.acp({
+            env: {
+              OPENCODE_ACP_NEXT: "1",
+              OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)),
+            },
+          }),
+        )
+        const initialized = expectOk(yield* acp.request<InitializeResponse>("initialize", { protocolVersion: 1 }))
+        expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})
+        const session = expectOk(yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] }))
+        const resumed = expectOk(
+          yield* acp.request<ResumeSessionResponse>("session/resume", {
+            cwd: home,
+            sessionId: session.sessionId,
+            mcpServers: [],
+          }),
+        )
+
+        expect(selectConfigOption(resumed.configOptions, "model")?.category).toBe("model")
       }),
     60_000,
   )
