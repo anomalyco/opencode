@@ -21,8 +21,26 @@ function eventData(data: unknown): Sse.Event {
     _tag: "Event",
     event: "message",
     id: undefined,
-    data: JSON.stringify(data),
+    data: eventJSON(data),
   }
+}
+
+function eventJSON(data: unknown) {
+  try {
+    return JSON.stringify(data)
+  } catch (cause) {
+    log.warn("failed to serialize global SSE event", { cause })
+    return JSON.stringify({
+      directory: eventDirectory(data),
+      payload: { id: Bus.createID(), type: "server.heartbeat", properties: {} },
+    })
+  }
+}
+
+function eventDirectory(data: unknown) {
+  return data && typeof data === "object" && "directory" in data && typeof data.directory === "string"
+    ? data.directory
+    : "global"
 }
 
 function parseBody(body: string) {

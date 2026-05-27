@@ -14,7 +14,16 @@ function eventData(data: unknown): Sse.Event {
     _tag: "Event",
     event: "message",
     id: undefined,
-    data: JSON.stringify(data),
+    data: eventJSON(data),
+  }
+}
+
+function eventJSON(data: unknown) {
+  try {
+    return JSON.stringify(data)
+  } catch (cause) {
+    log.warn("failed to serialize SSE event", { cause })
+    return JSON.stringify({ id: Bus.createID(), type: "server.heartbeat", properties: {} })
   }
 }
 

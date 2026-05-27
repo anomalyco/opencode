@@ -2,6 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 import { Bus } from "../../src/bus"
+import { BusEvent } from "../../src/bus/bus-event"
 import { Event as ServerEvent } from "../../src/server/event"
 import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
@@ -48,6 +49,7 @@ afterEach(async () => {
 })
 
 const it = testEffectShared(Bus.defaultLayer)
+const UnserializableEvent = BusEvent.define("test.unserializable", Schema.Struct({ value: Schema.Any }))
 
 describe("event HttpApi", () => {
   it.instance(
@@ -92,6 +94,23 @@ describe("event HttpApi", () => {
         const { directory } = yield* TestInstance
         const { reader } = yield* openEventStream(directory)
         expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
+
+        yield* Bus.use.publish(ServerEvent.Connected, {})
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "keeps the stream alive when an event cannot be serialized",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const { reader } = yield* openEventStream(directory)
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
+
+        yield* Bus.use.publish(UnserializableEvent, { value: BigInt(1) })
+        expect(yield* readEvent(reader)).toMatchObject({ type: "server.heartbeat", properties: {} })
 
         yield* Bus.use.publish(ServerEvent.Connected, {})
         expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
