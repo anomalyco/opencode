@@ -7,6 +7,15 @@ import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
+import { Database } from "@/storage/db"
+import { ProjectTable } from "@/project/project.sql"
+import { SessionTable } from "@/session/session.sql"
+import { PermissionTable } from "@/session/session.sql"
+import { WorkspaceTable } from "@/control-plane/workspace.sql"
+import { eq } from "drizzle-orm"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { SessionID } from "@/session/schema"
+import { WorkspaceID } from "@/control-plane/schema"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
@@ -29,6 +38,10 @@ function run<A, E>(fn: (svc: Project.Interface) => Effect.Effect<A, E>) {
     const svc = yield* Project.Service
     return yield* fn(svc)
   })
+}
+
+function remoteProjectID(remote: string) {
+  return ProjectID.make(Hash.fast(`git-remote:${remote}`))
 }
 
 /**
@@ -154,28 +167,91 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  it.live("keeps root commit identity when origin exists", () =>
+  it.live("prefers normalized origin remote over root commit", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ git: true })
       yield* Effect.promise(() => $`git remote add origin git@github.com:Test-Org/Test-Repo.git`.cwd(tmp).quiet())
 
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
-      const root = (yield* Effect.promise(() => $`git rev-list --max-parents=0 HEAD`.cwd(tmp).text())).trim()
 
-      expect(project.id).toBe(ProjectID.make(root))
+      expect(project.id).toBe(remoteProjectID("github.com/Test-Org/Test-Repo"))
     }),
   )
 
-  it.live("keeps cached project identity when origin becomes available", () =>
+  it.live("normalizes equivalent origin URL forms to the same project ID", () =>
+    Effect.gen(function* () {
+      const ssh = yield* tmpdirScoped({ git: true })
+      const https = yield* tmpdirScoped({ git: true })
+      yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(ssh).quiet())
+      yield* Effect.promise(() => $`git remote add origin https://github.com/owner/repo.git`.cwd(https).quiet())
+
+      const { project: a } = yield* run((svc) => svc.fromDirectory(ssh))
+      const { project: b } = yield* run((svc) => svc.fromDirectory(https))
+
+      expect(a.id).toBe(remoteProjectID("github.com/owner/repo"))
+      expect(b.id).toBe(a.id)
+    }),
+  )
+
+  it.live("migrates cached root project data when origin becomes available", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ git: true })
       const projects = yield* Project.Service
       const { project: rootProject } = yield* projects.fromDirectory(tmp)
+      const remoteID = remoteProjectID("github.com/acme/app")
+      const sessionID = crypto.randomUUID() as SessionID
+      const workspaceID = WorkspaceID.ascending()
+
+      yield* Effect.sync(() => {
+        Database.use((db) => {
+          db.insert(SessionTable)
+            .values({
+              id: sessionID,
+              project_id: rootProject.id,
+              slug: sessionID,
+              directory: tmp,
+              title: "test",
+              version: "0.0.0-test",
+              time_created: Date.now(),
+              time_updated: Date.now(),
+            })
+            .run()
+          db.insert(PermissionTable)
+            .values({
+              project_id: rootProject.id,
+              data: [{ permission: "edit", pattern: "*", action: "allow" }],
+              time_created: Date.now(),
+              time_updated: Date.now(),
+            })
+            .run()
+          db.insert(WorkspaceTable)
+            .values({
+              id: workspaceID,
+              type: "local",
+              name: "test",
+              project_id: rootProject.id,
+            })
+            .run()
+        })
+      })
       yield* Effect.promise(() => $`git remote add origin git@github.com:acme/app.git`.cwd(tmp).quiet())
 
       const { project } = yield* projects.fromDirectory(tmp)
 
-      expect(project.id).toBe(rootProject.id)
+      expect(project.id).toBe(remoteID)
+      expect(
+        Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, rootProject.id)).get()),
+      ).toBeUndefined()
+      expect(
+        Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())?.project_id,
+      ).toBe(remoteID)
+      expect(
+        Database.use((db) => db.select().from(PermissionTable).where(eq(PermissionTable.project_id, remoteID)).get()),
+      ).toBeDefined()
+      expect(
+        Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get())
+          ?.project_id,
+      ).toBe(remoteID)
     }),
   )
 })
