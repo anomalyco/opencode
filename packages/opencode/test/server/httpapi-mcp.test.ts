@@ -109,6 +109,10 @@ describe("mcp HttpApi", () => {
         expect(added.status).toBe(200)
         expect(yield* json(added)).toMatchObject({ added: { status: "disabled" } })
 
+        const addedDisconnected = yield* request(handler, "/mcp/added/disconnect", tmp.directory, { method: "POST" })
+        expect(addedDisconnected.status).toBe(200)
+        expect(yield* json(addedDisconnected)).toBe(true)
+
         const connected = yield* request(handler, "/mcp/demo/connect", tmp.directory, { method: "POST" })
         expect(connected.status).toBe(200)
         expect(yield* json(connected)).toBe(true)
