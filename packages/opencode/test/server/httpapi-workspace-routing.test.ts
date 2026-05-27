@@ -526,4 +526,38 @@ describe("HttpApi workspace routing middleware", () => {
       })
     }),
   )
+
+  it.live("routes local workspace requests from workspace header", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "local-header-target",
+        directory: workspaceDir,
+      })
+
+      yield* HttpRouter.add(
+        "POST",
+        "/probe",
+        Effect.gen(function* () {
+          const route = yield* WorkspaceRouteContext
+          return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
+        }),
+      ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
+
+      const response = yield* HttpClientRequest.post("/probe").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClientRequest.setHeader("x-opencode-workspace", workspace.id),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({
+        directory: workspaceDir,
+        workspaceID: workspace.id,
+      })
+    }),
+  )
 })

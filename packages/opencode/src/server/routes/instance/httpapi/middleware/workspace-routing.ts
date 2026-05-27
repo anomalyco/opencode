@@ -66,17 +66,26 @@ function configuredWorkspaceID(): WorkspaceID | undefined {
   return Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined
 }
 
-function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): WorkspaceID | undefined {
-  const workspaceParam = url.searchParams.get("workspace")
+function selectedWorkspaceParam(request: HttpServerRequest.HttpServerRequest, url: URL): string | undefined {
+  return url.searchParams.get("workspace") ?? request.headers["x-opencode-workspace"]
+}
+
+function selectedWorkspaceID(
+  request: HttpServerRequest.HttpServerRequest,
+  url: URL,
+  sessionWorkspaceID?: WorkspaceID,
+): WorkspaceID | undefined {
+  const workspaceParam = selectedWorkspaceParam(request, url)
   return sessionWorkspaceID ?? (workspaceParam ? WorkspaceID.make(workspaceParam) : undefined)
 }
 
 function selectedV2WorkspaceID(
+  request: HttpServerRequest.HttpServerRequest,
   url: URL,
   sessionWorkspaceID?: WorkspaceID,
 ): WorkspaceID | typeof InvalidWorkspaceID | undefined {
   if (sessionWorkspaceID) return sessionWorkspaceID
-  const workspaceParam = url.searchParams.get("workspace")
+  const workspaceParam = selectedWorkspaceParam(request, url)
   if (!workspaceParam) return undefined
   const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(workspaceParam)
   if (Option.isNone(workspaceID)) return InvalidWorkspaceID
@@ -165,8 +174,8 @@ function planRequest(
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, sessionWorkspaceID)
-      : selectedWorkspaceID(url, sessionWorkspaceID)
+      ? selectedV2WorkspaceID(request, url, sessionWorkspaceID)
+      : selectedWorkspaceID(request, url, sessionWorkspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
