@@ -17,6 +17,7 @@ export interface StreamResponsesWebSocketOptions {
   body: Record<string, unknown>
   idleTimeout?: number
   signal?: AbortSignal
+  onFirstEvent?: () => void
   onComplete?: (event: Record<string, unknown>) => void
   onTerminal?: (event: Record<string, unknown>) => void
   onRetryableTerminal?: (event: Record<string, unknown>) => Promise<WebSocket | undefined>
@@ -199,6 +200,7 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
       }
     }
 
+    if (!emitted) options.onFirstEvent?.()
     controller?.enqueue(encoder.encode(`${text.split(/\r?\n/).map((line) => `data: ${line}`).join("\n")}\n\n`))
     emitted = true
     resetIdleTimeout("idle timeout waiting for websocket")

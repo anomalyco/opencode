@@ -83,6 +83,8 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       return httpFetch(input, httpInit)
     }
 
+    entry.busy = true
+    entry.lastUsedAt = Date.now()
     try {
       let connectionLimitAttempts = 0
       entry.socket = await socket(
@@ -93,13 +95,18 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         maxConnectionAge,
         init?.signal,
       )
-      entry.busy = true
-      entry.lastUsedAt = Date.now()
-      return OpenAIWebSocket.streamResponsesWebSocket({
+      let resolveFirstEvent: (started: boolean) => void = () => {}
+      let rejectFirstEvent: (error: Error) => void = () => {}
+      const firstEvent = new Promise<boolean>((resolve, reject) => {
+        resolveFirstEvent = resolve
+        rejectFirstEvent = reject
+      })
+      const response = OpenAIWebSocket.streamResponsesWebSocket({
         socket: entry.socket,
         body,
         idleTimeout,
         signal: init?.signal ?? undefined,
+        onFirstEvent: () => resolveFirstEvent(true),
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
@@ -113,12 +120,14 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           entry.busy = false
           entry.fallback = true
           invalidate(entry)
+          resolveFirstEvent(false)
         },
-        onAbort: () => {
+        onAbort: (error) => {
           log.debug("websocket aborted", { key })
           entry.busy = false
           entry.lastUsedAt = Date.now()
           invalidate(entry)
+          rejectFirstEvent(error)
         },
         onRetryableTerminal: async (event) => {
           const error = event.error
@@ -148,7 +157,12 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           return entry.socket
         },
       })
+      if (await firstEvent) return response
+      log.debug("http fallback", { key, reason: "websocket_failed_before_first_event" })
+      return httpFetch(input, httpInit)
     } catch (error) {
+      entry.busy = false
+      entry.lastUsedAt = Date.now()
       if (OpenAIWebSocket.isAbortError(error)) {
         invalidate(entry)
         throw error
