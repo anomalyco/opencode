@@ -457,7 +457,7 @@ export function SessionSidePanel(props: {
                   edge="start"
                   size={layout.fileTree.width()}
                   min={200}
-                  max={480}
+                  max={360}
                   onResize={(width) => {
                     props.size.touch()
                     layout.fileTree.resize(width)

@@ -1809,13 +1809,14 @@ export default function Page() {
         }}
       />
 
-      <Show when={desktopReviewOpen()}>
-        <div onPointerDown={() => size.start()}>
+      <Show when={desktopSidePanelOpen()}>
+        <div style={{ "--resize-gap-offset": "7px" }} onPointerDown={() => size.start()}>
           <ResizeHandle
+            showHandle={true}
             direction="horizontal"
             size={layout.session.width()}
-            min={450}
-            max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+            min={300}
+            max={typeof window === "undefined" ? 1000 : window.innerWidth - 380}
             onResize={(width) => {
               size.touch()
               layout.session.resize(width)
@@ -1832,7 +1833,7 @@ export default function Page() {
         <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
           <div
             data-component="codle-session-frame"
-            class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0"
+            class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0 overflow-visible"
           >
             <SessionPanelContent />
           </div>
