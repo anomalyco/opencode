@@ -19,6 +19,7 @@
  *   POST /collab/session/:id/resolve      → Driver resolves vote pool
  *   PUT  /collab/session/:id/participant/:ghId/role → change role
  *   GET  /collab/session/:id/events      → SSE stream of CollabEvents
+ *   POST /collab/session/:id/reinit      → Driver retries failed workspace init
  */
 
 import { randomBytes } from "crypto"
@@ -38,6 +39,7 @@ import { runCollabMigrations } from "./migrate"
 import { collabDb } from "./db-impl"
 import {
   initSessionWorkspace,
+  refreshParticipantsFile,
   cleanupSessionWorkspace,
   sessionWorkspacePath,
   nativeSessionDirectory,
@@ -276,6 +278,23 @@ function preWarmNativeSession(collabSessionId: string, workspacePath: string): v
       console.error("[collab] native session pre-warm failed:", err)
     }
   }, 200) // 200 ms gives the creation response time to flush
+}
+
+/**
+ * Look up a session's current participants + repos and rewrite the per-repo
+ * `.git/collab-participants.json` files.  Future commits inside the workspace
+ * will pick up the new list and emit `Co-authored-by:` trailers for every
+ * current participant.
+ *
+ * Called from participant-mutation sites (invite redemption, role change).
+ * Cheap — one tiny atomic file write per repo.  Silently no-ops if the
+ * workspace hasn't been cloned yet (e.g. for a session whose init is still
+ * in flight or has no repos).
+ */
+function refreshParticipantsFileForSession(collabSessionId: string): void {
+  const cs = Session.getCollabSession(collabSessionId)
+  if (!cs || cs.repos.length === 0) return
+  refreshParticipantsFile(collabSessionId, cs.repos, cs.participants)
 }
 
 /**
@@ -883,6 +902,11 @@ async function handleInviteRedeem(req: Request, token: string): Promise<Response
     participant,
   })
 
+  // Refresh the per-repo participants file so future commits include the
+  // new participant in Co-authored-by trailers.  Fire-and-forget — a failed
+  // refresh shouldn't block the redirect.
+  refreshParticipantsFileForSession(invite.collabSessionId)
+
   // History-based router — the previous hash-prefixed URL ("/#/collab/<id>")
   // made the browser land at "/" (opencode home) because the hash was
   // discarded on the server-side 302 and the SPA never saw the collab path.
@@ -939,6 +963,13 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // directory.  Sequencing matters: opencode needs the repo on disk before
     // InstanceStore.load — otherwise the file tree, git status, and diff/review
     // pane all start empty.
+    //
+    // Workspace state machine (fix/session):
+    //   - new row inserts with init_status='pending' (schema default)
+    //   - on success → setInitStatus(ready) + broadcast collab:workspace_ready
+    //   - on failure → setInitStatus(failed, err) + broadcast collab:workspace_failed
+    // The iframe is gated on workspace_ready; on workspace_failed the SPA
+    // shows a recovery panel with a Driver retry button.
     const warmupDirectory = nativeSessionDirectory(created.id, created.repos)
     if (created.repos.length > 0) {
       // Pass the session name + branch so initSessionWorkspace can check out
@@ -946,14 +977,37 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       // Token: the creator's OAuth access token (sess.githubAccessToken),
       // which gets baked into the clone URL.  Subsequent push/pull operations
       // reuse it via .git/config.  See ADR-0005 Option B.
-      initSessionWorkspace(created.id, created.repos, sess.githubAccessToken, created.name, created.branch)
-        .then(() => preWarmNativeSession(created.id, warmupDirectory))
+      initSessionWorkspace(
+        created.id,
+        created.repos,
+        sess.githubAccessToken,
+        created.name,
+        created.branch,
+        created.participants,
+      )
+        .then(() => {
+          Session.setInitStatus(created.id, "ready")
+          broadcastSse(created.id, { type: "collab:workspace_ready", collabSessionId: created.id })
+          preWarmNativeSession(created.id, warmupDirectory)
+        })
         .catch((err) => {
-          console.error("[collab] workspace init failed:", err)
-          // Still pre-warm against the workspace root so the iframe at least loads
-          preWarmNativeSession(created.id, sessionWorkspacePath(created.id))
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[collab] workspace init failed:", msg)
+          Session.setInitStatus(created.id, "failed", msg)
+          broadcastSse(created.id, {
+            type: "collab:workspace_failed",
+            collabSessionId: created.id,
+            error: msg,
+          })
+          // Do NOT pre-warm against a broken workspace — that's the bug
+          // we're fixing.  The recovery panel offers a Driver retry via
+          // POST /collab/session/:id/reinit.
         })
     } else {
+      // No repos → workspace is trivially "ready"; the iframe gate will
+      // still require sessionId, which preWarmNativeSession provides.
+      Session.setInitStatus(created.id, "ready")
+      broadcastSse(created.id, { type: "collab:workspace_ready", collabSessionId: created.id })
       preWarmNativeSession(created.id, warmupDirectory)
     }
 
@@ -1029,9 +1083,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       // installation re-run idempotently across the whole set.
       const updated = Session.getCollabSession(sessionId)
       if (updated) {
-        initSessionWorkspace(sessionId, added, sess.githubAccessToken, updated.name, updated.branch).catch((err) =>
-          console.error("[collab.patch] workspace init for added repos failed:", err),
-        )
+        initSessionWorkspace(
+          sessionId,
+          added,
+          sess.githubAccessToken,
+          updated.name,
+          updated.branch,
+          updated.participants,
+        ).catch((err) => console.error("[collab.patch] workspace init for added repos failed:", err))
       }
       broadcastSse(sessionId, { type: "collab:repos_added", repos: added, addedBy: sess.githubLogin })
     }
@@ -1084,6 +1143,61 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     )
     const c = cfg()
     return json({ ...invite, url: Invite.inviteUrl(c.baseUrl, invite.token) }, 201)
+  }
+
+  // POST /collab/session/:id/reinit — Driver only.  Retry workspace init
+  // after it failed.  Wipes /var/opencode/workspaces/<id>/, resets
+  // init_status → "pending", and kicks initSessionWorkspace again.
+  //
+  // Rate-limited per ADR-0008 (5/hour/user) — the operation is heavy
+  // (full git clone) and we don't want a stuck retry loop spamming GitHub.
+  if (req.method === "POST" && parts[3] === "reinit") {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    const rl = checkRateLimit(`reinit:${sess.githubId}`, 5, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+
+    console.log("[collab.reinit]", { sessionId, login: sess.githubLogin })
+
+    // Wipe the existing workspace dir + revoke the native session id so
+    // preWarmNativeSession actually re-runs (it short-circuits on
+    // collabSession.sessionId).
+    cleanupSessionWorkspace(sessionId)
+    Session.linkNativeSession(sessionId, null) // clear so preWarm actually re-creates
+    Session.setInitStatus(sessionId, "pending")
+
+    // Same flow as session creation — fire-and-forget, broadcast on success/failure.
+    const warmupDirectory = nativeSessionDirectory(sessionId, collabSession.repos)
+    if (collabSession.repos.length > 0) {
+      initSessionWorkspace(
+        sessionId,
+        collabSession.repos,
+        sess.githubAccessToken,
+        collabSession.name,
+        collabSession.branch,
+        collabSession.participants,
+      )
+        .then(() => {
+          Session.setInitStatus(sessionId, "ready")
+          broadcastSse(sessionId, { type: "collab:workspace_ready", collabSessionId: sessionId })
+          preWarmNativeSession(sessionId, warmupDirectory)
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[collab.reinit] failed:", msg)
+          Session.setInitStatus(sessionId, "failed", msg)
+          broadcastSse(sessionId, {
+            type: "collab:workspace_failed",
+            collabSessionId: sessionId,
+            error: msg,
+          })
+        })
+    } else {
+      Session.setInitStatus(sessionId, "ready")
+      broadcastSse(sessionId, { type: "collab:workspace_ready", collabSessionId: sessionId })
+      preWarmNativeSession(sessionId, warmupDirectory)
+    }
+
+    return json({ ok: true }, 202)
   }
 
   // POST /collab/session/:id/pr — Driver only.  git push + open PR on GitHub.
@@ -1340,6 +1454,12 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       githubLogin: parts[4]!,
       role: body.role as any,
     })
+    // Role change reorders who's the "primary author" (Driver-first heuristic
+    // in pickCommitAuthor).  Refresh so the next commit uses the new ordering
+    // and so we don't co-author with a participant whose role just changed
+    // (in case future per-role filtering is added — currently we credit
+    // everyone regardless of role).
+    refreshParticipantsFileForSession(sessionId)
     return json({ ok: true })
   }
 

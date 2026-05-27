@@ -120,7 +120,28 @@ export function getCollabSession(id: string): CollabSession | null {
       })),
       createdAt: new Date(session.created_at),
       deletedAt: session.deleted_at ? new Date(session.deleted_at) : null,
+      initStatus: (session.init_status ?? "ready") as "pending" | "ready" | "failed",
+      initError: session.init_error ?? null,
     } satisfies CollabSession
+  })
+}
+
+/**
+ * Update the workspace init state.  Callers:
+ *   - router.ts after a successful initSessionWorkspace → setInitStatus(id, "ready").
+ *   - router.ts on initSessionWorkspace failure         → setInitStatus(id, "failed", err.message).
+ *   - reinit endpoint resets to "pending" before kicking off again.
+ */
+export function setInitStatus(
+  collabSessionId: string,
+  status: "pending" | "ready" | "failed",
+  error?: string | null,
+): void {
+  Database.use((db) => {
+    db.update(CollabSessionTable)
+      .set({ init_status: status, init_error: error ?? null })
+      .where(eq(CollabSessionTable.id, collabSessionId))
+      .run()
   })
 }
 
@@ -147,7 +168,7 @@ export function listCollabSessions(ownerGithubId?: number): CollabSession[] {
   })
 }
 
-export function linkNativeSession(collabSessionId: string, sessionId: string): void {
+export function linkNativeSession(collabSessionId: string, sessionId: string | null): void {
   Database.use((db) => {
     db.update(CollabSessionTable)
       .set({ session_id: sessionId })
