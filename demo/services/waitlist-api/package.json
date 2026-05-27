@@ -1,0 +1,19 @@
+{
+  "name": "@securecode/waitlist-api",
+  "private": true,
+  "type": "module",
+  "description": "waitlist 登録を受け取り Firestore に書き込む Cloud Run サービス",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "export": "bun run scripts/export-csv.ts"
+  },
+  "dependencies": {
+    "hono": "^4.12.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.7.3"
+  }
+}

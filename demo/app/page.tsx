@@ -1,6 +1,7 @@
 import { ScrollProgress } from "@/components/ScrollProgress"
 import { TopNav } from "@/components/TopNav"
 import { Hero } from "@/components/Hero"
+import { Waitlist } from "@/components/Waitlist"
 import { SectionProblem } from "@/components/SectionProblem"
 import { SectionTEE } from "@/components/SectionTEE"
 import { SectionHarness } from "@/components/SectionHarness"
@@ -16,11 +17,15 @@ export default function Page() {
       <TopNav />
       <main className="relative z-10">
         <Hero />
+        <Waitlist id="waitlist" />
         <SectionProblem />
         <SectionTEE />
+        <Waitlist variant="inline" />
         <SectionHarness />
         <SectionCoding />
+        <Waitlist variant="inline" />
         <SectionComparison />
+        <Waitlist />
         <CTA />
       </main>
       <Footer />
