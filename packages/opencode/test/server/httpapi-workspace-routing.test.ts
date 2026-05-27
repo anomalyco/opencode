@@ -1,6 +1,6 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Queue, Ref } from "effect"
+import { Context, Effect, Layer, Queue, Ref, Stream } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -268,8 +268,11 @@ describe("HttpApi workspace routing middleware", () => {
           "x-opencode-directory": "/secret/path",
           "x-opencode-workspace": "internal",
         }),
-        HttpClientRequest.bodyJson({ title: "Remote workspace request" }),
-        Effect.flatMap(HttpClient.execute),
+        HttpClientRequest.bodyStream(
+          Stream.make(new TextEncoder().encode('{"title":"Remote '), new TextEncoder().encode('workspace request"}')),
+          { contentType: "application/json" },
+        ),
+        HttpClient.execute,
         Effect.timeout("2 seconds"),
       )
 

@@ -6,6 +6,7 @@ import { WebSocketTracker } from "../websocket-tracker"
 
 function requestBody(request: HttpServerRequest.HttpServerRequest) {
   if (request.method === "GET" || request.method === "HEAD") return HttpBody.empty
+  if (request.source instanceof Request && request.source.body === null) return HttpBody.empty
   const len = request.headers["content-length"]
   return HttpBody.stream(request.stream, request.headers["content-type"], len ? Number(len) : undefined)
 }
