@@ -50,6 +50,8 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
 
     const key = poolKey(internalHeaders)
+    if (!key) return httpFetch(input, httpInit)
+
     const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false }
     pool.set(key, entry)
 
@@ -139,8 +141,11 @@ function invalidate(entry: PoolEntry) {
 }
 
 function poolKey(headers: Record<string, string>) {
+  const sessionID = headers["x-session-affinity"] ?? headers["session_id"]
+  if (!sessionID) return undefined
+
   return [
-    headers["x-session-affinity"] ?? headers["session_id"] ?? "global",
+    sessionID,
     headers[TITLE_HEADER] === "true" ? "title" : "conversation",
   ].join(":")
 }
