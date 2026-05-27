@@ -54,7 +54,7 @@ export async function BedrockAuthPlugin(_input: PluginInput): Promise<Hooks> {
                 return {
                   type: "success" as const,
                   provider: "amazon-bedrock",
-                  key: BEDROCK_CREDENTIAL_CHAIN_MARKER,
+                  key: "",
                   metadata: { source: "credential-chain" },
                 }
               },

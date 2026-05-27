@@ -297,7 +297,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const awsBearerToken = iife(() => {
         const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
         if (envToken) return envToken
-        if (auth?.type === "api" && auth.key !== BEDROCK_CREDENTIAL_CHAIN_MARKER) {
+        if (auth?.type === "api" && auth.key && auth.key !== BEDROCK_CREDENTIAL_CHAIN_MARKER) {
           process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
           _bedrockBearerSetByInit = auth.key
           return auth.key
@@ -313,7 +313,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       // Allow autoload when explicit config exists or credential chain marker was stored via /connect
       const hasExplicitConfig = providerConfig !== undefined
-      const hasCredentialChainMarker = auth?.type === "api" && auth.key === BEDROCK_CREDENTIAL_CHAIN_MARKER
+      const hasCredentialChainMarker =
+        auth?.type === "api" && (auth.key === "" || auth.key === BEDROCK_CREDENTIAL_CHAIN_MARKER)
 
       if (
         !profile &&
