@@ -1149,18 +1149,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
    */
   const handleSubmit = (event: Event) => {
     if (!isCollabEmbed()) return nativeHandleSubmit(event)
-    // LLM is running → this click is "stop", not "send".  Let native abort.
-    if (working()) return nativeHandleSubmit(event)
 
+    // Extract plain text BEFORE deciding stop-vs-queue.  Pills / mentions
+    // render as inline elements with their own text; innerText flattens them
+    // to the literal characters the collab API expects.
+    const editor = editorRef
+    const text = (editor?.innerText ?? editor?.textContent ?? "").trim()
+
+    // Three-state policy for collab embed mode:
+    //
+    //   typed text + idle    → queue (the normal happy path)
+    //   typed text + working → queue ANYWAY.  The collab queue serialises
+    //                          dispatch — the new prompt runs after the
+    //                          current LLM response finishes.  The previous
+    //                          behaviour (delegate to native, which aborts)
+    //                          silently dropped the user's text while the
+    //                          seed prompt was still streaming — the most
+    //                          common case for a freshly-created session.
+    //   empty + working      → native abort (the "stop" button)
+    //   empty + idle         → no-op
+    //
+    // i.e. typing something is ALWAYS treated as "send", never as "stop".
+    // The stop affordance is preserved by the empty-editor → working path.
     event.preventDefault?.()
 
-    // Extract plain text from the contenteditable.  Pills / mentions are
-    // rendered as inline elements with their own text, so innerText preserves
-    // them as plain text (which is what the collab API expects).
-    const editor = editorRef
+    if (!text) {
+      if (working()) return nativeHandleSubmit(event)
+      return
+    }
     if (!editor) return
-    const text = (editor.innerText ?? editor.textContent ?? "").trim()
-    if (!text) return
 
     try {
       window.parent.postMessage(
