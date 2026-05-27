@@ -12,10 +12,10 @@ OpenCode supports standard proxy environment variables and custom certificates f
 OpenCode respects standard proxy environment variables.
 
 ```bash
-# HTTPS proxy (recommended)
-export HTTPS_PROXY=https://proxy.example.com:8080
+# Proxy for HTTPS requests
+export HTTPS_PROXY=http://proxy.example.com:8080
 
-# HTTP proxy (if HTTPS not available)
+# Proxy for HTTP requests
 export HTTP_PROXY=http://proxy.example.com:8080
 
 # Bypass proxy for local server (required)
