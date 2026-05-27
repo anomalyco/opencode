@@ -30,6 +30,7 @@ import { EditorContextProvider } from "@tui/context/editor"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { StartupLoading } from "@tui/component/startup-loading"
+import { SPINNER_FRAMES } from "@tui/component/spinner"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { SyncProviderV2 } from "@tui/context/sync-v2"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -445,6 +446,22 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
+  const [spinnerFrame, setSpinnerFrame] = createSignal(0)
+
+  // Spinner animation for terminal title when session is busy
+  createEffect(() => {
+    if (route.data.type !== "session") {
+      setSpinnerFrame(0)
+      return
+    }
+    const isBusy = sync.session.status(route.data.sessionID) !== "idle"
+    if (!isBusy) {
+      setSpinnerFrame(0)
+      return
+    }
+    const interval = setInterval(() => setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length), 200)
+    onCleanup(() => clearInterval(interval))
+  })
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -457,13 +474,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
-      if (!session || SessionApi.isDefaultTitle(session.title)) {
+      if (!session) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      const status = sync.session.status(route.data.sessionID)
+      const statusPrefix = status === "idle" ? "▣" : SPINNER_FRAMES[spinnerFrame()]
+      renderer.setTerminalTitle(`${statusPrefix} ${title}`)
       return
     }
 
