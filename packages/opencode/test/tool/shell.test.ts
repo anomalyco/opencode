@@ -1026,6 +1026,50 @@ describe("tool.shell permissions", () => {
 })
 
 describe("tool.shell abort", () => {
+  if (process.platform !== "win32") {
+    it.live(
+      "returns when command exits before inherited stdout closes",
+      () =>
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const tmp = yield* tmpdirScoped()
+            const pidfile = path.join(tmp, "child.pid")
+            yield* Effect.addFinalizer(() =>
+              Effect.promise(async () => {
+                const pid = Number(
+                  await Bun.file(pidfile)
+                    .text()
+                    .catch(() => "0"),
+                )
+                if (!pid) return
+                try {
+                  process.kill(pid, "SIGKILL")
+                } catch {}
+              }),
+            )
+
+            const result = yield* run({
+              command: `${bin} -e ${squote(
+                [
+                  'const cp = require("node:child_process")',
+                  'const fs = require("node:fs")',
+                  `const child = cp.spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)"], { detached: true, stdio: ["ignore", "inherit", "ignore"] })`,
+                  `fs.writeFileSync(${JSON.stringify(pidfile)}, String(child.pid))`,
+                  "child.unref()",
+                  'console.log("parent done")',
+                ].join(";"),
+              )}`,
+              description: "Spawn detached child inheriting stdout",
+            })
+            expect(result.metadata.exit).toBe(0)
+            expect(result.output).toContain("parent done")
+          }),
+        ),
+      5_000,
+    )
+  }
+
   it.live(
     "preserves output when aborted",
     () =>

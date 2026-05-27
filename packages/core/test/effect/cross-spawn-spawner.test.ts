@@ -89,6 +89,45 @@ describe("cross-spawn spawner", () => {
     )
 
     fx.effect(
+      "returns exit code before inherited stdout pipe closes",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidfile = path.join(tmp.path, "child.pid")
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(async () => {
+            const pid = Number(await fs.readFile(pidfile, "utf8").catch(() => "0"))
+            if (!pid) return
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          }),
+        )
+
+        const handle = yield* js(
+          [
+            'const { spawn } = require("node:child_process")',
+            'const fs = require("node:fs")',
+            `const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)"], { detached: true, stdio: ["ignore", "inherit", "ignore"] })`,
+            `fs.writeFileSync(${JSON.stringify(pidfile)}, String(child.pid))`,
+            "child.unref()",
+          ].join("\n"),
+        )
+        const code = yield* handle.exitCode.pipe(
+          Effect.timeoutOrElse({
+            duration: "1 second",
+            orElse: () => Effect.fail(new Error("timed out waiting for process exit code")),
+          }),
+        )
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
+
+    fx.effect(
       "returns non-zero exit code",
       Effect.gen(function* () {
         const handle = yield* js("process.exit(42)")
