@@ -168,7 +168,7 @@ export function listCollabSessions(ownerGithubId?: number): CollabSession[] {
   })
 }
 
-export function linkNativeSession(collabSessionId: string, sessionId: string): void {
+export function linkNativeSession(collabSessionId: string, sessionId: string | null): void {
   Database.use((db) => {
     db.update(CollabSessionTable)
       .set({ session_id: sessionId })

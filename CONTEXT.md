@@ -154,6 +154,16 @@ Collab Session.  Stored as rows in `collab_repo`.  Cloned by
 using `GITHUB_TOKEN` for authentication (supports private repos).
 Participants never need local copies.
 
+**Workspace Init Status**
+A `Collab Session`'s lifecycle for the server-side workspace (clone +
+branch checkout + Native Session pre-warm).  One of `pending`, `ready`,
+`failed`.  Persisted as `collab_session.init_status` and broadcast as
+`collab:workspace_ready` / `collab:workspace_failed` SSE events.  The
+SPA gates the iframe mount on `ready` — mounting earlier (e.g. after a
+clone failure) lands opencode against an empty workspace and the
+prompt input locks up.  A Driver can retry a failed init via
+`POST /collab/session/:id/reinit`.
+
 **Workspace Directory**
 The path handed to opencode as the Native Session's working directory.
 Computed by `nativeSessionDirectory(sessionId, repos)`:

@@ -19,6 +19,7 @@
  *   POST /collab/session/:id/resolve      → Driver resolves vote pool
  *   PUT  /collab/session/:id/participant/:ghId/role → change role
  *   GET  /collab/session/:id/events      → SSE stream of CollabEvents
+ *   POST /collab/session/:id/reinit      → Driver retries failed workspace init
  */
 
 import { randomBytes } from "crypto"
@@ -1107,6 +1108,60 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     )
     const c = cfg()
     return json({ ...invite, url: Invite.inviteUrl(c.baseUrl, invite.token) }, 201)
+  }
+
+  // POST /collab/session/:id/reinit — Driver only.  Retry workspace init
+  // after it failed.  Wipes /var/opencode/workspaces/<id>/, resets
+  // init_status → "pending", and kicks initSessionWorkspace again.
+  //
+  // Rate-limited per ADR-0008 (5/hour/user) — the operation is heavy
+  // (full git clone) and we don't want a stuck retry loop spamming GitHub.
+  if (req.method === "POST" && parts[3] === "reinit") {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    const rl = checkRateLimit(`reinit:${sess.githubId}`, 5, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+
+    console.log("[collab.reinit]", { sessionId, login: sess.githubLogin })
+
+    // Wipe the existing workspace dir + revoke the native session id so
+    // preWarmNativeSession actually re-runs (it short-circuits on
+    // collabSession.sessionId).
+    cleanupSessionWorkspace(sessionId)
+    Session.linkNativeSession(sessionId, null) // clear so preWarm actually re-creates
+    Session.setInitStatus(sessionId, "pending")
+
+    // Same flow as session creation — fire-and-forget, broadcast on success/failure.
+    const warmupDirectory = nativeSessionDirectory(sessionId, collabSession.repos)
+    if (collabSession.repos.length > 0) {
+      initSessionWorkspace(
+        sessionId,
+        collabSession.repos,
+        sess.githubAccessToken,
+        collabSession.name,
+        collabSession.branch,
+      )
+        .then(() => {
+          Session.setInitStatus(sessionId, "ready")
+          broadcastSse(sessionId, { type: "collab:workspace_ready", collabSessionId: sessionId })
+          preWarmNativeSession(sessionId, warmupDirectory)
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error("[collab.reinit] failed:", msg)
+          Session.setInitStatus(sessionId, "failed", msg)
+          broadcastSse(sessionId, {
+            type: "collab:workspace_failed",
+            collabSessionId: sessionId,
+            error: msg,
+          })
+        })
+    } else {
+      Session.setInitStatus(sessionId, "ready")
+      broadcastSse(sessionId, { type: "collab:workspace_ready", collabSessionId: sessionId })
+      preWarmNativeSession(sessionId, warmupDirectory)
+    }
+
+    return json({ ok: true }, 202)
   }
 
   // POST /collab/session/:id/pr — Driver only.  git push + open PR on GitHub.
