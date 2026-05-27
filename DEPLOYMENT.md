@@ -487,13 +487,29 @@ Rotation is now a 30-second UI flow with no AWS access required.  The Secrets Ma
 
 ## CI surface
 
-`collab` is the integration branch.  Three workflows live in `.github/workflows/`:
+`collab` is the integration branch.  Two workflows live in `.github/workflows/`:
 
-| Workflow | Triggers | Purpose |
-|---|---|---|
-| `test.yml` | push to `collab`, any PR, `workflow_dispatch` | Unit test matrix across runtimes |
-| `typecheck.yml` | push to `collab`, PR targeting `collab`, `workflow_dispatch` | TS typecheck (`bun typecheck`) |
-| `deploy-collab.yml` | `workflow_dispatch` only | Build image + push to ECR + ECS rollout to utils account |
+| Workflow | Triggers | Jobs | Runner |
+|---|---|---|---|
+| `typecheck.yml` | push to `collab`, PR targeting `collab`, `workflow_dispatch` | `typecheck` (`bun typecheck`) + `parse-smoke` (`bun build --no-bundle` on the Bun runtime entry points) | `ubuntu-latest` |
+| `deploy-collab.yml` | `workflow_dispatch` only | Build image + push to ECR + ECS rollout to utils account | `ubuntu-latest` |
+
+The `parse-smoke` job is the gate that would have caught the 2026-05-27
+incident: it runs `bun build --no-bundle` on `index.ts`, `server.ts`,
+`collab/router.ts`, `collab/native-api.ts`, `collab/workspace.ts` and
+`cli/cmd/serve.ts`.  Bun's parser is stricter than `tsgo` — it rejects
+constructs like `await` outside `async function` at *load* time, which is
+the failure that put the service into a CrashLoop until `f4b0f831b`
+landed.  Add new runtime entry points to the `targets` array in
+`typecheck.yml` if you introduce them.
+
+The upstream sst/opencode `test.yml` (unit + e2e across a Linux + Windows
+matrix on Blacksmith self-hosted runners) was deleted in the same change.
+Blacksmith runners aren't configured for this fork, so every run sat in
+`queued` indefinitely and gated nothing.  The unit + e2e suites also test
+upstream-only paths that don't apply to the collab feature surface.
+Re-introduce a targeted unit test workflow if/when there are collab-fork
+tests worth gating on.
 
 No auto-deploy on push.  Deploys are always operator-initiated:
 
