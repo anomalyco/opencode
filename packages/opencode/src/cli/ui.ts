@@ -1,13 +1,13 @@
 import z from "zod"
 import { EOL } from "os"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@yunpat/core/util/error"
 import { logo as glyphs } from "./logo"
 
 const wordmark = [
-  `⠀                                ▄     `,
-  `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
-  `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
-  `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+  `云熙智能体 · yunpat`,
+  `█░█ █ █ █▀▀ █▀█`,
+  `█▀█ ▀▄▀ █▄▄ █▄█`,
+  `▀░▀  ▀  ▀▀▀ ▀ ▀`,
 ]
 
 export const CancelledError = NamedError.create("UICancelledError", z.void())

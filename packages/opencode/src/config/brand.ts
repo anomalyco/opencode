@@ -53,7 +53,7 @@ export const YUNPAT: BrandConfig = {
   theme: {
     primaryColor: "#2563EB",
     logoPath: "packages/ui/src/assets/brand/hero-lg.webp",
-    iconPath: "packages/ui/src/assets/brand/hero-sm.webp",
+    iconPath: "packages/ui/src/assets/brand/mark-96.png",
   },
 }
 

@@ -1,10 +1,10 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/core/util/path"
+import type { Session } from "@yunpat/sdk/v2/client"
+import { Avatar } from "@yunpat/ui/avatar"
+import { Icon } from "@yunpat/ui/icon"
+import { IconButton } from "@yunpat/ui/icon-button"
+import { Spinner } from "@yunpat/ui/spinner"
+import { Tooltip } from "@yunpat/ui/tooltip"
+import { getFilename } from "@yunpat/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
@@ -20,7 +20,7 @@ import { childSessionOnPath, hasProjectPermissions } from "./helpers"
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+  if (id === OPENCODE_PROJECT_ID) return "/favicon-v3.svg"
   if (icon?.override) return icon?.override
   if (icon?.color) return undefined
   return icon?.url
