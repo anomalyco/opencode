@@ -1,3 +1,5 @@
+import path from "path"
+import { pathToFileURL } from "url"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -140,12 +142,24 @@ export const layer = Layer.effect(
 
       for (const item of yield* skill.all()) {
         if (commands[item.name]) continue
+        const dir = path.dirname(item.location)
+        const base = pathToFileURL(dir).href
         commands[item.name] = {
           name: item.name,
           description: item.description,
           source: "skill",
           get template() {
-            return item.content
+            return [
+              `<skill_content name="${item.name}">`,
+              `# Skill: ${item.name}`,
+              "",
+              item.content.trim(),
+              "",
+              `Base directory for this skill: ${base}`,
+              "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+              "Note: you can use Glob, Grep, and Read tools to find and inspect reference files.",
+              "</skill_content>",
+            ].join("\n")
           },
           hints: [],
         }
