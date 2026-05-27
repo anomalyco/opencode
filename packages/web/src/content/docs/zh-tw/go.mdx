@@ -56,9 +56,10 @@ OpenCode Go 的運作方式與 OpenCode 中的任何其他供應商相同。
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
-- **MiniMax M2.7**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -86,9 +87,10 @@ OpenCode Go 包含以下限制：
 | Kimi K2.6          | 1,150           | 2,880      | 5,750      |
 | MiMo-V2.5 (≤ 256K) | 2,150           | 5,450      | 10,900     |
 | MiMo-V2.5-Pro      | 1,290           | 3,225      | 6,450      |
-| Qwen3.6 Plus       | 3,300           | 8,200      | 16,300     |
 | MiniMax M2.7       | 3,400           | 8,500      | 17,000     |
 | MiniMax M2.5       | 6,300           | 15,900     | 31,800     |
+| Qwen3.7 Max        | 950             | 2,390      | 4,770      |
+| Qwen3.6 Plus       | 3,300           | 8,200      | 16,300     |
 | Qwen3.5 Plus       | 10,200          | 25,200     | 50,500     |
 | DeepSeek V4 Pro    | 3,450           | 8,550      | 17,150     |
 | DeepSeek V4 Flash  | 31,650          | 79,050     | 158,150    |
@@ -100,8 +102,9 @@ OpenCode Go 包含以下限制：
 - DeepSeek V4 Pro — 每次請求 750 個輸入 token、82,000 個快取 token、290 個輸出 token
 - DeepSeek V4 Flash — 每次請求 790 個輸入 token、68,000 個快取 token、280 個輸出 token
 - MiniMax M2.7/M2.5 — 每次請求 300 個輸入 token、55,000 個快取 token、125 個輸出 token
-- Qwen3.5 Plus — 每次請求 410 個輸入 token、47,000 個快取 token、140 個輸出 token
+- Qwen3.7 Max — 每次請求 420 個輸入 token、66,000 個快取 token、200 個輸出 token
 - Qwen3.6 Plus — 每次請求 500 個輸入 token、57,000 個快取 token、190 個輸出 token
+- Qwen3.5 Plus — 每次請求 410 個輸入 token、47,000 個快取 token、140 個輸出 token
 - MiMo-V2.5 — 每次請求 1000 個輸入 token、60,000 個快取 token、140 個輸出 token
 - MiMo-V2.5-Pro — 每次請求 350 個輸入 token、41,000 個快取 token、250 個輸出 token
 
@@ -137,6 +140,7 @@ OpenCode Go 包含以下限制：
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
