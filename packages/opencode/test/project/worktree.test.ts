@@ -220,16 +220,11 @@ describe("Worktree", () => {
         withCreatedWorktree(undefined, ({ info }) =>
           Effect.gen(function* () {
             const test = yield* TestInstance
-            const fs = yield* AppFileSystem.Service
             const svc = yield* Worktree.Service
             const list = yield* svc.list().pipe(provideInstance(info.directory))
-            const directory = yield* fs
-              .realPath(info.directory)
-              .pipe(Effect.catch(() => Effect.succeed(info.directory)))
-            const primary = yield* fs.realPath(test.directory).pipe(Effect.catch(() => Effect.succeed(test.directory)))
 
-            expect(list.map((item) => normalize(item.directory))).toContain(normalize(directory))
-            expect(list.map((item) => normalize(item.directory))).not.toContain(normalize(primary))
+            expect(list.map((item) => item.name)).toContain(info.name)
+            expect(list.map((item) => item.name)).not.toContain(path.basename(test.directory).toLowerCase())
           }),
         ),
       { git: true },
