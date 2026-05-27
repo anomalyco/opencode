@@ -1,6 +1,6 @@
 # OpenAI Responses WebSocket
 
-Enabled by default on `local`, `dev`, and `beta`. Set `OPENCODE_EXPERIMENTAL_WEBSOCKETS=true` in releases.
+Enabled by default on `local`, `dev`, and `beta`. On `latest` and `prod`, set `OPENCODE_EXPERIMENTAL_WEBSOCKETS=true`.
 
 ## Flow
 
@@ -21,7 +21,7 @@ Enabled by default on `local`, `dev`, and `beta`. Set `OPENCODE_EXPERIMENTAL_WEB
 ## Retries
 
 - If WebSocket setup fails or it fails before its first event, replay over HTTP and keep that session on HTTP until idle-pruned.
-- If the server returns `websocket_connection_limit_reached` before output, reconnect up to 5 times, then use HTTP.
+- If the server returns `websocket_connection_limit_reached` before output, reconnect up to 5 times, then follow the same HTTP fallback.
 - If a WebSocket fails after its first event, fail the stream. Do not replay partial output.
 - Abort or cancel closes the socket.
 
