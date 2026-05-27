@@ -1,0 +1,96 @@
+.root {
+  [data-slot="balance"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    min-width: 15rem;
+    width: fit-content;
+
+    @media (max-width: 30rem) {
+      width: 100%;
+    }
+
+    [data-slot="amount"] {
+      padding: var(--space-3-5) var(--space-4);
+      background-color: var(--color-bg-surface);
+      border-radius: var(--border-radius-sm);
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-1);
+      justify-content: flex-end;
+
+      [data-slot="currency"] {
+        position: relative;
+        bottom: 2px;
+        font-size: var(--font-size-lg);
+        color: var(--color-text-muted);
+        font-weight: 400;
+      }
+
+      [data-slot="value"] {
+        font-size: var(--font-size-3xl);
+        font-weight: 500;
+        color: var(--color-text);
+      }
+    }
+
+    [data-slot="create-form"] {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin-top: var(--space-1);
+
+      [data-slot="input-container"] {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+
+      @media (max-width: 30rem) {
+        gap: var(--space-2);
+      }
+
+      input {
+        flex: 1;
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        background-color: var(--color-bg);
+        color: var(--color-text);
+        font-size: var(--font-size-sm);
+        font-family: var(--font-mono);
+
+        &:focus {
+          outline: none;
+          border-color: var(--color-accent);
+        }
+
+        &::placeholder {
+          color: var(--color-text-disabled);
+        }
+      }
+
+      [data-slot="form-actions"] {
+        display: flex;
+        gap: var(--space-2);
+        justify-content: flex-end;
+      }
+
+      [data-slot="form-error"] {
+        color: var(--color-danger);
+        font-size: var(--font-size-sm);
+        line-height: 1.4;
+      }
+    }
+  }
+
+  [data-slot="usage-status"] {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin: 0;
+    line-height: 1.4;
+  }
+}

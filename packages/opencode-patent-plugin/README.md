@@ -4,7 +4,7 @@ YunPat 知识产权智能体 Plugin for OpenCode
 
 ## 概述
 
-本 Plugin 将 [YunPat](https://github.com/xujian519/yunpat)（知识产权全生命周期智能体平台，49 个包、29 个智能体、18.4 万行代码）封装为 OpenCode Plugin，在 OpenCode 的 TUI/Desktop/Web/VSCode 多平台环境中提供专利智能体能力。
+本 Plugin 将 [YunPat](https://github.com/xujian519/yunpat-ts)（知识产权全生命周期智能体平台，49 个包、29 个智能体、18.4 万行代码）封装为 OpenCode Plugin，在 OpenCode 的 TUI/Desktop/Web/VSCode 多平台环境中提供专利智能体能力。
 
 ## 能力
 

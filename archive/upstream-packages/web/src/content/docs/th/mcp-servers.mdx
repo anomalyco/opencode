@@ -1,0 +1,511 @@
+---
+title: MCP เซิร์ฟเวอร์
+description: เพิ่มเครื่องมือ MCP ในพื้นที่และระยะไกล
+---
+
+คุณสามารถเพิ่มเครื่องมือภายนอกให้กับ OpenCode ได้โดยใช้ _Model Context Protocol_ หรือ MCP OpenCode รองรับทั้งเซิร์ฟเวอร์ภายในและเซิร์ฟเวอร์ระยะไกล
+
+เมื่อเพิ่มแล้ว เครื่องมือ MCP จะพร้อมใช้งานโดยอัตโนมัติสำหรับ LLM ควบคู่ไปกับเครื่องมือในตัว
+
+---
+
+#### คำเตือน
+
+เมื่อคุณใช้เซิร์ฟเวอร์ MCP เซิร์ฟเวอร์ดังกล่าวจะเพิ่มบริบท สิ่งนี้สามารถเพิ่มขึ้นได้อย่างรวดเร็วหากคุณมีเครื่องมือมากมาย ดังนั้นเราขอแนะนำให้ระมัดระวังเซิร์ฟเวอร์ MCP ที่คุณใช้
+
+:::tip
+เซิร์ฟเวอร์ MCP เพิ่มในบริบทของคุณ ดังนั้นคุณจึงต้องระวังด้วยว่าเซิร์ฟเวอร์ใดที่คุณเปิดใช้งาน
+:::
+
+เซิร์ฟเวอร์ MCP บางตัว เช่น เซิร์ฟเวอร์ GitHub MCP มีแนวโน้มที่จะเพิ่มโทเค็นจำนวนมากและอาจเกินขีดจำกัดบริบทได้อย่างง่ายดาย
+
+---
+
+## เปิดใช้งาน
+
+คุณสามารถกำหนดเซิร์ฟเวอร์ MCP ได้ใน [OpenCode Config](https://opencode.ai/docs/config/) ภายใต้ `mcp` เพิ่ม MCP แต่ละรายการด้วยชื่อที่ไม่ซ้ำใคร คุณสามารถอ้างอิงถึง MCP ด้วยชื่อได้เมื่อแจ้ง LLM
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+คุณยังสามารถปิดการใช้งานเซิร์ฟเวอร์ได้โดยการตั้งค่า `enabled` เป็น `false` สิ่งนี้มีประโยชน์หากคุณต้องการปิดการใช้งานเซิร์ฟเวอร์ชั่วคราวโดยไม่ต้องลบออกจากการกำหนดค่าของคุณ
+
+---
+
+### การเอาชนะค่าเริ่มต้นระยะไกล
+
+องค์กรสามารถจัดเตรียมเซิร์ฟเวอร์ MCP เริ่มต้นผ่านทางจุดสิ้นสุด `.well-known/opencode` เซิร์ฟเวอร์เหล่านี้อาจถูกปิดใช้งานตามค่าเริ่มต้น ทำให้ผู้ใช้สามารถเลือกใช้เซิร์ฟเวอร์ที่ต้องการได้
+
+หากต้องการเปิดใช้งานเซิร์ฟเวอร์เฉพาะจากการกำหนดค่าระยะไกลขององค์กรของคุณ ให้เพิ่มเซิร์ฟเวอร์ดังกล่าวลงในการกำหนดค่าภายในเครื่องของคุณด้วย `enabled: true`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+ค่าการกำหนดค่าในเครื่องของคุณจะแทนที่ค่าเริ่มต้นระยะไกล ดู [config ลำดับความสำคัญ](/docs/config#precedence-order) สำหรับรายละเอียดเพิ่มเติม
+
+---
+
+## ท้องถิ่น
+
+เพิ่มเซิร์ฟเวอร์ท้องถิ่น MCP โดยใช้ `type` ไปยัง `"local"` ภายในวัตถุ MCP
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+คำสั่งคือวิธีที่เซิร์ฟเวอร์ MCP ท้องถิ่นเริ่มทำงาน คุณยังสามารถส่งผ่านรายการตัวแปรสภาพแวดล้อมได้เช่นกัน
+
+ตัวอย่างเช่น นี่คือวิธีที่คุณสามารถเพิ่มการทดสอบเซิร์ฟเวอร์ [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP เซิร์ฟเวอร์
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+และหากต้องการใช้งาน ฉันสามารถเพิ่ม `use the mcp_everything tool` ในข้อความแจ้งของฉันได้
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### ตัวเลือก
+
+นี่คือตัวเลือกทั้งหมดสำหรับการกำหนดค่าเซิร์ฟเวอร์ MCP ภายในเครื่อง
+
+| ตัวเลือก      | พิมพ์    | ที่จำเป็น | คำอธิบาย                                                                                |
+| ------------- | -------- | --------- | --------------------------------------------------------------------------------------- |
+| `type`        | สตริง    | ย         | ประเภทของการเชื่อมต่อเซิร์ฟเวอร์ MCP ต้องเป็น `"local"`                                 |
+| `command`     | อาร์เรย์ | ย         | คำสั่งและอาร์กิวเมนต์เพื่อรันเซิร์ฟเวอร์ MCP                                            |
+| `environment` | วัตถุ    |           | ตัวแปรสภาพแวดล้อมที่จะตั้งค่าเมื่อรันเซิร์ฟเวอร์                                        |
+| `enabled`     | บูลีน    |           | เปิดหรือปิดใช้งานเซิร์ฟเวอร์ MCP เมื่อเริ่มต้นระบบ                                      |
+| `timeout`     | ตัวเลข   |           | หมดเวลาเป็น ms สำหรับการดึงเครื่องมือจากเซิร์ฟเวอร์ MCP ค่าเริ่มต้นคือ 5,000 (5 วินาที) |
+
+---
+
+## ระยะไกล
+
+เพิ่มเซิร์ฟเวอร์ระยะไกล MCP โดยตั้งค่า `type` เป็น `"remote"`
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+`url` คือ URL ของเซิร์ฟเวอร์ MCP ระยะไกล และด้วยตัวเลือก `headers` คุณสามารถส่งผ่านรายการส่วนหัวได้
+
+---
+
+#### ตัวเลือก
+
+| ตัวเลือก  | พิมพ์  | ที่จำเป็น | คำอธิบาย                                                                                |
+| --------- | ------ | --------- | --------------------------------------------------------------------------------------- |
+| `type`    | สตริง  | ย         | ประเภทของการเชื่อมต่อเซิร์ฟเวอร์ MCP ต้องเป็น `"remote"`                                |
+| `url`     | สตริง  | ย         | URL ของเซิร์ฟเวอร์ MCP ระยะไกล                                                          |
+| `enabled` | บูลีน  |           | เปิดหรือปิดใช้งานเซิร์ฟเวอร์ MCP เมื่อเริ่มต้นระบบ                                      |
+| `headers` | วัตถุ  |           | ส่วนหัวที่จะส่งพร้อมกับคำขอ                                                             |
+| `oauth`   | วัตถุ  |           | การกำหนดค่าการตรวจสอบสิทธิ์ OAuth ดูส่วน [OAuth](#oauth) ด้านล่าง                       |
+| `timeout` | ตัวเลข |           | หมดเวลาเป็น ms สำหรับการดึงเครื่องมือจากเซิร์ฟเวอร์ MCP ค่าเริ่มต้นคือ 5,000 (5 วินาที) |
+
+---
+
+## OAuth
+
+OpenCode จะจัดการการตรวจสอบสิทธิ์ OAuth สำหรับเซิร์ฟเวอร์ MCP ระยะไกลโดยอัตโนมัติ เมื่อเซิร์ฟเวอร์ต้องการการรับรองความถูกต้อง OpenCode จะ:
+
+1. ตรวจหาการตอบสนอง 401 และเริ่มโฟลว์ OAuth
+2. ใช้ **การลงทะเบียนไคลเอ็นต์แบบไดนามิก (RFC 7591)** หากเซิร์ฟเวอร์รองรับ
+3. จัดเก็บโทเค็นอย่างปลอดภัยสำหรับคำขอในอนาคต
+
+---
+
+### อัตโนมัติ
+
+สำหรับเซิร์ฟเวอร์ MCP ที่เปิดใช้งาน OAuth ส่วนใหญ่ ไม่จำเป็นต้องมีการกำหนดค่าพิเศษ เพียงกำหนดค่าเซิร์ฟเวอร์ระยะไกล:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+หากเซิร์ฟเวอร์ต้องมีการตรวจสอบสิทธิ์ OpenCode จะแจ้งให้คุณตรวจสอบความถูกต้องเมื่อคุณพยายามใช้งานครั้งแรก หากไม่เป็นเช่นนั้น คุณสามารถ[ทริกเกอร์โฟลว์ด้วยตนเอง](#การตรวจสอบสิทธิ์) ด้วย `opencode mcp auth <server-name>`
+
+---
+
+### ลงทะเบียนล่วงหน้า
+
+หากคุณมีข้อมูลประจำตัวไคลเอ็นต์จากผู้ให้บริการเซิร์ฟเวอร์ MCP คุณสามารถกำหนดค่าได้:
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### กำลังตรวจสอบสิทธิ์
+
+คุณสามารถทริกเกอร์การตรวจสอบสิทธิ์หรือจัดการข้อมูลประจำตัวได้ด้วยตนเอง
+
+ตรวจสอบสิทธิ์กับเซิร์ฟเวอร์ MCP เฉพาะ:
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+แสดงรายการเซิร์ฟเวอร์ MCP ทั้งหมดและสถานะการตรวจสอบสิทธิ์:
+
+```bash
+opencode mcp list
+```
+
+ลบข้อมูลรับรองที่เก็บไว้:
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+คำสั่ง `mcp auth` จะเปิดเบราว์เซอร์ของคุณเพื่อขออนุญาต หลังจากที่คุณอนุญาตแล้ว OpenCode จะจัดเก็บโทเค็นอย่างปลอดภัยใน `~/.local/share/opencode/mcp-auth.json`
+
+---
+
+#### ปิดการใช้งาน OAuth
+
+หากคุณต้องการปิดการใช้งาน OAuth อัตโนมัติสำหรับเซิร์ฟเวอร์ (เช่น สำหรับเซิร์ฟเวอร์ที่ใช้คีย์ API แทน) ให้ตั้งค่า `oauth` เป็น `false`:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### ตัวเลือก OAuth
+
+| ตัวเลือก       | พิมพ์         | คำอธิบาย                                                                        |
+| -------------- | ------------- | ------------------------------------------------------------------------------- |
+| `oauth`        | วัตถุ \| เท็จ | ออบเจ็กต์การกำหนดค่า OAuth หรือ `false` เพื่อปิดใช้การตรวจจับอัตโนมัติของ OAuth |
+| `clientId`     | สตริง         | รหัสไคลเอ็นต์ OAuth หากไม่ได้ระบุไว้ จะพยายามลงทะเบียนไคลเอ็นต์แบบไดนามิก       |
+| `clientSecret` | สตริง         | ข้อมูลลับไคลเอ็นต์ OAuth หากเซิร์ฟเวอร์การให้สิทธิ์กำหนดไว้                     |
+| `scope`        | สตริง         | ขอบเขต OAuth ที่จะขอระหว่างการให้สิทธิ์                                         |
+
+#### การดีบัก
+
+หากเซิร์ฟเวอร์ MCP ระยะไกลไม่สามารถตรวจสอบสิทธิ์ได้ คุณสามารถวินิจฉัยปัญหาด้วย:
+
+```bash
+# View auth status for all OAuth-capable servers
+opencode mcp auth list
+
+# Debug connection and OAuth flow for a specific server
+opencode mcp debug my-oauth-server
+```
+
+คำสั่ง `mcp debug` แสดงสถานะการตรวจสอบสิทธิ์ปัจจุบัน ทดสอบการเชื่อมต่อ HTTP และพยายามใช้ขั้นตอนการค้นหา OAuth
+
+---
+
+## จัดการ
+
+MCP ของคุณพร้อมใช้งานในฐานะเครื่องมือใน OpenCode ควบคู่ไปกับเครื่องมือในตัว คุณจึงสามารถจัดการผ่านการกำหนดค่า OpenCode ได้เหมือนกับเครื่องมืออื่นๆ
+
+---
+
+### ทั่วโลก
+
+ซึ่งหมายความว่าคุณสามารถเปิดหรือปิดใช้งานได้ทั่วโลก
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+นอกจากนี้เรายังสามารถใช้รูปแบบ glob เพื่อปิดใช้งาน MCP ที่ตรงกันทั้งหมดได้
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+ที่นี่เราใช้รูปแบบ glob `my-mcp*` เพื่อปิดการใช้งาน MCP ทั้งหมด
+
+---
+
+### ต่อตัวแทน
+
+หากคุณมีเซิร์ฟเวอร์ MCP จำนวนมาก คุณอาจต้องการเปิดใช้งานเซิร์ฟเวอร์เหล่านี้ต่อตัวแทนเท่านั้น และปิดใช้งานเซิร์ฟเวอร์เหล่านั้นทั่วโลก เมื่อต้องการทำสิ่งนี้:
+
+1. ปิดการใช้งานเป็นเครื่องมือทั่วโลก
+2. ใน [agent config](/docs/agents#tools) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### รูปแบบ Glob
+
+รูปแบบ glob ใช้รูปแบบ globbing regex แบบง่าย:
+
+- `*` ตรงกับอักขระใดๆ ตั้งแต่ศูนย์ขึ้นไป (เช่น `"my-mcp*"` ตรงกับ `my-mcp_search`, `my-mcp_list` ฯลฯ)
+- `?` ตรงกับอักขระหนึ่งตัวเท่านั้น
+- อักขระอื่นๆ ทั้งหมดตรงกันอย่างแท้จริง
+
+:::note
+MCP เครื่องมือเซิร์ฟเวอร์ได้รับการลงทะเบียนด้วยชื่อเซิร์ฟเวอร์เป็นคำนำหน้า ดังนั้นหากต้องการปิดการใช้งานเครื่องมือทั้งหมดสำหรับเซิร์ฟเวอร์ เพียงใช้:
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## ตัวอย่าง
+
+ด้านล่างนี้เป็นตัวอย่างของเซิร์ฟเวอร์ MCP ทั่วไปบางส่วน คุณสามารถส่ง PR ได้ถ้าคุณต้องการจัดทำเอกสารเซิร์ฟเวอร์อื่น
+
+---
+
+### Sentry
+
+เพิ่ม [เซิร์ฟเวอร์ Sentry MCP](https://mcp.sentry.dev) เพื่อโต้ตอบกับโครงการและปัญหา Sentry ของคุณ
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+หลังจากเพิ่มการกำหนดค่าแล้ว ให้ตรวจสอบสิทธิ์กับ Sentry:
+
+```bash
+opencode mcp auth sentry
+```
+
+ซึ่งจะเป็นการเปิดหน้าต่างเบราว์เซอร์เพื่อดำเนินการโฟลว์ OAuth ให้เสร็จสมบูรณ์ และเชื่อมต่อ OpenCode กับบัญชี Sentry ของคุณ
+
+เมื่อตรวจสอบสิทธิ์แล้ว คุณจะใช้เครื่องมือ Sentry ในข้อความแจ้งเพื่อค้นหาปัญหา โปรเจ็กต์ และข้อมูลข้อผิดพลาดได้
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Context7
+
+เพิ่ม [Context7 MCP server](https://github.com/upstash/context7) เพื่อค้นหาในเอกสาร
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+หากคุณได้ลงทะเบียนสำหรับบัญชีฟรี คุณสามารถใช้รหัส API ของคุณและรับขีดจำกัดอัตราที่สูงขึ้น
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+ที่นี่เราสมมติว่าคุณมีชุดตัวแปรสภาพแวดล้อม `CONTEXT7_API_KEY`
+
+เพิ่ม `use context7` ในข้อความแจ้งของคุณเพื่อใช้เซิร์ฟเวอร์ Context7 MCP
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+หรือคุณสามารถเพิ่มสิ่งนี้ลงใน [AGENTS.md](/docs/rules/) ของคุณได้
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep by Vercel
+
+เพิ่มเซิร์ฟเวอร์ [Grep by Vercel](https://grep.app) MCP เพื่อค้นหาผ่านข้อมูลโค้ดบน GitHub
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+เนื่องจากเราตั้งชื่อเซิร์ฟเวอร์ MCP `gh_grep` คุณสามารถเพิ่ม `use the gh_grep tool` ในข้อความแจ้งของคุณเพื่อให้ตัวแทนใช้งานได้
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+หรือคุณสามารถเพิ่มสิ่งนี้ลงใน [AGENTS.md](/docs/rules/) ของคุณได้
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

@@ -4,10 +4,10 @@
   "version": "1.14.40",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://github.com/xujian519/yunpat-ts",
   "author": {
     "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "email": "hello@yunpat.local"
   },
   "scripts": {
     "typecheck": "tsgo -b",

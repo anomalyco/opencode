@@ -1,0 +1,165 @@
+---
+title: Entreprise
+description: Utiliser OpenCode en toute sécurité dans votre organisation.
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+OpenCode Enterprise est destiné aux organisations qui souhaitent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Cela est possible grâce à une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.
+
+:::note
+OpenCode ne stocke aucune de vos données de code ou de contexte.
+:::
+
+Pour démarrer avec OpenCode Enterprise :
+
+1. Faites un essai en interne avec votre équipe.
+2. **<a href={email}>Contactez-nous</a>** pour discuter des options de tarification et de mise en œuvre.
+
+---
+
+## Essai
+
+OpenCode est open source et ne stocke aucune de vos données de code ou de contexte, vos développeurs peuvent donc simplement [commencer ](/docs/) et effectuer un essai.
+
+---
+
+### Traitement des données
+
+**OpenCode ne stocke pas votre code ni vos données contextuelles.** Tous les traitements s'effectuent localement ou via des appels API directs à votre fournisseur d'IA.
+
+Cela signifie que tant que vous faites appel à un fournisseur de confiance ou à une passerelle IA, vous pouvez utiliser OpenCode en toute sécurité.
+
+La seule mise en garde ici concerne la fonctionnalité facultative `/share`.
+
+---
+
+#### Partager des conversations
+
+Si un utilisateur active la fonctionnalité `/share`, la conversation et les données qui y sont associées sont envoyées au service que nous utilisons pour héberger ces pages de partage sur opencode.ai.
+
+Les données sont actuellement servies via le réseau périphérique de notre CDN et sont mises en cache en périphérie, à proximité de vos utilisateurs.
+
+Nous vous recommandons de désactiver cette option pour votre essai.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[En savoir plus sur le partage](/docs/share).
+
+---
+
+### Propriété du code
+
+**Vous possédez tout le code produit par OpenCode.** Il n'y a aucune restriction de licence ni revendication de propriété.
+
+---
+
+## Tarifs
+
+Nous utilisons un modèle par siège pour OpenCode Enterprise. Si vous disposez de votre propre passerelle LLM, nous ne facturons pas les jetons utilisés. Pour plus de détails sur les options de tarification et de mise en œuvre, **<a href={email}>contactez-nous</a>**.
+
+---
+
+## Déploiement
+
+Une fois que vous avez terminé votre essai et que vous êtes prêt à utiliser OpenCode à votre organisation, vous pouvez **<a href={email}>nous contacter</a>** pour discuter des options de tarification et de mise en œuvre.
+
+---
+
+### Configuration centrale
+
+Nous pouvons configurer OpenCode pour utiliser une seule configuration centrale pour l'ensemble de votre organisation.
+
+Cette configuration centralisée peut s'intégrer à votre fournisseur SSO et garantit que tous les utilisateurs accèdent uniquement à votre passerelle IA interne.
+
+---
+
+### Intégration SSO
+
+Grâce à la configuration centrale, OpenCode peut s'intégrer au fournisseur SSO de votre organisation pour l'authentification.
+
+Cela permet à OpenCode d'obtenir les informations d'identification de votre passerelle IA interne via votre système de gestion des identités existant.
+
+---
+
+### Passerelle IA interne
+
+Avec la configuration centrale, OpenCode peut également être configuré pour utiliser uniquement votre passerelle IA interne.
+
+Vous pouvez également désactiver tous les autres fournisseurs d'IA, en vous assurant que toutes les demandes transitent par l'infrastructure approuvée de votre organisation.
+
+---
+
+### Auto-hébergement
+
+Bien que nous vous recommandons de désactiver les pages de partage pour garantir que vos données ne quittent jamais votre organisation, nous pouvons également vous aider à les auto-héberger sur votre infrastructure.
+
+Ceci est actuellement sur notre feuille de route. Si vous êtes intéressé, **<a href={email}>faites-le-nous savoir</a>**.
+
+---
+
+## FAQ
+
+<details>
+<summary>Qu’est-ce que OpenCode Entreprise ?</summary>
+
+OpenCode Enterprise est destiné aux organisations qui souhaitent s'assurer que leur code et leurs données ne quittent jamais leur infrastructure. Il peut le faire en utilisant une configuration centralisée qui s'intègre à votre SSO et à votre passerelle IA interne.
+
+</details>
+
+<details>
+<summary>Comment démarrer avec OpenCode Enterprise ?</summary>
+
+Commencez simplement par un essai interne avec votre équipe. OpenCode par défaut ne stocke pas votre code ni vos données contextuelles, ce qui facilite le démarrage.
+
+Ensuite, **<a href={email}>contactez-nous</a>** pour discuter des options de tarification et de mise en œuvre.
+
+</details>
+
+<details>
+<summary>Comment fonctionne la tarification d'entreprise ?</summary>
+
+Nous proposons des tarifs d'entreprise par siège. Si vous disposez de votre propre passerelle LLM, nous ne facturons pas les jetons utilisés. Pour plus de détails, **<a href={email}>contactez-nous</a>** pour un devis personnalisé basé sur les besoins de votre organisation.
+
+</details>
+
+<details>
+<summary>Mes données sont-elles sécurisées avec OpenCode Enterprise ?</summary>
+
+Oui. OpenCode ne stocke pas votre code ni vos données contextuelles. Tout le traitement s'effectue localement ou via des appels API directs à votre fournisseur d'IA. Grâce à la configuration centrale et à l'intégration SSO, vos données restent sécurisées au sein de l'infrastructure de votre organisation.
+
+</details>
+
+<details>
+<summary>Pouvons-nous utiliser notre propre registre privé NPM ?</summary>
+
+OpenCode prend en charge les registres npm privés via la prise en charge native des fichiers `.npmrc` de Bun. Si votre organisation utilise un registre privé, tel que JFrog Artifactory, Nexus ou similaire, assurez-vous que les développeurs sont authentifiés avant d'exécuter OpenCode.
+
+Pour configurer l'authentification avec votre registre privé :
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+Cela crée `~/.npmrc` avec les détails d'authentification. OpenCode le détectera automatiquement.
+
+:::caution
+Vous devez être connecté au registre privé avant d'exécuter OpenCode.
+:::
+
+Alternativement, vous pouvez configurer manuellement un fichier `.npmrc` :
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+Les développeurs doivent être connectés au registre privé avant d'exécuter OpenCode pour garantir que les packages peuvent être installés à partir du registre de votre entreprise.
+
+</details>

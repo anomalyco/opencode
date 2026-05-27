@@ -1,0 +1,26 @@
+.root {
+  border: 1px solid var(--sl-color-divider);
+  background-color: var(--sl-color-bg-surface);
+  border-radius: 0.25rem;
+  padding: 0.5rem calc(0.5rem + 3px);
+
+  &[data-flush="true"] {
+    border: none;
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  pre {
+    --shiki-dark-bg: var(--sl-color-bg-surface) !important;
+    background-color: var(--sl-color-bg-surface) !important;
+    line-height: 1.6;
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    span {
+      white-space: break-spaces;
+    }
+  }
+}

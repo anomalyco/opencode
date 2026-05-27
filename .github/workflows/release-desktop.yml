@@ -1,0 +1,54 @@
+name: release-desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Package target"
+        required: true
+        type: choice
+        options:
+          - mac
+          - win
+          - linux
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ${{ inputs.platform == 'win' && 'windows-latest' || 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: packages/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install
+        working-directory: .
+
+      - name: Build desktop renderer
+        run: bun run build
+        env:
+          OPENCODE_CHANNEL: dev
+
+      - name: Package (unsigned)
+        run: |
+          case "${{ inputs.platform }}" in
+            mac) bun run package:mac ;;
+            win) bun run package:win ;;
+            linux) bun run package:linux ;;
+          esac
+        env:
+          OPENCODE_CHANNEL: dev
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yunpat-desktop-${{ inputs.platform }}-${{ github.sha }}
+          path: packages/desktop/dist/
+          if-no-files-found: error

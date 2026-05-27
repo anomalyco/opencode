@@ -1,0 +1,400 @@
+---
+title: TUI
+description: Arbeite mit OpenCode in der Terminal-Oberflaeche.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
+
+Ohne weitere Argumente startet OpenCode die TUI im aktuellen Verzeichnis.
+
+```bash
+opencode
+```
+
+Oder du startest sie fuer ein bestimmtes Arbeitsverzeichnis.
+
+```bash
+opencode /path/to/project
+```
+
+In der TUI kannst du direkt mit einer Nachricht prompten.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## Datei-Referenzen
+
+Mit `@` kannst du Dateien in Nachrichten referenzieren.
+Dabei wird im aktuellen Verzeichnis eine unscharfe Dateisuche genutzt.
+
+:::tip
+Du kannst `@` in Nachrichten fuer Datei-Referenzen verwenden.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+Der Dateiinhalt wird automatisch zur Unterhaltung hinzugefuegt.
+
+---
+
+## Bash-Befehle
+
+Beginne eine Nachricht mit `!`, um einen Shell-Befehl auszufuehren.
+
+```bash frame="none"
+!ls -la
+```
+
+Die Ausgabe landet als Tool-Ergebnis in der Unterhaltung.
+
+---
+
+## Befehle
+
+In der OpenCode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
+Zum Beispiel:
+
+```bash frame="none"
+/help
+```
+
+Viele Befehle haben auch Tastenkombinationen mit `ctrl+x` als Leader-Key.
+[Mehr dazu](/docs/keybinds).
+
+Hier sind alle verfuegbaren Slash-Commands:
+
+---
+
+### connect
+
+Fuegt einen Provider zu OpenCode hinzu. Erlaubt die Auswahl aus verfuegbaren Providern und das Hinzufuegen ihrer API-Keys.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+Kompaktiert die aktuelle Session. _Alias_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**Keybind:** `ctrl+x c`
+
+---
+
+### details
+
+Schaltet Tool-Ausfuehrungsdetails um.
+
+```bash frame="none"
+/details
+```
+
+**Keybind:** `ctrl+x d`
+
+---
+
+### editor
+
+Oeffnet externen Editor zum Verfassen von Nachrichten. Nutzt den in der `EDITOR`-Umgebungsvariable gesetzten Editor. [Mehr dazu](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**Keybind:** `ctrl+x e`
+
+---
+
+### exit
+
+Beendet OpenCode. _Aliase_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**Keybind:** `ctrl+x q`
+
+---
+
+### export
+
+Exportiert die aktuelle Unterhaltung als Markdown und oeffnet sie in deinem Standard-Editor. Nutzt den in der `EDITOR`-Umgebungsvariable gesetzten Editor. [Mehr dazu](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**Keybind:** `ctrl+x x`
+
+---
+
+### help
+
+Zeigt den Hilfedialog.
+
+```bash frame="none"
+/help
+```
+
+**Keybind:** `ctrl+x h`
+
+---
+
+### init
+
+Erstellt oder aktualisiert die `AGENTS.md`-Datei. [Mehr dazu](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**Keybind:** `ctrl+x i`
+
+---
+
+### models
+
+Listet verfuegbare Modelle.
+
+```bash frame="none"
+/models
+```
+
+**Keybind:** `ctrl+x m`
+
+---
+
+### new
+
+Startet eine neue Session. _Alias_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**Keybind:** `ctrl+x n`
+
+---
+
+### redo
+
+Wiederholt eine zuvor rueckgaengig gemachte Nachricht. Nur verfuegbar nach Verwendung von `/undo`.
+
+:::tip
+Auch Dateiaenderungen werden wiederhergestellt.
+:::
+
+Intern nutzt dies Git, um die Dateiaenderungen zu verwalten. Dein Projekt muss also **ein Git-Repository sein**.
+
+```bash frame="none"
+/redo
+```
+
+**Keybind:** `ctrl+x r`
+
+---
+
+### sessions
+
+Listet Sessions und wechselt zwischen ihnen. _Aliase_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**Keybind:** `ctrl+x l`
+
+---
+
+### share
+
+Teilt die aktuelle Session. [Mehr dazu](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**Keybind:** `ctrl+x s`
+
+---
+
+### themes
+
+Listet verfuegbare Themes.
+
+```bash frame="none"
+/theme
+```
+
+**Keybind:** `ctrl+x t`
+
+---
+
+### thinking
+
+Schaltet die Sichtbarkeit von Thinking/Reasoning-Bloecken in der Unterhaltung um. Wenn aktiviert, kannst du den Denkprozess des Modells sehen (bei Modellen, die das unterstuetzen).
+
+:::note
+Dieser Befehl steuert nur, ob Thinking-Bloecke **angezeigt** werden - er aktiviert oder deaktiviert nicht die Reasoning-Faehigkeiten des Modells. Um die Reasoning-Faehigkeiten umzuschalten, nutze `ctrl+t`, um durch die Modell-Varianten zu wechseln.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+Macht die letzte Nachricht in der Unterhaltung rueckgaengig. Entfernt die letzte Benutzernachricht, alle folgenden Antworten und alle Dateiaenderungen.
+
+:::tip
+Auch durchgefuehrte Dateiaenderungen werden rueckgaengig gemacht.
+:::
+
+Intern nutzt dies Git, um die Dateiaenderungen zu verwalten. Dein Projekt muss also **ein Git-Repository sein**.
+
+```bash frame="none"
+/undo
+```
+
+**Keybind:** `ctrl+x u`
+
+---
+
+### unshare
+
+Hebt das Teilen der aktuellen Session auf. [Mehr dazu](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Editor-Einrichtung
+
+Sowohl `/editor` als auch `/export` nutzen den in deiner `EDITOR`-Umgebungsvariable spezifizierten Editor.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    Um es dauerhaft zu machen, fuege dies zu deinem Shell-Profil hinzu;
+    `~/.bashrc`, `~/.zshrc`, etc.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    Um es dauerhaft zu machen, nutze **Systemeigenschaften** > **Umgebungsvariablen**.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    Um es dauerhaft zu machen, fuege dies zu deinem PowerShell-Profil hinzu.
+
+  </TabItem>
+</Tabs>
+
+Beliebte Editoren sind:
+
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim
+- `vim` - Vim
+- `nano` - Nano
+- `notepad` - Windows Notepad
+- `subl` - Sublime Text
+
+:::note
+Einige Editoren wie VS Code muessen mit dem `--wait`-Flag gestartet werden.
+:::
+
+Einige Editoren benoetigen Befehlszeilenargumente, um im blockierenden Modus zu laufen. Das `--wait`-Flag sorgt dafuer, dass der Editor-Prozess blockiert, bis er geschlossen wird.
+
+---
+
+## Konfiguration
+
+Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) anpassen.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
+}
+```
+
+Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
+
+### Optionen
+
+- `theme` - Setzt dein UI-Theme. [Mehr dazu](/docs/themes).
+- `keybinds` - Passt Tastenkombinationen an. [Mehr dazu](/docs/keybinds).
+- `scroll_acceleration.enabled` - Aktiviert Scroll-Beschleunigung im macOS-Stil fuer weiches, natuerliches Scrollen. Wenn aktiviert, erhoeht sich die Scroll-Geschwindigkeit bei schnellen Gesten und bleibt praezise bei langsamen Bewegungen. **Diese Einstellung hat Vorrang vor `scroll_speed` und ueberschreibt es, wenn aktiviert.**
+- `scroll_speed` - Steuert, wie schnell die TUI scrollt (Minimum: `0.001`, unterstuetzt Dezimalwerte). Standard ist `3`. **Hinweis: Wird ignoriert, wenn `scroll_acceleration.enabled` auf `true` gesetzt ist.**
+- `diff_style` - Steuert die Diff-Darstellung. `"auto"` passt sich der Terminalbreite an, `"stacked"` zeigt immer ein einspaltiges Layout.
+
+Verwende `OPENCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
+
+---
+
+## Anpassung
+
+Du kannst verschiedene Aspekte der TUI-Ansicht ueber die Befehlspalette (`ctrl+x h` oder `/help`) anpassen. Diese Einstellungen bleiben ueber Neustarts hinweg erhalten.
+
+---
+
+#### Benutzername-Anzeige
+
+Schaltet um, ob dein Benutzername in Chat-Nachrichten erscheint. Zugriff hierueber:
+
+- Befehlspalette: Suche nach "username" oder "hide username"
+- Die Einstellung wird automatisch gespeichert und bleibt ueber TUI-Sessions hinweg erhalten.

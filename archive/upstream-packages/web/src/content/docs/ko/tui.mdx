@@ -1,0 +1,396 @@
+---
+title: TUI
+description: OpenCode 터미널 사용자 인터페이스 사용.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode는 LLM과 함께 프로젝트 작업을 하기 위한 대화형 터미널 인터페이스(TUI)를 제공합니다.
+
+OpenCode를 실행하면 현재 디렉토리에서 TUI가 시작됩니다.
+
+```bash
+opencode
+```
+
+또는 특정 작업 디렉토리에 대해 시작할 수 있습니다.
+
+```bash
+opencode /path/to/project
+```
+
+TUI에 들어가면 메시지를 입력하여 프롬프트할 수 있습니다.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## 파일 참조
+
+`@`를 사용하여 메시지에서 파일을 참조할 수 있습니다. 이것은 현재 작업 디렉토리에서 퍼지(fuzzy) 파일 검색을 수행합니다.
+
+:::tip
+`@`를 사용하여 메시지에서 파일을 참조할 수 있습니다.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+파일의 내용이 자동으로 대화에 추가됩니다.
+
+---
+
+## Bash 명령
+
+`!`로 메시지를 시작하여 셸 명령을 실행합니다.
+
+```bash frame="none"
+!ls -la
+```
+
+명령의 출력은 도구 결과로 대화에 추가됩니다.
+
+---
+
+## 명령
+
+OpenCode TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을 빠르게 실행할 수 있습니다. 예를 들어:
+
+```bash frame="none"
+/help
+```
+
+대부분의 명령에는 기본 리더 키인 `ctrl+x`를 사용하는 키바인드도 있습니다. [더 알아보기](/docs/keybinds).
+
+사용 가능한 모든 슬래시 명령은 다음과 같습니다:
+
+---
+
+### connect
+
+OpenCode에 공급자를 추가합니다. 사용 가능한 공급자 중에서 선택하고 API 키를 추가할 수 있습니다.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+현재 세션을 압축합니다. _별칭_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**키바인드:** `ctrl+x c`
+
+---
+
+### details
+
+도구 실행 세부 정보 토글.
+
+```bash frame="none"
+/details
+```
+
+**키바인드:** `ctrl+x d`
+
+---
+
+### editor
+
+메시지 작성을 위한 외부 편집기를 엽니다. `EDITOR` 환경 변수에 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**키바인드:** `ctrl+x e`
+
+---
+
+### exit
+
+OpenCode를 종료합니다. _별칭_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**키바인드:** `ctrl+x q`
+
+---
+
+### export
+
+현재 대화를 Markdown으로 내보내고 기본 편집기에서 엽니다. `EDITOR` 환경 변수에 설정된 편집기를 사용합니다. [더 알아보기](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**키바인드:** `ctrl+x x`
+
+---
+
+### help
+
+도움말 대화 상자를 표시합니다.
+
+```bash frame="none"
+/help
+```
+
+**키바인드:** `ctrl+x h`
+
+---
+
+### init
+
+`AGENTS.md` 파일을 생성하거나 업데이트합니다. [더 알아보기](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**키바인드:** `ctrl+x i`
+
+---
+
+### models
+
+사용 가능한 모델 목록을 표시합니다.
+
+```bash frame="none"
+/models
+```
+
+**키바인드:** `ctrl+x m`
+
+---
+
+### new
+
+새 세션을 시작합니다. _별칭_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**키바인드:** `ctrl+x n`
+
+---
+
+### redo
+
+이전에 실행 취소한 메시지를 다시 실행합니다. `/undo`를 사용한 후에만 사용할 수 있습니다.
+
+:::tip
+모든 파일 변경 사항도 복원됩니다.
+:::
+
+내부적으로 Git을 사용하여 파일 변경 사항을 관리합니다. 따라서 프로젝트가 **Git 저장소**여야 합니다.
+
+```bash frame="none"
+/redo
+```
+
+**키바인드:** `ctrl+x r`
+
+---
+
+### sessions
+
+세션 목록을 표시하고 세션 간을 전환합니다. _별칭_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**키바인드:** `ctrl+x l`
+
+---
+
+### share
+
+현재 세션을 공유합니다. [더 알아보기](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**키바인드:** `ctrl+x s`
+
+---
+
+### themes
+
+사용 가능한 테마 목록을 표시합니다.
+
+```bash frame="none"
+/themes
+```
+
+**키바인드:** `ctrl+x t`
+
+---
+
+### thinking
+
+대화에서 생각/추론 블록의 가시성을 토글합니다. 활성화하면 확장된 사고를 지원하는 모델의 추론 과정을 볼 수 있습니다.
+
+:::note
+이 명령은 생각 블록이 **표시되는지 여부만 제어**하며 모델의 추론 기능을 활성화하거나 비활성화하지 않습니다. 실제 추론 기능을 토글하려면 `ctrl+t`를 사용하여 모델 변형을 순환하십시오.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+대화의 마지막 메시지를 실행 취소합니다. 가장 최근의 사용자 메시지, 모든 후속 응답 및 모든 파일 변경 사항을 제거합니다.
+
+:::tip
+모든 파일 변경 사항도 되돌려집니다.
+:::
+
+내부적으로 Git을 사용하여 파일 변경 사항을 관리합니다. 따라서 프로젝트가 **Git 저장소**여야 합니다.
+
+```bash frame="none"
+/undo
+```
+
+**키바인드:** `ctrl+x u`
+
+---
+
+### unshare
+
+현재 세션 공유를 취소합니다. [더 알아보기](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Editor setup
+
+`/editor`와 `/export` 명령 모두 `EDITOR` 환경 변수에 지정된 편집기를 사용합니다.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    영구적으로 설정하려면 셸 프로필(`~/.bashrc`, `~/.zshrc` 등)에 추가하십시오.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    영구적으로 설정하려면 **시스템 속성** > **환경 변수**를 사용하십시오.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    영구적으로 설정하려면 PowerShell 프로필에 추가하십시오.
+
+  </TabItem>
+</Tabs>
+
+인기 있는 편집기 옵션은 다음과 같습니다:
+
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim editor
+- `vim` - Vim editor
+- `nano` - Nano editor
+- `notepad` - Windows Notepad
+- `subl` - Sublime Text
+
+:::note
+VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 합니다.
+:::
+
+일부 편집기는 차단 모드에서 실행하려면 명령줄 인수가 필요합니다. `--wait` 플래그는 편집기 프로세스가 닫힐 때까지 차단되도록 합니다.
+
+---
+
+## 구성
+
+`tui.json` (또는 `tui.jsonc`) 파일을 통해 TUI 동작을 사용자 정의할 수 있습니다.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
+}
+```
+
+이는 서버/런타임 동작을 구성하는 `opencode.json`과는 별개입니다.
+
+### 옵션
+
+- `theme` - UI 테마를 설정합니다. [더 알아보기](/docs/themes).
+- `keybinds` - 키보드 단축키를 사용자 정의합니다. [더 알아보기](/docs/keybinds).
+- `scroll_acceleration.enabled` - 부드럽고 자연스러운 스크롤을 위해 macOS 스타일의 스크롤 가속을 활성화합니다. 활성화하면 빠른 스크롤 제스처로 스크롤 속도가 증가하고 느린 움직임에서는 정밀하게 유지됩니다. **이 설정은 `scroll_speed`보다 우선하며 활성화 시 이를 덮어씁니다.**
+- `scroll_speed` - 스크롤 명령을 사용할 때 TUI 스크롤 속도를 제어합니다 (최소: `0.001`, 소수점 값 지원). 기본값은 `3`입니다. **참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
+- `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 적응하고, `"stacked"`는 항상 단일 열 레이아웃을 표시합니다.
+
+`OPENCODE_TUI_CONFIG`를 사용하여 사용자 정의 TUI 설정 경로를 로드할 수 있습니다.
+
+---
+
+## 사용자 정의
+
+명령 팔레트(`ctrl+x h` 또는 `/help`)를 사용하여 TUI 보기의 다양한 측면을 사용자 정의할 수 있습니다. 설정은 다시 시작해도 유지됩니다.
+
+---
+
+#### 사용자 이름 표시
+
+채팅 메시지에 사용자 이름이 표시되는지 여부를 토글합니다. 다음을 통해 액세스:
+
+- 명령 팔레트: "username" 또는 "hide username" 검색
+- 설정은 자동으로 유지되며 TUI 세션 간에 기억됩니다.

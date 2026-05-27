@@ -1,0 +1,154 @@
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+
+  [data-slot="expand-button"] {
+    flex: 0 0 auto;
+    padding: 2px 0;
+    font-size: 0.857em;
+  }
+
+  [data-slot="markdown"] {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+
+    [data-expanded] & {
+      display: block;
+    }
+
+    font-size: 1em;
+    line-height: 1.5;
+
+    p,
+    blockquote,
+    ul,
+    ol,
+    dl,
+    table,
+    pre {
+      margin-bottom: 1rem;
+    }
+
+    ul,
+    ol {
+      margin-bottom: 0.5rem;
+    }
+
+    /* Add spacing between top-level list items */
+    ol > li {
+      margin-bottom: 0.5rem;
+    }
+
+    strong {
+      font-weight: 600;
+    }
+
+    ol {
+      list-style-position: outside;
+      padding-left: 1.5rem;
+    }
+
+    ul {
+      padding-left: 1.5rem;
+    }
+
+    /* Nested list spacing */
+    li ul,
+    li ol {
+      margin-top: 0.25rem;
+      margin-bottom: 0;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      font-size: 1em;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    & > *:last-child {
+      margin-bottom: 0;
+    }
+
+    pre {
+      --shiki-dark-bg: var(--sl-color-bg-surface) !important;
+      background-color: var(--sl-color-bg-surface) !important;
+      padding: 0.5rem 0.75rem;
+      line-height: 1.6;
+      font-size: 0.857em;
+      white-space: pre-wrap;
+      word-break: break-word;
+
+      span {
+        white-space: break-spaces;
+      }
+    }
+
+    code {
+      font-weight: 500;
+
+      &:not(pre code) {
+        &::before {
+          content: "`";
+          font-weight: 700;
+        }
+
+        &::after {
+          content: "`";
+          font-weight: 700;
+        }
+      }
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--sl-color-border);
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+
+    th {
+      border-bottom: 1px solid var(--sl-color-border);
+    }
+
+    /* Remove outer borders */
+    table tr:first-child th,
+    table tr:first-child td {
+      border-top: none;
+    }
+
+    table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table th:first-child,
+    table td:first-child {
+      border-left: none;
+    }
+
+    table th:last-child,
+    table td:last-child {
+      border-right: none;
+    }
+  }
+
+  [data-component="copy-button"] {
+    top: 0;
+    right: 0;
+  }
+}

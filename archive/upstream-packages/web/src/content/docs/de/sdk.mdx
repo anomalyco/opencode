@@ -1,0 +1,465 @@
+---
+title: SDK
+description: Typsicherer JS-Client fuer den opencode-Server.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+Das opencode JS/TS SDK bietet einen typsicheren Client fuer die Server-API.
+Damit kannst du Integrationen bauen und opencode programmatisch steuern.
+
+[Mehr zum Server](/docs/server). Beispiele findest du in den [Community-Projekten](/docs/ecosystem#projects).
+
+---
+
+## Installation
+
+Installiere das SDK ueber npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Client erstellen
+
+Erstelle eine opencode-Instanz:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Das startet Server und Client.
+
+#### Optionen
+
+| Option     | Type          | Description                    | Default     |
+| ---------- | ------------- | ------------------------------ | ----------- |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
+| `port`     | `number`      | Server port                    | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
+| `config`   | `Config`      | Configuration object           | `{}`        |
+
+---
+
+## Config
+
+Du kannst ein Konfigurationsobjekt uebergeben, um das Verhalten anzupassen.
+`opencode.json` wird weiterhin geladen, kann aber inline ueberschrieben oder erweitert werden:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Nur Client
+
+Wenn opencode bereits laeuft, kannst du nur einen Client erstellen und verbinden:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Optionen
+
+| Option          | Type       | Description                      | Default                 |
+| --------------- | ---------- | -------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
+| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
+| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
+
+---
+
+## Typen
+
+Das SDK bringt TypeScript-Definitionen fuer alle API-Typen mit.
+Du kannst sie direkt importieren:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Alle Typen werden aus der OpenAPI-Spezifikation des Servers generiert und sind in der <a href={typesUrl}>Typdatei</a> verfuegbar.
+
+---
+
+## Fehler
+
+Das SDK kann Fehler werfen, die du abfangen und behandeln kannst:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## Structured Output
+
+Du kannst eine strukturierte JSON-Ausgabe vom Modell anfordern, indem du ein `format` mit einem JSON-Schema angibst. Das Modell verwendet dann ein `StructuredOutput`-Tool, um validiertes JSON zurueckzugeben, das deinem Schema entspricht.
+
+### Grundlegende Verwendung
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Recherchiere Anthropic und gib Firmeninfos zurueck" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Firmenname" },
+          founded: { type: "number", description: "Gruendungsjahr" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Hauptprodukte",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Zugriff auf die strukturierte Ausgabe
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Ausgabeformate
+
+| Type          | Description                                                 |
+| ------------- | ----------------------------------------------------------- |
+| `text`        | Standard. Normale Textantwort (keine strukturierte Ausgabe) |
+| `json_schema` | Gibt validiertes JSON zurueck, das dem Schema entspricht    |
+
+### JSON-Schema-Format
+
+Bei Verwendung von `type: 'json_schema'` musst du Folgendes angeben:
+
+| Field        | Type            | Description                                                   |
+| ------------ | --------------- | ------------------------------------------------------------- |
+| `type`       | `'json_schema'` | Erforderlich. Gibt den JSON-Schema-Modus an                   |
+| `schema`     | `object`        | Erforderlich. JSON-Schema-Objekt, das die Struktur definiert  |
+| `retryCount` | `number`        | Optional. Anzahl der Validierungswiederholungen (Standard: 2) |
+
+### Fehlerbehandlung
+
+Wenn das Modell nach allen Wiederholungen keine valide strukturierte Ausgabe liefert, enthaelt die Antwort einen `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Strukturierte Ausgabe fehlgeschlagen:", result.data.info.error.message)
+  console.error("Versuche:", result.data.info.error.retries)
+}
+```
+
+### Best Practices
+
+1. **Klare Beschreibungen**: Gib in deinen Schema-Properties klare Beschreibungen an, damit das Modell versteht, welche Daten extrahiert werden sollen.
+2. **`required` nutzen**: Definiere, welche Felder zwingend vorhanden sein muessen.
+3. **Schemas einfach halten**: Komplexe verschachtelte Schemas sind fuer das Modell schwerer korrekt auszufuellen.
+4. **`retryCount` anpassen**: Erhoehe den Wert bei komplexen Schemas, verringere ihn bei einfachen.
+
+---
+
+## APIs
+
+Das SDK stellt alle Server-APIs ueber einen typsicheren Client bereit.
+
+---
+
+### Global
+
+| Method            | Description                      | Response                             |
+| ----------------- | -------------------------------- | ------------------------------------ |
+| `global.health()` | Prueft Server-Status und Version | `{ healthy: true, version: string }` |
+
+---
+
+#### Beispiele
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| Method         | Description                      | Response                                    |
+| -------------- | -------------------------------- | ------------------------------------------- |
+| `app.log()`    | Schreibt einen Log-Eintrag       | `boolean`                                   |
+| `app.agents()` | Listet alle verfuegbaren Agenten | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Beispiele
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| Method              | Description                  | Response                                      |
+| ------------------- | ---------------------------- | --------------------------------------------- |
+| `project.list()`    | Listet alle Projekte         | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Ruft das aktuelle Projekt ab | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### Beispiele
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| Method       | Description                | Response                                 |
+| ------------ | -------------------------- | ---------------------------------------- |
+| `path.get()` | Ruft den aktuellen Pfad ab | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Beispiele
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Config
+
+| Method               | Description                          | Response                                                                                              |
+| -------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Ruft Konfigurationsinfos ab          | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Listet Provider und Standard-Modelle | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Beispiele
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sessions
+
+| Method                                                     | Description                                   | Notes                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Listet Sessions                               | Gibt <a href={typesUrl}><code>Session[]</code></a> zurueck                                                                                                                                                                                |
+| `session.get({ path })`                                    | Ruft Session ab                               | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `session.children({ path })`                               | Listet Kind-Sessions                          | Gibt <a href={typesUrl}><code>Session[]</code></a> zurueck                                                                                                                                                                                |
+| `session.create({ body })`                                 | Erstellt Session                              | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `session.delete({ path })`                                 | Loescht Session                               | Gibt `boolean` zurueck                                                                                                                                                                                                                    |
+| `session.update({ path, body })`                           | Aktualisiert Session-Eigenschaften            | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `session.init({ path, body })`                             | Analysiert App und erstellt `AGENTS.md`       | Gibt `boolean` zurueck                                                                                                                                                                                                                    |
+| `session.abort({ path })`                                  | Bricht eine laufende Session ab               | Gibt `boolean` zurueck                                                                                                                                                                                                                    |
+| `session.share({ path })`                                  | Teilt Session                                 | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `session.unshare({ path })`                                | Hebt Teilen der Session auf                   | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `session.summarize({ path, body })`                        | Fasst Session zusammen                        | Gibt `boolean` zurueck                                                                                                                                                                                                                    |
+| `session.messages({ path })`                               | Listet Nachrichten einer Session              | Gibt `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` zurueck                                                                                                              |
+| `session.message({ path })`                                | Ruft Nachrichtendetails ab                    | Gibt `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` zurueck                                                                                                                |
+| `session.prompt({ path, body })`                           | Sendet Prompt-Nachricht                       | `body.noReply: true` gibt UserMessage (nur Kontext) zurueck. Standard gibt <a href={typesUrl}><code>AssistantMessage</code></a> mit AI-Antwort zurueck. Unterstuetzt `body.outputFormat` fuer [strukturierte Ausgabe](#structured-output) |
+| `session.command({ path, body })`                          | Sendet Befehl an Session                      | Gibt `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` zurueck                                                                                                       |
+| `session.shell({ path, body })`                            | Fuehrt Shell-Befehl aus                       | Gibt <a href={typesUrl}><code>AssistantMessage</code></a> zurueck                                                                                                                                                                         |
+| `session.revert({ path, body })`                           | Setzt Nachricht zurueck                       | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `session.unrevert({ path })`                               | Stellt zurueckgesetzte Nachrichten wieder her | Gibt <a href={typesUrl}><code>Session</code></a> zurueck                                                                                                                                                                                  |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Antwortet auf eine Berechtigungsanfrage       | Gibt `boolean` zurueck                                                                                                                                                                                                                    |
+
+---
+
+#### Beispiele
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Files
+
+| Method                    | Description                                 | Response                                                                                    |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Sucht Text in Dateien                       | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Findet Dateien und Verzeichnisse nach Namen | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Findet Workspace-Symbole                    | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Liest eine Datei                            | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Ruft Status fuer getrackte Dateien ab       | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+`find.files` unterstuetzt einige optionale Query-Felder:
+
+- `type`: `"file"` oder `"directory"`
+- `directory`: Ueberschreibt das Projekt-Root fuer die Suche
+- `limit`: Maximale Ergebnisse (1–200)
+
+---
+
+#### Beispiele
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Method                         | Description                    | Response  |
+| ------------------------------ | ------------------------------ | --------- |
+| `tui.appendPrompt({ body })`   | Haengt Text an den Prompt an   | `boolean` |
+| `tui.openHelp()`               | Oeffnet den Hilfedialog        | `boolean` |
+| `tui.openSessions()`           | Oeffnet die Session-Auswahl    | `boolean` |
+| `tui.openThemes()`             | Oeffnet die Theme-Auswahl      | `boolean` |
+| `tui.openModels()`             | Oeffnet die Modell-Auswahl     | `boolean` |
+| `tui.submitPrompt()`           | Sendet den aktuellen Prompt ab | `boolean` |
+| `tui.clearPrompt()`            | Leert den Prompt               | `boolean` |
+| `tui.executeCommand({ body })` | Fuehrt einen Befehl aus        | `boolean` |
+| `tui.showToast({ body })`      | Zeigt Toast-Benachrichtigung   | `boolean` |
+
+---
+
+#### Beispiele
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| Method              | Description                   | Response  |
+| ------------------- | ----------------------------- | --------- |
+| `auth.set({ ... })` | Setzt Authentifizierungsdaten | `boolean` |
+
+---
+
+#### Beispiele
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Events
+
+| Method              | Description               | Response                  |
+| ------------------- | ------------------------- | ------------------------- |
+| `event.subscribe()` | Server-Sent Events Stream | Server-sent events stream |
+
+---
+
+#### Beispiele
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

@@ -1,0 +1,398 @@
+---
+title: TUI
+description: OpenCode terminal kullanıcı arayüzünü kullanma.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode, projelerinizde LLM ile çalışmak için etkileşimli bir terminal arayüzü (TUI) sunar.
+
+OpenCode'u çalıştırdığınızda mevcut dizin için TUI başlar.
+
+```bash
+opencode
+```
+
+İsterseniz belirli bir çalışma dizini için de başlatabilirsiniz.
+
+```bash
+opencode /path/to/project
+```
+
+TUI içine girdiğinizde, bir mesajla istem gönderebilirsiniz.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## Dosya referansları
+
+Mesajlarınızda `@` kullanarak dosyalara referans verebilirsiniz. Bu, mevcut çalışma dizininde bulanık dosya araması yapar.
+
+:::tip
+Mesajlarınızda dosyalara referans vermek için `@` kullanabilirsiniz.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+Dosya içeriği otomatik olarak konuşmaya eklenir.
+
+---
+
+## Bash komutları
+
+Bir mesajı `!` ile başlatarak shell komutu çalıştırın.
+
+```bash frame="none"
+!ls -la
+```
+
+Komut çıktısı bir araç sonucu olarak konuşmaya eklenir.
+
+---
+
+## Komutlar
+
+OpenCode TUI kullanırken `/` ve ardından komut adını yazarak hızlı eylemler çalıştırabilirsiniz. Örneğin:
+
+```bash frame="none"
+/help
+```
+
+Komutların çoğu, lider tuşu `ctrl+x` olan bir kısayola da sahiptir. [Daha fazla bilgi](/docs/keybinds).
+
+İşte mevcut slash komutlarının tümü:
+
+---
+
+### connect
+
+OpenCode'a bir sağlayıcı ekler. Mevcut sağlayıcıları seçip API anahtarları eklemenizi sağlar.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+Mevcut oturumu sıkıştırır. _Takma ad_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**Kısayol:** `ctrl+x c`
+
+---
+
+### details
+
+Araç çalıştırma detaylarını göster/gizle yapar.
+
+```bash frame="none"
+/details
+```
+
+**Kısayol:** `ctrl+x d`
+
+---
+
+### editor
+
+Mesaj yazmak için harici editör açar. `EDITOR` ortam değişkeninde ayarlı editörü kullanır. [Daha fazla bilgi](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**Kısayol:** `ctrl+x e`
+
+---
+
+### exit
+
+OpenCode'dan çıkar. _Takma adlar_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**Kısayol:** `ctrl+x q`
+
+---
+
+### export
+
+Mevcut konuşmayı Markdown olarak dışa aktarır ve varsayılan editörünüzde açar. `EDITOR` ortam değişkeninde ayarlı editörü kullanır. [Daha fazla bilgi](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**Kısayol:** `ctrl+x x`
+
+---
+
+### help
+
+Yardım penceresini gösterir.
+
+```bash frame="none"
+/help
+```
+
+**Kısayol:** `ctrl+x h`
+
+---
+
+### init
+
+`AGENTS.md` dosyasını oluşturur veya günceller. [Daha fazla bilgi](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**Kısayol:** `ctrl+x i`
+
+---
+
+### models
+
+Kullanılabilir modelleri listeler.
+
+```bash frame="none"
+/models
+```
+
+**Kısayol:** `ctrl+x m`
+
+---
+
+### new
+
+Yeni bir oturum başlatır. _Takma ad_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**Kısayol:** `ctrl+x n`
+
+---
+
+### redo
+
+Geri alınan bir mesajı tekrar uygular. Yalnızca `/undo` kullanıldıktan sonra kullanılabilir.
+
+:::tip
+Herhangi bir dosya değişikliği de geri yüklenir.
+:::
+
+Dahili olarak bu işlem dosya değişikliklerini yönetmek için Git kullanır. Bu nedenle projenizin **bir Git deposu olması gerekir**.
+
+```bash frame="none"
+/redo
+```
+
+**Kısayol:** `ctrl+x r`
+
+---
+
+### sessions
+
+Oturumları listeler ve aralarında geçiş yapar. _Takma adlar_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**Kısayol:** `ctrl+x l`
+
+---
+
+### share
+
+Mevcut oturumu paylaşır. [Daha fazla bilgi](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**Kısayol:** `ctrl+x s`
+
+---
+
+### themes
+
+Kullanılabilir temaları listeler.
+
+```bash frame="none"
+/themes
+```
+
+**Kısayol:** `ctrl+x t`
+
+---
+
+### thinking
+
+Konuşmadaki thinking/reasoning bloklarının görünürlüğünü değiştirir. Etkin olduğunda, genişletilmiş düşünmeyi destekleyen modellerin akıl yürütme sürecini görebilirsiniz.
+
+:::note
+Bu komut sadece thinking bloklarının **gösterilip gösterilmeyeceğini** kontrol eder - modelin akıl yürütme yeteneklerini etkinleştirmez veya devre dışı bırakmaz. Gerçek akıl yürütme yeteneklerini değiştirmek için `ctrl+t` kullanarak model varyantları arasında geçiş yapın.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+Konuşmadaki son mesajı geri alır. En son kullanıcı mesajını, sonraki tüm yanıtları ve dosya değişikliklerini kaldırır.
+
+:::tip
+Yapılan tüm dosya değişiklikleri de geri alınır.
+:::
+
+Dahili olarak bu işlem dosya değişikliklerini yönetmek için Git kullanır. Bu nedenle projenizin **bir Git deposu olması gerekir**.
+
+```bash frame="none"
+/undo
+```
+
+**Kısayol:** `ctrl+x u`
+
+---
+
+### unshare
+
+Mevcut oturumun paylaşımını kaldırır. [Daha fazla bilgi](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Editör kurulumu
+
+Hem `/editor` hem de `/export` komutları, `EDITOR` ortam değişkeninde belirtilen editörü kullanır.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    Kalıcı yapmak için bunu kabuk profilinize ekleyin;
+    `~/.bashrc`, `~/.zshrc` vb.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    Kalıcı yapmak için **System Properties** > **Environment
+    Variables** yolunu kullanın.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    Kalıcı yapmak için bunu PowerShell profilinize ekleyin.
+
+  </TabItem>
+</Tabs>
+
+Popüler editör seçenekleri şunları içerir:
+
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim editörü
+- `vim` - Vim editörü
+- `nano` - Nano editörü
+- `notepad` - Windows Notepad
+- `subl` - Sublime Text
+
+:::note
+VS Code gibi bazı editörlerin `--wait` bayrağı ile başlatılması gerekir.
+:::
+
+Bazı editörler bloklama modunda çalışmak için komut satırı argümanlarına ihtiyaç duyar. `--wait` bayrağı, editör süreci kapanana kadar işlemin bloklanmasını sağlar.
+
+---
+
+## Yapılandırma
+
+TUI davranışını `tui.json` (veya `tui.jsonc`) aracılığıyla özelleştirebilirsiniz.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
+}
+```
+
+Bu, sunucu/çalışma zamanı davranışını yapılandıran `opencode.json` dosyasından ayrıdır.
+
+### Seçenekler
+
+- `theme` - UI temanızı ayarlar. [Daha fazla bilgi](/docs/themes).
+- `keybinds` - Klavye kısayollarını özelleştirir. [Daha fazla bilgi](/docs/keybinds).
+- `scroll_acceleration.enabled` - Pürüzsüz, doğal kaydırma için macOS tarzı kaydırma ivmesini etkinleştirin. Etkinleştirildiğinde, kaydırma hızı hızlı kaydırma hareketleriyle artar ve daha yavaş hareketler için hassas kalır. **Bu ayar `scroll_speed` ayarından önceliklidir ve etkinleştirildiğinde onu geçersiz kılar.**
+- `scroll_speed` - Kaydırma komutlarını kullanırken TUI'nin ne kadar hızlı kaydırılacağını kontrol eder (minimum: `0.001`, ondalık değerleri destekler). Varsayılan değer `3`'tür. **Not: `scroll_acceleration.enabled` `true` olarak ayarlanmışsa bu yok sayılır.**
+- `diff_style` - Fark (diff) oluşturmayı kontrol eder. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunlu bir düzen gösterir.
+
+Özel bir TUI yapılandırma yolu yüklemek için `OPENCODE_TUI_CONFIG` kullanın.
+
+---
+
+## Özelleştirme
+
+Komut paletini (`ctrl+x h` veya `/help`) kullanarak TUI görünümünün çeşitli yönlerini özelleştirebilirsiniz. Bu ayarlar yeniden başlatmalar arasında korunur.
+
+---
+
+#### Kullanıcı adı görünümü
+
+Sohbet mesajlarında kullanıcı adınızın görünüp görünmeyeceğini değiştirin. Buna şuradan erişin:
+
+- Komut paleti: "username" veya "hide username" araması yapın
+- Ayar otomatik olarak kalıcı hale gelir ve TUI oturumları arasında hatırlanır

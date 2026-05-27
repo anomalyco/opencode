@@ -1,0 +1,46 @@
+body {
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0-5: 0.125rem;
+  --space-0-75: 0.1875rem;
+  --space-1: 0.25rem;
+  --space-1-5: 0.375rem;
+  --space-2: 0.5rem;
+  --space-2-5: 0.625rem;
+  --space-3: 0.75rem;
+  --space-3-5: 0.875rem;
+  --space-4: 1rem;
+  --space-4-5: 1.125rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 1.75rem;
+  --space-8: 2rem;
+  --space-9: 2.25rem;
+  --space-10: 2.5rem;
+  --space-11: 2.75rem;
+  --space-12: 3rem;
+  --space-14: 3.5rem;
+  --space-16: 4rem;
+  --space-17: 4.25rem;
+  --space-18: 4.5rem;
+  --space-19: 4.75rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  --space-28: 7rem;
+  --space-32: 8rem;
+  --space-36: 9rem;
+  --space-40: 10rem;
+  --space-44: 11rem;
+  --space-48: 12rem;
+  --space-52: 13rem;
+  --space-56: 14rem;
+  --space-60: 15rem;
+  --space-64: 16rem;
+  --space-72: 18rem;
+  --space-80: 20rem;
+  --space-96: 24rem;
+
+  --border-radius-sm: 0.1875rem;
+  --border-radius-md: 0.3125rem;
+  --border-radius-lg: 0.5rem;
+}

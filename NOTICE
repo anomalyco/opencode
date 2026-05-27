@@ -1,0 +1,15 @@
+YunPat (云熙智能体)
+Copyright (c) 2025-2026 YunPat contributors
+
+This product includes software developed from the OpenCode project.
+https://github.com/sst/opencode
+
+OpenCode is Copyright (c) 2025 opencode and licensed under the MIT License.
+See LICENSE for the full MIT text.
+
+Modifications and patent-domain extensions in this repository are
+Copyright (c) 2025-2026 YunPat contributors and are also licensed under MIT
+unless a file states otherwise.
+
+When distributing binaries (CLI, desktop app), include this NOTICE file
+together with LICENSE.

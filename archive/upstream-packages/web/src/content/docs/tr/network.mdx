@@ -1,0 +1,57 @@
+---
+title: Ağ
+description: Proxy'leri ve özel sertifikaları yapılandırın.
+---
+
+opencode, kurumsal ağ ortamları için standart proxy ortam değişkenlerini ve özel sertifikaları destekler.
+
+---
+
+## Vekil Sunucu
+
+opencode respects standard proxy environment variables.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI yerel bir HTTP sunucusuyla iletişim kurar. Yönlendirme döngülerini önlemek için bu bağlantının proxy'sini atlamanız gerekir.
+:::
+
+[CLI flags](/docs/cli#run) kullanarak sunucunun bağlantı noktasını ve ana bilgisayar adını yapılandırabilirsiniz.
+
+---
+
+### Kimlik doğrulama
+
+Proxy'niz temel kimlik doğrulama gerektiriyorsa, kimlik bilgilerini URL dosyasına ekleyin.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+Şifreleri sabit kodlamaktan kaçının. Ortam değişkenlerini veya güvenli kimlik bilgileri deposunu kullanın.
+:::
+
+NTLM veya Kerberos gibi gelişmiş kimlik doğrulaması gerektiren proxy'ler için, kimlik doğrulama yönteminizi destekleyen bir LLM Ağ Geçidi kullanmayı düşünün.
+
+---
+
+## Özel sertifikalar
+
+Kuruluşunuz HTTPS bağlantıları için özel CA'lar kullanıyorsa, opencode'u bunlara güvenecek şekilde yapılandırın.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+Bu hem proxy bağlantıları hem de doğrudan API erişimi için işe yarar.
