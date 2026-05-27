@@ -39,6 +39,7 @@ import { runCollabMigrations } from "./migrate"
 import { collabDb } from "./db-impl"
 import {
   initSessionWorkspace,
+  refreshParticipantsFile,
   cleanupSessionWorkspace,
   sessionWorkspacePath,
   nativeSessionDirectory,
@@ -277,6 +278,23 @@ function preWarmNativeSession(collabSessionId: string, workspacePath: string): v
       console.error("[collab] native session pre-warm failed:", err)
     }
   }, 200) // 200 ms gives the creation response time to flush
+}
+
+/**
+ * Look up a session's current participants + repos and rewrite the per-repo
+ * `.git/collab-participants.json` files.  Future commits inside the workspace
+ * will pick up the new list and emit `Co-authored-by:` trailers for every
+ * current participant.
+ *
+ * Called from participant-mutation sites (invite redemption, role change).
+ * Cheap — one tiny atomic file write per repo.  Silently no-ops if the
+ * workspace hasn't been cloned yet (e.g. for a session whose init is still
+ * in flight or has no repos).
+ */
+function refreshParticipantsFileForSession(collabSessionId: string): void {
+  const cs = Session.getCollabSession(collabSessionId)
+  if (!cs || cs.repos.length === 0) return
+  refreshParticipantsFile(collabSessionId, cs.repos, cs.participants)
 }
 
 /**
@@ -884,6 +902,11 @@ async function handleInviteRedeem(req: Request, token: string): Promise<Response
     participant,
   })
 
+  // Refresh the per-repo participants file so future commits include the
+  // new participant in Co-authored-by trailers.  Fire-and-forget — a failed
+  // refresh shouldn't block the redirect.
+  refreshParticipantsFileForSession(invite.collabSessionId)
+
   // History-based router — the previous hash-prefixed URL ("/#/collab/<id>")
   // made the browser land at "/" (opencode home) because the hash was
   // discarded on the server-side 302 and the SPA never saw the collab path.
@@ -954,7 +977,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       // Token: the creator's OAuth access token (sess.githubAccessToken),
       // which gets baked into the clone URL.  Subsequent push/pull operations
       // reuse it via .git/config.  See ADR-0005 Option B.
-      initSessionWorkspace(created.id, created.repos, sess.githubAccessToken, created.name, created.branch)
+      initSessionWorkspace(
+        created.id,
+        created.repos,
+        sess.githubAccessToken,
+        created.name,
+        created.branch,
+        created.participants,
+      )
         .then(() => {
           Session.setInitStatus(created.id, "ready")
           broadcastSse(created.id, { type: "collab:workspace_ready", collabSessionId: created.id })
@@ -1053,9 +1083,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       // installation re-run idempotently across the whole set.
       const updated = Session.getCollabSession(sessionId)
       if (updated) {
-        initSessionWorkspace(sessionId, added, sess.githubAccessToken, updated.name, updated.branch).catch((err) =>
-          console.error("[collab.patch] workspace init for added repos failed:", err),
-        )
+        initSessionWorkspace(
+          sessionId,
+          added,
+          sess.githubAccessToken,
+          updated.name,
+          updated.branch,
+          updated.participants,
+        ).catch((err) => console.error("[collab.patch] workspace init for added repos failed:", err))
       }
       broadcastSse(sessionId, { type: "collab:repos_added", repos: added, addedBy: sess.githubLogin })
     }
@@ -1139,6 +1174,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
         sess.githubAccessToken,
         collabSession.name,
         collabSession.branch,
+        collabSession.participants,
       )
         .then(() => {
           Session.setInitStatus(sessionId, "ready")
@@ -1418,6 +1454,12 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       githubLogin: parts[4]!,
       role: body.role as any,
     })
+    // Role change reorders who's the "primary author" (Driver-first heuristic
+    // in pickCommitAuthor).  Refresh so the next commit uses the new ordering
+    // and so we don't co-author with a participant whose role just changed
+    // (in case future per-role filtering is added — currently we credit
+    // everyone regardless of role).
+    refreshParticipantsFileForSession(sessionId)
     return json({ ok: true })
   }
 

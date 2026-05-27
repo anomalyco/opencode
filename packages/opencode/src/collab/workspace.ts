@@ -10,7 +10,7 @@
  */
 
 import { spawn } from "child_process"
-import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs"
+import { mkdirSync, rmSync, existsSync, writeFileSync, renameSync } from "fs"
 import { join } from "path"
 import type { Participant } from "@opencode-ai/collab"
 
@@ -84,11 +84,24 @@ export async function initSessionWorkspace(
   userAccessToken: string,
   sessionName: string = "",
   branch: string | null = null,
+  /**
+   * Current participants of this collab session.  Used to:
+   *  1. Set the per-repo `user.name` / `user.email` (the session OWNER is
+   *     the author; nominated via `participants[0]` when role==="driver"
+   *     and it's the session creator).
+   *  2. Write `.git/collab-participants.json` so the prepare-commit-msg
+   *     hook can emit one `Co-authored-by:` line per participant.
+   * Optional for backwards compatibility — falls back to a name-only author
+   * if omitted.  Refresh after participant changes via
+   * `refreshParticipantsFile(sessionId, participants)`.
+   */
+  participants: Participant[] = [],
 ): Promise<void> {
   const root = sessionWorkspacePath(collabSessionId)
   mkdirSync(root, { recursive: true })
 
   const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" }
+  const author = pickCommitAuthor(participants)
 
   for (const repo of repos) {
     const repoName = repo.split("/").pop() ?? repo
@@ -131,9 +144,87 @@ export async function initSessionWorkspace(
       await checkoutCollabBranch(dest, branch, env)
     }
 
+    // Set the commit author identity for this clone.  The session owner is
+    // the primary author; everyone else attaches via Co-authored-by trailers
+    // emitted by the prepare-commit-msg hook.  No external GitHub API call —
+    // the no-reply email is derived from the participant's github id+login.
+    if (author) {
+      await runAsync("git", ["-C", dest, "config", "user.name", author.name], { env }).catch((err) =>
+        console.error("[collab] git config user.name failed:", err),
+      )
+      await runAsync("git", ["-C", dest, "config", "user.email", author.email], { env }).catch(
+        (err) => console.error("[collab] git config user.email failed:", err),
+      )
+    }
+
+    // Drop the participants list next to the hook so the hook can read it
+    // at commit time.  Refreshed by refreshParticipantsFile whenever the
+    // participant list changes (invite redemption, role change, leave).
+    writeParticipantsFile(dest, participants)
+
     // (Re)install the collab commit hook every time — covers fresh clones
     // and existing checkouts that pre-date the feature.
     installCollabCommitHook(dest, collabSessionId, sessionName, repo, branch)
+  }
+}
+
+/**
+ * Pick the GIT commit author for this session.  Heuristic:
+ *   - The first participant with role==="driver" (the session OWNER is
+ *     always a driver and is inserted first by createCollabSession).
+ *   - Falls back to the first participant if no driver found (defensive —
+ *     shouldn't happen because session creation inserts the owner as driver).
+ *   - Returns null if there are no participants at all (legacy callers).
+ */
+function pickCommitAuthor(participants: Participant[]): { name: string; email: string } | null {
+  const driver = participants.find((p) => p.role === "driver") ?? participants[0]
+  if (!driver) return null
+  return {
+    name: driver.githubLogin,
+    email: `${driver.githubId}+${driver.githubLogin}@users.noreply.github.com`,
+  }
+}
+
+/**
+ * Write the participants list to `<repoPath>/.git/collab-participants.json` so
+ * the prepare-commit-msg hook can read it at commit time.  Atomic via
+ * tmpfile + rename so a racing commit doesn't see a half-written file.
+ *
+ * Format: `[{ "id": 123, "login": "alice" }, …]` — minimal because the hook
+ * only needs id + login to construct the no-reply email.
+ */
+function writeParticipantsFile(repoPath: string, participants: Participant[]): void {
+  const gitDir = join(repoPath, ".git")
+  if (!existsSync(gitDir)) return // shouldn't happen for a healthy clone
+  const target = join(gitDir, "collab-participants.json")
+  const tmp = target + ".tmp"
+  const payload = JSON.stringify(
+    participants.map((p) => ({ id: p.githubId, login: p.githubLogin })),
+  )
+  try {
+    writeFileSync(tmp, payload, { mode: 0o644 })
+    renameSync(tmp, target)
+  } catch (err) {
+    console.error("[collab] failed to write participants file at", target, err)
+  }
+}
+
+/**
+ * Refresh `.git/collab-participants.json` in every repo of a collab session.
+ * Called from the routes that mutate participants (invite redemption, role
+ * change, leave) so future commits credit the up-to-date roster.
+ *
+ * Cheap — one tiny file write per repo.  No git operation; no network call.
+ */
+export function refreshParticipantsFile(
+  collabSessionId: string,
+  repos: string[],
+  participants: Participant[],
+): void {
+  for (const repo of repos) {
+    const dest = repoWorkspacePath(collabSessionId, repo)
+    if (!existsSync(join(dest, ".git"))) continue // not cloned yet — init will write it
+    writeParticipantsFile(dest, participants)
   }
 }
 
@@ -308,8 +399,10 @@ function installCollabCommitHook(
 
   const script = `#!/bin/sh
 # Auto-installed by unleashlive/opencode collab — DO NOT EDIT.
-# Appends collab-session trailers to every fresh commit message so commits
-# produced inside a collab workspace are clearly marked.
+# Appends collab-session trailers to every fresh commit message AND emits
+# one Co-authored-by line per current session participant so commits made
+# inside a collab workspace credit all participants on GitHub's contributor
+# graph (uses GitHub's no-reply email format: <id>+<login>@users.noreply.github.com).
 
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
@@ -325,6 +418,26 @@ case "$COMMIT_SOURCE" in
       printf 'Collab-Session-Id: %s\\n' '${safeId}' >> "$COMMIT_MSG_FILE"
       printf 'Collab-Repo: %s\\n' '${safeRepo}' >> "$COMMIT_MSG_FILE"
       ${safeBranch ? `printf 'Collab-Branch: %s\\n' '${safeBranch}' >> "$COMMIT_MSG_FILE"` : `# (no collab branch configured)`}
+
+      # Co-authored-by trailers — one per current participant.  Reads the
+      # JSON file the server keeps fresh; if it's missing (e.g. first commit
+      # before the file landed) we skip co-authorship silently.  The commit's
+      # primary author (git config user.email) is excluded so we don't co-
+      # author ourselves.
+      PARTICIPANTS_FILE="$(git rev-parse --git-dir)/collab-participants.json"
+      if [ -f "$PARTICIPANTS_FILE" ] && command -v node >/dev/null 2>&1; then
+        AUTHOR_EMAIL="$(git config user.email 2>/dev/null || echo "")"
+        node -e '
+          const fs = require("fs")
+          const participants = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+          const authorEmail = process.argv[2] || ""
+          for (const p of participants) {
+            const email = p.id + "+" + p.login + "@users.noreply.github.com"
+            if (email === authorEmail) continue
+            console.log("Co-authored-by: " + p.login + " <" + email + ">")
+          }
+        ' "$PARTICIPANTS_FILE" "$AUTHOR_EMAIL" >> "$COMMIT_MSG_FILE" || true
+      fi
     fi
     ;;
 esac
