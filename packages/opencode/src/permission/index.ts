@@ -157,16 +157,33 @@ export const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            for (const item of state.pending.values()) {
+            for (const id of Array.from(state.pending.keys())) {
+              const item = yield* removePending(state.pending, id, "reject")
+              if (!item) continue
               yield* Deferred.fail(item.deferred, new RejectedError())
             }
-            state.pending.clear()
           }),
         )
 
         return state
       }),
     )
+
+    const removePending = Effect.fn("Permission.removePending")(function* (
+      pending: Map<PermissionID, PendingEntry>,
+      id: PermissionID,
+      reply: Reply,
+    ) {
+      const item = pending.get(id)
+      if (!item) return undefined
+      pending.delete(id)
+      yield* bus.publish(Event.Replied, {
+        sessionID: item.info.sessionID,
+        requestID: item.info.id,
+        reply,
+      })
+      return item
+    })
 
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
@@ -202,25 +219,13 @@ export const layer = Layer.effect(
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
       yield* bus.publish(Event.Asked, info)
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
-      )
+      return yield* Effect.ensuring(Deferred.await(deferred), removePending(pending, id, "reject").pipe(Effect.ignore))
     })
 
     const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
       const { approved, pending } = yield* InstanceState.get(state)
-      const existing = pending.get(input.requestID)
+      const existing = yield* removePending(pending, input.requestID, input.reply)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-
-      pending.delete(input.requestID)
-      yield* bus.publish(Event.Replied, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-        reply: input.reply,
-      })
 
       if (input.reply === "reject") {
         yield* Deferred.fail(
@@ -230,13 +235,8 @@ export const layer = Layer.effect(
 
         for (const [id, item] of pending.entries()) {
           if (item.info.sessionID !== existing.info.sessionID) continue
-          pending.delete(id)
-          yield* bus.publish(Event.Replied, {
-            sessionID: item.info.sessionID,
-            requestID: item.info.id,
-            reply: "reject",
-          })
-          yield* Deferred.fail(item.deferred, new RejectedError())
+          const removed = yield* removePending(pending, id, "reject")
+          if (removed) yield* Deferred.fail(removed.deferred, new RejectedError())
         }
         return
       }
@@ -258,13 +258,8 @@ export const layer = Layer.effect(
           (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
         )
         if (!ok) continue
-        pending.delete(id)
-        yield* bus.publish(Event.Replied, {
-          sessionID: item.info.sessionID,
-          requestID: item.info.id,
-          reply: "always",
-        })
-        yield* Deferred.succeed(item.deferred, undefined)
+        const removed = yield* removePending(pending, id, "always")
+        if (removed) yield* Deferred.succeed(removed.deferred, undefined)
       }
     })
 

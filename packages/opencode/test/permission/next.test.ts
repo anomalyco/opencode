@@ -9,6 +9,7 @@ import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { waitGlobalBusEvent } from "../server/global-bus"
 import { MessageID, SessionID } from "../../src/session/schema"
 
 const bus = Bus.layer
@@ -46,6 +47,22 @@ const waitForPending = (count: number) =>
       Effect.timeoutOrElse({
         duration: "1 second",
         orElse: () => Effect.fail(new Error(`timed out waiting for ${count} pending permission request(s)`)),
+      }),
+    )
+  })
+
+const waitForReplied = (requestID: PermissionID) =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }>()
+    const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
+      if (event.properties.requestID === requestID) Deferred.doneUnsafe(seen, Effect.succeed(event.properties))
+    })
+    yield* Effect.addFinalizer(() => Effect.sync(unsub))
+    return yield* Deferred.await(seen).pipe(
+      Effect.timeoutOrElse({
+        duration: "1 second",
+        orElse: () => Effect.fail(new Error(`timed out waiting for permission replied event: ${requestID}`)),
       }),
     )
   })
@@ -1004,6 +1021,31 @@ it.live("permission requests stay isolated by directory", () =>
 )
 
 it.instance(
+  "ask - publishes replied event when pending request is interrupted",
+  () =>
+    Effect.gen(function* () {
+      const requestID = PermissionID.make("per_interrupt_event")
+      const sessionID = SessionID.make("session_interrupt_event")
+      const replied = yield* waitForReplied(requestID).pipe(Effect.forkScoped)
+      const fiber = yield* ask({
+        id: requestID,
+        sessionID,
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* Fiber.interrupt(fiber)
+      expect(yield* Fiber.join(replied)).toEqual({ sessionID, requestID, reply: "reject" })
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+it.instance(
   "pending permission rejects on instance dispose",
   () =>
     Effect.gen(function* () {
@@ -1026,6 +1068,42 @@ it.instance(
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "pending permission publishes global replied event on instance dispose",
+  () =>
+    Effect.gen(function* () {
+      const requestID = PermissionID.make("per_dispose_event")
+      const sessionID = SessionID.make("session_dispose_event")
+      const test = yield* TestInstance
+      const store = yield* InstanceStore.Service
+      const replied = yield* waitGlobalBusEvent({
+        message: "timed out waiting for global permission replied event",
+        predicate: (event) =>
+          event.directory === test.directory &&
+          event.payload.type === "permission.replied" &&
+          event.payload.properties.requestID === requestID,
+      }).pipe(Effect.forkScoped)
+      const fiber = yield* ask({
+        id: requestID,
+        sessionID,
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      const ctx = yield* store.load({ directory: test.directory })
+      yield* store.dispose(ctx)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect((yield* Fiber.join(replied)).payload.properties).toEqual({ sessionID, requestID, reply: "reject" })
     }),
   { git: true },
 )
