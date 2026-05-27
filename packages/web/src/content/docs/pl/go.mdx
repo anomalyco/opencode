@@ -60,9 +60,10 @@ Obecna lista modeli obejmuje:
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
-- **MiniMax M2.7**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -82,20 +83,21 @@ Limity są zdefiniowane w wartości w dolarach. Oznacza to, że rzeczywista licz
 
 Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych wzorców korzystania z Go:
 
-| Model              | żądania na 5 godzin | żądania na tydzień | żądania na miesiąc |
-| ------------------ | ------------------- | ------------------ | ------------------ |
-| GLM-5.1            | 880                 | 2,150              | 4,300              |
-| GLM-5              | 1,150               | 2,880              | 5,750              |
-| Kimi K2.5          | 1,850               | 4,630              | 9,250              |
-| Kimi K2.6          | 1,150               | 2,880              | 5,750              |
-| MiMo-V2.5 (≤ 256K) | 2,150               | 5,450              | 10,900             |
-| MiMo-V2.5-Pro      | 1,290               | 3,225              | 6,450              |
-| MiniMax M2.7       | 3,400               | 8,500              | 17,000             |
-| MiniMax M2.5       | 6,300               | 15,900             | 31,800             |
-| Qwen3.6 Plus       | 3,300               | 8,200              | 16,300             |
-| Qwen3.5 Plus       | 10,200              | 25,200             | 50,500             |
-| DeepSeek V4 Pro    | 3,450               | 8,550              | 17,150             |
-| DeepSeek V4 Flash  | 31,650              | 79,050             | 158,150            |
+| Model             | żądania na 5 godzin | żądania na tydzień | żądania na miesiąc |
+| ----------------- | ------------------- | ------------------ | ------------------ |
+| GLM-5.1           | 880                 | 2,150              | 4,300              |
+| GLM-5             | 1,150               | 2,880              | 5,750              |
+| Kimi K2.5         | 1,850               | 4,630              | 9,250              |
+| Kimi K2.6         | 1,150               | 2,880              | 5,750              |
+| MiMo-V2.5         | 30,100              | 75,200             | 150,400            |
+| MiMo-V2.5-Pro     | 3,250               | 8,150              | 16,300             |
+| MiniMax M2.7      | 3,400               | 8,500              | 17,000             |
+| MiniMax M2.5      | 6,300               | 15,900             | 31,800             |
+| Qwen3.7 Max       | 950                 | 2,390              | 4,770              |
+| Qwen3.6 Plus      | 3,300               | 8,200              | 16,300             |
+| Qwen3.5 Plus      | 10,200              | 25,200             | 50,500             |
+| DeepSeek V4 Pro   | 3,450               | 8,550              | 17,150             |
+| DeepSeek V4 Flash | 31,650              | 79,050             | 158,150            |
 
 Szacunki opierają się na zaobserwowanych średnich wzorcach żądań:
 
@@ -104,10 +106,11 @@ Szacunki opierają się na zaobserwowanych średnich wzorcach żądań:
 - DeepSeek V4 Pro — 750 tokenów wejściowych, 82 000 w pamięci podręcznej, 290 tokenów wyjściowych na żądanie
 - DeepSeek V4 Flash — 790 tokenów wejściowych, 68 000 w pamięci podręcznej, 280 tokenów wyjściowych na żądanie
 - MiniMax M2.7/M2.5 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
-- Qwen3.5 Plus — 410 tokenów wejściowych, 47 000 w pamięci podręcznej, 140 tokenów wyjściowych na żądanie
+- Qwen3.7 Max — 420 tokenów wejściowych, 66 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - Qwen3.6 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
-- MiMo-V2.5 — 1000 tokenów wejściowych, 60 000 w pamięci podręcznej, 140 tokenów wyjściowych na żądanie
-- MiMo-V2.5-Pro — 350 tokenów wejściowych, 41 000 w pamięci podręcznej, 250 tokenów wyjściowych na żądanie
+- Qwen3.5 Plus — 410 tokenów wejściowych, 47 000 w pamięci podręcznej, 140 tokenów wyjściowych na żądanie
+- MiMo-V2.5 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
+- MiMo-V2.5-Pro — 790 tokenów wejściowych, 86 000 w pamięci podręcznej, 305 tokenów wyjściowych na żądanie
 
 Możesz śledzić swoje bieżące zużycie w **<a href={console}>konsoli</a>**.
 
@@ -141,6 +144,7 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
