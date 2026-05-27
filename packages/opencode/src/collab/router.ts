@@ -1089,7 +1089,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     //
     // Cache-Control: no-store — participant.isOnline flips frequently, we
     // can't risk a stale 200 sitting in a proxy/CDN/browser cache.
-    const repoBranches = await readRepoBranches(sessionId, collabSession.repos)
+    const repoBranches = await readRepoBranches(sessionId, collabSession.repos, collabSession.branch)
     return new Response(
       JSON.stringify({
         ...collabSession,
@@ -1160,7 +1160,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   // Lightweight endpoint the client polls so the left-panel branch
   // display updates when the LLM (or anyone) does `git checkout`.
   if (req.method === "GET" && parts[3] === "branches") {
-    const repoBranches = await readRepoBranches(sessionId, collabSession.repos)
+    const repoBranches = await readRepoBranches(sessionId, collabSession.repos, collabSession.branch)
     return new Response(JSON.stringify({ repoBranches }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },

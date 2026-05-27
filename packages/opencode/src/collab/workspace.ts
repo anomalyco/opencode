@@ -262,12 +262,20 @@ async function checkoutCollabBranch(
   // Already on this branch? no-op.
   try {
     const head = await captureGitOutput(["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], env)
-    if (head.trim() === branch) return
-  } catch { /* fall through */ }
+    const headTrim = head.trim()
+    if (headTrim === branch) {
+      console.log("[collab.checkout] already on", branch, "in", repoPath)
+      return
+    }
+    console.log("[collab.checkout] HEAD=", headTrim, "want=", branch, "in", repoPath)
+  } catch (err) {
+    console.warn("[collab.checkout] rev-parse failed", repoPath, err)
+  }
 
   // Try local
   try {
     await runAsync("git", ["-C", repoPath, "checkout", branch], { env })
+    console.log("[collab.checkout] switched to existing local branch", branch, "in", repoPath)
     return
   } catch { /* fall through */ }
 
@@ -287,15 +295,16 @@ async function checkoutCollabBranch(
       { env },
     )
     await runAsync("git", ["-C", repoPath, "checkout", "-b", branch, `origin/${branch}`], { env })
+    console.log("[collab.checkout] created tracking branch", branch, "from origin in", repoPath)
     return
   } catch { /* fall through */ }
 
   // Create new branch off current HEAD (shallow-clone tip of default branch)
   try {
     await runAsync("git", ["-C", repoPath, "checkout", "-b", branch], { env })
-    console.log("[collab] created new branch", branch, "in", repoPath)
+    console.log("[collab.checkout] created new branch", branch, "off HEAD in", repoPath)
   } catch (err) {
-    console.error("[collab] failed to create branch", branch, "in", repoPath, err)
+    console.error("[collab.checkout] FAILED to create branch", branch, "in", repoPath, err)
   }
 }
 
@@ -328,10 +337,20 @@ export async function readRepoBranch(
   }
 }
 
-/** Bulk variant — reads the current branch for every repo concurrently. */
+/** Bulk variant — reads the current branch for every repo concurrently.
+ *
+ *  Logs a warning when a repo is on a branch that doesn't match the collab
+ *  session's configured branch — surfaces accidental `git checkout main`
+ *  (whether from the LLM or a participant via the iframe terminal) so
+ *  operators can see in CloudWatch what's flipping the branch indicator
+ *  back to the default.  The polling endpoint reports whatever it sees;
+ *  this log is the breadcrumb to track DOWN the cause without surprising
+ *  the user with auto-reverts.
+ */
 export async function readRepoBranches(
   collabSessionId: string,
   repos: string[],
+  expectedBranch?: string | null,
 ): Promise<Record<string, string>> {
   const entries = await Promise.all(
     repos.map(async (repo) => [repo, await readRepoBranch(collabSessionId, repo)] as const),
@@ -339,6 +358,19 @@ export async function readRepoBranches(
   const out: Record<string, string> = {}
   for (const [repo, branch] of entries) {
     if (branch) out[repo] = branch
+    if (expectedBranch && branch && branch !== expectedBranch) {
+      console.warn(
+        "[collab.branches] drift detected — session expects",
+        expectedBranch,
+        "but",
+        repo,
+        "is on",
+        branch,
+        "(collabSessionId=",
+        collabSessionId,
+        ")",
+      )
+    }
   }
   return out
 }
