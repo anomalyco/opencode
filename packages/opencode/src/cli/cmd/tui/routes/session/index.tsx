@@ -968,7 +968,10 @@ export function Session() {
             await Editor.open({
               value: transcript,
               renderer,
-              cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                process.cwd(),
             })
           } else {
             const exportDir = process.cwd()
@@ -981,7 +984,10 @@ export function Session() {
             const result = await Editor.open({
               value: transcript,
               renderer,
-              cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+              cwd:
+                (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+                project.instance.directory() ||
+                process.cwd(),
             })
             if (result !== undefined) {
               await Filesystem.write(filepath, result)
