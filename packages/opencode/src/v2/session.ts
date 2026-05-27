@@ -6,9 +6,8 @@ import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/s
 import * as Database from "@/storage/db"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "./session-message"
-import type { Prompt } from "./session-prompt"
+import { Prompt } from "./session-prompt"
 import { EventV2 } from "./event"
-import { ProjectID } from "@/project/schema"
 import { SessionEvent } from "./session-event"
 import { V2Schema } from "./schema"
 import { optionalOmitUndefined } from "@/util/schema"
@@ -290,12 +289,11 @@ export const layer = Layer.effect(
         return rows.map((row) => decode(row))
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
-        const messageID = SessionMessage.ID.ascending()
+        const messageID = SessionMessage.ID.create()
         const now = Date.now()
 
         const message: SessionMessage.User = new SessionMessage.User({
           id: messageID,
-          sessionID: input.sessionID,
           type: "user",
           text: input.prompt.text,
           files: input.prompt.files ?? [],
@@ -306,19 +304,19 @@ export const layer = Layer.effect(
 
         Database.use((db) =>
           db.insert(SessionMessageTable).values({
-            id: messageID,
+            id: messageID as SessionMessage.ID,
             session_id: input.sessionID,
             type: "user",
             time_created: now,
             time_updated: now,
-            data: { ...Schema.encodeSync(SessionMessage.User)(message), id: messageID, type: "user" },
+            data: { ...Schema.encodeSync(SessionMessage.User)(message), id: messageID, type: "user" } as any,
           }),
         )
 
         EventV2.run(SessionEvent.Prompted.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(now),
-          prompt: input.prompt,
+          prompt: { ...Schema.encodeSync(Prompt)(input.prompt) } as any,
         })
 
         return message
