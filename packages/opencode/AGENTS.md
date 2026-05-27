@@ -128,17 +128,8 @@ See `specs/effect/migration.md` for the compact pattern reference and examples.
 
 Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect/migration.md` for the full pattern.
 
-## Instance.bind — ALS for native callbacks
+## Callback boundaries
 
-`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
+Use `EffectBridge` for native or external callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, plugin callbacks, etc.) that need to re-enter Effect services with instance/workspace context.
 
-Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish` or anything that reads `Instance.directory`.
-
-You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
-
-```typescript
-const cb = Instance.bind((err, evts) => {
-  Bus.publish(MyEvent, { ... })
-})
-nativeAddon.subscribe(dir, cb)
-```
+Plain async code should pass explicit context or stay inside an Effect fiber; do not add ambient instance context shims.

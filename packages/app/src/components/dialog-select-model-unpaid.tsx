@@ -91,7 +91,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             <div class="w-full">
               <List
                 class="w-full px-0"
-                key={(x) => x?.id}
+                key={(p) => p.id}
                 items={providers.popular}
                 activeIcon="plus-small"
                 sortBy={(a, b) => {

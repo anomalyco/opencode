@@ -2,7 +2,6 @@ import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { InstanceRuntime } from "@/project/instance-runtime"
-import { WithInstance } from "@/project/with-instance"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
@@ -77,12 +76,8 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
-    await WithInstance.provide({
-      directory: input.directory,
-      fn: async () => {
-        await upgrade().catch(() => {})
-      },
-    })
+    await InstanceRuntime.load({ directory: input.directory })
+    await upgrade().catch(() => {})
   },
   async reload() {
     await AppRuntime.runPromise(
