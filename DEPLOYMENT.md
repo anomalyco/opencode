@@ -491,17 +491,28 @@ Rotation is now a 30-second UI flow with no AWS access required.  The Secrets Ma
 
 | Workflow | Triggers | Jobs | Runner |
 |---|---|---|---|
-| `typecheck.yml` | push to `collab`, PR targeting `collab`, `workflow_dispatch` | `typecheck` (`bun typecheck`) + `parse-smoke` (`bun build --no-bundle` on the Bun runtime entry points) | `ubuntu-latest` |
+| `parse-smoke.yml` | push to `collab`, PR targeting `collab`, `workflow_dispatch` | `bun build --no-bundle` on the Bun runtime entry points | `ubuntu-latest` |
 | `deploy-collab.yml` | `workflow_dispatch` only | Build image + push to ECR + ECS rollout to utils account | `ubuntu-latest` |
 
-The `parse-smoke` job is the gate that would have caught the 2026-05-27
-incident: it runs `bun build --no-bundle` on `index.ts`, `server.ts`,
-`collab/router.ts`, `collab/native-api.ts`, `collab/workspace.ts` and
-`cli/cmd/serve.ts`.  Bun's parser is stricter than `tsgo` — it rejects
-constructs like `await` outside `async function` at *load* time, which is
-the failure that put the service into a CrashLoop until `f4b0f831b`
-landed.  Add new runtime entry points to the `targets` array in
-`typecheck.yml` if you introduce them.
+The `parse-smoke` workflow is the gate that would have caught the
+2026-05-27 incident: it runs `bun build --no-bundle` on `index.ts`,
+`server.ts`, `collab/router.ts`, `collab/native-api.ts`,
+`collab/workspace.ts` and `cli/cmd/serve.ts`.  Bun's parser is stricter
+than `tsgo` — it rejects constructs like `await` outside `async function`
+at *load* time, which is the failure that put the service into a
+CrashLoop until `f4b0f831b` landed.  Add new runtime entry points to the
+`targets` array in `parse-smoke.yml` if you introduce them.
+
+`bun typecheck` is **not** wired into the gate today.  The collab fork
+carries ~20 pre-existing TS errors (Drizzle ORM type drift in
+`collab/notes.ts`, `collab/session.ts`, `collab/participant.ts`,
+`collab/reactions.ts`, `collab/migrate.ts`; date/number mixups in
+`collab/invite.ts`, `collab/router.ts`; missing id prefix `"nt"` in
+`collab/notes.ts`; an unused `@ts-expect-error` in
+`collab/preview-router.ts`) that the runtime tolerates but `tsgo`
+rejects.  Re-enable the `bun typecheck` step in `parse-smoke.yml` once
+those are resolved; the parse-smoke gate covers the actual
+deploy-breaking failure mode in the meantime.
 
 The upstream sst/opencode `test.yml` (unit + e2e across a Linux + Windows
 matrix on Blacksmith self-hosted runners) was deleted in the same change.
