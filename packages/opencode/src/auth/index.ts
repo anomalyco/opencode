@@ -56,13 +56,29 @@ export const layer = Layer.effect(
 
     const all = Effect.fn("Auth.all")(function* () {
       if (process.env.OPENCODE_AUTH_CONTENT) {
-        try {
-          return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
-        } catch (err) {}
+        const parsed = yield* Effect.try({
+          try: () => JSON.parse(process.env.OPENCODE_AUTH_CONTENT!) as Record<string, unknown>,
+          catch: (cause) => cause,
+        }).pipe(
+          Effect.tapError(() =>
+            Effect.logWarning("OPENCODE_AUTH_CONTENT is set but is not valid JSON; ignoring"),
+          ),
+          Effect.option,
+        )
+        if (parsed._tag === "Some") {
+          return Record.filterMap(parsed.value, (value) => Result.fromOption(decode(value), () => undefined))
+        }
       }
 
-      const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
-      return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+      const data = yield* fsys.readJson(file).pipe(
+        Effect.tapError((err) =>
+          Effect.logWarning(
+            `failed to read auth file at ${file}, treating as empty; run 'opencode auth login' to recover (${String(err)})`,
+          ),
+        ),
+        Effect.orElseSucceed(() => ({}) as Record<string, unknown>),
+      )
+      return Record.filterMap(data as Record<string, unknown>, (value) => Result.fromOption(decode(value), () => undefined))
     })
 
     const get = Effect.fn("Auth.get")(function* (providerID: string) {
