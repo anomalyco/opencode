@@ -455,37 +455,33 @@ this off in the Dockerfile build.
 
 ### How Claude credentials are supplied
 
-Two paths, ranked by suitability for a server deployment:
+Three paths, ranked by suitability for a server deployment:
 
 | | Path | When to pick |
 |---|---|---|
-| ✅ **Recommended (utils / dev)** | Claude Code creds via `CLAUDE_CREDENTIALS_JSON` Secrets Manager entry; `scripts/entrypoint.sh` writes the JSON to `~/.claude/.credentials.json` on container start; the pre-installed `opencode-claude-auth` plugin reads it at runtime.  No `ANTHROPIC_API_KEY` env in the task definition.  Billed to whoever's Claude Pro/Max subscription the creds belong to.  Tokens last a few weeks; rotate by re-dumping. |
-| ⚠️ For metered $ access | `ANTHROPIC_API_KEY` env var (via Secrets Manager) holding a real `sk-ant-...` key.  Set `manage_anthropic_api_key_secret = true` in the terraform module to opt in.  Bypasses the plugin — opencode sees a non-empty key and uses it directly. |
+| ✅ **Recommended (utils / dev)** | **UI upload** — any unleashlive org member visits `/collab/new`, the banner says "No Claude credentials on the server", they paste their Mac's credentials JSON into the textarea and click *Use these credentials*.  Server atomic-writes to the EFS path `/home/opencode/.local/share/opencode/claude-credentials.json` (persisted across container replacement) and symlinks `~/.claude/.credentials.json` to it so the plugin reads/writes the persistent file.  Whoever uploads last wins (container-wide, since the plugin is process-wide).  **No AWS step required.** |
+| Optional pre-seed | `CLAUDE_CREDENTIALS_JSON` Secrets Manager entry, exposed as an env var.  `scripts/entrypoint.sh` writes the JSON to the EFS path on first boot only (subsequent boots skip so UI uploads aren't clobbered).  Useful for fully unattended first-boot but not required — the UI works without it. |
+| For metered $ access | `ANTHROPIC_API_KEY` env var holding a real `sk-ant-...` key.  Bypasses the plugin entirely — opencode sees a non-empty key and uses it directly.  Set `manage_anthropic_api_key_secret = true` in the terraform module to opt in. |
 | ❌ Don't | Set `ANTHROPIC_API_KEY=dummy` in production.  ADR-0001 Phase 4 treats `"dummy"` as missing and fail-fast aborts the boot.  The string only exists as a docker-compose placeholder for local dev where the bind-mounted plugin takes over. |
 
-**Rotating Claude credentials** (utils path) — every few weeks:
+**Rotating Claude credentials** — every few weeks (when you see `opencode-claude-auth: Claude credentials are expired and could not be refreshed` in CloudWatch):
 
-```bash
-# On a Mac with active Claude Code login:
-CREDS=$(security find-generic-password -s "Claude Code-credentials" -w)
-aws secretsmanager put-secret-value \
-  --secret-id collab/claude_credentials \
-  --secret-string "$CREDS" \
-  --profile unleash-utils --region ap-southeast-2
+1. On a Mac with active Claude Code login:
+   ```bash
+   security find-generic-password -s "Claude Code-credentials" -w | pbcopy
+   ```
+2. Open `https://collab.utils.unleashlive.com/collab/new` in a browser.
+3. Banner shows ✓ green "Claude credentials available" with the last-refreshed time.  Click *Replace* (or *Paste credentials* if it's already amber/missing).
+4. Paste the clipboard contents into the textarea → *Use these credentials*.
+5. Banner flips to green with the fresh `refreshed just now`.  Done — next LLM call uses the new tokens.
 
-# Force ECS to restart the task so it re-reads the secret:
-aws ecs update-service \
-  --cluster opencode-collab --service opencode-collab \
-  --force-new-deployment \
-  --profile unleash-utils --region ap-southeast-2
+Rotation is now a 30-second UI flow with no AWS access required.  The Secrets Manager `CLAUDE_CREDENTIALS_JSON` path remains supported for IaC / unattended seeding but isn't on the critical path anymore.
 
-# Watch the rollout finish:
-aws ecs wait services-stable \
-  --cluster opencode-collab --services opencode-collab \
-  --profile unleash-utils --region ap-southeast-2
-```
-
-If you see `opencode-claude-auth: Claude credentials are expired and could not be refreshed` in the logs, that's the signal — the refresh token has aged out and a fresh dump is required.
+**Bootstrapping from scratch** (no AWS, no env var):
+- Deploy the ECS task with no `CLAUDE_CREDENTIALS_JSON` secret.
+- `serve.ts` Phase 4 check WILL fail-fast (it requires either a real API key OR an existing creds file).  Set `ANTHROPIC_API_KEY=dummy` as a temporary placeholder OR set `OPENCODE_ALLOW_UNAUTHENTICATED=1` for the very first boot, ECS task comes up.
+- Visit `/collab/new` → amber banner → paste creds → ✓.
+- Remove the temporary `dummy` (set `OPENCODE_ALLOW_UNAUTHENTICATED` back to unset) on the next deploy — by then EFS has real creds, the Phase 4 check sees the file and passes.
 
 ---
 

@@ -42,21 +42,31 @@ EFS_CREDS="$HOME_DIR/.local/share/opencode/claude-credentials.json"
 
 mkdir -p "$HOME_DIR/.claude" "$(dirname "$EFS_CREDS")"
 
-# ECS path: env var present.  Seed EFS on first boot if empty, then symlink.
-# Local path: env var unset.  Either the bind-mount provides credentials at
-# CANONICAL or the user has no Claude auth (Anthropic API key path).
-if [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
-  if [ ! -s "$EFS_CREDS" ]; then
-    printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$EFS_CREDS"
-    chmod 0600 "$EFS_CREDS"
-    echo "[entrypoint] seeded $EFS_CREDS from CLAUDE_CREDENTIALS_JSON ($(wc -c < "$EFS_CREDS") bytes)"
-  else
-    echo "[entrypoint] $EFS_CREDS already present ($(wc -c < "$EFS_CREDS") bytes) — keeping existing"
-  fi
-  # Always (re)link CANONICAL → EFS so plugin refresh writes hit the
-  # persistent file.  -L: remove if it's any kind of symlink already;
-  # -f also handles the case where it was a regular file from a prior
-  # entrypoint version.
+# Optional env-seed: if Secrets Manager (or any other shipping mechanism) put
+# the credentials JSON in $CLAUDE_CREDENTIALS_JSON, write it to EFS on first
+# boot.  Subsequent boots skip this so UI-uploaded creds aren't clobbered.
+if [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ] && [ ! -s "$EFS_CREDS" ]; then
+  printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$EFS_CREDS"
+  chmod 0600 "$EFS_CREDS"
+  echo "[entrypoint] seeded $EFS_CREDS from CLAUDE_CREDENTIALS_JSON ($(wc -c < "$EFS_CREDS") bytes)"
+elif [ -s "$EFS_CREDS" ]; then
+  echo "[entrypoint] $EFS_CREDS already present ($(wc -c < "$EFS_CREDS") bytes) — keeping existing"
+fi
+
+# Symlink the canonical path to EFS in two cases:
+#   (a) the EFS file exists (env-seeded above, persisted from a prior boot,
+#       OR uploaded via the UI at /collab/new on a prior run), OR
+#   (b) the env var is set on this boot (covers a brand-new ECS task that's
+#       about to be seeded; we link first so writeCredentials and plugin
+#       refresh both land on EFS even if we somehow skipped the seed block).
+#
+# Skipped entirely for local docker-compose: env var is unset AND the EFS
+# file doesn't exist, so the bind-mount's regular file at $CANONICAL stays
+# untouched.  Once the user uploads via the UI in a containerised dev,
+# subsequent boots will find $EFS_CREDS and start symlinking.
+if [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ] || [ -e "$EFS_CREDS" ]; then
+  # Force-relink: tolerates a stale symlink from a prior boot or a regular
+  # file left by an older entrypoint version.  Always idempotent.
   rm -f "$CANONICAL"
   ln -s "$EFS_CREDS" "$CANONICAL"
 fi

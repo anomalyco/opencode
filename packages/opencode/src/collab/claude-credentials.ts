@@ -27,8 +27,8 @@
  * sync).  Process-wide is the realistic model.
  */
 
-import { existsSync, renameSync, statSync, writeFileSync, readFileSync } from "fs"
-import { join } from "path"
+import { existsSync, lstatSync, mkdirSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync, readFileSync } from "fs"
+import { dirname, join } from "path"
 import { homedir } from "os"
 
 /** Canonical EFS path for the credentials file.  Override via env for tests. */
@@ -41,6 +41,57 @@ export function credentialsPath(): string {
     "opencode",
     "claude-credentials.json",
   )
+}
+
+/**
+ * Canonical path the opencode-claude-auth plugin reads at runtime —
+ * `~/.claude/.credentials.json`.  We symlink this to the EFS path
+ * (`credentialsPath()`) so the plugin's reads + refresh-writes both
+ * land on EFS, surviving container replacement.
+ */
+function canonicalPluginPath(): string {
+  return join(process.env["HOME"] ?? homedir() ?? "/home/opencode", ".claude", ".credentials.json")
+}
+
+/**
+ * Ensure the canonical plugin path is a symlink to the EFS file.  Idempotent:
+ *
+ *   - If already symlinked correctly → no-op.
+ *   - If a stale symlink points elsewhere → repoint.
+ *   - If a regular file exists (e.g. local docker-compose bind-mount) → leave
+ *     it alone.  Local dev runs the bind-mount path; we must not clobber it.
+ *   - If absent → create the directory + symlink.
+ *
+ * Called by writeCredentials so the very first UI upload makes the file
+ * visible to the plugin without requiring a container restart.  Also a
+ * defence-in-depth backstop if scripts/entrypoint.sh's setup missed (e.g.
+ * unrecognised env-var combinations).
+ */
+function ensureCanonicalSymlink(): void {
+  const target = credentialsPath()
+  const canonical = canonicalPluginPath()
+  try {
+    mkdirSync(dirname(canonical), { recursive: true })
+    let existing: ReturnType<typeof lstatSync> | null = null
+    try {
+      existing = lstatSync(canonical)
+    } catch {
+      // ENOENT → nothing exists, fall through to symlink creation
+    }
+    if (existing?.isSymbolicLink()) {
+      // Repoint only if the current symlink target is wrong.
+      // (Read via fs.readlink would tell us; cheapest path is just to
+      // unlink + relink — saves an extra syscall and is idempotent.)
+      unlinkSync(canonical)
+    } else if (existing?.isFile()) {
+      // Regular file (local docker-compose bind-mount) — DO NOT TOUCH.
+      // The bind-mount provides credentials directly from the host.
+      return
+    }
+    symlinkSync(target, canonical)
+  } catch (err) {
+    console.warn("[collab.claude-creds] failed to ensure canonical symlink:", err)
+  }
 }
 
 export interface CredentialsStatus {
@@ -111,9 +162,18 @@ export function writeCredentials(jsonString: string): { email?: string; bytes: n
   }
 
   const path = credentialsPath()
+  mkdirSync(dirname(path), { recursive: true })
   const tmp = path + ".tmp"
   writeFileSync(tmp, jsonString, { mode: 0o600 })
   renameSync(tmp, path) // atomic on the same filesystem
+
+  // Make the file immediately visible to the opencode-claude-auth plugin by
+  // ensuring ~/.claude/.credentials.json is a symlink to this EFS path.
+  // Without this, a UI-only bootstrap (no Secrets Manager seed) leaves the
+  // plugin's canonical read path absent on the FIRST upload — the user
+  // would have to wait for the next container restart for entrypoint.sh
+  // to set up the symlink.
+  ensureCanonicalSymlink()
 
   return {
     email: typeof parsed.email === "string" ? parsed.email : undefined,
