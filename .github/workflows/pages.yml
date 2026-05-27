@@ -41,6 +41,10 @@ jobs:
         # アクセス計測が走らない安全側のデフォルト。
         env:
           NEXT_PUBLIC_GTM_ID: ${{ vars.DEMO_GTM_ID }}
+          # waitlist フォームの送信先 (Cloud Run)。repo Variables の
+          # DEMO_WAITLIST_ENDPOINT から差し込む。未設定ならフォームは送信時に
+          # エラー表示になる安全側のデフォルト。
+          NEXT_PUBLIC_WAITLIST_ENDPOINT: ${{ vars.DEMO_WAITLIST_ENDPOINT }}
         run: bun run build
 
       # out/ をそのまま Pages の DocumentRoot として置く。
