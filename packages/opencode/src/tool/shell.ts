@@ -301,7 +301,7 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
     cwd,
     env,
     stdin: "ignore",
-    detached: process.platform !== "win32",
+    detached: false,
   })
 }
 const parser = lazy(async () => {
