@@ -146,6 +146,27 @@ function completedToolEvent(
   return { directory: cwd, payload }
 }
 
+function textPartUpdated(sessionId: string, cwd: string, messageID: string, partID: string, text: string) {
+  return {
+    directory: cwd,
+    payload: {
+      id: `evt_${sessionId}_${messageID}_${partID}_updated`,
+      type: "message.part.updated",
+      properties: {
+        sessionID: sessionId,
+        time: Date.now(),
+        part: {
+          id: partID,
+          sessionID: sessionId,
+          messageID,
+          type: "text",
+          text,
+        },
+      },
+    },
+  } satisfies GlobalEventEnvelope
+}
+
 function createEventStream() {
   const queue: GlobalEventEnvelope[] = []
   const waiters: Array<(value: GlobalEventEnvelope | undefined) => void> = []
@@ -477,6 +498,47 @@ describe("acp.agent event subscription", () => {
         expect(b).toContain(tokenB.join(""))
         for (const part of tokenB) expect(a).not.toContain(part)
         for (const part of tokenA) expect(b).not.toContain(part)
+
+        stop()
+      },
+    })
+  })
+
+  test("emits only the missing text suffix from message.part.updated", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, chunks, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_tail",
+              partID: "msg_tail_part",
+              field: "text",
+              delta: "hello",
+            },
+          },
+        } as any)
+        controller.push(textPartUpdated(sessionId, cwd, "msg_tail", "msg_tail_part", "hello world"))
+
+        await pollUntil(() => (chunks.get(sessionId) ?? "") === "hello world", "updated text suffix never arrived")
+
+        expect(
+          sessionUpdates
+            .filter((u) => u.sessionId === sessionId && u.update.sessionUpdate === "agent_message_chunk")
+            .map((u) =>
+              u.update.sessionUpdate === "agent_message_chunk" && u.update.content.type === "text"
+                ? u.update.content.text
+                : "",
+            ),
+        ).toEqual(["hello", " world"])
 
         stop()
       },

@@ -154,6 +154,24 @@ function partUpdated(sessionID: string, messageID: string, partID: string, type:
   }
 }
 
+function textPartUpdated(sessionID: string, messageID: string, partID: string, text: string): Event {
+  return {
+    id: `evt_${sessionID}_${messageID}_${partID}_updated`,
+    type: "message.part.updated",
+    properties: {
+      sessionID,
+      time: Date.now(),
+      part: {
+        id: partID,
+        sessionID,
+        messageID,
+        type: "text",
+        text,
+      },
+    },
+  }
+}
+
 function toolUpdated(part: ToolPart): Event {
   return {
     id: `evt_${part.sessionID}_${part.messageID}_${part.id}_${part.state.status}`,
@@ -344,6 +362,28 @@ describe("acp-next event routing", () => {
     expect(
       harness.updates.filter((update) => update.sessionId === "ses_b").map((update) => update.update.sessionUpdate),
     ).toEqual(["agent_thought_chunk", "agent_thought_chunk"])
+  })
+
+  it("emits only the missing text suffix from message.part.updated", async () => {
+    const harness = createHarness()
+    await createKnownSession(harness.session, "ses_tail", {
+      messageId: "msg_tail",
+      partId: "part_tail",
+      partType: "text",
+    })
+
+    await harness.subscription.handle(textDelta("ses_tail", "msg_tail", "part_tail", "hello"))
+    await harness.subscription.handle(textPartUpdated("ses_tail", "msg_tail", "part_tail", "hello world"))
+
+    expect(
+      harness.updates
+        .filter((update) => update.update.sessionUpdate === "agent_message_chunk")
+        .map((update) =>
+          update.update.sessionUpdate === "agent_message_chunk" && update.update.content.type === "text"
+            ? update.update.content.text
+            : "",
+        ),
+    ).toEqual(["hello", " world"])
   })
 
   it("does not create extra subscriptions on repeated loadSession", async () => {

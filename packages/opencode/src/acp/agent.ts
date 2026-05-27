@@ -146,6 +146,8 @@ export class Agent implements ACPAgent {
   private eventStarted = false
   private shellSnapshots = new Map<string, string>()
   private toolStarts = new Set<string>()
+  private streamedText = new Map<string, string>()
+  private partMetadata = new Map<string, { role: Role; type: string; ignored?: boolean }>()
   private permissionQueues = new Map<string, Promise<void>>()
   private permissionOptions: PermissionOption[] = [
     { optionId: "once", kind: "allow_once", name: "Allow once" },
@@ -427,11 +429,18 @@ export class Agent implements ACPAgent {
           }
         }
 
-        // ACP clients already know the prompt they just submitted, so replaying
-        // live user parts duplicates the message. We still replay user history in
-        // loadSession() and forkSession() via processMessage().
-        if (part.type !== "text" && part.type !== "file") return
+        if (part.type === "text" || part.type === "reasoning") {
+          const metadata = this.partMetadata.get(this.partKey(sessionId, part.messageID, part.id))
+          if (metadata?.role !== "assistant") return
+          if (metadata.type !== part.type) return
+          if (part.type === "text" && (metadata.ignored === true || part.ignored === true)) return
+          await this.flushUpdatedText(sessionId, part.messageID, part.id, part.type, part.text)
+          return
+        }
 
+        // ACP clients already know the prompt they just submitted, so replaying
+        // live user/file parts duplicates the message. We still replay user
+        // history in loadSession() and forkSession() via processMessage().
         return
       }
 
@@ -460,6 +469,11 @@ export class Agent implements ACPAgent {
 
         const part = message.parts.find((p) => p.id === props.partID)
         if (!part) return
+        this.partMetadata.set(this.partKey(sessionId, props.messageID, props.partID), {
+          role: message.info.role,
+          type: part.type,
+          ignored: part.type === "text" ? part.ignored : undefined,
+        })
 
         if (part.type === "text" && props.field === "text" && part.ignored !== true) {
           await this.connection
@@ -477,6 +491,7 @@ export class Agent implements ACPAgent {
             .catch((error) => {
               log.error("failed to send text delta to ACP", { error })
             })
+          this.appendStreamedText(sessionId, props.messageID, props.partID, props.delta)
           return
         }
 
@@ -496,10 +511,47 @@ export class Agent implements ACPAgent {
             .catch((error) => {
               log.error("failed to send reasoning delta to ACP", { error })
             })
+          this.appendStreamedText(sessionId, props.messageID, props.partID, props.delta)
         }
         return
       }
     }
+  }
+
+  private async flushUpdatedText(
+    sessionId: string,
+    messageId: string,
+    partId: string,
+    partType: "text" | "reasoning",
+    text: string,
+  ) {
+    const key = this.partKey(sessionId, messageId, partId)
+    const streamed = this.streamedText.get(key) ?? ""
+    if (!text.startsWith(streamed)) return
+    const delta = text.slice(streamed.length)
+    if (delta.length === 0) return
+
+    await this.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: partType === "text" ? "agent_message_chunk" : "agent_thought_chunk",
+        messageId,
+        content: {
+          type: "text",
+          text: delta,
+        },
+      },
+    })
+    this.streamedText.set(key, text)
+  }
+
+  private appendStreamedText(sessionId: string, messageId: string, partId: string, delta: string) {
+    const key = this.partKey(sessionId, messageId, partId)
+    this.streamedText.set(key, (this.streamedText.get(key) ?? "") + delta)
+  }
+
+  private partKey(sessionId: string, messageId: string, partId: string) {
+    return `${sessionId}:${messageId}:${partId}`
   }
 
   async initialize(params: InitializeRequest): Promise<InitializeResponse> {

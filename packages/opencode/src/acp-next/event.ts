@@ -40,6 +40,7 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly streamedText = new Map<string, string>()
   private started = false
 
   constructor(
@@ -105,6 +106,13 @@ export class Subscription {
     const sessionId = part.sessionID || event.properties.sessionID
     const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
     if (!session) return
+    const known = await Effect.runPromise(
+      this.input.session.tryGetPartMetadata({
+        sessionId: session.id,
+        messageId: part.messageID,
+        partId: part.id,
+      }),
+    )
 
     await Effect.runPromise(
       this.input.session.recordPartMetadata({
@@ -112,12 +120,19 @@ export class Subscription {
         messageId: part.messageID,
         partId: part.id,
         partType: part.type,
-        role: part.type === "reasoning" ? "assistant" : undefined,
+        role: part.type === "reasoning" ? "assistant" : known?.role,
         ignored: part.type === "text" ? part.ignored : undefined,
         toolCallId: part.type === "tool" ? part.callID : undefined,
         metadata: "metadata" in part ? part.metadata : undefined,
       }),
     )
+    if (part.type === "text" || part.type === "reasoning") {
+      if (known?.role !== "assistant") return
+      if (known.partType !== part.type) return
+      if (part.type === "text" && (known.ignored === true || part.ignored === true)) return
+      await this.flushUpdatedText(session.id, part.messageID, part.id, part.type, part.text)
+      return
+    }
     if (part.type === "tool") {
       await this.handleToolPart(session.id, part)
     }
@@ -152,6 +167,7 @@ export class Subscription {
           },
         },
       })
+      this.appendStreamedText(session.id, props.messageID, props.partID, props.delta)
       return
     }
 
@@ -167,7 +183,44 @@ export class Subscription {
           },
         },
       })
+      this.appendStreamedText(session.id, props.messageID, props.partID, props.delta)
     }
+  }
+
+  private async flushUpdatedText(
+    sessionId: string,
+    messageId: string,
+    partId: string,
+    partType: "text" | "reasoning",
+    text: string,
+  ) {
+    const key = this.streamedTextKey(sessionId, messageId, partId)
+    const streamed = this.streamedText.get(key) ?? ""
+    if (!text.startsWith(streamed)) return
+    const delta = text.slice(streamed.length)
+    if (delta.length === 0) return
+
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: partType === "text" ? "agent_message_chunk" : "agent_thought_chunk",
+        messageId,
+        content: {
+          type: "text",
+          text: delta,
+        },
+      },
+    })
+    this.streamedText.set(key, text)
+  }
+
+  private appendStreamedText(sessionId: string, messageId: string, partId: string, delta: string) {
+    const key = this.streamedTextKey(sessionId, messageId, partId)
+    this.streamedText.set(key, (this.streamedText.get(key) ?? "") + delta)
+  }
+
+  private streamedTextKey(sessionId: string, messageId: string, partId: string) {
+    return `${sessionId}:${messageId}:${partId}`
   }
 
   private async fetchPartMetadata(sessionId: string, cwd: string, messageId: string, partId: string) {
