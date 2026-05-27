@@ -15,7 +15,7 @@ Saturated 16px project avatar with color variants and optional unread ring.
 - Unread ring when \`unread\` is set.
 
 ### Theming
-- Uses \`--avatar-bg-*\` and \`--avatar-border-*\` tokens with inset box-shadow borders.
+- Uses \`--v2-avatar-bg-*\` and \`--v2-avatar-border-*\` tokens with inset box-shadow borders.
 `
 
 export default {
