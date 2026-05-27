@@ -29,6 +29,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { createShellPolyfill } from "./shell-polyfill"
 
 const log = Log.create({ service: "plugin" })
 
@@ -147,8 +148,8 @@ export const layer = Layer.effect(
           get serverUrl(): URL {
             return Server.url ?? new URL("http://localhost:4096")
           },
-          // @ts-expect-error
-          $: typeof Bun === "undefined" ? undefined : Bun.$,
+          // @ts-expect-error - In Bun, use native Bun.$; otherwise use polyfill
+          $: typeof Bun === "undefined" ? createShellPolyfill() : Bun.$,
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : INTERNAL_PLUGINS) {
