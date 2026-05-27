@@ -627,27 +627,13 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
   // Any authenticated org member can upload (the OAuth + org-membership gate
   // is the trust boundary).  Whoever uploads last wins, container-wide.
   // Rate-limited per ADR-0008 so a stuck client can't flood the endpoint.
+  //
+  // Handler is extracted into an async helper because this enclosing function
+  // returns `Promise<Response> | Response` synchronously; the branch needs
+  // `await req.json()` so we have to step out into an async closure (matching
+  // how handleOAuthCallback + handleInviteRedeem are structured).
   if (req.method === "POST" && path === "/collab/claude-creds") {
-    const sess = getSession(req)
-    if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
-    const rl = checkRateLimit(`claude-creds:${sess.githubId}`, 5, 60 * 60 * 1000)
-    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
-    const body = (await req.json().catch(() => null)) as { credentialsJson?: string } | null
-    if (!body?.credentialsJson || typeof body.credentialsJson !== "string") {
-      return json({ error: "Body must be { credentialsJson: string }." }, 400)
-    }
-    try {
-      const result = writeCredentials(body.credentialsJson)
-      console.log("[collab.claude-creds] uploaded by", sess.githubLogin, {
-        bytes: result.bytes,
-        email: result.email,
-      })
-      return json({ ok: true, ...getCredentialsStatus() }, 200)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.warn("[collab.claude-creds] upload rejected for", sess.githubLogin, msg)
-      return json({ error: msg }, 400)
-    }
+    return handleClaudeCredsUpload(req)
   }
 
   // GET /collab/me — current authenticated user info
@@ -704,6 +690,29 @@ function parseOAuthState(state: string | null): OAuthStatePayload | null {
     if (parsed && typeof parsed === "object" && typeof parsed.n === "string") return parsed
   } catch {}
   return null
+}
+
+async function handleClaudeCredsUpload(req: Request): Promise<Response> {
+  const sess = getSession(req)
+  if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
+  const rl = checkRateLimit(`claude-creds:${sess.githubId}`, 5, 60 * 60 * 1000)
+  if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+  const body = (await req.json().catch(() => null)) as { credentialsJson?: string } | null
+  if (!body?.credentialsJson || typeof body.credentialsJson !== "string") {
+    return json({ error: "Body must be { credentialsJson: string }." }, 400)
+  }
+  try {
+    const result = writeCredentials(body.credentialsJson)
+    console.log("[collab.claude-creds] uploaded by", sess.githubLogin, {
+      bytes: result.bytes,
+      email: result.email,
+    })
+    return json({ ok: true, ...getCredentialsStatus() }, 200)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn("[collab.claude-creds] upload rejected for", sess.githubLogin, msg)
+    return json({ error: msg }, 400)
+  }
 }
 
 async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
