@@ -9,7 +9,7 @@ import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } 
 import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InvalidRequestError } from "../errors"
@@ -219,7 +219,10 @@ function routeHttpApiWorkspace<E>(
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
-          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
+          Effect.catchIf(
+            (error): error is NotFoundError => NotFoundError.isInstance(error),
+            () => Effect.succeed(undefined),
+          ),
           Effect.catchDefect(() => Effect.succeed(undefined)),
         )
       : undefined
@@ -240,22 +243,5 @@ export const workspaceRoutingLayer = Layer.effect(
         Effect.provideService(Workspace.Service, workspace),
       ),
     )
-  }),
-)
-
-export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: WorkspaceRouteContext }>()(
-  Effect.gen(function* () {
-    const makeWebSocket = yield* Socket.WebSocketConstructor
-    const workspace = yield* Workspace.Service
-    const client = yield* HttpClient.HttpClient
-    return (effect) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest
-        const plan = yield* planRequest(request)
-        return yield* routeWorkspace(client, effect, plan)
-      }).pipe(
-        Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
-        Effect.provideService(Workspace.Service, workspace),
-      )
   }),
 )

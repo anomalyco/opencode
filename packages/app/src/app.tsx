@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -40,18 +41,13 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
-import { SettingsProvider } from "@/context/settings"
+import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { ServersProvider } from "./context/servers"
-
-if (import.meta.env.VITE_OPENCODE_CHANNEL !== "prod") {
-  document.body.classList.remove("text-12-regular")
-  document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
-}
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -97,9 +93,26 @@ function QueryProvider(props: ParentProps) {
   return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
+function BodyDesignClass() {
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (typeof document === "undefined") return
+
+    const enabled = settings.general.newLayoutDesigns()
+    document.body.classList.toggle("text-12-regular", !enabled)
+    document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
+    document.body.classList.toggle("text-[13px]", enabled)
+    document.body.classList.toggle("font-[440]", enabled)
+  })
+
+  return null
+}
+
 function AppShellProviders(props: ParentProps) {
   return (
     <SettingsProvider>
+      <BodyDesignClass />
       <PermissionProvider>
         <LayoutProvider>
           <NotificationProvider>

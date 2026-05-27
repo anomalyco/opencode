@@ -17,7 +17,7 @@
   margin: 0;
   padding: 0;
   border: 0;
-  font-family: var(--font-family-sans);
+  font-family: var(--v2-font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 13px;
@@ -76,7 +76,7 @@
   align-self: stretch;
   width: 100%;
   min-height: 11px;
-  font-family: var(--font-family-sans);
+  font-family: var(--v2-font-family-sans);
   font-style: normal;
   font-weight: 440;
   font-size: 11px;
