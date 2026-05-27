@@ -29,3 +29,5 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+packages/app/dist-desktop-mac
+.codegraph/

@@ -6,7 +6,7 @@ Upstream OpenCode packages and automation moved here when YunPat forked for inde
 
 | Path | Contents |
 |------|----------|
-| `upstream-packages/` | console, web, desktop-mac, storybook, slack, enterprise, … |
+| `upstream-packages/` | console, web, desktop-mac, desktop-mac-app (Vite entry), storybook, slack, enterprise, … |
 | `upstream-root/` | `github/` action, `infra/` SST, `sdks/vscode` |
 | `upstream-readmes/` | Multilingual README copies from upstream |
 | `github-workflows/` | OpenCode org CI (publish, deploy, triage, …) |
