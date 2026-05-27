@@ -168,14 +168,8 @@ class ShellPromise implements BunShellPromise {
   }
 }
 
-class ShellPolyfill implements BunShell {
-  private config: ShellConfig = {}
-
-  constructor(config: ShellConfig = {}) {
-    this.config = { ...config }
-  }
-
-  (strings: TemplateStringsArray, ...expressions: any[]): BunShellPromise {
+export function createShellPolyfill(config: ShellConfig = {}): BunShell {
+  const execute = (strings: TemplateStringsArray, ...expressions: any[]): BunShellPromise => {
     // Construct the command from template literal
     let command = strings[0]
     for (let i = 0; i < expressions.length; i++) {
@@ -184,13 +178,15 @@ class ShellPolyfill implements BunShell {
       command += value + strings[i + 1]
     }
 
-    return new ShellPromise(command, this.config)
+    return new ShellPromise(command, config)
   }
 
-  braces(pattern: string): string[] {
+  const shell = execute as BunShell
+
+  shell.braces = (pattern: string): string[] => {
     // Basic brace expansion - not full bash implementation
     // This is a simplified version; full implementation would be complex
-    const match = pattern.match(/^([^{]*)\\{([^}]+)\\}(.*)$/)
+    const match = pattern.match(/^([^{]*)\{([^}]+)\}(.*)$/)
     if (!match) return [pattern]
 
     const [, prefix, braceContent, suffix] = match
@@ -198,7 +194,7 @@ class ShellPolyfill implements BunShell {
     return parts.map((part) => prefix + part + suffix)
   }
 
-  escape(input: string): string {
+  shell.escape = (input: string): string => {
     // Shell escape for Unix-like systems
     if (process.platform === "win32") {
       return `"${input.replace(/"/g, '\\"')}"`
@@ -206,27 +202,21 @@ class ShellPolyfill implements BunShell {
     return `'${input.replace(/'/g, "'\\''")}'`
   }
 
-  env(newEnv?: Record<string, string | undefined>): BunShell {
-    return new ShellPolyfill({ ...this.config, env: { ...this.config.env, ...newEnv } }) as any
+  shell.env = (newEnv?: Record<string, string | undefined>): BunShell => {
+    return createShellPolyfill({ ...config, env: { ...config.env, ...newEnv } })
   }
 
-  cwd(newCwd?: string): BunShell {
-    return new ShellPolyfill({ ...this.config, cwd: newCwd }) as any
+  shell.cwd = (newCwd?: string): BunShell => {
+    return createShellPolyfill({ ...config, cwd: newCwd })
   }
 
-  nothrow(): BunShell {
-    return new ShellPolyfill({ ...this.config, throws: false }) as any
+  shell.nothrow = (): BunShell => {
+    return createShellPolyfill({ ...config, throws: false })
   }
 
-  throws(shouldThrow: boolean): BunShell {
-    return new ShellPolyfill({ ...this.config, throws: shouldThrow }) as any
+  shell.throws = (shouldThrow: boolean): BunShell => {
+    return createShellPolyfill({ ...config, throws: shouldThrow })
   }
-}
 
-export function createShellPolyfill(): BunShell {
-  const polyfill = new ShellPolyfill()
-  const fn = polyfill.bind(polyfill) as any
-  Object.setPrototypeOf(fn, ShellPolyfill.prototype)
-  Object.assign(fn, polyfill)
-  return fn as BunShell
+  return shell
 }
