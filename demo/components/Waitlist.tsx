@@ -227,9 +227,6 @@ export function Waitlist({ variant = "full", id }: WaitlistProps) {
                 送信に失敗しました。時間をおいて再度お試しください。
               </p>
             )}
-            <p className="mt-3 text-[10px] text-sc-text-dim">
-              登録情報はβ版案内のみに使用します。スパムはしません。
-            </p>
           </motion.form>
         )}
       </div>
