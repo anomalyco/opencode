@@ -4,7 +4,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SelectV2 } from "@opencode-ai/ui/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/components/switch-v2.jsx"
-import { TextField } from "@opencode-ai/ui/text-field"
+import { TextInputV2 } from "@opencode-ai/ui/v2/components/text-input-v2.jsx"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -521,19 +521,18 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.uiFont.description")}
         >
           <div class="w-full sm:w-[220px]">
-            <TextField
+            <TextInputV2
               data-action="settings-ui-font"
-              label={language.t("settings.general.row.uiFont.title")}
-              hideLabel
               type="text"
+              appearance="base"
               value={sans()}
-              onChange={(value) => settings.appearance.setUIFont(value)}
+              onInput={(event) => settings.appearance.setUIFont(event.currentTarget.value)}
               placeholder={sansDefault}
               spellcheck={false}
               autocorrect="off"
               autocomplete="off"
               autocapitalize="off"
-              class="text-12-regular"
+              aria-label={language.t("settings.general.row.uiFont.title")}
               style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
             />
           </div>
@@ -544,19 +543,18 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.font.description")}
         >
           <div class="w-full sm:w-[220px]">
-            <TextField
+            <TextInputV2
               data-action="settings-code-font"
-              label={language.t("settings.general.row.font.title")}
-              hideLabel
               type="text"
+              appearance="base"
               value={mono()}
-              onChange={(value) => settings.appearance.setFont(value)}
+              onInput={(event) => settings.appearance.setFont(event.currentTarget.value)}
               placeholder={monoDefault}
               spellcheck={false}
               autocorrect="off"
               autocomplete="off"
               autocapitalize="off"
-              class="text-12-regular"
+              aria-label={language.t("settings.general.row.font.title")}
               style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
             />
           </div>
@@ -567,19 +565,18 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.terminalFont.description")}
         >
           <div class="w-full sm:w-[220px]">
-            <TextField
+            <TextInputV2
               data-action="settings-terminal-font"
-              label={language.t("settings.general.row.terminalFont.title")}
-              hideLabel
               type="text"
+              appearance="base"
               value={terminal()}
-              onChange={(value) => settings.appearance.setTerminalFont(value)}
+              onInput={(event) => settings.appearance.setTerminalFont(event.currentTarget.value)}
               placeholder={terminalDefault}
               spellcheck={false}
               autocorrect="off"
               autocomplete="off"
               autocapitalize="off"
-              class="text-12-regular"
+              aria-label={language.t("settings.general.row.terminalFont.title")}
               style={{ "font-family": terminalFontFamily(settings.appearance.terminalFont()) }}
             />
           </div>

@@ -150,6 +150,10 @@
   }
 }
 
+[data-slot="settings-v2-row-control"] [data-component="text-input-v2"] {
+  width: 100%;
+}
+
 [data-component="settings-v2-dialog"] [data-component="select"][data-trigger-style="settings-v2"] {
   width: fit-content;
   max-width: 100%;
