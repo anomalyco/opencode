@@ -47,6 +47,7 @@ import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { ParentParamsProvider } from "@/context/parent-params"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const loadSession = () => import("@/pages/session")
@@ -90,23 +91,25 @@ function QueryProvider(props: ParentProps) {
 
 function AppShellProviders(props: ParentProps) {
   return (
-    <ClientEnvProvider>
-      <SettingsProvider>
-        <PermissionProvider>
-          <LayoutProvider>
-            <NotificationProvider>
-              <ModelsProvider>
-                <CommandProvider>
-                  <HighlightsProvider>
-                    <Layout>{props.children}</Layout>
-                  </HighlightsProvider>
-                </CommandProvider>
-              </ModelsProvider>
-            </NotificationProvider>
-          </LayoutProvider>
-        </PermissionProvider>
-      </SettingsProvider>
-    </ClientEnvProvider>
+    <ParentParamsProvider>
+      <ClientEnvProvider>
+        <SettingsProvider>
+          <PermissionProvider>
+            <LayoutProvider>
+              <NotificationProvider>
+                <ModelsProvider>
+                  <CommandProvider>
+                    <HighlightsProvider>
+                      <Layout>{props.children}</Layout>
+                    </HighlightsProvider>
+                  </CommandProvider>
+                </ModelsProvider>
+              </NotificationProvider>
+            </LayoutProvider>
+          </PermissionProvider>
+        </SettingsProvider>
+      </ClientEnvProvider>
+    </ParentParamsProvider>
   )
 }
 
