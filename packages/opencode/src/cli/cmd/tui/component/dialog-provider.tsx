@@ -262,6 +262,13 @@ function AutoMethod(props: AutoMethodProps) {
       method: props.index,
     })
     if (result.error) {
+      toast.show({
+        variant: "error",
+        message:
+          "name" in result.error && result.error.name === "ProviderAuthOauthCallbackFailed"
+            ? "OAuth authorization failed. Try /connect again."
+            : JSON.stringify(result.error),
+      })
       dialog.clear()
       return
     }

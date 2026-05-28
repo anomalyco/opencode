@@ -1,4 +1,5 @@
 import type { McpServer } from "@agentclientprotocol/sdk"
+import type { Message, Part } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, Ref } from "effect"
 import type { ModelID, ProviderID } from "../provider/schema"
 import * as ACPNextError from "./error"
@@ -11,6 +12,9 @@ export type SelectedModel = {
 export type KnownMessagePartMetadata = {
   messageId: string
   partId: string
+  partType?: Part["type"]
+  role?: Message["role"]
+  ignored?: boolean
   toolCallId?: string
   metadata?: unknown
 }
@@ -40,6 +44,9 @@ export type RecordPartMetadataInput = {
   sessionId: string
   messageId: string
   partId: string
+  partType?: Part["type"]
+  role?: Message["role"]
+  ignored?: boolean
   toolCallId?: string
   metadata?: unknown
 }
@@ -53,6 +60,7 @@ export type PartMetadataLookupInput = {
 export type Interface = {
   readonly create: (input: StoreInput) => Effect.Effect<Info>
   readonly load: (input: StoreInput) => Effect.Effect<Info>
+  readonly list: (cwd?: string) => Effect.Effect<readonly Info[]>
   readonly get: (sessionId: string) => Effect.Effect<Info, ACPNextError.SessionNotFoundError>
   readonly tryGet: (sessionId: string) => Effect.Effect<Info | undefined>
   readonly remove: (sessionId: string) => Effect.Effect<Info | undefined>
@@ -146,6 +154,9 @@ export const layer = Layer.effect(
       const metadata = {
         messageId: input.messageId,
         partId: input.partId,
+        partType: input.partType,
+        role: input.role,
+        ignored: input.ignored,
         toolCallId: input.toolCallId,
         metadata: input.metadata,
       }
@@ -158,6 +169,12 @@ export const layer = Layer.effect(
     return Service.of({
       create: store,
       load: store,
+      list: Effect.fn("ACPNext.Session.list")(function* (cwd?: string) {
+        return [...(yield* Ref.get(sessions)).values()]
+          .filter((session) => !cwd || session.cwd === cwd)
+          .map(snapshot)
+          .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      }),
       get,
       tryGet,
       remove,

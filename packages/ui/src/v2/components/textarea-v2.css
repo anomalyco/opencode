@@ -53,7 +53,7 @@
   background: transparent;
   outline: none;
   resize: vertical;
-  font-family: var(--font-family-sans);
+  font-family: var(--v2-font-family-sans);
   font-style: normal;
   font-weight: 440;
   font-size: 13px;

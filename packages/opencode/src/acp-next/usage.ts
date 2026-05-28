@@ -1,5 +1,6 @@
 import type { AgentSideConnection, Usage } from "@agentclientprotocol/sdk"
 import * as Log from "@opencode-ai/core/util/log"
+import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@opencode-ai/sdk/v2"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -8,27 +9,14 @@ import { Context, Effect, Layer, SynchronizedRef } from "effect"
 
 const log = Log.create({ service: "acp-next-usage" })
 
-export type AssistantTokenCost = {
-  readonly cost: number
-  readonly tokens: {
-    readonly input: number
-    readonly output: number
-    readonly reasoning: number
-    readonly cache: {
-      readonly read: number
-      readonly write: number
-    }
-  }
-}
+export type AssistantTokenCost = Pick<OpenCodeAssistantMessage, "cost" | "tokens">
 
-export type AssistantMessage = AssistantTokenCost & {
-  readonly role: "assistant"
-  readonly providerID?: string
-  readonly modelID?: string
-}
+export type AssistantMessage = AssistantTokenCost &
+  Pick<OpenCodeAssistantMessage, "role"> &
+  Partial<Pick<OpenCodeAssistantMessage, "providerID" | "modelID">>
 
 export type SessionMessage = {
-  readonly info: { readonly role: string } | AssistantMessage
+  readonly info: { readonly role: Message["role"] } | AssistantMessage
 }
 
 export type MessagesInput = {
