@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ProxyUtil } from "../../src/server/proxy-util"
+import { canonicalizeWindowsPath, ProxyUtil } from "../../src/server/proxy-util"
 
 describe("ProxyUtil", () => {
   describe("websocketTargetURL", () => {
@@ -108,6 +108,49 @@ describe("ProxyUtil", () => {
       expect(result.get("content-type")).toBe("application/json")
       expect(result.get("x-custom")).toBe("val")
       expect(result.get("x-extra")).toBe("added")
+    })
+  })
+
+  describe("canonicalizeWindowsPath", () => {
+    test("normalizes backslashes to forward slashes on Windows", () => {
+      const result = ProxyUtil.canonicalizeWindowsPath("C:\\Users\\project")
+      if (process.platform === "win32") {
+        expect(result).toBe("c:/Users/project")
+      } else {
+        expect(result).toBe("C:\\Users\\project")
+      }
+    })
+
+    test("lowercases drive letter on Windows", () => {
+      const result = ProxyUtil.canonicalizeWindowsPath("D:/Work/foo")
+      if (process.platform === "win32") {
+        expect(result).toBe("d:/Work/foo")
+      } else {
+        expect(result).toBe("D:/Work/foo")
+      }
+    })
+
+    test("preserves POSIX paths", () => {
+      const result = ProxyUtil.canonicalizeWindowsPath("/home/user/project")
+      expect(result).toBe("/home/user/project")
+    })
+
+    test("preserves already-normalized paths", () => {
+      const result = ProxyUtil.canonicalizeWindowsPath("e:/already/forward")
+      if (process.platform === "win32") {
+        expect(result).toBe("e:/already/forward")
+      } else {
+        expect(result).toBe("e:/already/forward")
+      }
+    })
+
+    test("handles mixed slashes", () => {
+      const result = ProxyUtil.canonicalizeWindowsPath("C:\\Users\\foo/bar\\baz")
+      if (process.platform === "win32") {
+        expect(result).toBe("c:/Users/foo/bar/baz")
+      } else {
+        expect(result).toBe("C:\\Users\\foo/bar\\baz")
+      }
     })
   })
 })

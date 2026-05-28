@@ -38,6 +38,15 @@ export function websocketProtocols(input: Request | Record<string, string | unde
     .filter(Boolean)
 }
 
+export function canonicalizeWindowsPath(path: string): string {
+  if (process.platform !== "win32") return path
+  // Normalize backslashes to forward slashes for consistent identity keys.
+  path = path.replaceAll("\\", "/")
+  // Lowercase drive letter (C: -> c:) to avoid case-sensitive mismatches.
+  path = path.replace(/^([A-Za-z]):/, (_, d: string) => `${d.toLowerCase()}:`)
+  return path
+}
+
 export function websocketTargetURL(url: string | URL) {
   const next = new URL(url)
   if (next.protocol === "http:") next.protocol = "ws:"
