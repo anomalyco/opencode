@@ -17,13 +17,19 @@ import {
 } from "@opencode-ai/stats-core/domain/home"
 import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
-import { scaleBand, scaleLinear } from "d3-scale"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 
-const products = ["All Users", "Zen", "Go", "Enterprise"] as const
-const tokenProducts = ["Zen", "Go", "Enterprise"] as const
-const ranges = ["1D", "1W", "1M", "3M", "YTD", "ALL"] as const
+const products = ["All Users", "Zen", "Go"] as const
+const tokenProducts = ["Zen", "Go"] as const
+const ranges = ["1D", "1W", "2W", "1M", "2M"] as const
+const rangeLabels: Record<UsageRange, string> = {
+  "1D": "1 Day",
+  "1W": "1 Week",
+  "2W": "2 Weeks",
+  "1M": "1 Month",
+  "2M": "2 Months",
+}
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
   { href: "#leaderboard", label: "Leaderboard" },
@@ -31,7 +37,19 @@ const headerLinks = [
   { href: "#token-cost", label: "Token Cost" },
   { href: "#session-cost", label: "Session Cost" },
 ] as const
-const usageColors = ["#ff5d64", "#ff8a00", "#8bef00", "#12c8b3", "#18c7dc", "#6c7dff", "#9d73f7"]
+const usageColors = [
+  "#ed6aff",
+  "#a684ff",
+  "#7c86ff",
+  "#51a2ff",
+  "#00d3f2",
+  "#00d5be",
+  "#00bc7d",
+  "#9ae600",
+  "#ffb900",
+  "#ff8904",
+  "#ff6467",
+]
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
 const countryPositions = [
   { x: 112, y: 96 },
@@ -72,14 +90,14 @@ export default function StatsHome() {
       <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+      <Header />
       <div data-component="container">
-        <Header />
         <div data-component="content">
           <Show when={data()} fallback={<StatsLoading />}>
             {(stats) => (
               <>
                 <Hero updatedAt={stats().updatedAt} />
-                <UsageSection data={stats().usage} />
+                <TopModelsSection data={stats().usage} />
                 <LeaderboardSection data={stats().leaderboard} />
                 <MarketShareSection data={stats().market} />
                 <TokenCostSection data={stats().tokenCost} />
@@ -180,23 +198,158 @@ function formatUpdatedAt(value: string, timeZone: string) {
   }).format(date)
 }
 
-function UsageSection(props: { data: StatsHomeData["usage"] }) {
+function TopModelsSection(props: { data: StatsHomeData["usage"] }) {
   const [product, setProduct] = createSignal<UsageProduct>("All Users")
   const [range, setRange] = createSignal<UsageRange>("1W")
+  const [sheet, setSheet] = createSignal<"product" | "range">()
   const data = createMemo(() => props.data[product()][range()])
 
+  createEffect(() => {
+    if (!sheet()) return
+    if (typeof document === "undefined") return
+    const htmlOverflow = document.documentElement.style.overflow
+    const bodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSheet(undefined)
+    }
+    document.addEventListener("keydown", onKeyDown)
+    onCleanup(() => {
+      document.documentElement.style.overflow = htmlOverflow
+      document.body.style.overflow = bodyOverflow
+      document.removeEventListener("keydown", onKeyDown)
+    })
+  })
+
   return (
-    <ChartSection id="top-models" title="Usage">
+    <section id="top-models" data-section="top-models">
+      <h2 data-slot="top-models-title">
+        <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
+      </h2>
+      <div data-slot="top-models-mobile-controls">
+        <MobileFilterButton
+          label="Product filter"
+          value={product()}
+          expanded={sheet() === "product"}
+          onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
+        />
+        <MobileFilterButton
+          label="Date range"
+          value={range()}
+          expanded={sheet() === "range"}
+          onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
+        />
+      </div>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title="No usage data" description="No model_stat rows matched this product and range." />}
       >
-        <UsageChart data={data()} />
+        <TopModelsChart data={data()} range={range()} />
       </Show>
       <div data-slot="chart-footer">
         <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
       </div>
-    </ChartSection>
+      <Show when={sheet()}>
+        {(kind) => (
+          <MobileFilterSheet
+            kind={kind()}
+            product={product()}
+            range={range()}
+            onProductSelect={(value) => {
+              setProduct(value)
+              setSheet(undefined)
+            }}
+            onRangeSelect={(value) => {
+              setRange(value)
+              setSheet(undefined)
+            }}
+            onClose={() => setSheet(undefined)}
+          />
+        )}
+      </Show>
+    </section>
+  )
+}
+
+function MobileFilterButton(props: { label: string; value: string; expanded: boolean; onClick: () => void }) {
+  return (
+    <button
+      data-slot="mobile-filter-button"
+      type="button"
+      aria-label={props.label}
+      aria-expanded={props.expanded ? "true" : "false"}
+      onClick={props.onClick}
+    >
+      <span>{props.value}</span>
+      <ChevronDown />
+    </button>
+  )
+}
+
+function MobileFilterSheet(props: {
+  kind: "product" | "range"
+  product: UsageProduct
+  range: UsageRange
+  onProductSelect: (product: UsageProduct) => void
+  onRangeSelect: (range: UsageRange) => void
+  onClose: () => void
+}) {
+  return (
+    <div data-component="mobile-filter-sheet" role="presentation" onClick={props.onClose}>
+      <div
+        data-slot="filter-sheet-panel"
+        role="radiogroup"
+        aria-label={props.kind === "product" ? "Product filter" : "Date range"}
+      >
+        <Show
+          when={props.kind === "product"}
+          fallback={
+            <For each={ranges}>
+              {(item) => (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={props.range === item}
+                  data-active={props.range === item ? "true" : undefined}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    props.onRangeSelect(item)
+                  }}
+                >
+                  {rangeLabels[item]}
+                </button>
+              )}
+            </For>
+          }
+        >
+          <For each={products}>
+            {(item) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={props.product === item}
+                data-active={props.product === item ? "true" : undefined}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  props.onProductSelect(item)
+                }}
+              >
+                {item}
+              </button>
+            )}
+          </For>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
+function ChevronDown() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path d="M5 7L8 10L11 7" stroke="currentColor" />
+    </svg>
   )
 }
 
@@ -252,158 +405,168 @@ function FilterPills<T extends string>(props: {
   )
 }
 
-function UsageChart(props: { data: UsagePoint[] }) {
+function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
   const [activeIndex, setActiveIndex] = createSignal<number>()
   const [activeSegment, setActiveSegment] = createSignal<number>()
-  const height = 434
-  const width = 920
-  const headerOffset = 46
-  const segmentGap = 2
-  const maxTotal = createMemo(() => Math.max(1, Math.max(...props.data.map((item) => usageTotal(item))) * 1.02))
+  const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
-  const y = createMemo(() => scaleLinear([0, maxTotal()], [height, 0]))
-  const x = createMemo(() =>
-    scaleBand(
-      props.data.map((_, index) => String(index)),
-      [0, width],
-    ).paddingInner(0.08),
-  )
-  const activeBar = createMemo(() => {
-    const index = activeIndex()
-    const point = activePoint()
-    if (index === undefined) return
-    if (!point) return
-    return {
-      point,
-      x: x()(String(index)) ?? 0,
-      width: x().bandwidth(),
-    }
-  })
 
   return (
-    <div data-component="usage-chart">
-      <svg viewBox={`0 0 ${width} ${height + headerOffset}`} role="img" aria-label="Stacked usage chart">
-        <defs>
-          <pattern id="stats-usage-dot-grid" width="6" height="6" patternUnits="userSpaceOnUse">
-            <rect x="1" y="1" width="2" height="2" fill="var(--stats-dot)" />
-          </pattern>
-        </defs>
+    <div
+      data-component="top-models-chart"
+      data-range={props.range}
+      role="img"
+      aria-label="Stacked top model usage chart"
+    >
+      <div data-slot="top-models-axis" aria-hidden="true">
         <For each={props.data}>
-          {(day, dayIndex) => {
-            const barX = x()(String(dayIndex())) ?? 0
-            const barWidth = x().bandwidth()
-            const stackTop = y()(usageTotal(day))
-            return (
-              <g
-                role="button"
-                tabIndex={0}
-                aria-label={`${day.date} ${formatTokens(usageTotal(day))}`}
-                data-active={activeIndex() === dayIndex() ? "true" : undefined}
-                onPointerEnter={() => {
-                  setActiveIndex(dayIndex())
-                  setActiveSegment(undefined)
-                }}
-                onPointerLeave={(event) => {
-                  if (event.pointerType === "touch") return
-                  setActiveIndex(undefined)
-                  setActiveSegment(undefined)
-                }}
-                onClick={() => setActiveIndex(dayIndex())}
-                onFocus={() => {
-                  setActiveIndex(dayIndex())
-                  setActiveSegment(undefined)
-                }}
-                onBlur={() => {
-                  setActiveIndex(undefined)
-                  setActiveSegment(undefined)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return
-                  event.preventDefault()
-                  setActiveIndex(dayIndex())
-                }}
-              >
-                <rect
-                  x={barX}
-                  y="0"
-                  width={barWidth}
-                  height={height + headerOffset}
-                  fill="transparent"
-                  pointer-events="all"
-                />
-                <text x={barX} y="17" class="chart-total">
-                  {formatTokens(usageTotal(day))}
-                </text>
-                <text x={barX} y="34" class="chart-date">
-                  {day.date}
-                </text>
-                <rect x={barX} y={headerOffset} width={barWidth} height={stackTop} fill="url(#stats-usage-dot-grid)" />
-                <For each={day.segments}>
-                  {(segment, index) => {
-                    const previous = day.segments.slice(0, index()).reduce((sum, item) => sum + item.value, 0)
-                    const segmentHeight = y()(previous) - y()(previous + segment.value)
-                    const segmentInset = index() === day.segments.length - 1 ? 0 : segmentGap
-                    return (
-                      <rect
-                        x={barX}
-                        y={headerOffset + y()(previous + segment.value) + segmentInset}
-                        width={barWidth}
-                        height={Math.max(segmentHeight - segmentInset, 0)}
-                        data-segment-active={
-                          activeIndex() === dayIndex() && activeSegment() === index() ? "true" : undefined
-                        }
-                        opacity={getUsageSegmentOpacity(activeIndex() === dayIndex(), activeSegment(), index())}
-                        fill={activeIndex() === dayIndex() ? usageColors[index()] : "var(--stats-bar-idle)"}
-                        onPointerEnter={(event) => {
-                          event.stopPropagation()
-                          setActiveIndex(dayIndex())
-                          setActiveSegment(index())
-                        }}
-                      />
-                    )
-                  }}
-                </For>
-              </g>
-            )
-          }}
+          {(day, index) => (
+            <div
+              data-active={activeIndex() === index() ? "true" : undefined}
+              data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
+            >
+              <span data-slot="axis-label">
+                <span data-slot="axis-total">{formatTokens(usageTotal(day))}</span>
+                <span data-slot="axis-date">
+                  <span data-slot="axis-date-full">{day.date}</span>
+                  <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
+                </span>
+              </span>
+            </div>
+          )}
         </For>
-      </svg>
-      <Show when={activeBar()}>
-        {(bar) => (
-          <div
-            data-component="chart-tooltip"
-            data-placement={bar().x > width * 0.62 ? "left" : "right"}
-            style={getUsageTooltipStyle(bar().x, bar().width, width)}
-          >
-            <strong>{bar().point.date}</strong>
-            <span>{formatTokens(usageTotal(bar().point))} total</span>
-            <div data-slot="tooltip-divider" />
-            <For each={bar().point.segments}>
-              {(segment, index) => (
-                <p data-active={activeSegment() === index() ? "true" : undefined}>
-                  <span data-slot="tooltip-label">
-                    <i style={{ background: usageColors[index()] }} /> {segment.model}
-                  </span>
-                  <b>{formatTokens(segment.value)}</b>
-                </p>
-              )}
-            </For>
-          </div>
-        )}
-      </Show>
+      </div>
+      <div data-slot="top-models-bars">
+        <For each={props.data}>
+          {(day, dayIndex) => (
+            <div
+              data-slot="top-models-bar"
+              role="button"
+              tabIndex={0}
+              aria-label={`${day.date} ${formatTokens(usageTotal(day))}`}
+              data-active={activeIndex() === dayIndex() ? "true" : undefined}
+              data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
+              style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
+              onPointerEnter={() => {
+                setActiveIndex(dayIndex())
+                setActiveSegment(undefined)
+              }}
+              onPointerLeave={(event) => {
+                if (event.pointerType === "touch") return
+                setActiveIndex(undefined)
+                setActiveSegment(undefined)
+              }}
+              onClick={() => setActiveIndex(dayIndex())}
+              onFocus={() => {
+                setActiveIndex(dayIndex())
+                setActiveSegment(undefined)
+              }}
+              onBlur={() => {
+                setActiveIndex(undefined)
+                setActiveSegment(undefined)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                setActiveIndex(dayIndex())
+                setActiveSegment(undefined)
+              }}
+            >
+              <div data-slot="top-models-stack" style={{ "grid-template-rows": getTopModelsSegmentRows(day) }}>
+                <For each={visibleTopModelsSegments(day)}>
+                  {(item) => (
+                    <i
+                      data-series={item.index}
+                      data-active={activeSegment() === item.index ? "true" : undefined}
+                      style={{
+                        background: getTopModelsSegmentColor(
+                          item.index,
+                          activeIndex() !== undefined && activeIndex() !== dayIndex(),
+                          activeSegment(),
+                        ),
+                      }}
+                      onPointerEnter={(event) => {
+                        event.stopPropagation()
+                        setActiveIndex(dayIndex())
+                        setActiveSegment(item.index)
+                      }}
+                    />
+                  )}
+                </For>
+              </div>
+              <Show when={activeIndex() === dayIndex() && activePoint()}>
+                {(point) => (
+                  <div
+                    data-component="chart-tooltip"
+                    data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
+                  >
+                    <strong>{point().date}</strong>
+                    <span>{formatTokens(usageTotal(point()))} total</span>
+                    <div data-slot="tooltip-divider" />
+                    <For each={visibleTopModelsSegments(point())}>
+                      {(item) => (
+                        <p
+                          data-active={activeSegment() === item.index ? "true" : undefined}
+                          data-muted={
+                            activeSegment() !== undefined && activeSegment() !== item.index ? "true" : undefined
+                          }
+                        >
+                          <span data-slot="tooltip-label">
+                            <i style={{ background: usageColors[item.index] }} /> {item.segment.model}
+                          </span>
+                          <b>{formatTokens(item.segment.value)}</b>
+                        </p>
+                      )}
+                    </For>
+                  </div>
+                )}
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
     </div>
   )
 }
 
-function getUsageTooltipStyle(barX: number, barWidth: number, width: number) {
-  if (barX > width * 0.62) return { left: "auto", right: `${((width - barX + 12) / width) * 100}%` }
-  return { left: `${((barX + barWidth + 12) / width) * 100}%`, right: "auto" }
+function getTopModelsBarHeight(total: number, max: number) {
+  if (total <= 0) return 0
+  return Math.max(2, Math.min(100, (total / max) * 100))
 }
 
-function getUsageSegmentOpacity(isActiveBar: boolean, activeSegment: number | undefined, index: number) {
-  if (!isActiveBar) return 1
-  if (activeSegment === undefined) return 1
-  return activeSegment === index ? 1 : 0.38
+function getTopModelsMaxTotal(data: UsagePoint[]) {
+  const max = Math.max(0, ...data.map((item) => usageTotal(item)))
+  if (max === 0) return 1
+  if (data.length === 1) return max * 1.75
+  return max
+}
+
+function getTopModelsSegmentRows(point: UsagePoint) {
+  const total = usageTotal(point)
+  if (total <= 0) return ""
+  return visibleTopModelsSegments(point)
+    .map((item) => `${(item.segment.value / total) * 100}%`)
+    .join(" ")
+}
+
+function visibleTopModelsSegments(point: UsagePoint) {
+  return point.segments.map((segment, index) => ({ segment, index })).filter((item) => item.segment.value > 0)
+}
+
+function getTopModelsSegmentColor(index: number, muted: boolean, activeSegment: number | undefined) {
+  if (activeSegment !== undefined)
+    return activeSegment === index ? (usageColors[index] ?? "var(--stats-text)") : "var(--stats-layer-2)"
+  if (muted) return "var(--stats-layer-2)"
+  return usageColors[index] ?? "var(--stats-text)"
+}
+
+function isTopModelsMobileAxisHidden(index: number, count: number) {
+  return count > 7 && index % 2 === 1
+}
+
+function formatTopModelsMobileDate(label: string, range: UsageRange) {
+  if (range === "1M" || range === "2M") return label.split(" - ")[0] ?? label
+  return label
 }
 
 function usageTotal(point: UsagePoint) {
