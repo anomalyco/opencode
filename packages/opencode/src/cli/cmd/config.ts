@@ -121,8 +121,9 @@ const ConfigResetCommand = effectCmd({
         .pipe(Effect.orDie)
       process.stdout.write(`${formatFile(target.file)}: reset (backup: ${backup})${EOL}`)
       process.stdout.write(
-        `  Tip: start opencode again, then ask the agent to inspect ${backup} and copy back the settings you still want.${EOL}`,
+        `  Tip: start opencode again, then ask the agent to repair useful settings from ${backup}.${EOL}`,
       )
+      process.stdout.write(`  Run: ${restoreCommand(backup)}${EOL}`)
     }
   }),
 })
@@ -265,5 +266,15 @@ function recoveryHint(file: ConfigFile) {
   if (file.scope === "custom") {
     return `  Safest recovery: move this file aside, start opencode, then ask the agent to inspect the backup and restore the settings you still want.${EOL}`
   }
-  return `  Safest recovery: run \`opencode config reset --${file.scope} --yes\`, then ask the agent to inspect the backup and restore the settings you still want.${EOL}`
+  return `  Safest recovery: run \`opencode config reset --${file.scope} --yes\`, then run the printed \`opencode run\` command to restore wanted settings from the backup.${EOL}`
+}
+
+function restoreCommand(backup: string) {
+  return `opencode run ${shellQuote(
+    `I reset my opencode config because it was invalid. Please inspect the backup at ${backup}, repair the useful settings into the current opencode config, remove or correct invalid fields, and run opencode config check when you are done. Explain what you changed.`,
+  )}`
+}
+
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`
 }
