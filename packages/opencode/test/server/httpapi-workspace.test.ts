@@ -479,6 +479,16 @@ describe("workspace HttpApi", () => {
             method: "POST",
           }),
         ])
+
+        const aborted = yield* request(`http://localhost/session/${session.id}/abort`, dir, { method: "POST" })
+        expect(aborted.status).toBe(200)
+        expect(proxied.filter((item) => new URL(item.url).pathname === `/base/session/${session.id}/abort`)).toEqual([
+          expect.objectContaining({
+            url: `http://127.0.0.1:${remote.port}/base/session/${session.id}/abort`,
+            method: "POST",
+            body: "",
+          }),
+        ])
       } finally {
         void remote.stop(true)
         yield* request(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })

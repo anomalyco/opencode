@@ -4,6 +4,7 @@ import type {
   ForkSessionResponse,
   LoadSessionResponse,
   NewSessionResponse,
+  SessionNotification,
   ResumeSessionResponse,
   SessionConfigOption,
   SessionConfigSelectOption,
@@ -14,6 +15,7 @@ import { Effect, ManagedRuntime } from "effect"
 import * as ACPNextService from "@/acp-next/service"
 import * as ACPNextError from "@/acp-next/error"
 import { ACPNextSession } from "@/acp-next/session"
+import { UsageService } from "@/acp-next/usage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import type { Provider } from "@/provider/provider"
 
@@ -141,10 +143,14 @@ const provider: Provider.Info = {
 
 describe("ACP next service sessions", () => {
   const makeService = (messages: readonly { info: unknown; parts: readonly unknown[] }[] = []) => {
-    const updates: unknown[] = []
+    const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
     const aborts: string[] = []
     const forks: string[] = []
+    const prompts: unknown[] = []
+    const commands: unknown[] = []
+    const summarizes: unknown[] = []
+    const usageUpdates: string[] = []
     const sessions = Array.from({ length: 102 }, (_, index) => ({
       id: `ses_${index + 1}`,
       directory: index % 2 === 0 ? "/workspace" : "/other",
@@ -184,6 +190,36 @@ describe("ACP next service sessions", () => {
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
+        prompt: (input: unknown) => {
+          prompts.push(input)
+          return Promise.resolve({
+            data: {
+              info: assistantInfo({
+                input: 100,
+                output: 40,
+                reasoning: 7,
+                cache: { read: 11, write: 13 },
+              }),
+            },
+          })
+        },
+        command: (input: unknown) => {
+          commands.push(input)
+          return Promise.resolve({
+            data: {
+              info: assistantInfo({
+                input: 3,
+                output: 4,
+                reasoning: 0,
+                cache: { read: 0, write: 0 },
+              }),
+            },
+          })
+        },
+        summarize: (input: unknown) => {
+          summarizes.push(input)
+          return Promise.resolve({ data: true })
+        },
         abort: (input: { sessionID: string }) => {
           aborts.push(input.sessionID)
           return Promise.resolve({ data: true })
@@ -201,13 +237,33 @@ describe("ACP next service sessions", () => {
       },
     } as unknown as OpencodeClient
     const connection = {
-      sessionUpdate: (update: unknown) => {
+      sessionUpdate: (update: SessionNotification) => {
         updates.push(update)
         return Promise.resolve()
       },
     } as Pick<AgentSideConnection, "sessionUpdate">
+    const usage = UsageService.Service.of({
+      buildUsage: UsageService.buildUsage,
+      latestAssistantMessage: UsageService.latestAssistantMessage,
+      totalSessionCost: UsageService.totalSessionCost,
+      contextLimit: () => Effect.succeed(128000),
+      sendUpdate: (input) =>
+        Effect.sync(() => {
+          usageUpdates.push(input.sessionID)
+        }),
+    })
 
-    return { service: ACPNextService.make({ sdk, connection }), updates, mcpAdds, aborts, forks }
+    return {
+      service: ACPNextService.make({ sdk, connection, usage }),
+      updates,
+      mcpAdds,
+      aborts,
+      forks,
+      prompts,
+      commands,
+      summarizes,
+      usageUpdates,
+    }
   }
 
   it("creates a backed session with config options and command update", async () => {
@@ -657,7 +713,219 @@ describe("ACP next service sessions", () => {
     expect(providersCalls).toBe(1)
     expect(commandCalls).toBe(1)
   })
+
+  it("normal text prompt sends model variant mode and converted parts", async () => {
+    const { service, prompts, usageUpdates } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "effort",
+        value: "high",
+      }),
+    )
+    await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "mode",
+        value: "plan",
+      }),
+    )
+
+    const result = await Effect.runPromise(
+      service.prompt({
+        sessionId: session.sessionId,
+        messageId: "00000000-0000-4000-8000-000000000001",
+        prompt: [{ type: "text", text: "hello" }],
+      }),
+    )
+
+    expect(prompts).toEqual([
+      {
+        sessionID: session.sessionId,
+        model: { providerID, modelID },
+        variant: "high",
+        parts: [{ type: "text", text: "hello" }],
+        agent: "plan",
+        directory: "/workspace",
+      },
+    ])
+    expect(result).toEqual({
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 100,
+        outputTokens: 40,
+        thoughtTokens: 7,
+        cachedReadTokens: 11,
+        cachedWriteTokens: 13,
+        totalTokens: 171,
+      },
+      userMessageId: "00000000-0000-4000-8000-000000000001",
+      _meta: {},
+    })
+    expect(usageUpdates).toEqual([session.sessionId])
+  })
+
+  it("prompt maps assistant and user audience annotations", async () => {
+    const { service, prompts } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await Effect.runPromise(
+      service.prompt({
+        sessionId: session.sessionId,
+        prompt: [
+          { type: "text", text: "assistant context", annotations: { audience: ["assistant"] } },
+          { type: "text", text: "user context", annotations: { audience: ["user"] } },
+        ],
+      }),
+    )
+
+    expect(prompts).toContainEqual({
+      sessionID: session.sessionId,
+      model: { providerID, modelID },
+      variant: "default",
+      parts: [
+        { type: "text", text: "assistant context", synthetic: true },
+        { type: "text", text: "user context", ignored: true },
+      ],
+      agent: "build",
+      directory: "/workspace",
+    })
+  })
+
+  it("prompt sends image and resource parts", async () => {
+    const { service, prompts } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await Effect.runPromise(
+      service.prompt({
+        sessionId: session.sessionId,
+        prompt: [
+          { type: "image", data: "AAAA", mimeType: "image/png", uri: "file:///tmp/screenshot.png" },
+          {
+            type: "resource",
+            resource: {
+              uri: "file:///tmp/report.pdf",
+              mimeType: "application/pdf",
+              blob: "JVBERg==",
+            },
+          },
+        ],
+      }),
+    )
+
+    expect((prompts[0] as { parts?: unknown }).parts).toEqual([
+      {
+        type: "file",
+        url: "data:image/png;base64,AAAA",
+        filename: "screenshot.png",
+        mime: "image/png",
+      },
+      {
+        type: "file",
+        url: "data:application/pdf;base64,JVBERg==",
+        filename: "report.pdf",
+        mime: "application/pdf",
+      },
+    ])
+  })
+
+  it("slash command prompt calls session command", async () => {
+    const { service, prompts, commands } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    const result = await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/init now" }] }),
+    )
+
+    expect(prompts).toEqual([])
+    expect(commands).toEqual([
+      {
+        sessionID: session.sessionId,
+        command: "init",
+        arguments: "now",
+        model: "test/test-model",
+        variant: "default",
+        agent: "build",
+        directory: "/workspace",
+      },
+    ])
+    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 4, totalTokens: 7 })
+  })
+
+  it("compact slash command calls summarize path", async () => {
+    const { service, prompts, commands, summarizes } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/compact" }] }),
+    )
+
+    expect(prompts).toEqual([])
+    expect(commands).toEqual([])
+    expect(summarizes).toEqual([
+      {
+        sessionID: session.sessionId,
+        directory: "/workspace",
+        providerID,
+        modelID,
+      },
+    ])
+  })
+
+  it("maps prompt auth failures to auth-required request errors", async () => {
+    const { service } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const failing = ACPNextService.make({
+      sdk: {
+        config: {
+          providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+          get: () => Promise.resolve({ data: {} }),
+        },
+        app: {
+          agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+          skills: () => Promise.resolve({ data: [] }),
+        },
+        command: {
+          list: () => Promise.resolve({ data: [] }),
+        },
+        session: {
+          create: () => Promise.resolve({ data: { id: session.sessionId } }),
+          list: () => Promise.resolve({ data: [] }),
+          prompt: () => Promise.reject({ name: "ProviderAuthError", data: { providerID: "test" } }),
+        },
+        mcp: {
+          add: () => Promise.resolve({ data: {} }),
+        },
+      } as unknown as OpencodeClient,
+      usage: UsageService.Service.of({
+        buildUsage: UsageService.buildUsage,
+        latestAssistantMessage: UsageService.latestAssistantMessage,
+        totalSessionCost: UsageService.totalSessionCost,
+        contextLimit: () => Effect.succeed(128000),
+        sendUpdate: () => Effect.void,
+      }),
+    })
+    await Effect.runPromise(failing.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const error = await Effect.runPromise(
+      failing
+        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+        .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+    )
+
+    expect(error.code).toBe(-32000)
+  })
 })
+
+function assistantInfo(tokens: UsageService.AssistantTokenCost["tokens"]): UsageService.AssistantMessage {
+  return {
+    role: "assistant",
+    providerID: "test",
+    modelID: "test-model",
+    cost: 0,
+    tokens,
+  }
+}
 
 function categories(result: NewSessionResponse | LoadSessionResponse) {
   return result.configOptions?.map((option) => option.category) ?? []

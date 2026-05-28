@@ -5,6 +5,7 @@ import type {
   InitializeResponse,
   LoadSessionResponse,
   NewSessionResponse,
+  PromptResponse,
   ResumeSessionResponse,
   SessionNotification,
   SetSessionConfigOptionResponse,
@@ -95,11 +96,21 @@ describe("opencode acp-next (subprocess)", () => {
         )
         expect(selectConfigOption(loaded.configOptions, "model")?.category).toBe("model")
 
-        const prompt = yield* acp.request("session/prompt", {
+        yield* llm.text("hello from acp-next", { usage: { input: 11, output: 7 } })
+        const prompted = expectOk(
+          yield* acp.request<PromptResponse>("session/prompt", {
+            sessionId: session.sessionId,
+            prompt: [{ type: "text", text: "hello" }],
+          }),
+        )
+        expect(prompted.stopReason).toBe("end_turn")
+        expect(prompted.usage?.totalTokens).toBeGreaterThan(0)
+
+        const missing = yield* acp.request("session/prompt", {
           sessionId: "ses_missing",
           prompt: [{ type: "text", text: "hello" }],
         })
-        expect(errorCode(prompt.error)).toBe(-32601)
+        expect(errorCode(missing.error)).toBe(-32602)
       }),
     60_000,
   )
