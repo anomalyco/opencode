@@ -28,17 +28,17 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
-type StatMetricRow = Omit<ModelStatMetric, "periodStart" | "periodEnd"> & {
+type StatMetricRow = Omit<ModelStatMetric, "updatedAt"> & {
   periodStart: number
-  periodEnd: number
+  updatedAt: number
 }
-type ProviderMetricRow = Omit<ProviderStatMetric, "periodStart" | "periodEnd"> & {
+type ProviderMetricRow = Omit<ProviderStatMetric, "updatedAt"> & {
   periodStart: number
-  periodEnd: number
+  updatedAt: number
 }
-type GeoMetricRow = Omit<GeoStatMetric, "periodStart" | "periodEnd"> & {
+type GeoMetricRow = Omit<GeoStatMetric, "updatedAt"> & {
   periodStart: number
-  periodEnd: number
+  updatedAt: number
 }
 
 type DateWindow = { start: number; end: number; previousStart: number; previousEnd: number }
@@ -85,10 +85,10 @@ function buildStatsHomeData(
 
   const earliest = Math.min(...periods.map((row) => row.periodStart))
   const latest = Math.max(...periods.map((row) => row.periodStart))
-  const latestEnd = Math.max(...periods.map((row) => row.periodEnd))
+  const latestUpdate = Math.max(...periods.map((row) => row.updatedAt))
 
   return {
-    updatedAt: new Date(latestEnd).toISOString(),
+    updatedAt: new Date(latestUpdate).toISOString(),
     usage: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildUsagePoints(normalized, product, range, getWindow(range, earliest, latest))),
     ),
@@ -361,14 +361,14 @@ function createRangeRecord<T>(value: (range: UsageRange) => T): Record<UsageRang
 }
 
 function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
-  const periodStart = dateTime(row.periodStart)
-  const periodEnd = dateTime(row.periodEnd)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return []
+  const periodStart = periodKeyTime(row.periodKey)
+  const updatedAt = dateTime(row.updatedAt)
+  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
   return [
     {
       ...row,
       periodStart,
-      periodEnd,
+      updatedAt,
       tier: normalizeTier(row.tier),
       provider: row.provider || "unknown",
       model: row.model || "unknown",
@@ -377,14 +377,14 @@ function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
 }
 
 function normalizeProviderRow(row: ProviderStatMetric): ProviderMetricRow[] {
-  const periodStart = dateTime(row.periodStart)
-  const periodEnd = dateTime(row.periodEnd)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return []
+  const periodStart = periodKeyTime(row.periodKey)
+  const updatedAt = dateTime(row.updatedAt)
+  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
   return [
     {
       ...row,
       periodStart,
-      periodEnd,
+      updatedAt,
       tier: normalizeTier(row.tier),
       provider: row.provider || "unknown",
     },
@@ -392,15 +392,17 @@ function normalizeProviderRow(row: ProviderStatMetric): ProviderMetricRow[] {
 }
 
 function normalizeGeoRow(row: GeoStatMetric): GeoMetricRow[] {
-  const periodStart = dateTime(row.periodStart)
-  const periodEnd = dateTime(row.periodEnd)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return []
+  const periodStart = periodKeyTime(row.periodKey)
+  const updatedAt = dateTime(row.updatedAt)
+  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
   return [
     {
       ...row,
       periodStart,
-      periodEnd,
+      updatedAt,
       tier: normalizeTier(row.tier),
+      provider: row.provider || "all",
+      model: row.model || "all",
       country: row.country || "ZZ",
       continent: row.continent || "",
     },
@@ -420,6 +422,12 @@ function dateTime(value: Date | string) {
   return (value instanceof Date ? value : new Date(value)).getTime()
 }
 
+function periodKeyTime(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return Number.NaN
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+}
+
 function formatBucketLabel(value: number, range: UsageRange) {
   const date = new Date(value)
   if (range === "YTD") return months[date.getUTCMonth()]
@@ -433,11 +441,19 @@ function formatBucketLabel(value: number, range: UsageRange) {
 function formatProvider(provider: string) {
   const known: Record<string, string> = {
     anthropic: "Anthropic",
+    deepseek: "DeepSeek",
     google: "Google",
     minimax: "MiniMax",
+    moonshot: "Moonshot",
     moonshotai: "Moonshot",
-    nvidia: "Nvidia",
+    nvidia: "NVIDIA",
+    opencode: "opencode",
     openai: "OpenAI",
+    qwen: "Qwen",
+    tencent: "Tencent",
+    xai: "xAI",
+    xiaomi: "Xiaomi",
+    zhipu: "Zhipu",
     zhipuai: "Zhipu",
   }
   const normalized = provider.toLowerCase().replace(/[^a-z0-9]/g, "")

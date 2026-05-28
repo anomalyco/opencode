@@ -1,43 +1,55 @@
 import { Client } from "@planetscale/database"
+import { readdir } from "node:fs/promises"
+import path from "node:path"
 import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { geoStat, modelStat, providerStat } from "./database/schema"
+import { modelAuthor, normalizeInferenceModel } from "./domain/model-normalization"
 import {
   chunks,
   collapseRows,
   inserted,
+  isoWeekId,
   normalizeCountry,
   normalizeTier,
+  periodKeyFor,
   rankBy,
   rankRowsWithMarketShare,
+  startOfIsoWeek,
+  startOfUtcDay,
   statPeriodKey,
   synthesizeAllTierRows,
   toStatBaseRow,
-  UPSERT_CHUNK_SIZE,
   type StatBaseAggregate,
 } from "./domain/stat"
 
 const DAY_MS = 86_400_000
-const DEFAULT_DAYS = 60
+const DEFAULT_UPSERT_CHUNK_SIZE = 100
+const DEFAULT_TIERS = ["Go", "Free", "Paid"]
 const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 
 type Grain = "day" | "week"
-type MetricDimension = "model" | "provider" | "geo"
+type MetricDimension = "model" | "provider" | "geo" | "geo-model"
 type LookupDimension = "model-provider-model" | "geo-continent"
 type ImportKey = `${MetricDimension | LookupDimension}-${Grain}`
+type QuerySpec = {
+  name: string
+  importKey: ImportKey
+  importFlag: `--${ImportKey}`
+  query: ReturnType<typeof metricQuery>
+}
 type RawRow = Record<string, string>
-type Period = { start: Date; end: Date }
-type Timing = { start_time: number; end_time: number; granularity?: number }
 type ImportOptions = {
   dataset: string
   databaseUrl: string | undefined
+  directories: string[]
   dryRun: boolean
-  periodEnd: Date | undefined
   periodStart: Date | undefined
-  files: Partial<Record<ImportKey, string>>
+  upsertChunkSize: number
+  files: Partial<Record<ImportKey, string[]>>
 }
 type ModelAggregate = StatBaseAggregate & { provider: string; model: string; provider_model: string }
 type ProviderAggregate = StatBaseAggregate & { provider: string }
-type GeoAggregate = StatBaseAggregate & { country: string; continent: string }
+type GeoAggregate = StatBaseAggregate & { provider: string; model: string; country: string; continent: string }
 type ModelStatRow = typeof modelStat.$inferInsert
 type ProviderStatRow = typeof providerStat.$inferInsert
 type GeoStatRow = typeof geoStat.$inferInsert
@@ -51,6 +63,8 @@ const inputKeys = [
   "provider-week",
   "geo-day",
   "geo-week",
+  "geo-model-day",
+  "geo-model-week",
   "geo-continent-day",
   "geo-continent-week",
 ] as const satisfies ImportKey[]
@@ -66,34 +80,24 @@ async function main() {
 
 function printQueries(args: string[]) {
   const flags = parseFlags(args)
-  const periodEnd = parseDateFlag(flags, "period-end") ?? defaultPeriodEnd()
-  const days = parseIntegerFlag(flags, "days") ?? DEFAULT_DAYS
   const limit = parseIntegerFlag(flags, "limit") ?? 1000
-  const dailyStart = new Date(
-    Date.UTC(periodEnd.getUTCFullYear(), periodEnd.getUTCMonth(), periodEnd.getUTCDate() - days + 1),
-  )
-  const weekStart = syncWeekStart(periodEnd)
+  const tiers = parseListFlag(flags, "tiers") ?? DEFAULT_TIERS
+  const queries = buildQueries(limit, tiers)
+  const only = flags.get("only")?.[0]
+
+  if (only) {
+    const item = queries.find((query) => query.name === only)
+    if (!item) fail(`Unknown --only ${only}. Expected one of: ${queries.map((query) => query.name).join(", ")}`)
+    console.log(JSON.stringify(item.query, null, 2))
+    return
+  }
 
   console.log(
     JSON.stringify(
       {
-        period_end: periodEnd.toISOString(),
-        import_hint: `bun src/honeycomb-backfill.ts import --period-end ${periodEnd.toISOString()} ...`,
-        daily: buildQuerySet(
-          {
-            start_time: Math.floor(dailyStart.getTime() / 1000),
-            end_time: Math.floor(periodEnd.getTime() / 1000),
-            granularity: DAY_MS / 1000,
-          },
-          limit,
-        ),
-        week: buildQuerySet(
-          {
-            start_time: Math.floor(weekStart.getTime() / 1000),
-            end_time: Math.floor(periodEnd.getTime() / 1000),
-          },
-          limit,
-        ),
+        tiers,
+        import_hint: "bun src/honeycomb-backfill.ts import --dir downloads",
+        queries,
       },
       null,
       2,
@@ -102,7 +106,9 @@ function printQueries(args: string[]) {
 }
 
 async function importFiles(args: string[]) {
-  const opts = parseImportOptions(args)
+  const parsed = parseImportOptions(args)
+  const opts = { ...parsed, files: mergeFiles(parsed.files, await discoverFiles(parsed.directories)) }
+  if (!inputKeys.some((key) => opts.files[key]?.length)) fail("No CSV or JSON import files were provided or discovered")
   const providerModelLookup = new Map([
     ...(await lookupRows(opts.files["model-provider-model-day"], "day", opts, modelProviderModelLookup)),
     ...(await lookupRows(opts.files["model-provider-model-week"], "week", opts, modelProviderModelLookup)),
@@ -111,50 +117,59 @@ async function importFiles(args: string[]) {
     ...(await lookupRows(opts.files["geo-continent-day"], "day", opts, geoContinentLookup)),
     ...(await lookupRows(opts.files["geo-continent-week"], "week", opts, geoContinentLookup)),
   ])
-  const modelRows = modelRowsFromAggregates([
-    ...(await metricRows(opts.files["model-day"], "day", opts, (row, base) => ({
-      ...base,
-      provider: provider(row),
-      model: model(row),
-      provider_model: providerModelLookup.get(lookupKey(base, provider(row), model(row))) ?? providerModel(row),
-    }))),
-    ...(await metricRows(opts.files["model-week"], "week", opts, (row, base) => ({
-      ...base,
-      provider: provider(row),
-      model: model(row),
-      provider_model: providerModelLookup.get(lookupKey(base, provider(row), model(row))) ?? providerModel(row),
-    }))),
-  ])
+  const modelAggregates = [
+    ...(await metricRows(opts.files["model-day"], "day", opts, (row, base) =>
+      modelAggregate(row, base, providerModelLookup),
+    )),
+    ...(await metricRows(opts.files["model-week"], "week", opts, (row, base) =>
+      modelAggregate(row, base, providerModelLookup),
+    )),
+  ]
+  const modelRows = modelRowsFromAggregates(modelAggregates)
   const providerRows = providerRowsFromAggregates([
     ...(await metricRows(opts.files["provider-day"], "day", opts, (row, base) => ({
       ...base,
-      provider: provider(row),
+      provider: provider(row) ?? "unknown",
     }))),
     ...(await metricRows(opts.files["provider-week"], "week", opts, (row, base) => ({
       ...base,
-      provider: provider(row),
+      provider: provider(row) ?? "unknown",
     }))),
   ])
   const geoRows = geoRowsFromAggregates([
     ...(await metricRows(opts.files["geo-day"], "day", opts, (row, base) => ({
       ...base,
+      provider: "all",
+      model: "all",
       country: country(row),
       continent: continentLookup.get(lookupKey(base, country(row))) ?? continent(row),
     }))),
     ...(await metricRows(opts.files["geo-week"], "week", opts, (row, base) => ({
       ...base,
+      provider: "all",
+      model: "all",
       country: country(row),
       continent: continentLookup.get(lookupKey(base, country(row))) ?? continent(row),
     }))),
+    ...(await metricRows(opts.files["geo-model-day"], "day", opts, (row, base) =>
+      geoModelAggregate(row, base, continentLookup),
+    )),
+    ...(await metricRows(opts.files["geo-model-week"], "week", opts, (row, base) =>
+      geoModelAggregate(row, base, continentLookup),
+    )),
   ])
 
   console.log(
     JSON.stringify(
       {
+        inputs: Object.fromEntries(
+          inputKeys.flatMap((key) => (opts.files[key]?.length ? [[key, opts.files[key].length]] : [])),
+        ),
         modelRows: modelRows.length,
         providerRows: providerRows.length,
         geoRows: geoRows.length,
         dryRun: opts.dryRun,
+        upsertChunkSize: opts.upsertChunkSize,
       },
       null,
       2,
@@ -165,114 +180,97 @@ async function importFiles(args: string[]) {
   if (!opts.databaseUrl) fail("DATABASE_URL is required unless --dry-run is set")
 
   const db = drizzle({ client: new Client({ url: opts.databaseUrl }) })
-  await upsertModelRows(db, modelRows)
-  await upsertProviderRows(db, providerRows)
-  await upsertGeoRows(db, geoRows)
+  await upsertModelRows(db, modelRows, opts.upsertChunkSize)
+  await upsertProviderRows(db, providerRows, opts.upsertChunkSize)
+  await upsertGeoRows(db, geoRows, opts.upsertChunkSize)
 }
 
-function buildQuerySet(timing: Timing, limit: number) {
+function buildQueries(limit: number, tiers: string[]): QuerySpec[] {
+  const daily = tiers.flatMap((tier) => [
+    querySpec(
+      "model-day",
+      tier,
+      metricQuery(["date", "tier", "stat_provider", "stat_model"], limit, tierFilters(tier)),
+    ),
+    querySpec("provider-day", tier, metricQuery(["date", "tier", "stat_provider"], limit, tierFilters(tier))),
+    querySpec("geo-day", tier, metricQuery(["date", "tier", "country", "continent"], limit, tierFilters(tier))),
+    querySpec(
+      "geo-model-day",
+      tier,
+      metricQuery(["date", "tier", "stat_provider", "stat_model", "country", "continent"], limit, tierFilters(tier)),
+    ),
+  ])
+  const weekly = tiers.flatMap((tier) => [
+    querySpec(
+      "model-week",
+      tier,
+      metricQuery(["week", "tier", "stat_provider", "stat_model"], limit, tierFilters(tier)),
+    ),
+    querySpec("provider-week", tier, metricQuery(["week", "tier", "stat_provider"], limit, tierFilters(tier))),
+    querySpec("geo-week", tier, metricQuery(["week", "tier", "country", "continent"], limit, tierFilters(tier))),
+    querySpec(
+      "geo-model-week",
+      tier,
+      metricQuery(["week", "tier", "stat_provider", "stat_model", "country", "continent"], limit, tierFilters(tier)),
+    ),
+  ])
+
+  return [...daily, ...weekly]
+}
+
+function querySpec(importKey: ImportKey, tier: string, query: ReturnType<typeof metricQuery>) {
   return {
-    model: metricQuery(["stat_tier", "stat_provider", "model"], timing, limit),
-    model_provider_model: lookupQuery(["stat_tier", "stat_provider", "model", "provider.model"], timing, limit),
-    provider: metricQuery(["stat_tier", "stat_provider"], timing, limit),
-    geo: metricQuery(["stat_tier", "stat_country"], timing, limit),
-    geo_continent: lookupQuery(["stat_tier", "stat_country", "cf.continent"], timing, limit),
+    name: `${importKey}-${queryNameSegment(tier)}`,
+    importKey,
+    importFlag: `--${importKey}` as const,
+    query,
   }
 }
 
-function metricQuery(breakdowns: string[], timing: Timing, limit: number) {
+function metricQuery(breakdowns: string[], limit: number, filters: ReturnType<typeof commonFilters> = []) {
   return {
-    ...timing,
+    granularity: 0,
     breakdowns,
-    calculated_fields: [...commonCalculatedFields(), ...metricCalculatedFields()],
     calculations: [
-      { op: "COUNT_DISTINCT", column: "session", name: "sessions" },
-      { op: "COUNT", name: "requests" },
-      { op: "SUM", column: "tokens.input", name: "input_tokens" },
-      { op: "SUM", column: "tokens.output", name: "output_tokens" },
-      { op: "SUM", column: "tokens.reasoning", name: "reasoning_tokens" },
-      { op: "SUM", column: "tokens.cache_read", name: "cache_read_tokens" },
-      { op: "SUM", column: "stat_tokens_total", name: "total_tokens" },
-      { op: "SUM", column: "stat_cost_input_microcents", name: "input_cost_microcents" },
-      { op: "SUM", column: "stat_cost_output_microcents", name: "output_cost_microcents" },
-      { op: "SUM", column: "stat_cost_total_microcents", name: "total_cost_microcents" },
-      { op: "AVG", column: "duration", name: "avg_duration_ms" },
-      { op: "P50", column: "duration", name: "p50_duration_ms" },
-      { op: "P95", column: "duration", name: "p95_duration_ms" },
-      { op: "AVG", column: "time_to_first_byte", name: "avg_ttfb_ms" },
-      { op: "P50", column: "time_to_first_byte", name: "p50_ttfb_ms" },
-      { op: "P95", column: "time_to_first_byte", name: "p95_ttfb_ms" },
-      { op: "AVG", column: "stat_output_tps", name: "avg_output_tps" },
-      { op: "SUM", column: "stat_success", name: "success_count" },
-      { op: "SUM", column: "stat_error", name: "error_count" },
-      { op: "COUNT", name: "sample_count" },
+      { op: "COUNT_DISTINCT", column: "session" },
+      { op: "COUNT" },
+      { op: "SUM", column: "tokens.input" },
+      { op: "SUM", column: "tokens.output" },
+      { op: "SUM", column: "tokens.reasoning" },
+      { op: "SUM", column: "tokens.cache_read" },
+      { op: "SUM", column: "tokens" },
+      { op: "SUM", column: "cost.input.microcents" },
+      { op: "SUM", column: "cost.output.microcents" },
+      { op: "SUM", column: "cost.total.microcents" },
+      { op: "AVG", column: "duration" },
+      { op: "P50", column: "duration" },
+      { op: "P95", column: "duration" },
+      { op: "AVG", column: "time_to_first_byte" },
+      { op: "P50", column: "time_to_first_byte" },
+      { op: "P95", column: "time_to_first_byte" },
+      { op: "AVG", column: "tps.output" },
     ],
-    filters: commonFilters(),
+    filters: [...commonFilters(), ...filters],
     filter_combination: "AND",
-    orders: [{ column: "stat_tokens_total", op: "SUM", order: "descending" }],
+    orders: [{ column: "tokens", op: "SUM", order: "descending" }],
+    havings: [],
     limit,
+    formulas: [],
   }
 }
 
-function lookupQuery(breakdowns: string[], timing: Timing, limit: number) {
-  return {
-    ...timing,
-    breakdowns,
-    calculated_fields: commonCalculatedFields(),
-    calculations: [{ op: "COUNT", name: "requests" }],
-    filters: commonFilters(),
-    filter_combination: "AND",
-    orders: [{ op: "COUNT", order: "descending" }],
-    limit,
-  }
+function tierFilters(tier: string) {
+  if (tier === "all") return []
+  return [{ column: "tier", op: "=", value: tier }]
 }
 
-function commonCalculatedFields() {
-  return [
-    {
-      name: "stat_included_client",
-      expression: `IF(OR(CONTAINS(COALESCE($user_agent, ""), "ai-sdk"), CONTAINS(COALESCE($user_agent, ""), "opencode")), 1, 0)`,
-    },
-    {
-      name: "stat_tier",
-      expression: `IF(EQUALS(COALESCE($source, ""), "lite"), "Go", OR(EQUALS(COALESCE($model, ""), "gpt-5-nano"), EQUALS(COALESCE($model, ""), "grok-code"), EQUALS(COALESCE($model, ""), "big-pickle"), ENDS_WITH(COALESCE($model, ""), "-free")), "Free", "Zen")`,
-    },
-    {
-      name: "stat_provider",
-      expression:
-        `IF(STARTS_WITH(COALESCE($provider, ""), "minimax-plan"), "minimax-plan", STARTS_WITH(COALESCE($provider, ""), "zai-plan"), "zai-plan", STARTS_WITH(COALESCE($provider, ""), "azure-databricks"), "azure-databricks", REG_MATCH(COALESCE($provider, ""), ` +
-        "`^azure[0-9]+`" +
-        `), "azure-openai", COALESCE($provider, "unknown"))`,
-    },
-    { name: "stat_country", expression: `COALESCE($cf.country, "ZZ")` },
-  ]
-}
-
-function metricCalculatedFields() {
-  return [
-    {
-      name: "stat_tokens_total",
-      expression: `SUM(COALESCE($tokens.cache_read, 0), COALESCE($tokens.cache_write_5m, 0), COALESCE($tokens.input, 0), COALESCE($tokens.output, 0))`,
-    },
-    {
-      name: "stat_cost_input_microcents",
-      expression: `COALESCE($cost.input.microcents, MUL($cost.input, 1000000), 0)`,
-    },
-    {
-      name: "stat_cost_output_microcents",
-      expression: `COALESCE($cost.output.microcents, MUL($cost.output, 1000000), 0)`,
-    },
-    {
-      name: "stat_cost_total_microcents",
-      expression: `COALESCE($cost.total.microcents, MUL($cost.total, 1000000), 0)`,
-    },
-    {
-      name: "stat_output_tps",
-      expression: `IF(LT(SUB($timestamp.last_byte, $timestamp.first_byte), 100), null, DIV(MUL($tokens.output, 1000), SUB($timestamp.last_byte, $timestamp.first_byte)))`,
-    },
-    { name: "stat_success", expression: `IF(AND(GTE($status, 200), LT($status, 400)), 1, 0)` },
-    { name: "stat_error", expression: `IF(GTE($status, 400), 1, 0)` },
-  ]
+function queryNameSegment(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "all"
+  )
 }
 
 function commonFilters() {
@@ -280,28 +278,28 @@ function commonFilters() {
     { column: "event_type", op: "=", value: "completions" },
     { column: "model", op: "exists" },
     { column: "model", op: "!=", value: "" },
-    { column: "stat_included_client", op: "=", value: 1 },
+    { column: "model", op: "!=", value: "alpha-gpt-next" },
   ]
 }
 
 function metricRows<T extends StatBaseAggregate>(
-  file: string | undefined,
+  files: string[] | undefined,
   grain: Grain,
   opts: ImportOptions,
-  map: (row: RawRow, base: StatBaseAggregate) => T,
+  map: (row: RawRow, base: StatBaseAggregate) => T | T[],
 ) {
-  if (!file) return Promise.resolve([])
-  return readRows(file).then((rows) => rows.map((row) => map(row, baseAggregate(row, grain, opts))))
+  if (!files) return Promise.resolve([])
+  return readFiles(files).then((rows) => rows.flatMap((row) => map(row, baseAggregate(row, grain, opts))))
 }
 
 function lookupRows(
-  file: string | undefined,
+  files: string[] | undefined,
   grain: Grain,
   opts: ImportOptions,
   map: (row: RawRow, grain: Grain, opts: ImportOptions) => readonly (readonly [string, string])[],
 ) {
-  if (!file) return Promise.resolve([])
-  return readRows(file).then((rows) =>
+  if (!files) return Promise.resolve([])
+  return readFiles(files).then((rows) =>
     Array.from(
       rows
         .flatMap((row) => map(row, grain, opts))
@@ -313,11 +311,91 @@ function lookupRows(
   )
 }
 
+async function readFiles(files: string[]) {
+  return (await Promise.all(files.map(readRows))).flat()
+}
+
+async function discoverFiles(directories: string[]) {
+  const classified = await Promise.all(
+    (await Promise.all(directories.map(filesInDirectory))).flat().map(async (file) => ({
+      file,
+      key: classifyRows(file, await readRows(file)),
+    })),
+  )
+  return classified.reduce<Partial<Record<ImportKey, string[]>>>((result, item) => {
+    return { ...result, [item.key]: [...(result[item.key] ?? []), item.file] }
+  }, {})
+}
+
+async function filesInDirectory(directory: string): Promise<string[]> {
+  return (
+    await Promise.all(
+      (await readdir(directory, { withFileTypes: true })).map((entry) => {
+        const file = path.join(directory, entry.name)
+        if (entry.isDirectory()) return filesInDirectory(file)
+        if (entry.isFile() && /\.(csv|json)$/i.test(entry.name)) return Promise.resolve([file])
+        return Promise.resolve([])
+      }),
+    )
+  ).flat()
+}
+
+function classifyRows(file: string, rows: RawRow[]): ImportKey {
+  if (rows.length === 0) fail(`Cannot classify empty export: ${file}`)
+  const headers = new Set(rows.flatMap((row) => Object.keys(row).map(normalizeHeader)))
+  const grain: Grain = headers.has("date") ? "day" : "week"
+  if (hasHeader(headers, ["country", "cf.country"])) {
+    if (hasHeader(headers, ["model", "stat_model"]) && hasMetricHeaders(headers)) return `geo-model-${grain}`
+    return hasMetricHeaders(headers) ? `geo-${grain}` : `geo-continent-${grain}`
+  }
+  if (hasHeader(headers, ["model", "stat_model"]))
+    return hasMetricHeaders(headers) ? `model-${grain}` : `model-provider-model-${grain}`
+  if (hasHeader(headers, ["provider", "provider.normalized", "stat_provider"])) return `provider-${grain}`
+  fail(`Cannot classify export from columns in ${file}`)
+}
+
+function hasMetricHeaders(headers: Set<string>) {
+  return ["sumtokens", "sumtokensinput", "inputtokens", "totaltokens", "avgduration", "countdistinctsession"].some(
+    (header) => headers.has(header),
+  )
+}
+
+function hasHeader(headers: Set<string>, names: string[]) {
+  return names.some((name) => headers.has(normalizeHeader(name)))
+}
+
+function mergeFiles(left: Partial<Record<ImportKey, string[]>>, right: Partial<Record<ImportKey, string[]>>) {
+  return inputKeys.reduce<Partial<Record<ImportKey, string[]>>>((result, key) => {
+    const files = [...(left[key] ?? []), ...(right[key] ?? [])]
+    if (files.length === 0) return result
+    return { ...result, [key]: files }
+  }, {})
+}
+
 function modelProviderModelLookup(row: RawRow, grain: Grain, opts: ImportOptions): [string, string][] {
   const base = basePeriod(row, grain, opts)
   const value = providerModel(row)
-  if (!value) return []
-  return [[lookupKey({ ...base, dataset: opts.dataset, tier: tier(row), grain }, provider(row), model(row)), value]]
+  const author = provider(row)
+  if (!value || !author) return []
+  return [[lookupKey({ ...base, dataset: opts.dataset, tier: tier(row), grain }, author, model(row)), value]]
+}
+
+function modelAggregate(
+  row: RawRow,
+  base: StatBaseAggregate,
+  providerModelLookup: Map<string, string>,
+): ModelAggregate[] {
+  const author = provider(row)
+  if (!author) return []
+
+  return [
+    {
+      ...base,
+      provider: author,
+      model: model(row),
+      provider_model: providerModelLookup.get(lookupKey(base, author, model(row))) ?? providerModel(row),
+    },
+  ]
 }
 
 function geoContinentLookup(row: RawRow, grain: Grain, opts: ImportOptions): [string, string][] {
@@ -325,6 +403,21 @@ function geoContinentLookup(row: RawRow, grain: Grain, opts: ImportOptions): [st
   const value = continent(row)
   if (!value) return []
   return [[lookupKey({ ...base, dataset: opts.dataset, tier: tier(row), grain }, country(row)), value]]
+}
+
+function geoModelAggregate(row: RawRow, base: StatBaseAggregate, continentLookup: Map<string, string>): GeoAggregate[] {
+  const author = provider(row)
+  if (!author) return []
+
+  return [
+    {
+      ...base,
+      provider: author,
+      model: model(row),
+      country: country(row),
+      continent: continentLookup.get(lookupKey(base, country(row))) ?? continent(row),
+    },
+  ]
 }
 
 function baseAggregate(row: RawRow, grain: Grain, opts: ImportOptions): StatBaseAggregate {
@@ -340,41 +433,46 @@ function baseAggregate(row: RawRow, grain: Grain, opts: ImportOptions): StatBase
     reasoning_tokens: integer(row, "reasoning_tokens", ["SUM(tokens.reasoning)", "SUM(tokens_reasoning)"]),
     cache_read_tokens: integer(row, "cache_read_tokens", ["SUM(tokens.cache_read)", "SUM(tokens_cache_read)"]),
     total_tokens: integer(row, "total_tokens", ["SUM(stat_tokens_total)", "SUM(tokens)", "SUM(tokens_total)"]),
-    input_cost_microcents: integer(row, "input_cost_microcents", ["SUM(stat_cost_input_microcents)"]),
-    output_cost_microcents: integer(row, "output_cost_microcents", ["SUM(stat_cost_output_microcents)"]),
-    total_cost_microcents: integer(row, "total_cost_microcents", ["SUM(stat_cost_total_microcents)"]),
+    input_cost_microcents: integer(row, "input_cost_microcents", [
+      "SUM(cost.input.microcents)",
+      "SUM(stat_cost_input_microcents)",
+    ]),
+    output_cost_microcents: integer(row, "output_cost_microcents", [
+      "SUM(cost.output.microcents)",
+      "SUM(stat_cost_output_microcents)",
+    ]),
+    total_cost_microcents: integer(row, "total_cost_microcents", [
+      "SUM(cost.total.microcents)",
+      "SUM(stat_cost_total_microcents)",
+    ]),
     avg_duration_ms: nullableNumber(row, "avg_duration_ms", ["AVG(duration)", "AVG(duration_ms)"]),
     p50_duration_ms: nullableInteger(row, "p50_duration_ms", ["P50(duration)", "P50(duration_ms)"]),
     p95_duration_ms: nullableInteger(row, "p95_duration_ms", ["P95(duration)", "P95(duration_ms)"]),
     avg_ttfb_ms: nullableNumber(row, "avg_ttfb_ms", ["AVG(time_to_first_byte)", "AVG(ttfb_ms)"]),
     p50_ttfb_ms: nullableInteger(row, "p50_ttfb_ms", ["P50(time_to_first_byte)", "P50(ttfb_ms)"]),
     p95_ttfb_ms: nullableInteger(row, "p95_ttfb_ms", ["P95(time_to_first_byte)", "P95(ttfb_ms)"]),
-    avg_output_tps: nullableNumber(row, "avg_output_tps", ["AVG(stat_output_tps)", "AVG(tps.output)"]),
-    success_count: integer(row, "success_count", ["SUM(stat_success)"]),
-    error_count: integer(row, "error_count", ["SUM(stat_error)"]),
+    avg_output_tps: nullableNumber(row, "avg_output_tps", ["AVG(tps.output)", "AVG(stat_output_tps)"]),
+    success_count: integer(row, "success_count", ["SUM(success)", "SUM(is_success)", "SUM(stat_success)"]),
+    error_count: integer(row, "error_count", ["SUM(error)", "SUM(is_error)", "SUM(stat_error)"]),
     sample_count: integer(row, "sample_count", ["COUNT", "COUNT()"]),
   }
 }
 
 function basePeriod(row: RawRow, grain: Grain, opts: ImportOptions) {
-  const period = periodFor(row, grain, opts)
-  return { period_start: period.start, period_end: period.end }
+  return { period_key: periodKey(row, grain, opts) }
 }
 
-function periodFor(row: RawRow, grain: Grain, opts: ImportOptions): Period {
+function periodKey(row: RawRow, grain: Grain, opts: ImportOptions) {
   if (grain === "week") {
-    const end = opts.periodEnd ?? parseTime(row)
-    if (!end) fail("--period-end is required for week imports")
-    return { start: opts.periodStart ?? syncWeekStart(end), end }
+    const week = parseWeek(row)
+    if (week) return week
+    fail("weekly imports require a week or period_key column")
   }
 
   const time = parseTime(row)
   const start = time ? startOfUtcDay(time) : opts.periodStart
   if (!start) fail("daily imports require a time column or --period-start")
-  return {
-    start,
-    end: opts.periodEnd && sameUtcDay(start, opts.periodEnd) ? opts.periodEnd : new Date(start.getTime() + DAY_MS),
-  }
+  return periodKeyFor("day", start)
 }
 
 function modelRowsFromAggregates(aggregates: ModelAggregate[]) {
@@ -404,16 +502,19 @@ function providerRowsFromAggregates(aggregates: ProviderAggregate[]) {
 }
 
 function geoRowsFromAggregates(aggregates: GeoAggregate[]) {
-  return rankRowsWithMarketShare([
-    ...synthesizeAllTierRows(
-      collapseRows(aggregates.filter((item) => item.grain === "week").map(toGeoRow), geoDimensionKey),
-      geoDimensionKey,
-    ),
-    ...synthesizeAllTierRows(
-      collapseRows(aggregates.filter((item) => item.grain === "day").map(toGeoRow), geoDimensionKey),
-      geoDimensionKey,
-    ),
-  ])
+  return rankRowsWithMarketShare(
+    [
+      ...synthesizeAllTierRows(
+        collapseRows(aggregates.filter((item) => item.grain === "week").map(toGeoRow), geoDimensionKey),
+        geoDimensionKey,
+      ),
+      ...synthesizeAllTierRows(
+        collapseRows(aggregates.filter((item) => item.grain === "day").map(toGeoRow), geoDimensionKey),
+        geoDimensionKey,
+      ),
+    ],
+    geoMarketShareKey,
+  )
 }
 
 function toModelRow(data: ModelAggregate): ModelStatRow {
@@ -425,7 +526,13 @@ function toProviderRow(data: ProviderAggregate): ProviderStatRow {
 }
 
 function toGeoRow(data: GeoAggregate): GeoStatRow {
-  return { ...toStatBaseRow(data), country: data.country, continent: data.continent }
+  return {
+    ...toStatBaseRow(data),
+    provider: data.provider,
+    model: data.model,
+    country: data.country,
+    continent: data.continent,
+  }
 }
 
 function rankModelRows(rows: ModelStatRow[]) {
@@ -457,11 +564,15 @@ function providerDimensionKey(row: ProviderStatRow) {
 }
 
 function geoDimensionKey(row: GeoStatRow) {
-  return row.country
+  return [row.provider, row.model, row.country].join("\u0000")
 }
 
-function lookupKey(base: { grain: string; period_start: Date; dataset: string; tier: string }, ...dimension: string[]) {
-  return [base.grain, base.period_start.toISOString(), base.dataset, base.tier, ...dimension].join("\u0000")
+function geoMarketShareKey(row: GeoStatRow) {
+  return [statPeriodKey(row), row.provider, row.model].join("\u0000")
+}
+
+function lookupKey(base: { grain: string; period_key: string; dataset: string; tier: string }, ...dimension: string[]) {
+  return [base.grain, base.period_key, base.dataset, base.tier, ...dimension].join("\u0000")
 }
 
 function tier(row: RawRow) {
@@ -472,23 +583,19 @@ function deriveTier(row: RawRow) {
   const source = cell(row, ["source"])
   const value = model(row)
   if (source === "lite") return "Go"
-  if (FREE_MODELS.has(value) || value.endsWith("-free")) return "Free"
+  if (FREE_MODELS.has(value) || /-free(:global)?$/.test(rawModel(row))) return "Free"
   return "Zen"
 }
 
 function provider(row: RawRow) {
-  return normalizeProvider(cell(row, ["stat_provider", "provider"]) || "unknown")
-}
-
-function normalizeProvider(value: string) {
-  if (value.startsWith("minimax-plan")) return "minimax-plan"
-  if (value.startsWith("zai-plan")) return "zai-plan"
-  if (value.startsWith("azure-databricks")) return "azure-databricks"
-  if (/^azure[0-9]+/.test(value)) return "azure-openai"
-  return value || "unknown"
+  return cell(row, ["stat_provider"]) || modelAuthor(model(row))
 }
 
 function model(row: RawRow) {
+  return normalizeInferenceModel(cell(row, ["stat_model"]) || rawModel(row))
+}
+
+function rawModel(row: RawRow) {
   return cell(row, ["model"]) || "unknown"
 }
 
@@ -544,7 +651,7 @@ function normalizeHeader(value: string) {
 }
 
 function parseTime(row: RawRow) {
-  const value = cell(row, ["time", "timestamp", "date", "datetime", "bucket"])
+  const value = cell(row, ["date", "time", "timestamp", "datetime", "bucket"])
   if (!value) return undefined
   const numeric = Number(value)
   const date = Number.isFinite(numeric)
@@ -554,24 +661,21 @@ function parseTime(row: RawRow) {
   return date
 }
 
-function startOfUtcDay(value: Date) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
-}
+function parseWeek(row: RawRow) {
+  const value = cell(row, ["period_key", "week", "stat_week"])
+  if (!value) return undefined
 
-function syncWeekStart(periodEnd: Date) {
-  return new Date(Date.UTC(periodEnd.getUTCFullYear(), periodEnd.getUTCMonth(), periodEnd.getUTCDate() - 6))
-}
+  const match = /^(\d{4})-W(\d{1,2})$/.exec(value)
+  if (!match) fail(`Invalid week value: ${value}`)
 
-function defaultPeriodEnd() {
-  return new Date(Math.floor((Date.now() - 5 * 60_000) / 60_000) * 60_000)
-}
+  const year = Number(match[1])
+  const week = Number(match[2])
+  if (week < 1 || week > 53) fail(`Invalid week value: ${value}`)
 
-function sameUtcDay(left: Date, right: Date) {
-  return (
-    left.getUTCFullYear() === right.getUTCFullYear() &&
-    left.getUTCMonth() === right.getUTCMonth() &&
-    left.getUTCDate() === right.getUTCDate()
-  )
+  const start = new Date(startOfIsoWeek(new Date(Date.UTC(year, 0, 4))).getTime() + (week - 1) * 7 * DAY_MS)
+  const id = `${year}-W${String(week).padStart(2, "0")}`
+  if (isoWeekId(start) !== id) fail(`Invalid week value: ${value}`)
+  return id
 }
 
 async function readRows(file: string) {
@@ -673,143 +777,141 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-async function upsertModelRows(db: ReturnType<typeof drizzle>, rows: ModelStatRow[]) {
-  await Promise.all(
-    chunks(rows, UPSERT_CHUNK_SIZE).map((chunk) =>
-      db
-        .insert(modelStat)
-        .values(chunk)
-        .onDuplicateKeyUpdate({
-          set: {
-            period_end: inserted("period_end"),
-            provider_model: inserted("provider_model"),
-            sessions: inserted("sessions"),
-            requests: inserted("requests"),
-            input_tokens: inserted("input_tokens"),
-            output_tokens: inserted("output_tokens"),
-            reasoning_tokens: inserted("reasoning_tokens"),
-            cache_read_tokens: inserted("cache_read_tokens"),
-            total_tokens: inserted("total_tokens"),
-            input_cost_microcents: inserted("input_cost_microcents"),
-            output_cost_microcents: inserted("output_cost_microcents"),
-            total_cost_microcents: inserted("total_cost_microcents"),
-            avg_duration_ms: inserted("avg_duration_ms"),
-            p50_duration_ms: inserted("p50_duration_ms"),
-            p95_duration_ms: inserted("p95_duration_ms"),
-            avg_ttfb_ms: inserted("avg_ttfb_ms"),
-            p50_ttfb_ms: inserted("p50_ttfb_ms"),
-            p95_ttfb_ms: inserted("p95_ttfb_ms"),
-            avg_output_tps: inserted("avg_output_tps"),
-            success_count: inserted("success_count"),
-            error_count: inserted("error_count"),
-            sample_count: inserted("sample_count"),
-            rank_by_tokens: inserted("rank_by_tokens"),
-            rank_by_requests: inserted("rank_by_requests"),
-            rank_by_cost: inserted("rank_by_cost"),
-          },
-        }),
-    ),
-  )
+async function upsertModelRows(db: ReturnType<typeof drizzle>, rows: ModelStatRow[], chunkSize: number) {
+  const batches = chunks(rows, chunkSize)
+  console.log(JSON.stringify({ table: "model_stat", batches: batches.length, chunkSize }))
+  for (const chunk of batches) {
+    await db
+      .insert(modelStat)
+      .values(chunk)
+      .onDuplicateKeyUpdate({
+        set: {
+          provider_model: inserted("provider_model"),
+          sessions: inserted("sessions"),
+          requests: inserted("requests"),
+          input_tokens: inserted("input_tokens"),
+          output_tokens: inserted("output_tokens"),
+          reasoning_tokens: inserted("reasoning_tokens"),
+          cache_read_tokens: inserted("cache_read_tokens"),
+          total_tokens: inserted("total_tokens"),
+          input_cost_microcents: inserted("input_cost_microcents"),
+          output_cost_microcents: inserted("output_cost_microcents"),
+          total_cost_microcents: inserted("total_cost_microcents"),
+          avg_duration_ms: inserted("avg_duration_ms"),
+          p50_duration_ms: inserted("p50_duration_ms"),
+          p95_duration_ms: inserted("p95_duration_ms"),
+          avg_ttfb_ms: inserted("avg_ttfb_ms"),
+          p50_ttfb_ms: inserted("p50_ttfb_ms"),
+          p95_ttfb_ms: inserted("p95_ttfb_ms"),
+          avg_output_tps: inserted("avg_output_tps"),
+          success_count: inserted("success_count"),
+          error_count: inserted("error_count"),
+          sample_count: inserted("sample_count"),
+          rank_by_tokens: inserted("rank_by_tokens"),
+          rank_by_requests: inserted("rank_by_requests"),
+          rank_by_cost: inserted("rank_by_cost"),
+        },
+      })
+  }
 }
 
-async function upsertProviderRows(db: ReturnType<typeof drizzle>, rows: ProviderStatRow[]) {
-  await Promise.all(
-    chunks(rows, UPSERT_CHUNK_SIZE).map((chunk) =>
-      db
-        .insert(providerStat)
-        .values(chunk)
-        .onDuplicateKeyUpdate({
-          set: {
-            period_end: inserted("period_end"),
-            sessions: inserted("sessions"),
-            requests: inserted("requests"),
-            input_tokens: inserted("input_tokens"),
-            output_tokens: inserted("output_tokens"),
-            reasoning_tokens: inserted("reasoning_tokens"),
-            cache_read_tokens: inserted("cache_read_tokens"),
-            total_tokens: inserted("total_tokens"),
-            input_cost_microcents: inserted("input_cost_microcents"),
-            output_cost_microcents: inserted("output_cost_microcents"),
-            total_cost_microcents: inserted("total_cost_microcents"),
-            avg_duration_ms: inserted("avg_duration_ms"),
-            p50_duration_ms: inserted("p50_duration_ms"),
-            p95_duration_ms: inserted("p95_duration_ms"),
-            avg_ttfb_ms: inserted("avg_ttfb_ms"),
-            p50_ttfb_ms: inserted("p50_ttfb_ms"),
-            p95_ttfb_ms: inserted("p95_ttfb_ms"),
-            avg_output_tps: inserted("avg_output_tps"),
-            success_count: inserted("success_count"),
-            error_count: inserted("error_count"),
-            sample_count: inserted("sample_count"),
-            market_share_tokens: inserted("market_share_tokens"),
-            market_share_requests: inserted("market_share_requests"),
-            market_share_sessions: inserted("market_share_sessions"),
-            rank_by_tokens: inserted("rank_by_tokens"),
-            rank_by_requests: inserted("rank_by_requests"),
-            rank_by_sessions: inserted("rank_by_sessions"),
-            rank_by_cost: inserted("rank_by_cost"),
-          },
-        }),
-    ),
-  )
+async function upsertProviderRows(db: ReturnType<typeof drizzle>, rows: ProviderStatRow[], chunkSize: number) {
+  const batches = chunks(rows, chunkSize)
+  console.log(JSON.stringify({ table: "provider_stat", batches: batches.length, chunkSize }))
+  for (const chunk of batches) {
+    await db
+      .insert(providerStat)
+      .values(chunk)
+      .onDuplicateKeyUpdate({
+        set: {
+          sessions: inserted("sessions"),
+          requests: inserted("requests"),
+          input_tokens: inserted("input_tokens"),
+          output_tokens: inserted("output_tokens"),
+          reasoning_tokens: inserted("reasoning_tokens"),
+          cache_read_tokens: inserted("cache_read_tokens"),
+          total_tokens: inserted("total_tokens"),
+          input_cost_microcents: inserted("input_cost_microcents"),
+          output_cost_microcents: inserted("output_cost_microcents"),
+          total_cost_microcents: inserted("total_cost_microcents"),
+          avg_duration_ms: inserted("avg_duration_ms"),
+          p50_duration_ms: inserted("p50_duration_ms"),
+          p95_duration_ms: inserted("p95_duration_ms"),
+          avg_ttfb_ms: inserted("avg_ttfb_ms"),
+          p50_ttfb_ms: inserted("p50_ttfb_ms"),
+          p95_ttfb_ms: inserted("p95_ttfb_ms"),
+          avg_output_tps: inserted("avg_output_tps"),
+          success_count: inserted("success_count"),
+          error_count: inserted("error_count"),
+          sample_count: inserted("sample_count"),
+          market_share_tokens: inserted("market_share_tokens"),
+          market_share_requests: inserted("market_share_requests"),
+          market_share_sessions: inserted("market_share_sessions"),
+          rank_by_tokens: inserted("rank_by_tokens"),
+          rank_by_requests: inserted("rank_by_requests"),
+          rank_by_sessions: inserted("rank_by_sessions"),
+          rank_by_cost: inserted("rank_by_cost"),
+        },
+      })
+  }
 }
 
-async function upsertGeoRows(db: ReturnType<typeof drizzle>, rows: GeoStatRow[]) {
-  await Promise.all(
-    chunks(rows, UPSERT_CHUNK_SIZE).map((chunk) =>
-      db
-        .insert(geoStat)
-        .values(chunk)
-        .onDuplicateKeyUpdate({
-          set: {
-            period_end: inserted("period_end"),
-            continent: inserted("continent"),
-            sessions: inserted("sessions"),
-            requests: inserted("requests"),
-            input_tokens: inserted("input_tokens"),
-            output_tokens: inserted("output_tokens"),
-            reasoning_tokens: inserted("reasoning_tokens"),
-            cache_read_tokens: inserted("cache_read_tokens"),
-            total_tokens: inserted("total_tokens"),
-            input_cost_microcents: inserted("input_cost_microcents"),
-            output_cost_microcents: inserted("output_cost_microcents"),
-            total_cost_microcents: inserted("total_cost_microcents"),
-            avg_duration_ms: inserted("avg_duration_ms"),
-            p50_duration_ms: inserted("p50_duration_ms"),
-            p95_duration_ms: inserted("p95_duration_ms"),
-            avg_ttfb_ms: inserted("avg_ttfb_ms"),
-            p50_ttfb_ms: inserted("p50_ttfb_ms"),
-            p95_ttfb_ms: inserted("p95_ttfb_ms"),
-            avg_output_tps: inserted("avg_output_tps"),
-            success_count: inserted("success_count"),
-            error_count: inserted("error_count"),
-            sample_count: inserted("sample_count"),
-            market_share_tokens: inserted("market_share_tokens"),
-            market_share_requests: inserted("market_share_requests"),
-            market_share_sessions: inserted("market_share_sessions"),
-            rank_by_tokens: inserted("rank_by_tokens"),
-            rank_by_requests: inserted("rank_by_requests"),
-            rank_by_sessions: inserted("rank_by_sessions"),
-            rank_by_cost: inserted("rank_by_cost"),
-          },
-        }),
-    ),
-  )
+async function upsertGeoRows(db: ReturnType<typeof drizzle>, rows: GeoStatRow[], chunkSize: number) {
+  const batches = chunks(rows, chunkSize)
+  console.log(JSON.stringify({ table: "geo_stat", batches: batches.length, chunkSize }))
+  for (const chunk of batches) {
+    await db
+      .insert(geoStat)
+      .values(chunk)
+      .onDuplicateKeyUpdate({
+        set: {
+          continent: inserted("continent"),
+          sessions: inserted("sessions"),
+          requests: inserted("requests"),
+          input_tokens: inserted("input_tokens"),
+          output_tokens: inserted("output_tokens"),
+          reasoning_tokens: inserted("reasoning_tokens"),
+          cache_read_tokens: inserted("cache_read_tokens"),
+          total_tokens: inserted("total_tokens"),
+          input_cost_microcents: inserted("input_cost_microcents"),
+          output_cost_microcents: inserted("output_cost_microcents"),
+          total_cost_microcents: inserted("total_cost_microcents"),
+          avg_duration_ms: inserted("avg_duration_ms"),
+          p50_duration_ms: inserted("p50_duration_ms"),
+          p95_duration_ms: inserted("p95_duration_ms"),
+          avg_ttfb_ms: inserted("avg_ttfb_ms"),
+          p50_ttfb_ms: inserted("p50_ttfb_ms"),
+          p95_ttfb_ms: inserted("p95_ttfb_ms"),
+          avg_output_tps: inserted("avg_output_tps"),
+          success_count: inserted("success_count"),
+          error_count: inserted("error_count"),
+          sample_count: inserted("sample_count"),
+          market_share_tokens: inserted("market_share_tokens"),
+          market_share_requests: inserted("market_share_requests"),
+          market_share_sessions: inserted("market_share_sessions"),
+          rank_by_tokens: inserted("rank_by_tokens"),
+          rank_by_requests: inserted("rank_by_requests"),
+          rank_by_sessions: inserted("rank_by_sessions"),
+          rank_by_cost: inserted("rank_by_cost"),
+        },
+      })
+  }
 }
 
 function parseImportOptions(args: string[]): ImportOptions {
   const flags = parseFlags(args)
-  const files = inputKeys.reduce<Partial<Record<ImportKey, string>>>((result, key) => {
-    const value = flags.get(key)?.[0]
-    if (!value) return result
-    return { ...result, [key]: value }
+  const files = inputKeys.reduce<Partial<Record<ImportKey, string[]>>>((result, key) => {
+    const values = flags.get(key)
+    if (!values) return result
+    return { ...result, [key]: values }
   }, {})
   return {
     dataset: flags.get("dataset")?.[0] ?? "zen",
     databaseUrl: flags.get("database-url")?.[0] ?? process.env.DATABASE_URL,
+    directories: flags.get("dir") ?? flags.get("directory") ?? [],
     dryRun: flags.has("dry-run"),
-    periodEnd: parseDateFlag(flags, "period-end"),
     periodStart: parseDateFlag(flags, "period-start"),
+    upsertChunkSize: parseIntegerFlag(flags, "upsert-chunk-size") ?? DEFAULT_UPSERT_CHUNK_SIZE,
     files,
   }
 }
@@ -820,14 +922,15 @@ function parseFlags(args: string[]) {
     const arg = args[index]
     if (!arg.startsWith("--")) fail(`Unexpected argument: ${arg}`)
     const name = arg.slice(2)
-    if (name === "dry-run") {
+    if (name === "dry-run" || name === "include-weekly") {
       result.set(name, ["true"])
       continue
     }
-    const value = args[index + 1]
-    if (!value || value.startsWith("--")) fail(`Missing value for --${name}`)
-    result.set(name, [...(result.get(name) ?? []), value])
-    index++
+    const nextFlag = args.findIndex((value, valueIndex) => valueIndex > index && value.startsWith("--"))
+    const values = args.slice(index + 1, nextFlag === -1 ? args.length : nextFlag)
+    if (values.length === 0) fail(`Missing value for --${name}`)
+    result.set(name, [...(result.get(name) ?? []), ...values])
+    index += values.length
   }
   return result
 }
@@ -848,10 +951,21 @@ function parseIntegerFlag(flags: Map<string, string[]>, name: string) {
   return parsed
 }
 
+function parseListFlag(flags: Map<string, string[]>, name: string) {
+  const value = flags.get(name)?.[0]
+  if (!value) return undefined
+  if (value === "all") return ["all"]
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function usage(): never {
   fail(`Usage:
-  bun src/honeycomb-backfill.ts queries [--period-end ISO] [--days 60] [--limit 1000]
-  bun src/honeycomb-backfill.ts import --period-end ISO [--dry-run] [--database-url URL] --model-day file.csv ...`)
+  bun src/honeycomb-backfill.ts queries [--tiers Go,Free,Paid] [--limit 1000]
+  bun src/honeycomb-backfill.ts import [--dry-run] [--upsert-chunk-size 100] [--database-url URL] --dir downloads
+  bun src/honeycomb-backfill.ts import [--dry-run] [--upsert-chunk-size 100] [--database-url URL] --model-day file.csv [--model-day more.csv] ...`)
 }
 
 function fail(message: string): never {
