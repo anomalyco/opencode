@@ -1,6 +1,9 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
+import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 import desktopPlugin from "./vite"
+
+const appRoot = fileURLToPath(new URL(".", import.meta.url))
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -25,6 +28,9 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     port: 3000,
+    watch: {
+      ignored: (path) => !path.startsWith(appRoot),
+    },
   },
   build: {
     target: "esnext",
