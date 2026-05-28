@@ -119,17 +119,19 @@ export const latestProjectSession = (
   const key = workspaceKey(input.root)
   const dirs = input.dirs.filter((dir) => workspaceKey(dir) !== key)
   const all = [input.root, ...dirs]
+  const allowed = new Set(all.map(workspaceKey))
+  const stores = input.stores.filter((store) => allowed.has(workspaceKey(store.path.directory)))
   const recent =
     input.recent &&
     all.some((dir) => workspaceKey(dir) === workspaceKey(input.recent!.directory)) &&
-    input.stores
+    stores
       .flatMap(roots)
       .find(
         (session) =>
           workspaceKey(session.directory) === workspaceKey(input.recent!.directory) && session.id === input.recent!.id,
       )
   if (recent) return recent
-  return latestRootSession(input.stores, now)
+  return latestRootSession(stores, now)
 }
 
 export function hasProjectPermissions(

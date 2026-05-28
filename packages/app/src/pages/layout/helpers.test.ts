@@ -455,6 +455,41 @@ describe("layout workspace helpers", () => {
     expect(result?.id).toBe("workspace")
   })
 
+  test("ignores stores outside the requested project", () => {
+    const result = latestProjectSession(
+      {
+        root: "/root",
+        dirs: ["/root", "/workspace"],
+        recent: { directory: "/other", id: "other", at: 999 },
+        stores: [
+          {
+            path: { directory: "/root" },
+            session: [
+              session({
+                id: "root",
+                directory: "/root",
+                time: { created: 1, updated: 1, archived: undefined },
+              }),
+            ],
+          },
+          {
+            path: { directory: "/other" },
+            session: [
+              session({
+                id: "other",
+                directory: "/other",
+                time: { created: 99, updated: 99, archived: undefined },
+              }),
+            ],
+          },
+        ],
+      },
+      120_000,
+    )
+
+    expect(result?.id).toBe("root")
+  })
+
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")

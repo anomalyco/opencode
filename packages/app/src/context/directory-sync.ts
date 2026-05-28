@@ -170,11 +170,12 @@ export const createDirSyncContext = (client: OpencodeClient, directory: string) 
   type Child = ReturnType<(typeof globalSync)["child"]>
   type Setter = Child[1]
 
-  const current = createMemo(() => globalSync.child(directory))
+  const current = createMemo(() => globalSync.child(directory, { bootstrap: false }))
   const target = (directory?: string) => {
     if (!directory || directory === directory) return current()
-    return globalSync.child(directory)
+    return globalSync.child(directory, { bootstrap: false })
   }
+  globalSync.project.warm(directory)
   const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
   const initialMessagePageSize = 80
   const historyMessagePageSize = 200

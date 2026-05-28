@@ -167,7 +167,6 @@ export default function Layout(props: ParentProps) {
   const server = useServer()
   const notification = useNotification()
   const permission = usePermission()
-  const trace = (_event: string, _extra?: Record<string, unknown>) => {}
   const location = useLocation()
   const navigate = useNavigate()
   setNavigate(navigate)
@@ -759,12 +758,8 @@ export default function Layout(props: ParentProps) {
       return true
     }
     const [child] = globalSync.child(dir, { bootstrap: false })
-    const hasDirectory = !!child.path.directory
     const sessionCount = child.session.length
-    const status = child.status
-    if (!hasDirectory) return false
-    if (sessionCount > 0) return true
-    return status === "complete"
+    return sessionCount > 0 || child.sessions === "ready" || child.status === "complete"
   })
 
   createEffect(() => {
@@ -1060,8 +1055,8 @@ export default function Layout(props: ParentProps) {
         : projects[(index + offset + projects.length) % projects.length]
     if (!target) return
 
-    // warm up child store to prevent flicker
-    globalSync.child(target.worktree)
+    // Warm the full instance in the background; session list loading stays independent.
+    globalSync.project.warm(target.worktree)
     openProject(target.worktree)
   }
 
@@ -1541,6 +1536,38 @@ export default function Layout(props: ParentProps) {
     return currentProject()?.root ?? projectRoot(directory)
   }
 
+  function cachedProjectSession(root: string) {
+    const project = layout.projects.list().find((item) => workspaceKey(item.worktree) === workspaceKey(root))
+    if (!project) return
+
+    const dirs = workspaceIds(project)
+    if (dirs.length === 0) return
+
+    const recent = store.lastProjectSession[root]
+    const known =
+      recent && dirs.some((item) => workspaceKey(item) === workspaceKey(recent.directory))
+        ? recent
+        : undefined
+    const stores = dirs.map((item) => globalSync.child(item, { bootstrap: false })[0])
+    const session = latestProjectSession(
+      {
+        root,
+        dirs,
+        recent: known,
+        stores,
+      },
+      Date.now(),
+    )
+    return session
+  }
+
+  function warmProjectSessions(root: string) {
+    const [child] = globalSync.child(root, { bootstrap: false })
+    if (child.sessions === "ready" || child.sessions === "loading") return
+    void globalSync.project.loadSessions(root, { silent: true })
+    globalSync.project.warm(root)
+  }
+
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     setStore("lastProjectSession", root, { directory, id, at: Date.now() })
     return root
@@ -1587,6 +1614,14 @@ export default function Layout(props: ParentProps) {
     }
 
     const root = projectRoot(directory)
+    warmProjectSessions(root)
+    const session = cachedProjectSession(root)
+    if (session) {
+      setSwitching(undefined)
+      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+      return
+    }
+
     setSwitching(root)
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
@@ -2280,10 +2315,14 @@ export default function Layout(props: ParentProps) {
           },
           Date.now(),
         )
+        const rootStore = stores.find((item) => workspaceKey(item.path.directory) === workspaceKey(root))
 
         console.debug(
           `[project-switch] activate root=${root} dir=${dir} recent=${known?.directory ?? ""}:${known?.id ?? ""} session=${session?.directory ?? ""}:${session?.id ?? ""}`,
         )
+        if (!session && rootStore?.sessions === "loading") {
+          return
+        }
 
         setSwitching(undefined)
         if (!session) {
@@ -2367,12 +2406,6 @@ export default function Layout(props: ParentProps) {
     on(
       () => [visibleSessionDirs(), routeDir(), autoselecting.loading] as const,
       ([dirs, dir, selecting]) => {
-        trace("visibleSessionDirs.effect", {
-          dirs,
-          dir,
-          selecting,
-          started,
-        })
         if (selecting) return
         if (dirs.length === 0) return
 
@@ -2381,10 +2414,6 @@ export default function Layout(props: ParentProps) {
           if (!dir) return
           const [child] = globalSync.child(dir, { bootstrap: false })
           if (child.sessions === "ready" || child.sessions === "loading") return
-          trace("visibleSessionDirs.load", {
-            directory: dir,
-            reason: "startup",
-          })
           globalSync.project.loadSessions(dir, { silent: true })
           return
         }
@@ -2392,10 +2421,6 @@ export default function Layout(props: ParentProps) {
         for (const directory of dirs) {
           const [child] = globalSync.child(directory, { bootstrap: false })
           if (child.sessions === "ready" || child.sessions === "loading") continue
-          trace("visibleSessionDirs.load", {
-            directory,
-            reason: "visible",
-          })
           globalSync.project.loadSessions(directory, { silent: true })
         }
       },
@@ -2561,7 +2586,7 @@ export default function Layout(props: ParentProps) {
       return [created.directory, ...next]
     })
 
-    globalSync.child(created.directory)
+    globalSync.project.warm(created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
   }
 

@@ -923,7 +923,6 @@ function* listByProject(
     experimentalWorkspaces: boolean
   },
 ) {
-  const start = Date.now()
   const conditions = [eq(SessionTable.project_id, input.projectID)]
 
   if (input.workspaceID) {
@@ -965,19 +964,6 @@ function* listByProject(
       .limit(limit)
       .all(),
   )
-  log.info("session.list", {
-    projectID: input.projectID,
-    directory: input.directory,
-    scope: input.scope,
-    path: input.path,
-    workspaceID: input.workspaceID,
-    roots: input.roots,
-    start: input.start,
-    search: input.search,
-    limit,
-    count: rows.length,
-    duration: Date.now() - start,
-  })
   for (const row of rows) {
     yield fromRow(row)
   }

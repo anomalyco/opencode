@@ -518,7 +518,7 @@ export const LocalWorkspace = (props: {
   const [searchQuery, setSearchQuery] = createSignal("")
   const [refreshing, setRefreshing] = createSignal(false)
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
-  const stores = createMemo(() => dirs().map((directory) => globalSync.child(directory)))
+  const stores = createMemo(() => dirs().map((directory) => globalSync.child(directory, { bootstrap: false })))
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const allSessions = createMemo(() => sortedProjectSessions(stores().map((item) => item[0]), props.sortNow()))
   const sessions = createMemo(() => {

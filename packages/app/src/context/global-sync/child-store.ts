@@ -23,13 +23,18 @@ export function createChildStoreManager(input: {
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
-  const seed = (input: { meta: ProjectMeta | undefined; icon: string | undefined; vcs: VcsInfo | undefined }) => ({
+  const seed = (input: {
+    directory: string
+    meta: ProjectMeta | undefined
+    icon: string | undefined
+    vcs: VcsInfo | undefined
+  }) => ({
     project: "",
     projectMeta: input.meta,
     icon: input.icon,
     provider: { all: [], connected: [], default: {} },
     config: {},
-    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    path: { state: "", config: "", worktree: "", directory: input.directory, home: "" },
     status: "loading" as const,
     sessions: "idle" as const,
     session_error: undefined as string | undefined,
@@ -183,7 +188,9 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
-          const child = createStore<State>(seed({ meta: initialMeta, icon: initialIcon, vcs: vcsStore.value }))
+          const child = createStore<State>(
+            seed({ directory, meta: initialMeta, icon: initialIcon, vcs: vcsStore.value }),
+          )
           children[directory] = child
           disposers.set(directory, dispose)
 
@@ -274,7 +281,7 @@ export function createChildStoreManager(input: {
     const meta = metaCache.get(directory)?.store.value
     const icon = iconCache.get(directory)?.store.value
     // Preserve local persisted project metadata while wiping server-derived state.
-    child[1](reconcile(seed({ meta, icon, vcs })))
+    child[1](reconcile(seed({ directory, meta, icon, vcs })))
   }
 
   return {

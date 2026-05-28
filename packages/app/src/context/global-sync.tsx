@@ -133,7 +133,6 @@ function createGlobalSync() {
   let active = true
   let projectWritten = false
   let prevServer = server.current?.integration
-  let _lsSeq = 0
   // A directory is only "isolated" (skip bootstrap/load/event application) when its
   // domain has no registered server to talk to. Visible-domain no longer gates hidden
   // domains; each domain runs in parallel so long as it has an active server.
@@ -305,7 +304,9 @@ function createGlobalSync() {
       isLoadingSessions: (directory) => sessionLoads.has(directory),
       onBootstrap: (directory) => {
         void bootstrapInstance(directory).catch((err) => {
-          console.error("[global-sync] bootstrap trigger failed", { directory, err })
+          console.error(
+            `[global-sync] bootstrap trigger failed directory=${directory} err=${err instanceof Error ? err.message : String(err)}`,
+          )
         })
       },
       onDispose: (directory) => {
@@ -365,9 +366,6 @@ function createGlobalSync() {
   }
 
   async function loadSessions(directory: string, opts?: { silent?: boolean; force?: boolean }) {
-    const _seq = ++_lsSeq
-    const started = typeof performance === "object" ? performance.now() : Date.now()
-    const elapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - started)
     if (isolated(directory)) {
       return
     }
@@ -436,7 +434,9 @@ function createGlobalSync() {
         setLoaded("dir", directory, true)
       })
       .catch((err) => {
-        console.error("Failed to load sessions", err)
+        console.error(
+          `[global-sync] failed to load sessions directory=${directory} err=${err instanceof Error ? err.message : String(err)}`,
+        )
         setStore("sessions", "idle")
         const note = permissionNotice(err, language.t, "session")
         setStore("session_error", note)
@@ -573,21 +573,9 @@ function createGlobalSync() {
             part?: { id?: string; messageID?: string; type?: string }
           }
         | undefined
-      console.error("[global-sync] directory event failed", {
-        directory,
-        domain: dirDomain,
-        type: event.type,
-        recent,
-        status: store.status,
-        sessions: store.sessions,
-        path: store.path.directory,
-        props: {
-          messageID: props?.messageID ?? props?.part?.messageID,
-          partID: props?.partID ?? props?.part?.id,
-          partType: props?.part?.type,
-        },
-        err,
-      })
+      console.error(
+        `[global-sync] directory event failed directory=${directory} domain=${dirDomain} type=${event.type} recent=${recent ? 1 : 0} status=${store.status} sessions=${store.sessions} path=${store.path.directory} messageID=${props?.messageID ?? props?.part?.messageID ?? ""} partID=${props?.partID ?? props?.part?.id ?? ""} partType=${props?.part?.type ?? ""} err=${err instanceof Error ? err.message : String(err)}`,
+      )
       throw err
     }
   })
@@ -665,6 +653,9 @@ function createGlobalSync() {
 
   const projectApi = {
     loadSessions,
+    warm(directory: string) {
+      void bootstrapInstance(directory)
+    },
     meta(directory: string, patch: ProjectMeta) {
       children.projectMeta(directory, patch)
     },

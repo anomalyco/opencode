@@ -61,12 +61,9 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
     if (next === last) return
     last = next
     if (!notify()) return
-    console.debug("[project-icon] badge", {
-      dir: props.project.worktree,
-      count: count(),
-      error: error(),
-      permission: perms(),
-    })
+    console.debug(
+      `[project-icon] badge dir=${props.project.worktree} count=${count()} error=${error() ? 1 : 0} permission=${perms() ? 1 : 0}`,
+    )
   })
   return (
     <div
@@ -203,7 +200,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const globalSync = useGlobalSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = globalSync.child(props.session.directory)
+  const [sessionStore] = globalSync.child(props.session.directory, { bootstrap: false })
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
       return !permission.autoResponds(item, props.session.directory)
@@ -230,9 +227,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const copy = () => {
     const text = `Session ID: ${props.session.id}\nProject path: ${props.session.directory}`
     const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard
-    console.debug("[sidebar-session] copy info", { id: props.session.id, dir: props.session.directory })
+    console.debug(`[sidebar-session] copy info id=${props.session.id} dir=${props.session.directory}`)
     if (!clip?.writeText) {
-      console.debug("[sidebar-session] clipboard unavailable", { id: props.session.id })
+      console.debug(`[sidebar-session] clipboard unavailable id=${props.session.id}`)
       showToast({
         variant: "error",
         title: language.t("common.requestFailed"),
@@ -242,7 +239,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     }
     void clip.writeText(text).then(
       () => {
-        console.debug("[sidebar-session] copied info", { id: props.session.id, dir: props.session.directory })
+        console.debug(`[sidebar-session] copied info id=${props.session.id} dir=${props.session.directory}`)
         showToast({
           variant: "success",
           icon: "circle-check",
@@ -251,7 +248,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         })
       },
       (err: unknown) => {
-        console.debug("[sidebar-session] copy failed", { id: props.session.id, err })
+        console.debug(`[sidebar-session] copy failed id=${props.session.id} err=${err instanceof Error ? err.message : String(err)}`)
         showToast({
           variant: "error",
           title: language.t("common.requestFailed"),

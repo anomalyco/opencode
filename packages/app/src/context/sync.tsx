@@ -187,13 +187,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const current = createMemo(() => {
       // Rebind the current directory store whenever GlobalSync hot-resets for a server switch.
       globalSync.version
-      return globalSync.child(sdk.directory)
+      return globalSync.child(sdk.directory, { bootstrap: false })
     })
     const target = (directory?: string) => {
       if (!directory || directory === sdk.directory) return current()
       globalSync.version
-      return globalSync.child(directory)
+      return globalSync.child(directory, { bootstrap: false })
     }
+    globalSync.project.warm(sdk.directory)
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
 const initialMessagePageSize = 80
      const historyMessagePageSize = 200
