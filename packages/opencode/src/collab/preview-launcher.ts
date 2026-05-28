@@ -22,6 +22,10 @@
  * URL of the running preview: served by the existing /preview/<port>/* proxy
  * in collab/preview-router.ts.  The proxy already gates on a valid collab
  * cookie (ADR-0001), so participants — and only participants — can reach it.
+ * The proxy forwards with Host: local.unleashlive.com:<port> so the dev
+ * server sees its expected hostname — the container's /etc/hosts maps
+ * local.unleashlive.com to 127.0.0.1 via the task definition's `extraHosts`
+ * field (and docker-compose's `extra_hosts:`).
  *
  * Per-repo config: `.opencode-preview.json` in the repo root.  When absent,
  * defaults match the unleashlive/frontend setup (the zero-config case the

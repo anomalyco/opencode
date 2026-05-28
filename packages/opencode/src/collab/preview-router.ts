@@ -44,16 +44,45 @@ export function parsePreviewPath(pathname: string): { port: number; rest: string
 }
 
 /**
- * Forward a plain HTTP request through to 127.0.0.1:<port>.  Returns a
+ * The Host header value we forward to dev servers behind /preview/<port>/*.
+ *
+ * Targets the in-container loopback alias `local.unleashlive.com` (set up
+ * via the task definition's `extraHosts` field for ECS and the
+ * `extra_hosts` map in docker-compose.yml — both resolve to 127.0.0.1).
+ * This lets `unleashlive/frontend` keep its CORS / hostname assumptions
+ * unchanged: dev server sees Host: local.unleashlive.com:<port> exactly
+ * as it would on a developer's Mac with `127.0.0.1 local.unleashlive.com`
+ * in /etc/hosts.
+ *
+ * Without this rewrite the upstream would see Host: 127.0.0.1:<port> and
+ * any Vite/Webpack `server.allowedHosts` strictness OR runtime hostname
+ * check inside the frontend would reject the request.
+ */
+const PREVIEW_UPSTREAM_HOST = "local.unleashlive.com"
+
+function upstreamHostHeader(port: number): string {
+  return `${PREVIEW_UPSTREAM_HOST}:${port}`
+}
+
+/**
+ * Forward a plain HTTP request through to local.unleashlive.com:<port>
+ * (which the container's /etc/hosts maps to 127.0.0.1:<port>).  Returns a
  * Response the collab middleware can hand back to the browser.  Headers
  * that don't survive a hop are stripped; everything else passes through.
  */
 export async function handlePreviewHttp(req: Request, port: number, rest: string): Promise<Response> {
   const url = new URL(req.url)
-  const target = `http://127.0.0.1:${port}${rest}${url.search}`
+  // Connect to the dev server via the hostname alias rather than raw
+  // 127.0.0.1.  Bun's fetch resolves via /etc/hosts so the alias resolves
+  // back to 127.0.0.1 for the actual TCP connect — but the Host header on
+  // the wire reads `local.unleashlive.com:<port>`, which the frontend
+  // expects.
+  const target = `http://${PREVIEW_UPSTREAM_HOST}:${port}${rest}${url.search}`
 
-  // Strip hop-by-hop headers + the Host header (would otherwise lie about
-  // the upstream's host name and break some apps' redirect logic).
+  // Strip hop-by-hop headers + the Host header (we set it ourselves below
+  // so the dev server sees its expected hostname; the browser's original
+  // Host header would otherwise leak collab.utils.unleashlive.com which
+  // some dev servers reject).
   const headers = new Headers()
   for (const [name, value] of req.headers.entries()) {
     const lower = name.toLowerCase()
@@ -72,6 +101,11 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
     }
     headers.set(name, value)
   }
+  // Override the Host header explicitly.  Some fetch implementations
+  // auto-set Host from the URL host; we set it anyway so the wire value
+  // is unambiguous + we don't accidentally pass port as a separate
+  // header field on weirder runtimes.
+  headers.set("Host", upstreamHostHeader(port))
   // Tell the upstream what its public URL prefix is — apps that use this
   // (e.g. Vite with `--base`) can self-rewrite their links.
   headers.set("X-Forwarded-Prefix", `/preview/${port}`)
@@ -108,9 +142,10 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
       `<!doctype html><meta charset="utf-8"><title>Preview unavailable</title>` +
         `<div style="font-family:system-ui;margin:3rem auto;max-width:520px;line-height:1.5">` +
         `<h1 style="margin:0 0 .5rem 0">Preview unavailable</h1>` +
-        `<p>Couldn't reach <code>127.0.0.1:${port}</code> from inside the workspace container.</p>` +
-        `<p>Is a dev server actually listening there?  In the iframe terminal:</p>` +
+        `<p>Couldn't reach <code>${PREVIEW_UPSTREAM_HOST}:${port}</code> from inside the workspace container.</p>` +
+        `<p>Is a dev server actually listening on port ${port}?  In the iframe terminal:</p>` +
         `<pre style="background:#111;color:#eee;padding:.75rem;border-radius:6px">ss -lntp | grep ${port}</pre>` +
+        `<p>If the dev server is up but this still 502s, check that <code>${PREVIEW_UPSTREAM_HOST}</code> resolves to <code>127.0.0.1</code> in the container's <code>/etc/hosts</code> (via the task definition's <code>extraHosts</code> entry).</p>` +
         `<p>Error: <code>${detail.replace(/</g, "&lt;")}</code></p>` +
         `</div>`,
       { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
@@ -154,6 +189,14 @@ export function attachPreviewUpgrade(server: {
       return
     }
 
+    // TCP-connect to the loopback alias.  Resolved via /etc/hosts to
+    // 127.0.0.1, but `netConnect` accepts hostnames so we can be explicit
+    // about the intent.  Using `127.0.0.1` here would still work because
+    // the Host header rewrite below is what the dev server actually sees;
+    // the hostname only matters when the upstream is on a remote IP.
+    // We use 127.0.0.1 for the TCP connect because it's strictly faster
+    // (skips the DNS lookup) and the dev server is always loopback —
+    // the hostname rewrite is purely for the Host header below.
     const upstreamSocket = netConnect({ host: "127.0.0.1", port: parsed.port })
 
     const cleanup = (err?: Error) => {
@@ -185,7 +228,9 @@ export function attachPreviewUpgrade(server: {
         const name = raw[i]!
         const value = raw[i + 1]!
         if (name.toLowerCase() === "host") {
-          lines.push(`Host: 127.0.0.1:${parsed.port}`)
+          // Rewrite Host to the loopback alias so the dev server sees its
+          // expected hostname — same rationale as in handlePreviewHttp.
+          lines.push(`Host: ${upstreamHostHeader(parsed.port)}`)
         } else {
           lines.push(`${name}: ${value}`)
         }

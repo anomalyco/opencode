@@ -50,6 +50,15 @@ services:
       # Claude Code credentials for opencode-claude-auth plugin (bind-mount from host)
       # To populate: security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.credentials.json
       - ${HOME}/.claude/.credentials.json:/home/opencode/.claude/.credentials.json:ro
+    # Map local.unleashlive.com → 127.0.0.1 inside the container.  The frontend
+    # live-preview launcher (collab/preview-launcher.ts) and the preview
+    # proxy (collab/preview-router.ts) both rely on the dev server seeing
+    # its expected hostname so the frontend's CORS / hostname assumptions
+    # don't have to change.  Docker rewrites /etc/hosts on every container
+    # start; this map persists across restarts.  On ECS the equivalent is
+    # the task definition's `extraHosts` field — see DEPLOYMENT.md Step 5.
+    extra_hosts:
+      - "local.unleashlive.com:127.0.0.1"
     restart: unless-stopped
     healthcheck:
       # /healthz returns 503 when SQLite is unreachable — finer-grained than

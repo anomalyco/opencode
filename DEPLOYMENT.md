@@ -235,6 +235,12 @@ Fargate, 2 vCPU / 4 GB.  Replace `<…>` placeholders with the ARNs and IDs you 
     },
     "readonlyRootFilesystem": false,
     "user": "10001:10001",
+    "extraHosts": [
+      {
+        "hostname": "local.unleashlive.com",
+        "ipAddress": "127.0.0.1"
+      }
+    ],
     "healthCheck": {
       "command": ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""],
       "interval": 15, "timeout": 5, "retries": 5, "startPeriod": 30
@@ -403,6 +409,39 @@ Common gotchas you'll see in the logs if anything's misconfigured:
 | `[collab] failed to create native session` | Anthropic key invalid | Check `ANTHROPIC_API_KEY` secret (real `sk-ant-...`, not `dummy`) or refresh `CLAUDE_CREDENTIALS_JSON` |
 | `opencode-claude-auth: Claude credentials are expired` | Claude OAuth refresh token rejected | Re-dump on a Mac (`security find-generic-password -s "Claude Code-credentials" -w`) and `put-secret-value` to `collab/claude_credentials`, then `aws ecs update-service --force-new-deployment` |
 | `FATAL: no LLM auth configured in collab production` | Neither `ANTHROPIC_API_KEY` (real) nor `~/.claude/.credentials.json` present at boot | Set one of them.  The literal string `"dummy"` is treated as missing (ADR-0001 Phase 4) |
+
+### Frontend live-preview loopback alias
+
+The `extraHosts` entry in the task definition above maps
+`local.unleashlive.com → 127.0.0.1` inside the container's
+`/etc/hosts`.  This is what makes the **"Launch Unleash live frontend"**
+button work without modifying the `unleashlive/frontend` repo:
+
+- The frontend dev server still sees `Host: local.unleashlive.com:8080`
+  on every request — its CORS / hostname checks pass exactly as they
+  would on a developer's Mac with `127.0.0.1 local.unleashlive.com`
+  in `/etc/hosts`
+- The preview proxy at `/preview/8080/*` rewrites the Host header to
+  `local.unleashlive.com:8080` before forwarding to the dev server
+  (`packages/opencode/src/collab/preview-router.ts`)
+- TCP connect still goes to 127.0.0.1 — no extra DNS lookup hop
+
+If you forget the `extraHosts` field, the preview HTTP proxy still
+TCP-connects fine (it uses literal 127.0.0.1), but anything inside
+the dev server that does its own resolution of `local.unleashlive.com`
+will fail.  The proxy's 502 page calls this out explicitly.
+
+For Terraform users: add the equivalent to the ECS task definition's
+`container_definitions` block:
+
+```hcl
+extra_hosts = [
+  { hostname = "local.unleashlive.com", ip_address = "127.0.0.1" },
+]
+```
+
+(Field name varies by terraform provider version — `extra_hosts` for
+`hashicorp/aws ≥ 5.x`, `extraHosts` in the raw task-definition JSON.)
 
 ---
 
