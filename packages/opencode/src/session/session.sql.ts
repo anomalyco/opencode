@@ -53,7 +53,23 @@ export const SessionTable = sqliteTable(
   },
   (table) => [
     index("session_project_idx").on(table.project_id),
+    index("session_project_parent_time_idx").on(table.project_id, table.parent_id, table.time_updated, table.id),
+    index("session_project_directory_parent_time_idx").on(
+      table.project_id,
+      table.directory,
+      table.parent_id,
+      table.time_updated,
+      table.id,
+    ),
+    index("session_project_path_parent_time_idx").on(
+      table.project_id,
+      table.path,
+      table.parent_id,
+      table.time_updated,
+      table.id,
+    ),
     index("session_workspace_idx").on(table.workspace_id),
+    index("session_workspace_parent_time_idx").on(table.workspace_id, table.parent_id, table.time_updated, table.id),
     index("session_parent_idx").on(table.parent_id),
   ],
 )

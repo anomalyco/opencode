@@ -118,6 +118,60 @@ export const layer = Layer.effect(
           }
         }),
       },
+      {
+        name: "session_time_updated_from_messages",
+        run: Effect.gen(function* () {
+          for (let cursor: SessionID | undefined, page = 1; ; page++) {
+            const next = yield* Effect.gen(function* () {
+              const sessions = yield* Effect.sync(() =>
+                Database.use((db) =>
+                  db
+                    .select({ id: SessionTable.id })
+                    .from(SessionTable)
+                    .where(cursor ? gt(SessionTable.id, cursor) : undefined)
+                    .orderBy(asc(SessionTable.id))
+                    .limit(100)
+                    .all(),
+                ),
+              )
+              if (sessions.length === 0) return
+
+              yield* Effect.sync(() =>
+                Database.transaction((db) => {
+                  const ids = sessions.map((session) => session.id)
+                  for (const row of db
+                    .select({
+                      session_id: MessageTable.session_id,
+                      time_updated: sql<number>`max(${MessageTable.time_created})`,
+                    })
+                    .from(MessageTable)
+                    .where(inArray(MessageTable.session_id, ids))
+                    .groupBy(MessageTable.session_id)
+                    .all()) {
+                    db.update(SessionTable)
+                      .set({ time_updated: sql`max(${SessionTable.time_updated}, ${row.time_updated})` })
+                      .where(eq(SessionTable.id, row.session_id))
+                      .run()
+                  }
+                }),
+              )
+
+              return sessions.at(-1)?.id
+            }).pipe(
+              Effect.withSpan("DataMigration.sessionTimeUpdated.page", {
+                attributes: {
+                  "data_migration.name": "session_time_updated_from_messages",
+                  "data_migration.page": page,
+                  "data_migration.cursor": cursor ?? "",
+                },
+              }),
+            )
+            if (!next) return
+            cursor = next
+            yield* Effect.sleep("10 millis")
+          }
+        }),
+      },
     ]
 
     yield* Effect.gen(function* () {

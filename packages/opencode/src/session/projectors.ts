@@ -136,6 +136,10 @@ export default [
         })
         .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest } })
         .run()
+      db.update(SessionTable)
+        .set({ time_updated: sql`max(${SessionTable.time_updated}, ${time_created})` })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
     } catch (err) {
       if (!foreign(err)) throw err
       log.warn("ignored late message update", { messageID: id, sessionID })

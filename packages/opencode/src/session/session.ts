@@ -19,7 +19,6 @@ import { like } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { sql } from "drizzle-orm"
 import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
@@ -895,6 +894,7 @@ function* listByProject(
     experimentalWorkspaces: boolean
   },
 ) {
+  const start = Date.now()
   const conditions = [eq(SessionTable.project_id, input.projectID)]
 
   if (input.workspaceID) {
@@ -926,21 +926,31 @@ function* listByProject(
   }
 
   const limit = input.limit ?? 100
-  const lastActivity = sql<number>`max(${SessionTable.time_updated}, coalesce(max(${MessageTable.time_created}), ${SessionTable.time_updated}))`
 
   const rows = Database.use((db) =>
     db
-      .select({ session: SessionTable, lastActivity })
+      .select()
       .from(SessionTable)
-      .leftJoin(MessageTable, eq(MessageTable.session_id, SessionTable.id))
       .where(and(...conditions))
-      .groupBy(SessionTable.id)
-      .orderBy(desc(lastActivity), desc(SessionTable.id))
+      .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
       .limit(limit)
       .all(),
   )
+  log.info("session.list", {
+    projectID: input.projectID,
+    directory: input.directory,
+    scope: input.scope,
+    path: input.path,
+    workspaceID: input.workspaceID,
+    roots: input.roots,
+    start: input.start,
+    search: input.search,
+    limit,
+    count: rows.length,
+    duration: Date.now() - start,
+  })
   for (const row of rows) {
-    yield fromRow({ ...row.session, time_updated: row.lastActivity })
+    yield fromRow(row)
   }
 }
 

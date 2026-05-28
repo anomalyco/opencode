@@ -14,6 +14,7 @@ import { Storage } from "@/storage/storage"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 void Log.init({ print: false })
 const it = testEffect(
@@ -229,39 +230,57 @@ describe("session.list", () => {
   )
 
   it.instance(
-    "orders limited results by the latest conversation message time",
+    "orders limited results by persisted session update time",
     () =>
       Effect.gen(function* () {
-        const staleSession = yield* withSession({ title: "stale-session-new-message" })
+        const latestSession = yield* withSession({ title: "latest-session" })
         const recentSession = yield* withSession({ title: "recent-session" })
         const olderSession = yield* withSession({ title: "older-session" })
 
         yield* Effect.sync(() => {
           Database.use((db) => {
-            db.update(SessionTable).set({ time_updated: 100 }).where(eq(SessionTable.id, staleSession.id)).run()
+            db.update(SessionTable).set({ time_updated: 400 }).where(eq(SessionTable.id, latestSession.id)).run()
             db.update(SessionTable).set({ time_updated: 300 }).where(eq(SessionTable.id, recentSession.id)).run()
             db.update(SessionTable).set({ time_updated: 200 }).where(eq(SessionTable.id, olderSession.id)).run()
-            db.insert(MessageTable)
-              .values({
-                id: "message-latest" as (typeof MessageTable.$inferInsert)["id"],
-                session_id: staleSession.id,
-                time_created: 400,
-                time_updated: 400,
-                data: {
-                  role: "user",
-                  time: { created: 400 },
-                  agent: "general",
-                  model: { providerID: "test", modelID: "test" },
-                } as (typeof MessageTable.$inferInsert)["data"],
-              })
-              .run()
           })
         })
 
         const sessions = yield* SessionNs.use.list({ roots: true, limit: 2 })
 
-        expect(sessions.map((session) => session.id)).toEqual([staleSession.id, recentSession.id])
+        expect(sessions.map((session) => session.id)).toEqual([latestSession.id, recentSession.id])
         expect(sessions[0]?.time.updated).toBe(400)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "updates session time when messages are stored",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "message-updates-session-time" })
+        yield* Effect.sync(() => {
+          Database.use((db) =>
+            db.update(SessionTable).set({ time_updated: 100 }).where(eq(SessionTable.id, session.id)).run(),
+          )
+        })
+
+        yield* SessionNs.use.updateMessage({
+          id: "message-latest" as (typeof MessageTable.$inferInsert)["id"],
+          sessionID: session.id,
+          role: "user",
+          time: { created: 400 },
+          agent: "general",
+          model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+        })
+
+        const row = Database.use((db) =>
+          db
+            .select({ timeUpdated: SessionTable.time_updated })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get(),
+        )
+        expect(row?.timeUpdated).toBe(400)
       }),
     { git: true },
   )
