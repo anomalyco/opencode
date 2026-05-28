@@ -104,6 +104,13 @@ interface ActiveState extends PreviewStateSnapshot {
    *  trigger — e.g. a dev server with a `--build` flag that finishes
    *  building and exits naturally). */
   _stopRequested: boolean
+  /** GitHub OAuth token the original launch used for git fetches.  Cached
+   *  here so `restartPreview` (Driver button OR branch-change auto-restart)
+   *  reuses it without a fresh DB lookup.  NEVER surfaced via
+   *  `getPreviewState()` — that constructor strips this field explicitly.
+   *  May be null when launchPreview was called without a token (public-only
+   *  install) — restartPreview then also runs unauthenticated. */
+  _gitAccessToken: string | null
 }
 
 // ── Module state (singleton — "first-launch wins") ─────────────────────────
@@ -236,10 +243,20 @@ export type LaunchResult =
  * Spawn the preview.  First-launch wins; second call while another preview
  * is active returns 409 with the existing state so the caller can render a
  * "already running in session X" message.
+ *
+ * `gitAccessToken` is the GitHub OAuth token the install pipeline should
+ * present to `git` when fetching private dependencies (npm packages declared
+ * as `git+ssh://` or `git+https://` URLs in package.json / pnpm-lock.yaml).
+ * Threaded via `GITHUB_TOKEN` env into the child process, which the
+ * container's GIT_ASKPASS helper (see Dockerfile) reads to answer git's
+ * credential prompt.  The token NEVER lands on disk (no .gitconfig write,
+ * no URL embedding, no lockfile entry).  Pass null / omit for public-only
+ * installs.
  */
 export function launchPreview(
   collabSessionId: string,
   repoFullName: string,
+  gitAccessToken?: string | null,
 ): LaunchResult {
   if (active) {
     return {
@@ -262,12 +279,22 @@ export function launchPreview(
     ? `${config.installCommand} && ${config.command}`
     : config.command
 
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     OPENCODE_PREVIEW: "1",
     PORT: String(config.port),
     // Cap dev-server heap so a Vite explosion doesn't OOM the whole container.
     NODE_OPTIONS: `${process.env["NODE_OPTIONS"] ?? ""} --max-old-space-size=2048`.trim(),
+  }
+  // Per-launch GitHub OAuth token for the install's git fetches.  Picked up
+  // by the container's GIT_ASKPASS helper (Dockerfile) as `Password` against
+  // the static `Username: x-access-token`.  Lives only in this child's env;
+  // unset GITHUB_TOKEN globally so spawning an unauthenticated pnpm install
+  // by some other path doesn't accidentally inherit it.
+  if (gitAccessToken) {
+    env.GITHUB_TOKEN = gitAccessToken
+  } else {
+    delete env.GITHUB_TOKEN
   }
 
   let child: ChildProcess
@@ -312,6 +339,9 @@ export function launchPreview(
     child,
     config,
     _stopRequested: false,
+    // Cache for restartPreview.  Normalise undefined → null so the field is
+    // always a concrete `string | null` (avoids a third "unknown" case).
+    _gitAccessToken: gitAccessToken ?? null,
   }
   active = state
 
@@ -417,6 +447,11 @@ export function restartPreview(): LaunchResult {
     return { ok: false, status: 404, error: "No preview is currently running." }
   }
   const { collabSessionId, repoFullName, port, label, config } = active
+  // Snapshot the cached token BEFORE stopPreview clears `active`.  Same
+  // reason as the port/label snapshot — we need it to survive the
+  // synchronous null-out so the deferred relaunch can re-authenticate
+  // any git fetches the install pipeline kicks off again.
+  const cachedToken = active._gitAccessToken
   const installing: PreviewStateSnapshot = {
     collabSessionId,
     repoFullName,
@@ -436,7 +471,7 @@ export function restartPreview(): LaunchResult {
   // later stop / delete arrives before the relaunch fires.
   pendingRestart = setTimeout(() => {
     pendingRestart = null
-    const result = launchPreview(collabSessionId, repoFullName)
+    const result = launchPreview(collabSessionId, repoFullName, cachedToken)
     if (!result.ok) {
       console.error(`[collab.preview] restart relaunch failed: ${result.error}`)
       // Surface to the SPA so its banner doesn't stay stuck "installing".
@@ -660,9 +695,38 @@ export async function resumePreviewsOnBoot(): Promise<void> {
     `[collab.preview] resumePreviewsOnBoot: ${intents.length} intent(s) on disk; picking session=${pick.collabSessionId} repo=${pick.repoFullName} (most-recent)`,
   )
 
+  // Look up the session owner's most-recent unexpired OAuth token so the
+  // resumed install can authenticate any private git+https dependencies
+  // (npm packages declared as git deps in package.json that resolve to
+  // private unleashlive repos).  No Driver "clicker" exists on a boot
+  // resume — the owner is the canonical fallback (always a Driver per
+  // ADR-0005, always present in collab_session).  Returns null if every
+  // login for this user has expired or no row exists, in which case the
+  // resumed install runs unauthenticated and private deps will fail with
+  // git's standard credential-prompt error (which surfaces in the
+  // preview banner's log tail).
+  let gitAccessToken: string | null = null
+  try {
+    const cs = session.getCollabSession(pick.collabSessionId)
+    if (cs) {
+      const cookieAuth = await import("./cookie-auth")
+      gitAccessToken = cookieAuth.latestAccessTokenForGithubId(cs.ownerGithubId)
+      if (!gitAccessToken) {
+        console.warn(
+          `[collab.preview] resumePreviewsOnBoot: no fresh OAuth token for owner github_id=${cs.ownerGithubId}; resumed install will run unauthenticated`,
+        )
+      }
+    }
+  } catch (err) {
+    console.warn(
+      `[collab.preview] resumePreviewsOnBoot: owner-token lookup threw; resumed install will run unauthenticated:`,
+      err,
+    )
+  }
+
   let result: LaunchResult
   try {
-    result = launchPreview(pick.collabSessionId, pick.repoFullName)
+    result = launchPreview(pick.collabSessionId, pick.repoFullName, gitAccessToken)
   } catch (err) {
     console.error(
       `[collab.preview] resumePreviewsOnBoot: launchPreview threw for session=${pick.collabSessionId}:`,

@@ -1438,7 +1438,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       return json({ error: "No preview-capable repo linked to this session." }, 400)
     }
 
-    const result = Preview.launchPreview(sessionId, repoFullName)
+    // Pass the clicker's GitHub OAuth token through so pnpm/npm/yarn git
+    // fetches inside the install pipeline authenticate against
+    // private unleashlive repos declared as deps in package.json.  Lives
+    // only in the spawned child's env, never on disk — see Dockerfile's
+    // GIT_ASKPASS helper for the consumption side, and preview-launcher's
+    // ActiveState._gitAccessToken comment for the in-memory caching
+    // semantics across restart.
+    const result = Preview.launchPreview(sessionId, repoFullName, sess.githubAccessToken)
     if (!result.ok) return json({ error: result.error, ...("existing" in result ? { existing: result.existing } : {}) }, result.status)
     // Persist the Driver's intent so an ECS task replacement re-spawns the
     // preview on the next boot (resumePreviewsOnBoot in serve.ts).  Stored

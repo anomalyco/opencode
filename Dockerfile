@@ -49,10 +49,53 @@ WORKDIR /app
 # System packages — git for the workspace repo cloning at runtime; build tools
 # in case native modules need to compile (tree-sitter / pty fall back to wasm
 # when --ignore-scripts is used, but g++/python3/make are still cheap insurance);
-# nodejs/npm are required by @npmcli/arborist (opencode's plugin loader).
+# nodejs/npm are required by @npmcli/arborist (opencode's plugin loader);
+# openssh-client lets git fork ssh for npm packages that declare git+ssh deps
+# (pnpm-lock.yaml occasionally records ssh URLs from upstream package.json
+# specs).  Without ssh in PATH, git fails with "cannot run ssh: No such file
+# or directory" — observed in the wild during unleashlive/frontend preview
+# install.  We don't actually USE ssh auth (no key shipped); the next layer
+# rewrites every git ssh URL to authenticated HTTPS via a system gitconfig.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git ca-certificates python3 make g++ nodejs npm && \
+        git ca-certificates python3 make g++ nodejs npm openssh-client && \
     rm -rf /var/lib/apt/lists/*
+
+# Rewrite ssh-form GitHub URLs to HTTPS at the system level.  Every flavour
+# pnpm / npm / yarn could produce gets normalised to `https://github.com/`:
+#
+#   git@github.com:owner/repo        → https://github.com/owner/repo
+#   ssh://git@github.com/owner/repo  → https://github.com/owner/repo
+#   git+ssh://git@github.com/...     → https://github.com/...
+#
+# Public repos clone unauthenticated; for private repos (e.g. unleashlive
+# internal forks declared as deps in the frontend's package.json) the
+# per-launch GIT_ASKPASS handler below supplies the Driver's OAuth token at
+# git's credential prompt.  Writing to /etc/gitconfig (--system) means the
+# rule applies to every UID inside the container — preview launches run as
+# uid 10001, not root, so --global wouldn't reach the right HOME.
+RUN git config --system url."https://github.com/".insteadOf "git@github.com:" && \
+    git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" && \
+    git config --system url."https://github.com/".insteadOf "git+ssh://git@github.com/"
+
+# Credential helper for authenticated HTTPS git fetches.  When git needs
+# creds (e.g. cloning a private dep over the URL the rewrite above produced),
+# it execs $GIT_ASKPASS twice — once for "Username", once for "Password".
+# Our helper answers `x-access-token` / `$GITHUB_TOKEN`, which is GitHub's
+# canonical OAuth-app HTTP basic-auth form.
+#
+# Token-flow lifecycle:
+#   - Token NEVER lands on disk (only in env at install time)
+#   - Token NEVER lands in pnpm-lock.yaml (lockfile sees `https://github.com/`
+#     from the rewrite above — the askpass form keeps the URL clean)
+#   - The preview-launcher injects GITHUB_TOKEN per-spawn only.  Outside the
+#     install process, GITHUB_TOKEN is unset.
+#
+# Bun's shell-builtin /usr/local/bin needs to be writable by uid 10001 (or
+# the file world-readable) — we chmod a+rx + write as root, world-readable.
+RUN printf '#!/bin/sh\ncase "$1" in\n  Username*) echo x-access-token ;;\n  Password*) echo "$GITHUB_TOKEN" ;;\nesac\n' \
+      > /usr/local/bin/git-askpass-token && \
+    chmod a+rx /usr/local/bin/git-askpass-token
+ENV GIT_ASKPASS=/usr/local/bin/git-askpass-token
 
 # pnpm@10 — used by the frontend live-preview launcher to install + run dev
 # servers inside a collab workspace (see packages/opencode/src/collab/preview-launcher.ts).
