@@ -296,6 +296,19 @@ find_binary() {
   return 1
 }
 
+# Find the inner opencode binary (`securecode-bin`) that ships next to the
+# supervisor inside the extracted archive. The supervisor at runtime spawns
+# this binary inside the sandbox, so it has to live in the same install dir.
+find_inner_binary() {
+  local supervisor="$1"
+  local dir
+  dir=$(dirname "$supervisor")
+  for candidate in "$dir/securecode-bin" "$dir/securecode-bin.exe"; do
+    if [ -f "$candidate" ]; then echo "$candidate"; return 0; fi
+  done
+  return 1
+}
+
 # Locate the bundled setup/install.sh after extraction so we can run plugin /
 # config seeding without forcing the user to navigate the archive manually.
 find_setup_dir() {
@@ -399,6 +412,18 @@ main() {
     bin=$(find_binary "$tmp/unpacked") || { err "Could not locate ${ARCHIVE_PREFIX} binary inside ${filename}"; exit 1; }
     install_binary "$bin" "$install_dir/$APP"
     info "Installed $APP -> $install_dir/$APP"
+
+    # supervisor は同じディレクトリにある securecode-bin (opencode 本体) を
+    # sandbox 内で spawn する。並べて install_dir に置く。
+    local inner_bin inner_name
+    if inner_bin=$(find_inner_binary "$bin"); then
+      inner_name=$(basename "$inner_bin")
+      install_binary "$inner_bin" "$install_dir/$inner_name"
+      info "Installed $inner_name -> $install_dir/$inner_name"
+    else
+      err "Could not locate securecode-bin (opencode 本体) inside ${filename}. SecureCode will not start."
+      exit 1
+    fi
 
     if [ "$no_config" != "true" ]; then
       local setup_dir

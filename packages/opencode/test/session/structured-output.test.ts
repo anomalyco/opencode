@@ -1,60 +1,65 @@
 import { describe, expect, test } from "bun:test"
+import { Exit, Schema } from "effect"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionID, MessageID } from "../../src/session/schema"
 
+const decodeFormat = Schema.decodeUnknownExit(MessageV2.Format)
+const decodeUser = Schema.decodeUnknownExit(MessageV2.User)
+const decodeAssistant = Schema.decodeUnknownExit(MessageV2.Assistant)
+
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
-    const result = MessageV2.Format.zod.safeParse({ type: "text" })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.type).toBe("text")
+    const result = decodeFormat({ type: "text" })
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      expect(result.value.type).toBe("text")
     }
   })
 
   test("parses json_schema format with defaults", () => {
-    const result = MessageV2.Format.zod.safeParse({
+    const result = decodeFormat({
       type: "json_schema",
       schema: { type: "object", properties: { name: { type: "string" } } },
     })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.type).toBe("json_schema")
-      if (result.data.type === "json_schema") {
-        expect(result.data.retryCount).toBe(2) // default value
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      expect(result.value.type).toBe("json_schema")
+      if (result.value.type === "json_schema") {
+        expect(result.value.retryCount).toBe(2) // default value
       }
     }
   })
 
   test("parses json_schema format with custom retryCount", () => {
-    const result = MessageV2.Format.zod.safeParse({
+    const result = decodeFormat({
       type: "json_schema",
       schema: { type: "object" },
       retryCount: 5,
     })
-    expect(result.success).toBe(true)
-    if (result.success && result.data.type === "json_schema") {
-      expect(result.data.retryCount).toBe(5)
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result) && result.value.type === "json_schema") {
+      expect(result.value.retryCount).toBe(5)
     }
   })
 
   test("rejects invalid type", () => {
-    const result = MessageV2.Format.zod.safeParse({ type: "invalid" })
-    expect(result.success).toBe(false)
+    const result = decodeFormat({ type: "invalid" })
+    expect(Exit.isFailure(result)).toBe(true)
   })
 
   test("rejects json_schema without schema", () => {
-    const result = MessageV2.Format.zod.safeParse({ type: "json_schema" })
-    expect(result.success).toBe(false)
+    const result = decodeFormat({ type: "json_schema" })
+    expect(Exit.isFailure(result)).toBe(true)
   })
 
   test("rejects negative retryCount", () => {
-    const result = MessageV2.Format.zod.safeParse({
+    const result = decodeFormat({
       type: "json_schema",
       schema: { type: "object" },
       retryCount: -1,
     })
-    expect(result.success).toBe(false)
+    expect(Exit.isFailure(result)).toBe(true)
   })
 })
 
@@ -95,7 +100,7 @@ describe("structured-output.StructuredOutputError", () => {
 
 describe("structured-output.UserMessage", () => {
   test("user message accepts outputFormat", () => {
-    const result = MessageV2.User.zod.safeParse({
+    const result = decodeUser({
       id: MessageID.ascending(),
       sessionID: SessionID.descending(),
       role: "user",
@@ -107,11 +112,11 @@ describe("structured-output.UserMessage", () => {
         schema: { type: "object" },
       },
     })
-    expect(result.success).toBe(true)
+    expect(Exit.isSuccess(result)).toBe(true)
   })
 
   test("user message works without outputFormat (optional)", () => {
-    const result = MessageV2.User.zod.safeParse({
+    const result = decodeUser({
       id: MessageID.ascending(),
       sessionID: SessionID.descending(),
       role: "user",
@@ -119,7 +124,7 @@ describe("structured-output.UserMessage", () => {
       agent: "default",
       model: { providerID: "anthropic", modelID: "claude-3" },
     })
-    expect(result.success).toBe(true)
+    expect(Exit.isSuccess(result)).toBe(true)
   })
 })
 
@@ -140,19 +145,19 @@ describe("structured-output.AssistantMessage", () => {
   }
 
   test("assistant message accepts structured", () => {
-    const result = MessageV2.Assistant.zod.safeParse({
+    const result = decodeAssistant({
       ...baseAssistantMessage,
       structured: { company: "Anthropic", founded: 2021 },
     })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.structured).toEqual({ company: "Anthropic", founded: 2021 })
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (Exit.isSuccess(result)) {
+      expect(result.value.structured).toEqual({ company: "Anthropic", founded: 2021 })
     }
   })
 
   test("assistant message works without structured_output (optional)", () => {
-    const result = MessageV2.Assistant.zod.safeParse(baseAssistantMessage)
-    expect(result.success).toBe(true)
+    const result = decodeAssistant(baseAssistantMessage)
+    expect(Exit.isSuccess(result)).toBe(true)
   })
 })
 

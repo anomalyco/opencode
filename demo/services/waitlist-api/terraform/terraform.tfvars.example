@@ -1,0 +1,12 @@
+# cp terraform.tfvars.example terraform.tfvars して実値を埋める。
+
+project_id           = "noted-gizmo-337508"
+region               = "asia-northeast1"
+service_name         = "waitlist-api"
+firestore_database   = "waitlist"
+firestore_collection = "waitlist"
+allowed_origins      = "" # stage-1 は空(=*)。stage-2 で LP オリジンに絞る
+image                = "asia-northeast1-docker.pkg.dev/noted-gizmo-337508/waitlist-api/waitlist-api:latest"
+
+# 既に Firestore Native DB がある場合は false にする
+# create_firestore_database = false

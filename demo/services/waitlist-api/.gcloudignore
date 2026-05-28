@@ -1,0 +1,8 @@
+# Cloud Build / gcloud へのソースアップロードから除外する
+.git/
+node_modules/
+terraform/
+*.tfstate
+*.tfstate.*
+.env
+*.log

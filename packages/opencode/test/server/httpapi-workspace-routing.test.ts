@@ -1,7 +1,6 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Queue } from "effect"
+import { Context, Effect, Layer, Queue, Ref } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -15,9 +14,9 @@ import * as Socket from "effect/unstable/socket/Socket"
 import Http from "node:http"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { registerAdaptor } from "../../src/control-plane/adaptors"
+import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
-import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import { Project } from "../../src/project/project"
@@ -26,24 +25,25 @@ import {
   WorkspaceRouteContext,
   workspaceRouterMiddleware,
 } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
+import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await resetDatabase()
       }),
     )
   }),
 )
+
+const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
 const it = testEffect(
   Layer.mergeAll(
@@ -51,7 +51,7 @@ const it = testEffect(
     NodeHttpServer.layerTest,
     NodeServices.layer,
     Project.defaultLayer,
-    Workspace.defaultLayer,
+    workspaceLayer,
     Socket.layerWebSocketConstructorGlobal,
   ),
 )
@@ -82,7 +82,7 @@ const listenAdditionalServer = <E, R>(handler: TestHandler<E, R>) =>
     return HttpServer.formatAddress(server.address)
   })
 
-const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
   description: "Create a local test workspace",
   configure: (info) => ({ ...info, name: "local-test", directory }),
@@ -93,7 +93,7 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
   target: () => ({ type: "local" as const, directory }),
 })
 
-const remoteAdaptor = (directory: string, url: string, headers?: HeadersInit): WorkspaceAdaptor => ({
+const remoteAdapter = (directory: string, url: string, headers?: HeadersInit): WorkspaceAdapter => ({
   name: "Remote Test",
   description: "Create a remote test workspace",
   configure: (info) => ({ ...info, name: "remote-test", directory }),
@@ -116,10 +116,10 @@ const syncResponse = (request: HttpServerRequest.HttpServerRequest) => {
   return undefined
 }
 
-const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; adaptor: WorkspaceAdaptor }) =>
+const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; adapter: WorkspaceAdapter }) =>
   Effect.acquireRelease(
     Effect.gen(function* () {
-      registerAdaptor(input.projectID, input.type, input.adaptor)
+      registerAdapter(input.projectID, input.type, input.adapter)
       const workspace = yield* Workspace.Service
       return yield* workspace.create({
         type: input.type,
@@ -128,7 +128,7 @@ const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; a
         projectID: input.projectID,
       })
     }),
-    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
+    (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
 const createRemoteWorkspace = (input: {
@@ -144,14 +144,14 @@ const createRemoteWorkspace = (input: {
   createWorkspace({
     projectID: input.projectID,
     type: input.type,
-    adaptor: remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url, input.headers),
+    adapter: remoteAdapter(path.join(input.dir, `.${input.type}`), input.url, input.headers),
   })
 
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
   createWorkspace({
     projectID: input.projectID,
     type: input.type,
-    adaptor: localAdaptor(input.directory),
+    adapter: localAdapter(input.directory),
   })
 
 const insertRemoteWorkspaceWithoutSync = (input: {
@@ -162,7 +162,7 @@ const insertRemoteWorkspaceWithoutSync = (input: {
 }) =>
   Effect.sync(() => {
     const id = WorkspaceID.ascending()
-    registerAdaptor(input.projectID, input.type, remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url))
+    registerAdapter(input.projectID, input.type, remoteAdapter(path.join(input.dir, `.${input.type}`), input.url))
     Database.use((db) => db.insert(WorkspaceTable).values({ id, type: input.type, project_id: input.projectID }).run())
     return id
   })
@@ -237,7 +237,7 @@ describe("HttpApi workspace routing middleware", () => {
           { status: 201, headers: { "x-remote": "yes" } },
         )
       })
-      // The adaptor target tells the middleware where to proxy selected remote
+      // The adapter target tells the middleware where to proxy selected remote
       // workspace requests. Appending /probe to this base should produce
       // `${remoteUrl}/base/probe` on the fake remote server above.
       const workspace = yield* createRemoteWorkspace({
@@ -279,6 +279,64 @@ describe("HttpApi workspace routing middleware", () => {
       expect(forwarded?.headers["x-target-auth"]).toBe("secret")
       expect(forwarded?.headers["x-opencode-directory"]).toBeUndefined()
       expect(forwarded?.headers["x-opencode-workspace"]).toBeUndefined()
+    }),
+  )
+
+  it.live("waits for sync fence headers from remote workspace HTTP responses", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceID = WorkspaceID.ascending()
+      const type = "remote-http-fence-target"
+      const waited = yield* Ref.make<{ workspaceID: WorkspaceID; state: Record<string, number> } | undefined>(undefined)
+
+      const remoteUrl = yield* startRemoteWorkspaceHttpServer(() =>
+        HttpServerResponse.json(
+          { proxied: true },
+          { status: 202, headers: { [FenceHeader]: JSON.stringify({ aggregate: 3 }) } },
+        ),
+      )
+      registerAdapter(project.project.id, type, remoteAdapter(path.join(dir, `.${type}`), `${remoteUrl}/base`))
+
+      const workspace = Workspace.Service.of({
+        create: () => Effect.die("unused"),
+        sessionWarp: () => Effect.die("unused"),
+        list: () => Effect.die("unused"),
+        syncList: () => Effect.die("unused"),
+        get: (id) =>
+          Effect.succeed(
+            id === workspaceID
+              ? {
+                  id: workspaceID,
+                  type,
+                  branch: null,
+                  name: "remote-http-fence-target",
+                  directory: null,
+                  extra: null,
+                  projectID: project.project.id,
+                  timeUsed: Date.now(),
+                }
+              : undefined,
+          ),
+        remove: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
+        isSyncing: () => Effect.succeed(true),
+        waitForSync: (id, state) => Ref.set(waited, { workspaceID: id, state }),
+        startWorkspaceSyncing: () => Effect.die("unused"),
+      })
+
+      yield* HttpRouter.add("PATCH", "/probe", HttpServerResponse.text("route called")).pipe(
+        Layer.provide(workspaceRoutingTestLayer),
+        Layer.provide(Layer.succeed(Workspace.Service, workspace)),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.patch(`/probe?workspace=${workspaceID}`).pipe(HttpClient.execute)
+
+      expect(response.status).toBe(202)
+      expect(yield* response.json).toEqual({ proxied: true })
+      expect(yield* Ref.get(waited)).toEqual({ workspaceID, state: { aggregate: 3 } })
     }),
   )
 

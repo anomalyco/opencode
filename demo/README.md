@@ -78,13 +78,10 @@ GitHub Pages 上の挙動を手元で再現したい時はこっち。`bun run p
 `bun x serve out --listen 4321` のショートカット (内部で `serve` パッケージを
 on-the-fly で起動する。devDependency への追加は不要)。
 
-basePath 込みで完全に本番再現したい場合:
-
-```bash
-NEXT_PUBLIC_BASE_PATH=/securecode/demo bun run build
-bun x serve out -l 4321
-# → http://localhost:4321/securecode/demo/
-```
+本番は root 配信 (basePath なし) なので、`bun run preview` の挙動が
+本番と一致する。`NEXT_PUBLIC_BASE_PATH` をセットすれば任意のサブパス
+配信も再現可能 (履歴上、以前 `acompany-develop.github.io/securecode/demo/`
+で配信していたときの確認に使う)。
 
 ### 3. 型チェック
 
@@ -116,9 +113,10 @@ trailingSlash: true       // GitHub Pages 互換 (index.html ベース)
 images: { unoptimized: true }  // next/image の最適化サーバーを無効化
 ```
 
-`basePath` を環境変数経由にしているので、配信パス (`/securecode/demo` 等)
-を CI 側からだけ差し込める。ローカル `bun run dev` では env を渡さず空文字に
-なり、ルート `/` で動く。
+`basePath` は環境変数経由なので、サブパス配信したいときだけ
+`NEXT_PUBLIC_BASE_PATH=/foo bun run build` のように差し込める。本番は
+カスタムドメインを root に紐付けて配信するので、CI でも env を渡さず
+空文字 (= root) のままビルドしている。
 
 ### GitHub Pages デプロイ
 
@@ -126,14 +124,62 @@ images: { unoptimized: true }  // next/image の最適化サーバーを無効�
 
 1. `push: dev` ブランチで `demo/**` または同 workflow が変更されたら起動
 2. `oven-sh/setup-bun@v2` → `bun install --frozen-lockfile`
-3. `NEXT_PUBLIC_BASE_PATH=/securecode/demo bun run build`
-4. `out/.nojekyll` を touch (Pages の Jekyll 処理を抑止、`_next/` を維持)
+3. `bun run build` (basePath は空 = root 配信)
+4. `out/` をそのまま `_site/` にコピー、`_site/CNAME` にカスタムドメイン名、`_site/.nojekyll` を touch
 5. `actions/upload-pages-artifact@v3` → `actions/deploy-pages@v4`
 
-公開 URL: `https://acompany-develop.github.io/securecode/demo/`
+公開 URL: `https://securecode.acompany.tech/`
+(設定が伝播するまでの暫定 URL: `https://acompany-develop.github.io/securecode/`)
 
-リポジトリ Settings → Pages の Source は **GitHub Actions** に設定する
-必要がある (初回のみ手動)。
+#### 初回 1 度だけ手動でやること
+
+1. リポジトリ Settings → Pages → **Build and deployment**:
+   - **Source**: GitHub Actions
+   - **Custom domain**: `securecode.acompany.tech`
+   - **Enforce HTTPS** をオン (証明書発行を待ってからオンにする)
+2. XServer の DNS 設定で CNAME を追加:
+   - ホスト名: `securecode`
+   - 種別: `CNAME`
+   - 内容: `acompany-develop.github.io.`
+3. 伝播後 GitHub Pages が Let's Encrypt 証明書を自動発行 (数分〜数時間)。
+   `curl -I https://securecode.acompany.tech/` が 200 を返せば完了。
+
+### アクセス計測 (Google Tag Manager)
+
+`app/layout.tsx` で `@next/third-parties/google` の `GoogleTagManager`
+を使ってる。container ID は build 時の env `NEXT_PUBLIC_GTM_ID` で
+差し込む形にしてあるので、リポに ID を埋め込まない。
+
+#### GTM を有効化する手順
+
+1. GTM (`tagmanager.google.com`) で demo 用 container を新規作成
+   (もしくは既存 `service.acompany.tech` の container を流用)
+2. 発行された container ID (`GTM-XXXXXXX` 形式) を取得
+3. リポジトリ Settings → Secrets and variables → Actions → **Variables** タブ:
+   - 名前: `DEMO_GTM_ID`
+   - 値: `GTM-XXXXXXX`
+4. `dev` ブランチへの push (or `Deploy demo to GitHub Pages` workflow を
+   手動 dispatch) で Pages が再 build されると、`<head>` に GTM の
+   snippet が注入され、`<body>` 直後に noscript iframe が入る
+5. GTM 側で **GA4 設定タグ** を作って GA4 プロパティに接続する
+   (これをしないと GTM だけ入って GA4 にデータが流れない)
+
+#### ローカル動作確認時
+
+ローカル `bun run dev` では env を渡さないので `NEXT_PUBLIC_GTM_ID` が
+undefined → `<GoogleTagManager>` をレンダリングしない → 本番計測を
+汚さない。GTM 動作確認を local でも見たい時は環境変数を上書きする:
+
+```bash
+NEXT_PUBLIC_GTM_ID=GTM-XXXXXXX bun run dev
+```
+
+#### Cookie / 同意バナーについて
+
+GA4 が自動で永続 Cookie (`_ga` 等、13 か月) を発行する。EU 訪問者向けに
+consent banner が必要なら別途実装 (Consent Mode v2 を `@next/third-parties`
+の `sendGTMEvent` で連動させるパターンが一般的)。今のところ日本向け
+public-beta 段階なら未実装でも実害は無い。
 
 #### なぜ `next start` ではなく `bun x serve` でプレビューするのか
 

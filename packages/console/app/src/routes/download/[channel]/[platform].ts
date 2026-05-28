@@ -2,11 +2,11 @@ import type { APIEvent } from "@solidjs/start"
 import type { DownloadPlatform } from "../types"
 
 const prodAssetNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "opencode-desktop-darwin-aarch64.dmg",
-  "darwin-x64-dmg": "opencode-desktop-darwin-x64.dmg",
-  "windows-x64-nsis": "opencode-desktop-windows-x64.exe",
+  "darwin-aarch64-dmg": "opencode-desktop-mac-arm64.dmg",
+  "darwin-x64-dmg": "opencode-desktop-mac-x64.dmg",
+  "windows-x64-nsis": "opencode-desktop-win-x64.exe",
   "linux-x64-deb": "opencode-desktop-linux-amd64.deb",
-  "linux-x64-appimage": "opencode-desktop-linux-amd64.AppImage",
+  "linux-x64-appimage": "opencode-desktop-linux-x86_64.AppImage",
   "linux-x64-rpm": "opencode-desktop-linux-x86_64.rpm",
 } satisfies Record<DownloadPlatform, string>
 
@@ -32,13 +32,6 @@ export async function GET({ params: { platform, channel } }: APIEvent) {
 
   const resp = await fetch(
     `https://github.com/anomalyco/${channel === "stable" ? "opencode" : "opencode-beta"}/releases/latest/download/${assetName}`,
-    {
-      cf: {
-        // in case gh releases has rate limits
-        cacheTtl: 60 * 5,
-        cacheEverything: true,
-      },
-    } as any,
   )
 
   const downloadName = downloadNames[platform]

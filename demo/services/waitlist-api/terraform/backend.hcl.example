@@ -1,0 +1,8 @@
+# cp backend.hcl.example backend.hcl して実値を埋め、以下で init する:
+#   terraform init -backend-config=backend.hcl
+#
+# stage-2（専用プロジェクト）へ移す際は bucket をそのプロジェクトの
+# state バケットに差し替える。
+
+bucket = "noted-gizmo-337508-tfstate"
+prefix = "waitlist-api"

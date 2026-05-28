@@ -249,7 +249,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description":
-    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
+    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -261,8 +261,6 @@ export const dict = {
   "go.cta.promo": "$5 للشهر الأول",
   "go.pricing.body":
     "استخدمه مع أي وكيل. $5 للشهر الأول، ثم $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
-  "go.banner.badge": "3x",
-  "go.banner.text": "Kimi K2.6: حد الاستخدام 3 أضعاف حتى 27 أبريل",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
@@ -300,7 +298,7 @@ export const dict = {
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
   "go.problem.item4":
-    "يتضمن GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash",
+    "يتضمن GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash",
   "go.how.title": "كيف يعمل Go",
   "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
@@ -324,7 +322,7 @@ export const dict = {
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
+    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
@@ -347,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 وDeepSeek V4 Pro وDeepSeek V4 Flash مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
@@ -357,8 +355,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "مفتاح API مفقود.",
   "zen.api.error.invalidApiKey": "مفتاح API غير صالح.",
   "zen.api.error.subscriptionQuotaExceeded": "تم تجاوز حصة الاشتراك. أعد المحاولة خلال {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "تم تجاوز حصة الاشتراك. يمكنك الاستمرار في استخدام النماذج المجانية.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "تم الوصول إلى حد الاستخدام لمدة 5 ساعات. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "تم الوصول إلى حد الاستخدام الأسبوعي. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "تم الوصول إلى حد الاستخدام الشهري. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "لا توجد طريقة دفع. أضف طريقة دفع هنا: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "رصيد غير كاف. إدارة فواتيرك هنا: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -657,6 +659,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "جارٍ إعادة التوجيه...",
   "workspace.lite.promo.otherMethods": "طرق دفع أخرى",
   "workspace.lite.promo.selectMethod": "اختر طريقة الدفع",
+
+  "workspace.referral.copyLink": "نسخ الرابط",
+  "workspace.referral.copied": "تم النسخ",
+  "workspace.referral.overview.title": "ادعُ أصدقاءك",
+  "workspace.referral.overview.subtitle": "احصل على $5 عند اشتراك صديق. وسيحصل هو أيضًا على $5.",
+  "workspace.referral.instructions.share": "شارك رابط الإحالة الخاص بك",
+  "workspace.referral.instructions.subscribe": "ينضم صديقك ويشترك في Go",
+  "workspace.referral.instructions.claim": "تحصلان كلاكما على رصيد استخدام بقيمة $5 لتطبيقه على حدود استخدام Go",
+  "workspace.referral.rewards.title": "مكافآت الإحالة",
+  "workspace.referral.rewards.description": "طبّق أرصدة الإحالة المتاحة على استخدامك لـ Go.",
+  "workspace.referral.rewards.subtitle": "تم تطبيق {{applied}} / {{total}} من المكافآت.",
+  "workspace.referral.rewards.empty": "لا توجد مكافآت إحالة بعد.",
+  "workspace.referral.table.reward": "المكافأة",
+  "workspace.referral.table.referral": "الوصف",
+  "workspace.referral.table.date": "التاريخ",
+  "workspace.referral.reward.description.inviter": "تمت دعوة {{email}}",
+  "workspace.referral.reward.description.invitee": "تمت دعوتك بواسطة {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "اشترك لإلغاء القفل",
+  "workspace.referral.reward.action.view": "عرض المكافأة",
+  "workspace.referral.reward.action.applied": "تم تطبيق المكافأة",
+  "workspace.referral.reward.source.pendingInviter": "بانتظار اشتراكه",
+  "workspace.referral.reward.source.pendingInvitee": "اشترك لإلغاء قفل المكافأة",
+  "workspace.referral.reward.source.available": "المكافأة جاهزة للتطبيق",
+  "workspace.referral.reward.source.applied": "تم تطبيق المكافأة",
+  "workspace.referral.reward.status.applied": "تم تطبيق المكافأة",
+  "workspace.referral.reward.status.pendingInviter": "اشترك لإلغاء القفل",
+  "workspace.referral.reward.status.pendingInvitee": "اشترك لإلغاء القفل",
+  "workspace.referral.apply.noGo": "اشترك لإلغاء القفل",
+  "workspace.referral.apply.preview": "عرض المكافأة",
+  "workspace.referral.apply.action": "تطبيق",
+  "workspace.referral.apply.confirmTitle": "تطبيق المكافأة",
+  "workspace.referral.apply.confirmBody": "طبِّق {{amount}} لتقليل الاستخدام الحالي في مساحة العمل هذه.",
+  "workspace.referral.apply.confirmAction": "تطبيق",
 
   "download.title": "OpenCode | تنزيل",
   "download.meta.description": "نزّل OpenCode لـ macOS، Windows، وLinux",

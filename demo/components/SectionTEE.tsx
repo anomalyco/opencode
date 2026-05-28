@@ -13,12 +13,12 @@ const STEPS = [
   {
     id: "attest",
     title: "01. リモートアテステーション",
-    body: "接続先の TEE が発行する署名済みレポートを検証し、改ざんされた実行環境を拒否する。正当性を確認できてから鍵を渡す。",
+    body: "接続先サーバーが TEE 上で稼働し、想定通りのコードを実行していることを CPU 製造元の署名付きレポートで検証する。想定外のコードや設定が動いている環境には接続しない。",
   },
   {
     id: "send",
     title: "02. 暗号化して送信",
-    body: "プロンプトとソースコードを TEE の公開鍵で暗号化して送出し、TEE 内で復号する。平文はネットワークにも我々のサーバにも残らない。",
+    body: "プロンプトとソースコードを HTTPS で暗号化した状態で TEE 内に送信し、TEE 内で復号する。平文は TEE の外に一切露出しない。",
   },
   {
     id: "infer",
@@ -28,7 +28,7 @@ const STEPS = [
   {
     id: "return",
     title: "04. 暗号化して返信",
-    body: "戻り値も同じ秘匿経路で暗号化し、開発者の手元で復号。平文は最後まで TEE の外に出ない。",
+    body: "戻り値も同様に HTTPS で暗号化した状態で返し、ユーザの環境で復号。平文は最後まで TEE の外に出ない。",
   },
 ] as const
 
@@ -94,6 +94,16 @@ export function SectionTEE() {
   // バッジ 04 は出現したら消さずに残す
   const retBadgeOpacity = useTransform(a3, [0, 0.12], [0, 1], { clamp: true })
 
+  // Mobile: step card slide transitions (右からスライドイン、左へスライドアウト)
+  const mob0Op = useTransform(scrollYProgress, [0.00, 0.10, 0.22, 0.32], [0, 1, 1, 0], { clamp: true })
+  const mob0X = useTransform(scrollYProgress, [0.00, 0.10, 0.22, 0.32], [20, 0, 0, -20], { clamp: true })
+  const mob1Op = useTransform(scrollYProgress, [0.26, 0.36, 0.48, 0.58], [0, 1, 1, 0], { clamp: true })
+  const mob1X = useTransform(scrollYProgress, [0.26, 0.36, 0.48, 0.58], [20, 0, 0, -20], { clamp: true })
+  const mob2Op = useTransform(scrollYProgress, [0.52, 0.62, 0.70, 0.78], [0, 1, 1, 0], { clamp: true })
+  const mob2X = useTransform(scrollYProgress, [0.52, 0.62, 0.70, 0.78], [20, 0, 0, -20], { clamp: true })
+  const mob3Op = useTransform(scrollYProgress, [0.74, 0.84, 1.00, 1.00], [0, 1, 1, 1], { clamp: true })
+  const mob3X = useTransform(scrollYProgress, [0.74, 0.84], [20, 0], { clamp: true })
+
   return (
     <>
     <section
@@ -102,13 +112,12 @@ export function SectionTEE() {
       className="relative w-full md:h-[420vh]"
     >
       {/*
-       * Desktop (>= md): sticky + h-[100dvh] で scrollytelling として、
+       * Desktop (>= md): sticky + h-dvh で scrollytelling。
        *   外側 h-[420vh] の 4 倍スクロール範囲で a0..a3 を進行させる。
-       * Mobile (< md): sticky を外して縦スクロール。図とステップカードが
-       *   viewport を超えても自然に下にスクロールできる
-       *   (sticky のまま h-screen 固定だと下のカードが見切れる)。
+       * Mobile (< md): sticky なし・静的レイアウト。
+       *   図は非表示にして 4 ステップを縦に並列表示する。
        */}
-      <div className="flex w-full flex-col md:sticky md:top-0 md:h-[100dvh] md:min-h-[640px] md:overflow-hidden">
+      <div className="flex w-full flex-col md:sticky md:top-0 md:h-dvh md:min-h-160 md:overflow-hidden">
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_70%_30%,rgba(3,76,255,0.12)_0%,transparent_55%)]"
@@ -129,14 +138,14 @@ export function SectionTEE() {
             だから、誰も中を覗けない。
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
-            TEE (Trusted Execution Environment) は CPU 内に物理的に隔離された
+            Trusted Execution Environment (TEE) は CPU 内に物理的に隔離された
             実行領域。推論中の平文がメモリ上に展開されても、インフラ事業者を含む
             第三者からは参照できない。
           </p>
 
-          <div className="mt-6 grid flex-1 grid-cols-1 gap-8 md:grid-cols-[1.8fr_1fr]">
+          <div className="mt-6 flex flex-1 flex-col gap-4 md:grid md:grid-cols-[1fr_1fr] md:gap-8 lg:grid-cols-[1.8fr_1fr]">
             {/* === 図 === */}
-            <div className="relative flex items-center justify-center">
+            <div className="relative hidden min-h-0 flex-6 items-center justify-center md:flex">
               <svg
                 viewBox="0 0 520 420"
                 className="h-full w-full max-h-[62vh]"
@@ -398,12 +407,20 @@ export function SectionTEE() {
             </div>
 
             {/* === ステップリスト === */}
-            <ol className="space-y-3 self-center">
+            <ol className="hidden self-center md:block md:space-y-1 lg:space-y-3">
               <Step progress={a0} index={0} step={STEPS[0]} />
               <Step progress={a1} index={1} step={STEPS[1]} />
               <Step progress={a2} index={2} step={STEPS[2]} />
               <Step progress={a3} index={3} step={STEPS[3]} />
             </ol>
+
+            {/* モバイル: 静的 4 ステップ一覧 */}
+            <div className="flex flex-col gap-3 md:hidden">
+              <MobileStepCard index={0} step={STEPS[0]} />
+              <MobileStepCard index={1} step={STEPS[1]} />
+              <MobileStepCard index={2} step={STEPS[2]} />
+              <MobileStepCard index={3} step={STEPS[3]} />
+            </div>
           </div>
         </div>
       </div>
@@ -439,7 +456,7 @@ function Step({
   return (
     <motion.li
       style={{ opacity, x, borderColor }}
-      className="rounded-md border bg-sc-bg-soft/60 p-4 backdrop-blur-sm"
+      className="rounded-md border bg-sc-bg-soft/60 py-2.5 px-3 lg:p-4 backdrop-blur-sm"
     >
       <div className="mb-1 flex items-center gap-2">
         <motion.span
@@ -450,11 +467,32 @@ function Step({
           STEP {String(index + 1).padStart(2, "0")}
         </span>
       </div>
-      <h3 className="text-base font-medium text-sc-text">{step.title}</h3>
-      <p className="mt-1 text-xs leading-relaxed text-sc-text-mid">
+      <h3 className="text-sm font-medium text-sc-text lg:text-base">{step.title}</h3>
+      <p className="mt-1 text-[11px] leading-relaxed text-sc-text-mid lg:text-xs">
         {step.body}
       </p>
     </motion.li>
+  )
+}
+
+function MobileStepCard({
+  index,
+  step,
+}: {
+  index: number
+  step: (typeof STEPS)[number]
+}) {
+  return (
+    <div className="w-full rounded-md border border-[rgba(252,83,58,0.9)] bg-sc-bg-soft/60 p-4 backdrop-blur-sm">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="block size-1.5 rounded-full bg-sc-ember" />
+        <span className="font-mono text-[10px] tracking-[0.18em] text-sc-text-dim">
+          STEP {String(index + 1).padStart(2, "0")}
+        </span>
+      </div>
+      <h3 className="text-base font-medium text-sc-text">{step.title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-sc-text-mid">{step.body}</p>
+    </div>
   )
 }
 

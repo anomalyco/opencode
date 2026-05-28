@@ -27,7 +27,7 @@ securecode は `anomalyco/opencode` の fork として運用しており、追�
 | 区分 | 例 | 扱い |
 |---|---|---|
 | upstream owned | `packages/opencode/**`, `packages/core/**`, `packages/plugin/**`, `packages/app/**`, `packages/sdk/**`, `packages/web/**`, `packages/tui/**`, `packages/desktop/**`, `packages/console/**`, `packages/extensions/**`, `packages/storybook/**`, `packages/ui/**`, `script/**`（securecode 固有 script を除く） | 原則として直接修正しない |
-| securecode 固有 | `packages/opencode/src/securecode/**`, `script/release-securecode.ts`, `setup/**`, `install-securecode`, `specs/**`, `benchmarks/securecode/**`, `.opencode/**`（securecode リポジトリ直下の plugin / agent / command 等） | 自由に追加 / 変更可 |
+| securecode 固有 | `packages/opencode/src/securecode/**`, `script/release-securecode.ts`, `script/securecode-*.ts`, `script/securecode-*.json`, `setup/**`, `install-securecode`, `specs/**`, `benchmarks/securecode/**`, `.opencode/**`（securecode リポジトリ直下の plugin / agent / command 等） | 自由に追加 / 変更可 |
 | 同居だが securecode 固有 | `packages/opencode/AGENTS.md` などの説明文書、`packages/opencode/test/securecode/**` のテスト | securecode 固有として扱う |
 
 判断に迷ったら原則「upstream owned」とみなして touch しない選択肢を優先する。

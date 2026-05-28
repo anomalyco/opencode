@@ -1,12 +1,34 @@
 import type { Metadata } from "next"
+import { GoogleTagManager } from "@next/third-parties/google"
 import "./globals.css"
 
+// GTM container ID は CI から NEXT_PUBLIC_GTM_ID で差し込む (例:
+// "GTM-XXXXXXX")。未設定の dev 環境では <GoogleTagManager> を
+// レンダリングしないので、ローカル動作確認で本番 GTM を汚さない。
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID
+
+const SITE_URL = "https://securecode.acompany.tech/"
+const SITE_TITLE = "Acompanyセキュアコード — 機密ソースコードを守る AI コーディング"
+const SITE_DESCRIPTION =
+  "機密ソースコードを社外に出さずに AI コーディング支援を導入できる、Acompany の Confidential AI Suite 第 2 弾製品。Trusted Execution Environment (TEE) と運用ハーネスで、組織の機密を守ったまま生成 AI を活用できる。"
+
 export const metadata: Metadata = {
-  title: "Acompanyセキュアコード — チュートリアル / デモ",
-  description:
-    "機密ソースコードを漏洩させずに AI コーディング支援を実現する、Acompanyセキュアコードのスクロールテリングデモ。",
-  // 検索エンジンに乗せたいデモではないので noindex
-  robots: { index: false, follow: false },
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Acompanyセキュアコード",
+    locale: "ja_JP",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 }
 
 // suppressHydrationWarning: ブラウザの privacy 拡張 (Google Analytics
@@ -33,6 +55,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
+      {GTM_ID && <GoogleTagManager gtmId={GTM_ID} />}
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   )

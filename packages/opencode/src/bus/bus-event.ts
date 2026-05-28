@@ -1,6 +1,5 @@
-import z from "zod"
 import { Schema } from "effect"
-import { zodObject } from "@/util/effect-zod"
+import { EventV2 } from "@opencode-ai/core/event"
 
 export type Definition<Type extends string = string, Properties extends Schema.Top = Schema.Top> = {
   type: Type
@@ -18,32 +17,29 @@ export function define<Type extends string, Properties extends Schema.Top>(
   return result
 }
 
-export function payloads() {
-  return registry
-    .entries()
-    .map(([type, def]) => {
-      return z
-        .object({
-          type: z.literal(type),
-          properties: zodObject(def.properties),
-        })
-        .meta({
-          ref: `Event.${def.type}`,
-        })
-    })
-    .toArray()
-}
-
 export function effectPayloads() {
-  return registry
-    .entries()
-    .map(([type, def]) =>
-      Schema.Struct({
-        type: Schema.Literal(type),
-        properties: def.properties,
-      }).annotate({ identifier: `Event.${type}` }),
-    )
-    .toArray()
+  return [
+    ...registry
+      .entries()
+      .map(([type, def]) =>
+        Schema.Struct({
+          id: Schema.String,
+          type: Schema.Literal(type),
+          properties: def.properties,
+        }).annotate({ identifier: `Event.${type}` }),
+      )
+      .toArray(),
+    ...EventV2.registry
+      .values()
+      .map((definition) =>
+        Schema.Struct({
+          id: Schema.String,
+          type: Schema.Literal(definition.type),
+          properties: definition.data,
+        }).annotate({ identifier: `Event.${definition.type}` }),
+      )
+      .toArray(),
+  ]
 }
 
 export * as BusEvent from "./bus-event"
