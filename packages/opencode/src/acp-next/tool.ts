@@ -74,7 +74,7 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
     case "read":
     case "edit":
     case "write":
-      return locationFrom(input.filePath)
+      return locationFrom(input.filePath ?? input.filepath)
 
     case "grep":
     case "glob":

@@ -2,6 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Cause, Effect, Exit, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -27,7 +28,9 @@ import * as DateTime from "effect/DateTime"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { TestLLMServer } from "../lib/llm-server"
+import { testProviderConfig } from "../lib/test-provider"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -366,6 +369,45 @@ describe("session HttpApi", () => {
         ).toMatchObject([{ type: "assistant" }])
       }),
     { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.live("uses the persisted session directory for prompt requests", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      yield* llm.text("ok", { usage: { input: 1, output: 1 } })
+
+      const config = testProviderConfig(llm.url)
+      const sessionDirectory = yield* tmpdirScoped({ git: true, config })
+      const requestDirectory = yield* tmpdirScoped({ git: true, config })
+      const session = yield* createSession({ title: "directory regression" }).pipe(
+        provideInstanceEffect(sessionDirectory),
+      )
+
+      const response = yield* request(
+        `${pathFor(SessionPaths.prompt, { sessionID: session.id })}?directory=${encodeURIComponent(requestDirectory)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "which directory?" }],
+          }),
+        },
+      )
+
+      expect(response.status).toBe(200)
+      yield* responseJson(response)
+
+      const messages = yield* Session.use
+        .messages({ sessionID: session.id })
+        .pipe(provideInstanceEffect(sessionDirectory), Effect.orDie)
+      const assistant = messages.find((message) => message.info.role === "assistant")
+      expect(assistant?.info.role === "assistant" ? assistant.info.path : undefined).toEqual({
+        cwd: sessionDirectory,
+        root: sessionDirectory,
+      })
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
   )
 
   it.instance(
