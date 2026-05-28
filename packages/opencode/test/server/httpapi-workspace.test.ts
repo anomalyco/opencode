@@ -8,6 +8,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
+import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { Session } from "@/session/session"
 import { Database } from "@opencode-ai/core/database/database"
 import * as Log from "@opencode-ai/core/util/log"
@@ -355,6 +356,7 @@ describe("workspace HttpApi", () => {
         proxied.push(request)
         const url = new URL(request.url)
         if (url.pathname === "/base/global/event") return eventStreamResponse()
+        if (url.pathname === "/base/event") return eventStreamResponse()
         if (url.pathname === "/base/sync/history") return Response.json([])
         return new Response(
           JSON.stringify({
@@ -424,6 +426,18 @@ describe("workspace HttpApi", () => {
         ])
         expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-directory")
         expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-workspace")
+
+        const eventURL = new URL(`http://localhost${EventPaths.event}`)
+        eventURL.searchParams.set("workspace", workspace.id)
+        const eventResponse = yield* request(eventURL.toString(), dir)
+        expect(eventResponse.status).toBe(200)
+        expect(eventResponse.headers.get("content-type")).toContain("text/event-stream")
+        if (!eventResponse.body) throw new Error("missing proxied event response body")
+        const eventReader = eventResponse.body.getReader()
+        const event = yield* Effect.promise(() => eventReader.read())
+        yield* Effect.promise(() => eventReader.cancel())
+        expect(new TextDecoder().decode(event.value)).toContain("server.connected")
+        expect(proxied.some((item) => new URL(item.url).pathname === "/base/event")).toBe(true)
       } finally {
         void remote.stop(true)
         yield* requestDefault(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })

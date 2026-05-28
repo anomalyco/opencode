@@ -1,6 +1,6 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Queue, Ref } from "effect"
+import { Context, Effect, Layer, Queue, Ref, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -11,6 +11,7 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import Http from "node:http"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
@@ -21,10 +22,13 @@ import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "../../src/project/project"
+import { Session } from "../../src/session/session"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
   WorkspaceRouteContext,
-  workspaceRouterMiddleware,
+  workspaceRoutingLayer,
 } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { resetDatabase } from "../fixture/db"
@@ -67,7 +71,7 @@ type TestHandler<E, R> = (
   request: HttpServerRequest.HttpServerRequest,
 ) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 
-const workspaceRoutingTestLayer = workspaceRouterMiddleware.layer.pipe(
+const workspaceRoutingTestLayer = workspaceRoutingLayer.pipe(
   Layer.provide([Socket.layerWebSocketConstructorGlobal, FetchHttpClient.layer]),
 )
 
@@ -205,16 +209,45 @@ const echoWebSocket = (request: HttpServerRequest.HttpServerRequest) =>
     return HttpServerResponse.empty()
   })
 
-const serveRouteContextProbe = HttpRouter.add(
-  "GET",
-  "/probe",
-  Effect.gen(function* () {
-    // The fake route exposes the context installed by the middleware, so tests
-    // can assert routing decisions without pulling in the production API tree.
-    const route = yield* WorkspaceRouteContext
-    return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
-  }),
-).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
+const ProbeResult = Schema.Struct({
+  directory: Schema.String,
+  workspaceID: Schema.optional(Schema.String),
+})
+
+const ProbeApi = HttpApi.make("workspace-routing-probe").add(
+  HttpApiGroup.make("probe")
+    .add(
+      HttpApiEndpoint.get("get", "/probe", { query: WorkspaceRoutingQuery, success: ProbeResult }),
+      HttpApiEndpoint.patch("patch", "/probe", { query: WorkspaceRoutingQuery, success: Schema.Boolean }),
+      HttpApiEndpoint.get("session", "/session", { query: WorkspaceRoutingQuery, success: ProbeResult }),
+      HttpApiEndpoint.get("workspace", WorkspacePaths.list, {
+        query: WorkspaceRoutingQuery,
+        success: ProbeResult,
+      }),
+    )
+    .middleware(WorkspaceRoutingMiddleware),
+)
+
+const routeContextResponse = Effect.gen(function* () {
+  const route = yield* WorkspaceRouteContext
+  return { directory: route.directory, workspaceID: route.workspaceID }
+})
+
+const probeHandlers = HttpApiBuilder.group(ProbeApi, "probe", (handlers) =>
+  handlers
+    .handle("get", () => routeContextResponse)
+    .handle("patch", () => Effect.succeed(false))
+    .handle("session", () => routeContextResponse)
+    .handle("workspace", () => routeContextResponse),
+)
+
+const serveProbe = HttpApiBuilder.layer(ProbeApi).pipe(
+  Layer.provide(probeHandlers),
+  Layer.provide(workspaceRoutingTestLayer),
+  Layer.provide(Layer.mock(Session.Service)({})),
+  HttpRouter.serve,
+  Layer.build,
+)
 
 describe("HttpApi workspace routing middleware", () => {
   it.live("proxies remote workspace HTTP requests through the selected workspace target", () =>
@@ -252,11 +285,7 @@ describe("HttpApi workspace routing middleware", () => {
 
       // The local /probe handler should not run. Selecting a remote workspace
       // should make the middleware call HttpApiProxy.http instead.
-      yield* HttpRouter.add("PATCH", "/probe", HttpServerResponse.text("route called")).pipe(
-        Layer.provide(workspaceRoutingTestLayer),
-        HttpRouter.serve,
-        Layer.build,
-      )
+      yield* serveProbe
 
       const response = yield* HttpClientRequest.patch(`/probe?workspace=${workspace.id}&keep=yes`).pipe(
         HttpClientRequest.setHeaders({
@@ -327,9 +356,11 @@ describe("HttpApi workspace routing middleware", () => {
         startWorkspaceSyncing: () => Effect.die("unused"),
       })
 
-      yield* HttpRouter.add("PATCH", "/probe", HttpServerResponse.text("route called")).pipe(
+      yield* HttpApiBuilder.layer(ProbeApi).pipe(
+        Layer.provide(probeHandlers),
         Layer.provide(workspaceRoutingTestLayer),
         Layer.provide(Layer.succeed(Workspace.Service, workspace)),
+        Layer.provide(Layer.mock(Session.Service)({})),
         HttpRouter.serve,
         Layer.build,
       )
@@ -353,11 +384,7 @@ describe("HttpApi workspace routing middleware", () => {
         url: "http://127.0.0.1:1/base",
       })
 
-      yield* HttpRouter.add("GET", "/probe", HttpServerResponse.text("route called")).pipe(
-        Layer.provide(workspaceRoutingTestLayer),
-        HttpRouter.serve,
-        Layer.build,
-      )
+      yield* serveProbe
 
       const response = yield* HttpClient.get(`/probe?workspace=${workspaceID}`)
 
@@ -380,11 +407,7 @@ describe("HttpApi workspace routing middleware", () => {
 
       // The client connects to the local test server. The middleware should
       // detect the WebSocket upgrade and proxy it to the remote /base/probe.
-      yield* HttpRouter.add("GET", "/probe", HttpServerResponse.text("route called")).pipe(
-        Layer.provide(workspaceRoutingTestLayer),
-        HttpRouter.serve,
-        Layer.build,
-      )
+      yield* serveProbe
 
       const socket = yield* Socket.makeWebSocket(
         `${(yield* serverUrl).replace(/^http/, "ws")}/probe?workspace=${workspace.id}`,
@@ -408,11 +431,7 @@ describe("HttpApi workspace routing middleware", () => {
       const workspaceID = WorkspaceV2.ID.ascending("wrk_missing")
       // If the middleware resolves the workspace first, this handler is never
       // reached and the response should be the middleware error response.
-      yield* HttpRouter.add("GET", "/probe", HttpServerResponse.text("route called")).pipe(
-        Layer.provide(workspaceRoutingTestLayer),
-        HttpRouter.serve,
-        Layer.build,
-      )
+      yield* serveProbe
 
       const response = yield* HttpClient.get(`/probe?workspace=${workspaceID}`)
 
@@ -435,14 +454,7 @@ describe("HttpApi workspace routing middleware", () => {
 
       // GET /session is a control-plane route: it lists sessions for the main
       // process and should not be redirected into the selected workspace target.
-      yield* HttpRouter.add(
-        "GET",
-        "/session",
-        Effect.gen(function* () {
-          const route = yield* WorkspaceRouteContext
-          return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
-        }),
-      ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
+      yield* serveProbe
 
       const response = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
 
@@ -465,14 +477,7 @@ describe("HttpApi workspace routing middleware", () => {
       // Workspace CRUD/status routes manage the control plane itself. Selecting
       // a workspace should preserve the selected id for handlers, but must not
       // swap the route context to the workspace target directory.
-      yield* HttpRouter.add(
-        "GET",
-        WorkspacePaths.list,
-        Effect.gen(function* () {
-          const route = yield* WorkspaceRouteContext
-          return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
-        }),
-      ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
+      yield* serveProbe
 
       const response = yield* HttpClient.get(`${WorkspacePaths.list}?workspace=${workspace.id}`)
 
@@ -486,7 +491,7 @@ describe("HttpApi workspace routing middleware", () => {
       const dir = yield* tmpdirScoped()
       const queryDir = path.join(dir, "query-target")
       const headerDir = path.join(dir, "header-target")
-      yield* serveRouteContextProbe
+      yield* serveProbe
 
       // Without a selected workspace, the middleware falls back to request
       // directory hints before using the process cwd.
@@ -497,9 +502,9 @@ describe("HttpApi workspace routing middleware", () => {
       )
 
       expect(queryResponse.status).toBe(200)
-      expect(yield* queryResponse.json).toEqual({ directory: queryDir })
+      expect(yield* queryResponse.json).toEqual({ directory: queryDir, workspaceID: null })
       expect(headerResponse.status).toBe(200)
-      expect(yield* headerResponse.json).toEqual({ directory: headerDir })
+      expect(yield* headerResponse.json).toEqual({ directory: headerDir, workspaceID: null })
     }),
   )
 
@@ -515,7 +520,7 @@ describe("HttpApi workspace routing middleware", () => {
         directory: workspaceDir,
       })
 
-      yield* serveRouteContextProbe
+      yield* serveProbe
 
       // /probe is not a control-plane route, so selecting a local workspace
       // should swap the route context to the workspace target directory.
