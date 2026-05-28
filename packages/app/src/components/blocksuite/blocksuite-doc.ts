@@ -2,7 +2,6 @@ import { AffineSchemas } from "@blocksuite/blocks/schemas"
 import type { BlockModel, Doc, Query } from "@blocksuite/store"
 import { getFilename } from "@opencode-ai/util/path"
 import { DocCollection, Schema } from "@blocksuite/store"
-import { encodeFilePath } from "@/context/file/path"
 import "@/components/blocksuite/blocksuite-doc.css"
 import { watchCursorLabels } from "./cursor-labels"
 import { baseline, docMarkdown, docPlain, ensureEditable } from "./doc-content"
@@ -421,7 +420,7 @@ export async function createPage(input: DocMountInput) {
     if (!parent) return false
     doc.addBlock(
       "opencode:file-reference",
-      { name: getFilename(path), path, url: `file://${encodeFilePath(path)}` },
+      { name: getFilename(path), path, url: path },
       parent.id,
     )
     onHistory()

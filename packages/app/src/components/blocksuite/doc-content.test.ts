@@ -88,8 +88,8 @@ describe("docMarkdown", () => {
       "opencode:file-reference",
       {
         name: ".prettierignore",
-        path: "/tmp/project/.prettierignore",
-        url: "file:///tmp/project/.prettierignore",
+        path: ".prettierignore",
+        url: ".prettierignore",
       },
       ctx.note,
     )
@@ -99,7 +99,7 @@ describe("docMarkdown", () => {
       opts(async () => new Response(null, { status: 404 })),
     )
 
-    expect(out.text).toContain("[.prettierignore](file:///tmp/project/.prettierignore)")
+    expect(out.text).toContain("[.prettierignore](.prettierignore)")
     expect(docPlain(ctx.doc)).toContain(".prettierignore")
   })
 

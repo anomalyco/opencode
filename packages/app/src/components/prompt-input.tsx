@@ -1402,8 +1402,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart,
     dropPath: async (path) => {
       if (store.mode !== "doc") return false
-      const abs = path.startsWith("/") || /^[A-Za-z]:/.test(path) ? path : `${sdk.directory.replace(/\/+$/, "")}/${path}`
-      const ok = doc.addReference(abs)
+      const dir = sdk.directory.replace(/\/+$/, "")
+      const rel =
+        path.startsWith(dir) && (path === dir || path[dir.length] === "/")
+          ? path.slice(dir.length).replace(/^\/+/, "")
+          : path
+      const ok = doc.addReference(rel)
       if (ok) addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
       return ok
     },
