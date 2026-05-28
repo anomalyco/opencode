@@ -76,6 +76,8 @@ interface ProcessorContext extends Input {
   snapshot: string | undefined
   blocked: boolean
   needsCompaction: boolean
+  steered: boolean
+  atToolBoundary: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
 }
@@ -116,6 +118,8 @@ export const layer = Layer.effect(
         snapshot: initialSnapshot,
         blocked: false,
         needsCompaction: false,
+        steered: false,
+        atToolBoundary: false,
         currentText: undefined,
         reasoningMap: {},
       }
@@ -131,6 +135,7 @@ export const layer = Layer.effect(
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
         delete ctx.toolcalls[toolCallID]
+        ctx.atToolBoundary = true
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
@@ -378,6 +383,7 @@ export const layer = Layer.effect(
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
+            ctx.atToolBoundary = false
             const toolCall = yield* ensureToolCall(value)
             const input = toolInput(value.input)
             if (!toolCall.call.inputEnded) {
@@ -737,7 +743,7 @@ export const layer = Layer.effect(
             state: {
               ...part.state,
               status: "error",
-              error: "Tool execution aborted",
+              error: ctx.steered ? "Skipped: user sent a new message" : "Tool execution aborted",
               metadata: { ...metadata, interrupted: true },
               time: { start: "time" in part.state ? part.state.time.start : end, end },
             },
@@ -780,7 +786,15 @@ export const layer = Layer.effect(
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         slog.info("process")
         ctx.needsCompaction = false
+        ctx.steered = false
+        ctx.atToolBoundary = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+
+        const unsub = yield* bus.subscribeCallback(MessageV2.Event.Updated, (event) => {
+          if (event.properties.sessionID === ctx.sessionID && event.properties.info.role === "user") {
+            ctx.steered = true
+          }
+        })
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -791,7 +805,7 @@ export const layer = Layer.effect(
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
+              Stream.takeUntil(() => ctx.needsCompaction || (ctx.steered && ctx.atToolBoundary)),
               Stream.runDrain,
             )
           }).pipe(
@@ -842,10 +856,12 @@ export const layer = Layer.effect(
             Effect.ensuring(cleanup()),
           )
 
+          unsub()
+
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"
-        })
+        }).pipe(Effect.onInterrupt(() => Effect.sync(() => { unsub() })))
       })
 
       return {

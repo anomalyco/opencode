@@ -346,25 +346,31 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
-  const providerOptions = {
-    anthropic: {
-      cacheControl: { type: "ephemeral" },
-    },
-    openrouter: {
-      cacheControl: { type: "ephemeral" },
-    },
-    bedrock: {
-      cachePoint: { type: "default" },
-    },
-    openaiCompatible: {
-      cache_control: { type: "ephemeral" },
-    },
-    copilot: {
-      copilot_cache_control: { type: "ephemeral" },
-    },
-    alibaba: {
-      cacheControl: { type: "ephemeral" },
-    },
+  const systemSet = new Set<ModelMessage>(system)
+  function options(msg: ModelMessage) {
+    // Bedrock supports 1h TTL for system cache points and 5m for conversation.
+    // Longer TTL must appear before shorter TTL in the request.
+    const ttl = systemSet.has(msg) ? "1h" : "5m"
+    return {
+      anthropic: {
+        cacheControl: { type: "ephemeral" },
+      },
+      openrouter: {
+        cacheControl: { type: "ephemeral" },
+      },
+      bedrock: {
+        cachePoint: { type: "default", ttl },
+      },
+      openaiCompatible: {
+        cache_control: { type: "ephemeral" },
+      },
+      copilot: {
+        copilot_cache_control: { type: "ephemeral" },
+      },
+      alibaba: {
+        cacheControl: { type: "ephemeral" },
+      },
+    }
   }
 
   for (const msg of unique([...system, ...final])) {
@@ -382,12 +388,12 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
         lastContent.type !== "tool-approval-request" &&
         lastContent.type !== "tool-approval-response"
       ) {
-        lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+        lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, options(msg))
         continue
       }
     }
 
-    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
+    msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, options(msg))
   }
 
   return msgs

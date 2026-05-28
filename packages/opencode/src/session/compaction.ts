@@ -202,6 +202,7 @@ export interface Interface {
     model: { providerID: ProviderID; modelID: ModelID }
     auto: boolean
     overflow?: boolean
+    variant?: string
   }) => Effect.Effect<void>
 }
 
@@ -587,6 +588,7 @@ export const layer = Layer.effect(
       model: { providerID: ProviderID; modelID: ModelID }
       auto: boolean
       overflow?: boolean
+      variant?: string
     }) {
       const msg = yield* session.updateMessage({
         id: MessageID.ascending(),
@@ -594,6 +596,7 @@ export const layer = Layer.effect(
         model: input.model,
         sessionID: input.sessionID,
         agent: input.agent,
+        variant: input.variant,
         time: { created: Date.now() },
       })
       yield* session.updatePart({

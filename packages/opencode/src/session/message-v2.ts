@@ -866,6 +866,14 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               })
             continue
           }
+          // Drop reasoning parts likely corrupted by the historical trimEnd() bug —
+          // it removed trailing whitespace from thinking text, invalidating the
+          // cryptographic signature. Sending them without metadata produces empty
+          // content blocks that Bedrock rejects. Redacted blocks (empty text with
+          // providerOptions) are kept by normalizeMessages; uncorrupted blocks whose
+          // text still ends with whitespace are preserved as-is.
+          const corrupted = part.text.length > 0 && part.metadata && !/\s$/.test(part.text)
+          if (corrupted) continue
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
