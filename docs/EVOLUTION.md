@@ -126,6 +126,39 @@ Branch: `claude/simplicio-setup-config-9PXIm`
 
 Resultado: PARCIAL — toolchain real validada, flow corrigido. Ainda pendente: smoke do `simplicio task` (precisa de Ollama rodando) e `sendsprint run` (precisa credenciais Jira/ADO ou milestone GH real).
 
+### 2026-05-28 — R5 Fases 1+2 + scripts npm + board Sprints MVP
+
+Branch: `claude/simplicio-setup-config-9PXIm`. Commit: `9e2e020`.
+
+**R5 Fase 1 concluída** (visíveis-only):
+- 21 variantes `README.??.md` agora têm banner SimplicioCode no topo (alt texts já trocados em commit anterior).
+- `CONTRIBUTING.md`, `SECURITY.md`, `STATS.md` headers rebranded.
+
+**R5 Fase 2 concluída** (pacote npm renomeado + alias):
+- `packages/opencode/package.json#name`: `opencode` → `simpliciocode`.
+- `bin`: agora expõe `simpliciocode` E o legado `opencode` (compat de 1 release).
+- `packages/web/package.json` dep: `opencode` → `simpliciocode`.
+- 5 imports em `packages/web/src` atualizados para `from "simpliciocode/..."`.
+- `bun.lock` regenerado com sucesso.
+- `bun --cwd packages/opencode typecheck` → **PASS** (clean).
+- `bun astro check` em `packages/web` → 20 erros, todos pré-existentes (confirmado via stash + retest).
+
+**Scripts npm visíveis** (R7):
+- `bun run simplicio:bootstrap` → instala toolchain + roda map.
+- `bun run simplicio:update` → idem ao cron diário.
+- `bun run simplicio:task "<desc>"` → atalho do flow.
+- `bun run sprints` → board ASCII unificado Jira/ADO/GitHub/local.
+
+**R3 MVP board** (`script/simplicio/sprints.sh`):
+- Lê `.simplicio/config.json` e detecta credenciais (`JIRA_*`, `AZDO_*`).
+- Renderiza colunas TO DO / IN PROGRESS / REVIEW / DONE.
+- Modos: `local | github | jira | azuredevops | all` (default).
+- Aponta para `flow.sh --sprint` para entregar cards.
+
+**`.specs/sprints/sprint-01/SPRINT.md`** atualizado com o board real de R1–R7 ligado às issues #3–#9.
+
+Resultado: PARCIAL avançado — Fase 2 do rename validada via typecheck. Falta Fases 3–5 (dirs, imports profundos, URLs).
+
 ### Pendências para próximos commits
 
 - [ ] R5 — rename OpenCode→SimplicioCode (em fases, ver `docs/RENAME_PLAN.md`):

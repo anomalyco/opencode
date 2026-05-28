@@ -19,7 +19,11 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
-    "test": "echo 'do not run tests from root' && exit 1"
+    "test": "echo 'do not run tests from root' && exit 1",
+    "simplicio:bootstrap": "bash script/simplicio/install-tools.sh && bash script/simplicio/flow.sh --map-only",
+    "simplicio:update": "bash script/simplicio/update.sh",
+    "simplicio:task": "bash script/simplicio/flow.sh",
+    "sprints": "bash script/simplicio/sprints.sh"
   },
   "workspaces": {
     "packages": [
