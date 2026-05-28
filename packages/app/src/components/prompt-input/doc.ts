@@ -259,6 +259,13 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const empty = () => (handle ? handle.empty() : true)
 
+  const addFiles = async (files: File[]) => {
+    const result = await Promise.all(files.map((file) => handle?.addFile(file) ?? false))
+    return result.some(Boolean)
+  }
+
+  const addReference = (path: string) => handle?.addReference(path) ?? false
+
   const actors = () => {
     const list: DocActor[] = handle?.actors() ?? []
     const own = actor()
@@ -305,6 +312,8 @@ export function createPromptDoc(input: PromptDocInput) {
     guard,
     refocus,
     commitMarkdown,
+    addFiles,
+    addReference,
     empty,
     advance,
     undo,

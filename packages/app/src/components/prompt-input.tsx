@@ -1239,6 +1239,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const addPart = (part: ContentPart) => {
     if (part.type === "image") return false
+    if (store.mode === "doc") {
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      prompt.set([...prompt.current(), part], cursor)
+      return true
+    }
 
     const selection = window.getSelection()
     if (!selection) return false
@@ -1382,15 +1387,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
-    enabled: () => !canvasMode(store.mode),
+    enabled: () => store.mode !== "draw",
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
     focusEditor: () => {
+      if (store.mode === "doc") {
+        doc.refocus()
+        return
+      }
       editorRef.focus()
       setCursorPosition(editorRef, promptLength(prompt.current()))
     },
     addPart,
+    dropPath: async (path) => {
+      if (store.mode !== "doc") return false
+      const abs = path.startsWith("/") || /^[A-Za-z]:/.test(path) ? path : `${sdk.directory.replace(/\/+$/, "")}/${path}`
+      const ok = doc.addReference(abs)
+      if (ok) addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
+      return ok
+    },
+    dropFiles: async (list) => {
+      if (store.mode !== "doc") return false
+      const ok = await doc.addFiles(list)
+      if (!ok && list.length > 0) {
+        showToast({
+          title: language.t("common.requestFailed"),
+        })
+      }
+      return true
+    },
     readClipboardImage: platform.readClipboardImage,
   })
 
@@ -1789,7 +1815,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Show when={!canvasMode(store.mode)}>
+        <Show when={store.mode !== "draw"}>
           <PromptDragOverlay
             type={store.draggingType}
             label={language.t(

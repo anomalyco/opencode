@@ -1,6 +1,8 @@
 import { AffineSchemas } from "@blocksuite/blocks/schemas"
-import type { BlockModel, Doc, Query } from "@blocksuite/store"
+import { Text, type BlockModel, type Doc, type Query } from "@blocksuite/store"
+import { getFilename } from "@opencode-ai/util/path"
 import { DocCollection, Schema } from "@blocksuite/store"
+import { encodeFilePath } from "@/context/file/path"
 import "@/components/blocksuite/blocksuite-doc.css"
 import { watchCursorLabels } from "./cursor-labels"
 import { baseline, docMarkdown, docPlain, ensureEditable } from "./doc-content"
@@ -38,6 +40,8 @@ type TextModel = {
   yBlock?: YBlock
 }
 
+const IMAGES = new Set(["gif", "jpeg", "jpg", "png", "webp"])
+
 const text = (value: unknown): value is TextProp => {
   if (!value || typeof value !== "object") return false
   return typeof (value as TextProp).toString === "function"
@@ -69,6 +73,21 @@ const actor = (value: unknown): DocActor | undefined => {
   if (typeof actorID !== "string" || typeof name !== "string") return
   return { actorID, name }
 }
+
+const kind = (file: File) => {
+  const type = file.type.split(";", 1)[0]?.trim().toLowerCase()
+  if (type) return type
+  const idx = file.name.lastIndexOf(".")
+  const ext = idx === -1 ? "" : file.name.slice(idx + 1).toLowerCase()
+  if (IMAGES.has(ext)) return `image/${ext === "jpg" ? "jpeg" : ext}`
+  return "application/octet-stream"
+}
+
+const image = (file: File) => kind(file).startsWith("image/")
+
+const label = (value: string) => value.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]")
+
+const reference = (path: string) => `[${label(getFilename(path))}](file://${encodeFilePath(path)})`
 
 export async function createPage(input: DocMountInput) {
   await ensureEffects()
@@ -378,6 +397,37 @@ export async function createPage(input: DocMountInput) {
     void focus()
   }
 
+  const addFile = async (file: File) => {
+    if (input.readonly) return false
+    ensureEditable(doc)
+    const parent = doc.getBlockByFlavour("affine:note")[0]
+    if (!parent) return false
+    const id = await doc.blobSync.set(file)
+    if (image(file)) {
+      doc.addBlock("affine:image", { sourceId: id, caption: file.name, size: file.size }, parent.id)
+    } else {
+      doc.addBlock(
+        "affine:attachment",
+        { sourceId: id, name: file.name, size: file.size, type: kind(file), embed: false },
+        parent.id,
+      )
+    }
+    onHistory()
+    requestAnimationFrame(() => void focus())
+    return true
+  }
+
+  const addReference = (path: string) => {
+    if (input.readonly) return false
+    ensureEditable(doc)
+    const parent = doc.getBlockByFlavour("affine:note")[0]
+    if (!parent) return false
+    doc.addBlock("affine:paragraph", { text: new Text(reference(path)) }, parent.id)
+    onHistory()
+    requestAnimationFrame(() => void focus())
+    return true
+  }
+
   const undo = () => {
     if (!doc.canUndo) return
     doc.undo()
@@ -412,6 +462,8 @@ export async function createPage(input: DocMountInput) {
     detach,
     guard,
     refocus,
+    addFile,
+    addReference,
     onHistory,
     markdown: () =>
       input.sync
