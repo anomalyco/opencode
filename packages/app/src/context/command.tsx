@@ -62,6 +62,15 @@ function isAllowedEditableKeybind(id: string | undefined) {
   return EDITABLE_KEYBIND_IDS.has(actionId(id))
 }
 
+export function shouldPreserveNativeEditableKeybind(
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
+  isMac = IS_MAC,
+) {
+  if (!isMac) return false
+  if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
+  return event.key === "ArrowUp" || event.key === "ArrowDown"
+}
+
 export type KeybindConfig = string
 
 export interface Keybind {
@@ -378,8 +387,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const modified = event.ctrlKey || event.metaKey || event.altKey
       const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified && !isTab)
-        return
+      const editable = isEditableTarget(event.target)
+      if (editable && shouldPreserveNativeEditableKeybind(event)) return
+      if (editable && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified && !isTab) return
 
       if (isPalette) {
         event.preventDefault()

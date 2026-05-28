@@ -100,6 +100,13 @@ export function applyDirectoryEvent(input: {
   const event = input.event
   switch (event.type) {
     case "server.instance.disposed": {
+      input.setStore(
+        produce((draft) => {
+          draft.permission = {}
+          draft.question = {}
+        }),
+      )
+      console.debug(`[question-sync] instance disposed: cleared pending requests directory=${input.directory}`)
       input.push(input.directory)
       return
     }

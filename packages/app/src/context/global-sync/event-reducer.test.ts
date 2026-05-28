@@ -553,7 +553,13 @@ describe("applyDirectoryEvent", () => {
   })
 
   test("routes disposal and lsp events to side-effect handlers", () => {
-    const [store, setStore] = createStore(baseState())
+    const sessionID = "ses_1"
+    const [store, setStore] = createStore(
+      baseState({
+        permission: { [sessionID]: [permissionRequest("perm_1", sessionID)] },
+        question: { [sessionID]: [questionRequest("q_1", sessionID)] },
+      }),
+    )
     const pushes: string[] = []
     let lspLoads = 0
 
@@ -569,6 +575,9 @@ describe("applyDirectoryEvent", () => {
         lspLoads += 1
       },
     })
+
+    expect(store.permission).toEqual({})
+    expect(store.question).toEqual({})
 
     applyDirectoryEvent({
       event: { type: "lsp.updated" },

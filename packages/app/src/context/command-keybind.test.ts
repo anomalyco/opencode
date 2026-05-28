@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatKeybind, matchKeybind, parseKeybind } from "./command"
+import { formatKeybind, matchKeybind, parseKeybind, shouldPreserveNativeEditableKeybind } from "./command"
 
 describe("command keybind helpers", () => {
   test("parseKeybind handles aliases and multiple combos", () => {
@@ -65,5 +65,23 @@ describe("command keybind helpers", () => {
 
     expect(display.includes("K") || display.includes("k")).toBe(true)
     expect(display.includes("P") || display.includes("p")).toBe(false)
+  })
+
+  test("preserves macOS editable cursor movement keybinds", () => {
+    expect(shouldPreserveNativeEditableKeybind(new KeyboardEvent("keydown", { key: "ArrowUp", metaKey: true }), true)).toBe(
+      true,
+    )
+    expect(
+      shouldPreserveNativeEditableKeybind(new KeyboardEvent("keydown", { key: "ArrowDown", metaKey: true }), true),
+    ).toBe(true)
+    expect(
+      shouldPreserveNativeEditableKeybind(
+        new KeyboardEvent("keydown", { key: "ArrowUp", metaKey: true, shiftKey: true }),
+        true,
+      ),
+    ).toBe(false)
+    expect(shouldPreserveNativeEditableKeybind(new KeyboardEvent("keydown", { key: "ArrowUp", metaKey: true }), false)).toBe(
+      false,
+    )
   })
 })
