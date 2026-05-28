@@ -1,5 +1,5 @@
 import { AffineSchemas } from "@blocksuite/blocks/schemas"
-import { Text, type BlockModel, type Doc, type Query } from "@blocksuite/store"
+import type { BlockModel, Doc, Query } from "@blocksuite/store"
 import { getFilename } from "@opencode-ai/util/path"
 import { DocCollection, Schema } from "@blocksuite/store"
 import { encodeFilePath } from "@/context/file/path"
@@ -13,6 +13,7 @@ import { frame, settled } from "./frame"
 import { inlineReady } from "./inline-editor"
 import { OpencodeAwarenessSource, OpencodeBlobSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
 import { scheme } from "./theme"
+import { FileReferenceBlockSpec, withFileReferenceSchema } from "./file-reference-block"
 
 export type DocMountInput = {
   theme: () => "light" | "dark"
@@ -85,18 +86,14 @@ const kind = (file: File) => {
 
 const image = (file: File) => kind(file).startsWith("image/")
 
-const label = (value: string) => value.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]")
-
-const reference = (path: string) => `[${label(getFilename(path))}](file://${encodeFilePath(path)})`
-
 export async function createPage(input: DocMountInput) {
   await ensureEffects()
-  const [{ PageEditor }, { PreviewEditorBlockSpecs, ThemeProvider }] = await Promise.all([
+  const [{ PageEditor }, { PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider }] = await Promise.all([
     import("@blocksuite/presets"),
     import("@blocksuite/blocks"),
   ])
 
-  const schema = new Schema().register(AffineSchemas)
+  const schema = new Schema().register(withFileReferenceSchema(AffineSchemas))
   const page = "page"
   const query = { match: [], mode: "loose" } satisfies Query
   let draft: Doc | undefined
@@ -159,7 +156,7 @@ export async function createPage(input: DocMountInput) {
 
   const editor = new PageEditor()
   editor.doc = doc
-  if (input.readonly) editor.specs = PreviewEditorBlockSpecs
+  editor.specs = [...(input.readonly ? PreviewEditorBlockSpecs : PageEditorBlockSpecs), ...FileReferenceBlockSpec]
   editor.hasViewport = true
 
   let reload: (() => void) | undefined
@@ -422,7 +419,11 @@ export async function createPage(input: DocMountInput) {
     ensureEditable(doc)
     const parent = doc.getBlockByFlavour("affine:note")[0]
     if (!parent) return false
-    doc.addBlock("affine:paragraph", { text: new Text(reference(path)) }, parent.id)
+    doc.addBlock(
+      "opencode:file-reference",
+      { name: getFilename(path), path, url: `file://${encodeFilePath(path)}` },
+      parent.id,
+    )
     onHistory()
     requestAnimationFrame(() => void focus())
     return true

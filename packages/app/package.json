@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@blocksuite/affine-model": "0.0.0-canary-20250316001624",
+    "@blocksuite/block-std": "0.0.0-canary-20250316001624",
     "@blocksuite/blocks": "0.0.0-canary-20250316001624",
     "@blocksuite/icons": "2.1.75",
     "@blocksuite/presets": "0.0.0-canary-20250316001624",
@@ -75,6 +76,7 @@
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#main",
+    "lit": "3.3.3",
     "luxon": "catalog:",
     "marked": "catalog:",
     "marked-shiki": "catalog:",
