@@ -10,6 +10,12 @@ import {
 } from "./shared"
 import { ConfigPlugin } from "@/config/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@/util/hash"
+import { Filesystem } from "@/util/filesystem"
+import { cp, mkdir, rm, symlink } from "fs/promises"
+import path from "path"
+import { fileURLToPath, pathToFileURL } from "url"
 
 export namespace PluginLoader {
   // A normalized plugin declaration derived from config before any filesystem or npm work happens.
@@ -59,6 +65,80 @@ export namespace PluginLoader {
   type AttemptResult<R> = {
     value?: R
     retry: boolean
+  }
+
+  const scopedCopies = new Map<string, Promise<void>>()
+
+  function pathFromSpec(spec: string) {
+    if (spec.startsWith("file://")) return fileURLToPath(spec)
+    return spec
+  }
+
+  function hrefFromPath(file: string) {
+    return pathToFileURL(file).href
+  }
+
+  function findNodeModulesRoot(pkg: PluginPackage) {
+    const parts = pkg.dir.split(path.sep)
+    const index = parts.lastIndexOf("node_modules")
+    if (index < 0) return
+    return parts.slice(0, index).join(path.sep) || path.sep
+  }
+
+  function filePluginRoot(row: Resolved, origin: ConfigPlugin.Origin | undefined) {
+    const entry = pathFromSpec(row.entry)
+    const originStat = origin ? Filesystem.stat(origin.source) : undefined
+    const configRoot = origin ? (originStat?.isDirectory() ? origin.source : path.dirname(origin.source)) : undefined
+    if (configRoot && Filesystem.contains(Filesystem.resolve(configRoot), Filesystem.resolve(entry))) return configRoot
+    return row.pkg?.dir ?? path.dirname(pathFromSpec(row.target))
+  }
+
+  async function copyScopedPlugin(row: Resolved, root: string, scoped: string) {
+    await rm(scoped, { recursive: true, force: true })
+    await mkdir(path.dirname(scoped), { recursive: true })
+    if (row.source === "npm") {
+      await cp(root, scoped, { recursive: true, dereference: true })
+      return
+    }
+
+    const nodeModules = path.join(root, "node_modules")
+    const hasNodeModules = await Filesystem.exists(nodeModules)
+    await cp(root, scoped, {
+      recursive: true,
+      dereference: true,
+      filter: (source) => Filesystem.resolve(source) !== Filesystem.resolve(nodeModules),
+    })
+    if (hasNodeModules) {
+      await symlink(nodeModules, path.join(scoped, "node_modules"), "dir")
+    }
+  }
+
+  // Bun normalizes file import query/hash fragments, so project isolation needs a real path.
+  async function scopedImportSpec(row: Resolved, origin: ConfigPlugin.Origin | undefined, scope: string | undefined) {
+    if (!scope) return row.entry
+    const entry = pathFromSpec(row.entry)
+    const root = row.source === "npm" && row.pkg ? findNodeModulesRoot(row.pkg) ?? row.pkg.dir : filePluginRoot(row, origin)
+    const relative = path.relative(root, entry)
+    const key = Hash.fast([scope, row.source, row.target, row.entry].join("\0"))
+    const scoped = path.join(Global.Path.tmp, "plugin-modules", key)
+    const scopedEntry = path.join(scoped, relative)
+    const previous = scopedCopies.get(key)
+    if (previous) {
+      await previous
+    } else {
+      const copy = Promise.resolve().then(async () => {
+        await copyScopedPlugin(row, root, scoped)
+      })
+      scopedCopies.set(key, copy)
+      try {
+        await copy
+      } catch (error) {
+        scopedCopies.delete(key)
+        throw error
+      }
+    }
+
+    return hrefFromPath(scopedEntry)
   }
 
   function errorMessage(error: unknown) {
@@ -132,10 +212,14 @@ export namespace PluginLoader {
   }
 
   // Import the resolved module only after all earlier validation has succeeded.
-  export async function load(row: Resolved): Promise<{ ok: true; value: Loaded } | { ok: false; error: unknown }> {
+  export async function load(
+    row: Resolved,
+    origin?: ConfigPlugin.Origin,
+    scope?: string,
+  ): Promise<{ ok: true; value: Loaded } | { ok: false; error: unknown }> {
     let mod
     try {
-      mod = await import(row.entry)
+      mod = await import(await scopedImportSpec(row, origin, scope))
     } catch (error) {
       return { ok: false, error }
     }
@@ -152,6 +236,7 @@ export namespace PluginLoader {
     finish: ((load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     missing: ((value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report | undefined,
+    importScope: string | undefined,
   ): Promise<AttemptResult<R>> {
     const plan = candidate.plan
     const filePlugin = pluginSource(plan.spec) === "file"
@@ -177,7 +262,7 @@ export namespace PluginLoader {
       return { retry: filePlugin && isRetryableResolveError(resolved.stage, resolved.error) }
     }
 
-    const loaded = await load(resolved.value)
+    const loaded = await load(resolved.value, candidate.origin, importScope)
     if (!loaded.ok) {
       report?.error?.(candidate, retry, "load", loaded.error, resolved.value)
       return { retry: false }
@@ -197,6 +282,7 @@ export namespace PluginLoader {
     finish?: (load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>
     missing?: (value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>
     report?: Report
+    importScope?: string
   }
 
   // Resolve and load all configured plugins in parallel.
@@ -208,7 +294,7 @@ export namespace PluginLoader {
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<AttemptResult<R>>> = []
     for (const candidate of candidates) {
-      list.push(attempt(candidate, input.kind, false, input.finish, input.missing, input.report))
+      list.push(attempt(candidate, input.kind, false, input.finish, input.missing, input.report, input.importScope))
     }
     const out = await Promise.all(list)
     if (input.wait) {
@@ -224,7 +310,7 @@ export namespace PluginLoader {
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
         await deps
-        out[i] = await attempt(candidate, input.kind, true, input.finish, input.missing, input.report)
+        out[i] = await attempt(candidate, input.kind, true, input.finish, input.missing, input.report, input.importScope)
       }
     }
 

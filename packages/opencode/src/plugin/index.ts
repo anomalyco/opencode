@@ -29,6 +29,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Hash } from "@/util/hash"
 
 const log = Log.create({ service: "plugin" })
 
@@ -172,6 +173,7 @@ export const layer = Layer.effect(
           PluginLoader.loadExternal({
             items: plugins,
             kind: "server",
+            importScope: Hash.fast([ctx.project.id, ctx.worktree, ctx.directory].join("\0")),
             report: {
               start(candidate) {
                 log.info("loading plugin", { path: candidate.plan.spec })

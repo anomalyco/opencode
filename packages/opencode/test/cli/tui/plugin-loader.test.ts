@@ -120,6 +120,123 @@ test("does not retry top-level plugin errors that look like resolver messages", 
   expect(waited).toBe(false)
 })
 
+test("isolates plugin module state by import scope", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "stateful-plugin.ts")
+      await Bun.write(
+        file,
+        `const key = ${JSON.stringify(file)}
+const state = ((globalThis as any).__opencodePluginLoaderScopeTest ??= {})
+state[key] = (state[key] ?? 0) + 1
+export default { id: "demo.stateful", tui: async () => {}, count: state[key] }
+`,
+      )
+      return { spec: pathToFileURL(file).href }
+    },
+  })
+
+  const items = [{ spec: tmp.extra.spec, scope: "local" as const, source: path.join(tmp.path, "tui.json") }]
+  const finish = async (loaded: PluginLoader.Loaded) => (loaded.mod.default as { count: number }).count
+
+  const first = await PluginLoader.loadExternal({ items, kind: "tui", finish })
+  const second = await PluginLoader.loadExternal({ items, kind: "tui", finish })
+  const scopedA = await PluginLoader.loadExternal({ items, kind: "tui", importScope: "project-a", finish })
+  const scopedB = await PluginLoader.loadExternal({ items, kind: "tui", importScope: "project-b", finish })
+  const scopedAAgain = await PluginLoader.loadExternal({ items, kind: "tui", importScope: "project-a", finish })
+
+  expect(first).toEqual([1])
+  expect(second).toEqual([1])
+  expect(scopedA).toEqual([2])
+  expect(scopedB).toEqual([3])
+  expect(scopedAAgain).toEqual([2])
+})
+
+test("keeps config-local dependencies available for scoped file plugins", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const config = path.join(dir, ".opencode", "tui.json")
+      const plugin = path.join(dir, ".opencode", "plugin", "uses-config-node-modules.ts")
+      const dep = path.join(dir, ".opencode", "node_modules", "demo-dep", "index.js")
+      await Bun.write(dep, `export default "from-config-node-modules"\n`)
+      await Bun.write(
+        plugin,
+        `import value from "demo-dep"
+export default { id: "demo.config-deps", tui: async () => {}, value }
+`,
+      )
+      return { config, spec: pathToFileURL(plugin).href }
+    },
+  })
+
+  const loaded = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local" as const, source: tmp.extra.config }],
+    kind: "tui",
+    importScope: "project-with-config-deps",
+    finish: async (item) => (item.mod.default as { value: string }).value,
+  })
+
+  expect(loaded).toEqual(["from-config-node-modules"])
+})
+
+test("does not import config node_modules while copying scoped file plugin sources", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const config = path.join(dir, ".opencode", "tui.json")
+      const plugin = path.join(dir, ".opencode", "plugin", "uses-relative-lib.ts")
+      const lib = path.join(dir, ".opencode", "lib", "plugin-lib.ts")
+      const broken = path.join(dir, ".opencode", "node_modules", "broken-package", "package.json")
+      await Bun.write(lib, `export const value = "from-relative-lib"\n`)
+      await Bun.write(broken, `{"exports":{"."":"./missing.js"}}\n`)
+      await Bun.write(
+        plugin,
+        `import { value } from "../lib/plugin-lib"
+export default { id: "demo.relative-lib", tui: async () => {}, value }
+`,
+      )
+      return { config, spec: pathToFileURL(plugin).href }
+    },
+  })
+
+  const loaded = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local" as const, source: tmp.extra.config }],
+    kind: "tui",
+    importScope: "project-with-broken-config-node-modules",
+    finish: async (item) => (item.mod.default as { value: string }).value,
+  })
+
+  expect(loaded).toEqual(["from-relative-lib"])
+})
+
+test("uses auto-discovered plugin directory origins instead of copying the repository root", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const configDir = path.join(dir, ".opencode")
+      const plugin = path.join(configDir, "plugin", "uses-relative-lib.ts")
+      const lib = path.join(configDir, "lib", "plugin-lib.ts")
+      const brokenRepoSymlink = path.join(dir, "broken-repo-link.ts")
+      await Bun.write(lib, `export const value = "from-auto-discovered-origin"\n`)
+      await fs.symlink("missing-target.ts", brokenRepoSymlink)
+      await Bun.write(
+        plugin,
+        `import { value } from "../lib/plugin-lib"
+export default { id: "demo.auto-origin", tui: async () => {}, value }
+`,
+      )
+      return { configDir, spec: pathToFileURL(plugin).href }
+    },
+  })
+
+  const loaded = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local" as const, source: tmp.extra.configDir }],
+    kind: "tui",
+    importScope: "project-with-auto-discovered-plugin",
+    finish: async (item) => (item.mod.default as { value: string }).value,
+  })
+
+  expect(loaded).toEqual(["from-auto-discovered-origin"])
+})
+
 type Data = {
   local: Row
   global: Row

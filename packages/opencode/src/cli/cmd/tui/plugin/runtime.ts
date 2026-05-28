@@ -42,6 +42,7 @@ import { ConfigPlugin } from "@/config/plugin"
 import { createCommandShim } from "./command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
+import { Hash } from "@/util/hash"
 
 ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
 
@@ -688,6 +689,7 @@ async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => P
   return PluginLoader.loadExternal({
     items: list,
     kind: "tui",
+    importScope: Hash.fast(process.cwd()),
     wait: async () => {
       await wait().catch((error) => {
         log.warn("failed waiting for tui plugin dependencies", { error })
