@@ -421,6 +421,13 @@ export function CollabProvider(props: CollabProviderProps) {
         setSession((prev) =>
           prev ? { ...prev, initStatus: "ready", initError: null } : prev,
         )
+        // Refetch the session row: `availablePreview` is computed server-side
+        // from the clone existing on disk (Preview.repoHasPreview checks
+        // existsSync of the workspace dir).  At first-fetch time the clone
+        // hadn't completed yet so availablePreview was null and the
+        // PreviewLauncher button was hidden.  After workspace_ready it
+        // should populate — fetchSession picks up the updated value.
+        fetchSession()
         break
 
       case "collab:workspace_failed":
@@ -654,12 +661,18 @@ export function CollabProvider(props: CollabProviderProps) {
     previewState,
 
     async launchPreview() {
-      const data = await api("/preview/launch", "POST")
-      // Server returns the snapshot on 202; mirror it locally so the UI
-      // flips immediately (the SSE event will arrive milliseconds later
-      // and overwrite this with the same data — harmless).
-      if (data && typeof data === "object" && "port" in data) {
-        setPreviewState(data as PreviewStateSnapshot)
+      // api() returns the raw Response — match the pattern used by openPullRequest /
+      // createInvite / addRepos above and parse JSON ourselves.  Failure to parse
+      // (or unexpected shape) is non-fatal; the SSE event will populate state
+      // milliseconds later anyway.
+      const res = await api("/preview/launch", "POST")
+      try {
+        const data = (await res.json()) as PreviewStateSnapshot
+        if (data && typeof data === "object" && typeof data.port === "number") {
+          setPreviewState(data)
+        }
+      } catch {
+        // SSE will fill in state shortly — no need to surface a parse error
       }
     },
 
@@ -670,9 +683,14 @@ export function CollabProvider(props: CollabProviderProps) {
     },
 
     async restartPreview() {
-      const data = await api("/preview/restart", "POST")
-      if (data && typeof data === "object" && "port" in data) {
-        setPreviewState(data as PreviewStateSnapshot)
+      const res = await api("/preview/restart", "POST")
+      try {
+        const data = (await res.json()) as PreviewStateSnapshot
+        if (data && typeof data === "object" && typeof data.port === "number") {
+          setPreviewState(data)
+        }
+      } catch {
+        // SSE will fill in state shortly
       }
     },
   }

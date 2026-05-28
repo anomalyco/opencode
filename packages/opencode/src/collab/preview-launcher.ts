@@ -232,11 +232,21 @@ export function launchPreview(
 
   let child: ChildProcess
   try {
+    // `detached: true` puts the child + all its descendants in a NEW process
+    // group whose pgid === child.pid.  Without this, sh→pnpm→node forms a
+    // tree where `child.kill("SIGTERM")` only signals `sh`; the dev server
+    // (node) keeps running and holds port 8080.  The next launch then 409s
+    // on port-in-use until something garbage-collects the orphan.
+    //
+    // We kill via process.kill(-child.pid, signal) in stopPreview to fan
+    // the signal across the entire group.  detached doesn't actually
+    // detach from us (we keep stdio, keep the parent watching exit) —
+    // it's just the pgid creation we want.
     child = spawn("sh", ["-c", shellCmd], {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
-      detached: false,
+      detached: true,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -263,6 +273,12 @@ export function launchPreview(
     config,
   }
   active = state
+
+  // Reset the HEAD tracker for the new preview's workspace.  Without this
+  // a relaunch (or a brand-new preview for a different session/repo) would
+  // compare against the previous preview's last-seen HEAD, generating a
+  // spurious "branch changed" → auto-restart loop on the first LLM turn.
+  lastKnownHead = null
 
   wireChildStreams(state)
   startSweepLoop()
@@ -297,14 +313,26 @@ export function stopPreview(reason: string = "explicit"): void {
   const { child, collabSessionId } = active
   const sessionId = collabSessionId
 
-  try { child.kill("SIGTERM") } catch {}
-  const killTimer = setTimeout(() => {
-    try { child.kill("SIGKILL") } catch {}
-  }, 5_000)
+  // Signal the whole process group — sh → pnpm → node — not just the
+  // top-level shell.  `detached: true` in spawn() guarantees pgid ===
+  // child.pid.  Negative pid syntax on process.kill targets the group.
+  // Fall back to plain child.kill if pgid signalling fails (e.g. the
+  // child already exited).
+  const killGroup = (sig: NodeJS.Signals) => {
+    try {
+      if (child.pid) process.kill(-child.pid, sig)
+    } catch {
+      try { child.kill(sig) } catch {}
+    }
+  }
+
+  killGroup("SIGTERM")
+  const killTimer = setTimeout(() => killGroup("SIGKILL"), 5_000)
   child.once("exit", () => clearTimeout(killTimer))
 
   console.log(`[collab.preview] stopped (${reason}) for session ${sessionId}`)
   active = null
+  lastKnownHead = null
   stopSweepLoop()
 
   broadcast(sessionId, {
@@ -316,36 +344,58 @@ export function stopPreview(reason: string = "explicit"): void {
 /**
  * Stop + relaunch with the SAME args.  Used by the SPA's Restart button AND
  * by the branch-checkout hook below.  Returns the same shape as launchPreview.
+ *
+ * Important: we snapshot port + label BEFORE the stop, because `stopPreview`
+ * sets `active = null` synchronously.  Without the pre-stop snapshot the
+ * returned `state` would have `port: 0, label: "preview"` (the previous
+ * defensive-default fallback was a bug — the SPA showed port 0 in the
+ * banner until SSE caught up).
+ *
+ * The actual relaunch fires 100 ms later via setTimeout so the dev server's
+ * old port is fully released before the new one binds.  If the inner launch
+ * fails (e.g. the workspace was wiped between stop and relaunch, or
+ * something else grabbed the slot first), we broadcast collab:preview_failed
+ * so the SPA's banner reflects the truth instead of staying stuck in
+ * "installing".
  */
 export function restartPreview(): LaunchResult {
   if (!active) {
     return { ok: false, status: 404, error: "No preview is currently running." }
   }
-  const { collabSessionId, repoFullName } = active
-  stopPreview("restart")
-  // Tiny delay so the port is fully released before the next launch.
-  // 50ms is empirically enough for Node http listeners.
-  const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-  // We can't make launchPreview async here without changing the route shape;
-  // run it after a sync microtask delay instead.
-  setTimeout(() => {
-    void wait(50).then(() => launchPreview(collabSessionId, repoFullName))
-  }, 50)
-  // Return an "installing" snapshot synchronously; SSE will update when the
-  // actual relaunch finishes.
-  return {
-    ok: true,
-    state: {
-      collabSessionId,
-      repoFullName,
-      port: active?.port ?? 0,
-      label: active?.label ?? "preview",
-      status: "installing",
-      startedAt: Date.now(),
-      lastTraffic: Date.now(),
-      recentLog: [],
-    },
+  const { collabSessionId, repoFullName, port, label, config } = active
+  const installing: PreviewStateSnapshot = {
+    collabSessionId,
+    repoFullName,
+    port,
+    label,
+    status: "installing",
+    startedAt: Date.now(),
+    lastTraffic: Date.now(),
+    recentLog: [],
   }
+
+  stopPreview("restart")
+
+  // Relaunch after the port is fully released.  100 ms is generous for
+  // Node http listeners; the previous 50 ms was tight on slow runners.
+  setTimeout(() => {
+    const result = launchPreview(collabSessionId, repoFullName)
+    if (!result.ok) {
+      console.error(`[collab.preview] restart relaunch failed: ${result.error}`)
+      // Surface to the SPA so its banner doesn't stay stuck "installing".
+      broadcast(collabSessionId, {
+        type: "collab:preview_failed",
+        collabSessionId,
+        error: result.error,
+      })
+    }
+  }, 100)
+
+  // Avoid an "unused" lint by referencing config — also documents that the
+  // config carries through to the relaunch via previewConfigForRepo on the
+  // workspace, not via the in-memory state.
+  void config
+  return { ok: true, state: installing }
 }
 
 /**
@@ -382,6 +432,14 @@ export async function maybeRestartOnBranchChange(): Promise<void> {
 
 function wireChildStreams(state: ActiveState): void {
   const onLine = (stream: "stdout" | "stderr") => (chunk: Buffer) => {
+    // Stop emitting log/state events for a child whose state has been
+    // replaced (stopPreview cleared `active`, or a restart spun up a new
+    // ActiveState).  The OS may still flush a few hundred bytes of stdout
+    // between SIGTERM and process exit; without this guard those bytes
+    // surface in the SPA as zombie log lines AFTER the user already saw
+    // "Preview stopped".
+    if (active !== state) return
+
     const lines = chunk.toString("utf8").split("\n").filter(Boolean)
     for (const line of lines) {
       state._log.push({ stream, line, ts: Date.now() })

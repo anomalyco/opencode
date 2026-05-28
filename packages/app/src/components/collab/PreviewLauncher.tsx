@@ -5,19 +5,22 @@
  * button.  Hides unless the session has at least one preview-capable repo
  * (computed server-side via `availablePreview` on the session payload).
  *
- * Four visual states driven by `collab.previewState()`:
+ * Three visual states driven by `collab.previewState()`:
  *
  *   null            → "Launch Unleash live frontend" button.  Driver-only.
- *   "installing"    → spinner + last few log lines + Cancel
- *   "running"       → 🟢 pill + "Open preview" link + Restart / Stop
- *   "failed"        → ❌ banner with error + Retry
+ *                    Also the post-stop and post-idle-timeout state — the
+ *                    server's collab:preview_stopped event sets previewState
+ *                    back to null so we naturally return to the Launch button.
+ *   "installing"    → spinner + last few log lines + Cancel (Driver)
+ *   "running"       → 🟢 pill + "Open preview" link + Restart / Stop (Driver)
+ *   "failed"        → ❌ banner with error tail + Retry (Driver)
  *
  * Plan: ~/.claude/plans/frontend-live-preview.md
  * Server: packages/opencode/src/collab/preview-launcher.ts
  */
 
 import { createMemo, createSignal, Show, For } from "solid-js"
-import { useCollab } from "@/context/collab"
+import { useCollab, type PreviewStateSnapshot } from "@/context/collab"
 
 export function PreviewLauncher() {
   const collab = useCollab()
@@ -106,7 +109,12 @@ export function PreviewLauncher() {
           {(s) => (
             <>
               <Show when={s().status === "installing"}>
-                <InstallingBanner state={s()} />
+                <InstallingBanner
+                  state={s()}
+                  isDriver={isDriver()}
+                  onCancel={stop}
+                  busy={busy()}
+                />
               </Show>
 
               <Show when={s().status === "running"}>
@@ -127,10 +135,10 @@ export function PreviewLauncher() {
                   busy={busy()}
                 />
               </Show>
-
-              <Show when={s().status === "stopped"}>
-                <StoppedBanner isDriver={isDriver()} onRelaunch={launch} busy={busy()} />
-              </Show>
+              {/* No "stopped" branch — collab:preview_stopped clears
+                  previewState to null, taking us back to the Launch button
+                  via the fallback above.  Idle-timeout stops behave the
+                  same (server SIGTERMs + broadcasts stopped + nulls). */}
             </>
           )}
         </Show>
@@ -145,13 +153,29 @@ export function PreviewLauncher() {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function InstallingBanner(props: { state: PreviewState }) {
+function InstallingBanner(props: {
+  state: PreviewStateSnapshot
+  isDriver: boolean
+  onCancel: () => void
+  busy: boolean
+}) {
   const lines = () => props.state.recentLog.slice(-5)
   return (
     <div class="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-1.5">
       <div class="flex items-center gap-2 text-xs text-amber-200">
         <Spinner />
-        <span>Installing dev server…</span>
+        <span class="flex-1">Installing dev server…</span>
+        <Show when={props.isDriver}>
+          <button
+            type="button"
+            onClick={props.onCancel}
+            disabled={props.busy}
+            class="text-[10px] px-2 py-0.5 rounded border border-zinc-700 text-zinc-400 hover:text-red-300 hover:border-red-500/60 disabled:opacity-50 transition-colors"
+            title="SIGTERM the install + dev-server process tree"
+          >
+            Cancel
+          </button>
+        </Show>
       </div>
       <p class="text-[10px] text-amber-300/70">
         First launch installs node_modules — this can take a few minutes.  Subsequent
@@ -175,7 +199,7 @@ function InstallingBanner(props: { state: PreviewState }) {
 }
 
 function RunningBanner(props: {
-  state: PreviewState
+  state: PreviewStateSnapshot
   isDriver: boolean
   onStop: () => void
   onRestart: () => void
@@ -226,7 +250,7 @@ function RunningBanner(props: {
 }
 
 function FailedBanner(props: {
-  state: PreviewState
+  state: PreviewStateSnapshot
   isDriver: boolean
   onRetry: () => void
   busy: boolean
@@ -270,24 +294,6 @@ function FailedBanner(props: {
   )
 }
 
-function StoppedBanner(props: { isDriver: boolean; onRelaunch: () => void; busy: boolean }) {
-  return (
-    <div class="rounded-md border border-zinc-700 bg-zinc-900/40 px-3 py-2 space-y-1.5">
-      <div class="text-xs text-zinc-400">Preview stopped (idle).</div>
-      <Show when={props.isDriver}>
-        <button
-          type="button"
-          onClick={props.onRelaunch}
-          disabled={props.busy}
-          class="w-full text-[11px] py-1.5 rounded bg-blue-600/30 border border-blue-500/40 hover:bg-blue-600/40 text-blue-100 disabled:opacity-50 transition-colors"
-        >
-          {props.busy ? "Relaunching…" : "Relaunch"}
-        </button>
-      </Show>
-    </div>
-  )
-}
-
 function Spinner() {
   return (
     <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -302,16 +308,3 @@ function humanize(err: unknown): string {
   return String(err)
 }
 
-// ── Local types (mirror collab/preview-launcher.ts PreviewStateSnapshot) ─────
-
-interface PreviewState {
-  collabSessionId: string
-  repoFullName: string
-  port: number
-  label: string
-  status: "installing" | "running" | "stopped" | "failed"
-  startedAt: number
-  lastTraffic: number
-  recentLog: ReadonlyArray<{ stream: "stdout" | "stderr"; line: string; ts: number }>
-  errorMessage?: string
-}
