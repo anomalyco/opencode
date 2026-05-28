@@ -1725,6 +1725,30 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+export type WebSearchProviderConfig = {
+  enabled?: boolean
+  label?: string
+  url?: string
+  tool?: string
+  headers?: {
+    [key: string]: string
+  }
+  args?: {
+    [key: string]: unknown
+  }
+  /**
+   * Relative weight for deterministic per-session selection across enabled providers. Defaults to 1. Must be a positive integer.
+   */
+  weight?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type WebSearchConfig = {
+  default?: string
+  providers?: {
+    [key: string]: WebSearchProviderConfig
+  }
+}
+
 export type ImageAttachmentConfig = {
   auto_resize?: boolean
   max_width?: number
@@ -1847,6 +1871,7 @@ export type Config = {
   instructions?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
+  websearch?: WebSearchConfig
   tools?: {
     [key: string]: boolean
   }

@@ -22,7 +22,7 @@ import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
-import { WebSearchTool } from "./websearch"
+import { resolveProviders, WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
 import { RepositoryCache } from "@/reference/repository-cache"
@@ -58,8 +58,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const log = Log.create({ service: "tool.registry" })
 
-export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
+export function webSearchEnabled(providerID: ProviderV2.ID, hasProviders: boolean) {
+  return providerID === ProviderV2.ID.opencode || hasProviders
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
@@ -321,9 +321,12 @@ export const layer: Layer.Layer<
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const cfg = (yield* config.get()).websearch
+      const hasWebSearchProvider =
+        resolveProviders({ exa: flags.enableExa, parallel: flags.enableParallel }, cfg).length > 0
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
-          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
+          return webSearchEnabled(input.providerID, hasWebSearchProvider)
         }
 
         const usePatch =

@@ -1,11 +1,6 @@
 import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 
-export const EXA_URL = process.env.EXA_API_KEY
-  ? `https://mcp.exa.ai/mcp?exaApiKey=${encodeURIComponent(process.env.EXA_API_KEY)}`
-  : "https://mcp.exa.ai/mcp"
-export const PARALLEL_URL = "https://search.parallel.ai/mcp"
-
 const McpResult = Schema.Struct({
   result: Schema.Struct({
     content: Schema.Array(
@@ -40,56 +35,43 @@ export const parseResponse = Effect.fn("McpWebSearch.parseResponse")(function* (
   return undefined
 })
 
-export const SearchArgs = Schema.Struct({
-  query: Schema.String,
-  type: Schema.String,
-  numResults: Schema.Number,
-  livecrawl: Schema.String,
-  contextMaxCharacters: Schema.optional(Schema.Number),
+const McpRequest = Schema.Struct({
+  jsonrpc: Schema.Literal("2.0"),
+  id: Schema.Literal(1),
+  method: Schema.Literal("tools/call"),
+  params: Schema.Struct({
+    name: Schema.String,
+    arguments: Schema.Unknown,
+  }),
 })
 
-export const ParallelSearchArgs = Schema.Struct({
-  objective: Schema.String,
-  search_queries: Schema.Array(Schema.String),
-  session_id: Schema.optional(Schema.String),
-  model_name: Schema.optional(Schema.String),
-})
+export interface CallInput {
+  url: string
+  tool: string
+  args: unknown
+  headers?: Record<string, string>
+  timeout: Duration.Input
+}
 
-const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>
-  Schema.Struct({
-    jsonrpc: Schema.Literal("2.0"),
-    id: Schema.Literal(1),
-    method: Schema.Literal("tools/call"),
-    params: Schema.Struct({
-      name: Schema.String,
-      arguments: args,
-    }),
-  })
-
-export const call = <F extends Schema.Struct.Fields>(
-  http: HttpClient.HttpClient,
-  url: string,
-  tool: string,
-  args: Schema.Struct<F>,
-  value: Schema.Struct.Type<F>,
-  timeout: Duration.Input,
-  headers?: Record<string, string>,
-) =>
+export const call = (http: HttpClient.HttpClient, input: CallInput) =>
   Effect.gen(function* () {
-    const request = yield* HttpClientRequest.post(url).pipe(
+    const request = yield* HttpClientRequest.post(input.url).pipe(
       HttpClientRequest.accept("application/json, text/event-stream"),
-      HttpClientRequest.setHeaders(headers ?? {}),
-      HttpClientRequest.schemaBodyJson(McpRequest(args))({
+      HttpClientRequest.setHeaders(input.headers ?? {}),
+      HttpClientRequest.schemaBodyJson(McpRequest)({
         jsonrpc: "2.0" as const,
         id: 1 as const,
         method: "tools/call" as const,
-        params: { name: tool, arguments: value },
+        params: { name: input.tool, arguments: input.args },
       }),
     )
     const response = yield* HttpClient.filterStatusOk(http)
       .execute(request)
       .pipe(
-        Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error(`${tool} request timed out`)) }),
+        Effect.timeoutOrElse({
+          duration: input.timeout,
+          orElse: () => Effect.die(new Error(`${input.tool} request timed out`)),
+        }),
       )
     const body = yield* response.text
     return yield* parseResponse(body)

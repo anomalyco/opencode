@@ -41,6 +41,7 @@ import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
+import { ConfigWebSearch } from "./websearch"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ConfigExperimental } from "@opencode-ai/core/config/experimental"
@@ -244,6 +245,10 @@ export const Info = Schema.Struct({
   }),
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermission.Info),
+  websearch: Schema.optional(ConfigWebSearch.Info).annotate({
+    description:
+      "Websearch tool configuration. Register additional providers under `providers` and pick a `default` when more than one is enabled.",
+  }),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachment.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",

@@ -15682,6 +15682,72 @@
         "enum": ["auto", "stretch"],
         "description": "@deprecated Always uses stretch layout."
       },
+      "WebSearchProviderConfig": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "args": {
+            "type": "object"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ],
+            "description": "Relative weight for deterministic per-session selection across enabled providers. Defaults to 1. Must be a positive integer."
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebSearchConfig": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "type": "string"
+          },
+          "providers": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WebSearchProviderConfig"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "ImageAttachmentConfig": {
         "type": "object",
         "properties": {
@@ -16035,6 +16101,9 @@
           },
           "permission": {
             "$ref": "#/components/schemas/PermissionConfig"
+          },
+          "websearch": {
+            "$ref": "#/components/schemas/WebSearchConfig"
           },
           "tools": {
             "type": "object",
