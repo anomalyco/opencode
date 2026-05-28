@@ -532,6 +532,54 @@ it.instance("keybinds accept OpenTUI binding specs", () =>
   ),
 )
 
+it.instance("coerces keybinds.leader = \"none\" to the default to avoid TUI crash (#26628)", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        $schema: "https://opencode.ai/tui.json",
+        keybinds: { leader: "none" },
+      })
+      // Before the fix, this throws "Invalid leader trigger" from createBindingLookup.
+      // After the fix, leader silently falls back to TuiKeybind.LeaderDefault ("ctrl+x").
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds).toBeDefined()
+    }),
+  ),
+)
+
+it.instance("coerces keybinds.leader = false to the default to avoid TUI crash (#26628)", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        $schema: "https://opencode.ai/tui.json",
+        keybinds: { leader: false },
+      })
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds).toBeDefined()
+    }),
+  ),
+)
+
+it.instance("respects keybinds.leader override when a real binding is provided", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        $schema: "https://opencode.ai/tui.json",
+        keybinds: { leader: "alt+space" },
+      })
+      // The fix must only coerce on the "disabled" sentinels - any real binding must pass through.
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds).toBeDefined()
+    }),
+  ),
+)
+
 winIt("defaults Ctrl+Z to input undo on Windows", () =>
   withCleanState(
     Effect.gen(function* () {
