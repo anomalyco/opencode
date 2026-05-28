@@ -1,6 +1,7 @@
+import { readFileSync } from "fs"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -2343,3 +2344,21 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+test("session/prompt: source assembles system array with env at tail for cache stability", () => {
+  // Enforce that the assembled `system` array in runLoop puts the volatile
+  // env block (cwd, datetime, platform, model id) at the END so byte 0 of
+  // the system payload is invariant across sessions, days, and users.
+  // This enables exact-prefix cache reuse on every provider opencode targets.
+  // Related: anomalyco/opencode#20110, anomalyco/opencode#5224.
+  const source = readFileSync(
+    path.resolve(__dirname, "../../src/session/prompt.ts"),
+    "utf8",
+  )
+  const match = source.match(
+    /const system = \[\.\.\.(\w+),\s*\.\.\.\(skills \? \[skills\] : \[\]\),\s*\.\.\.(\w+)\]/,
+  )
+  expect(match).not.toBeNull()
+  expect(match![1]).toBe("instructions")
+  expect(match![2]).toBe("env")
+})
