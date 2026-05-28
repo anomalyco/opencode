@@ -410,9 +410,12 @@ The frontend live-preview proxy at `/preview/<port>/*` rewrites the
 `Host` header to `local.unleashlive.com:<port>` so the frontend's CORS
 / hostname checks pass exactly as they would on a developer's Mac with
 `127.0.0.1 local.unleashlive.com` in `/etc/hosts`
-(`packages/opencode/src/collab/preview-router.ts`).
+(`packages/opencode/src/collab/preview-router.ts`).  Both the HTTP and
+WebSocket paths of the proxy TCP-connect to literal `127.0.0.1` and
+rewrite the Host header — **no `/etc/hosts` entry is required** in the
+container.
 
-#### Why we don't add `extraHosts` to the task definition
+#### Why we can't use `extraHosts` even if we wanted to
 
 We used to inject an `extraHosts` entry into the container definition
 (`local.unleashlive.com → 127.0.0.1`) via the deploy workflow's `jq`
@@ -429,24 +432,18 @@ no longer touches the field; if you see one in the live task definition
 from an older revision, it's an artifact of a previous register attempt
 and can be safely removed via the AWS Console.
 
-#### Current state without the alias
+#### When you'd still need the alias
 
-- **WebSocket preview** (`attachPreviewUpgrade` in
-  `preview-router.ts`) already TCP-connects to literal `127.0.0.1`
-  and only rewrites the Host header — works without /etc/hosts.
-- **HTTP preview** (`handlePreviewHttp`) calls
-  `fetch("http://local.unleashlive.com:<port>/…")`.  Without
-  `/etc/hosts` resolution that fetch fails with `ENOTFOUND`, so the
-  HTTP path of the preview won't reach the dev server until the
-  fetch URL is changed to `127.0.0.1` (keeping the Host-header
-  rewrite).  Tracked with the frontend live-preview work.
+If anything inside the **dev server** does its own DNS resolution of
+`local.unleashlive.com` (e.g. the frontend code itself does `fetch("//
+local.unleashlive.com/...")`), that lookup will fail — the proxy's
+Host header rewrite only covers what the dev server sees from the
+proxy, not what the dev server's own code resolves.
 
-The awsvpc-compatible options for the underlying alias, if we
-eventually need real `/etc/hosts` resolution (e.g. the dev server
-itself does a DNS lookup for `local.unleashlive.com`):
+If we hit this, the awsvpc-compatible options are:
 
-1. Code change in `preview-router.ts` to connect via 127.0.0.1
-   instead of the hostname (preferred — no infra change required).
+1. Make the offending code use a relative URL or an explicit
+   `127.0.0.1` (preferred — no infra change).
 2. Write `/etc/hosts` from the entrypoint as root before dropping to
    `USER opencode` (requires a Dockerfile change to either chown
    `/etc/hosts` or split the entrypoint into a root-init phase).

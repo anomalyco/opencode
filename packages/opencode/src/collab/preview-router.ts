@@ -46,13 +46,12 @@ export function parsePreviewPath(pathname: string): { port: number; rest: string
 /**
  * The Host header value we forward to dev servers behind /preview/<port>/*.
  *
- * Targets the in-container loopback alias `local.unleashlive.com` (set up
- * via the task definition's `extraHosts` field for ECS and the
- * `extra_hosts` map in docker-compose.yml — both resolve to 127.0.0.1).
- * This lets `unleashlive/frontend` keep its CORS / hostname assumptions
- * unchanged: dev server sees Host: local.unleashlive.com:<port> exactly
- * as it would on a developer's Mac with `127.0.0.1 local.unleashlive.com`
- * in /etc/hosts.
+ * `unleashlive/frontend`'s dev server runs with its CORS / hostname
+ * assumptions tuned for `local.unleashlive.com:<port>` — that's the
+ * canonical "local dev URL" inside the org.  We rewrite the Host header
+ * to that value on every forwarded request so the dev server sees its
+ * expected hostname even though the actual TCP connect is to literal
+ * loopback (see PREVIEW_UPSTREAM_TCP_HOST below).
  *
  * Without this rewrite the upstream would see Host: 127.0.0.1:<port> and
  * any Vite/Webpack `server.allowedHosts` strictness OR runtime hostname
@@ -60,24 +59,43 @@ export function parsePreviewPath(pathname: string): { port: number; rest: string
  */
 const PREVIEW_UPSTREAM_HOST = "local.unleashlive.com"
 
+/**
+ * Where we actually open the TCP socket.  Dev servers always run on
+ * loopback inside the same container; connecting to literal `127.0.0.1`
+ * (vs. PREVIEW_UPSTREAM_HOST) removes the `/etc/hosts` resolution
+ * dependency — which we can't satisfy on ECS anyway, because AWS
+ * rejects container-level `extraHosts` for tasks with
+ * `networkMode=awsvpc` ("Extra hosts are not supported on container
+ * when networkMode=awsvpc").  See DEPLOYMENT.md → Frontend live-preview
+ * loopback alias.
+ *
+ * The Host header is set separately above, so the wire value reaching
+ * the dev server is unchanged from what it would have been with
+ * /etc/hosts in play.
+ */
+const PREVIEW_UPSTREAM_TCP_HOST = "127.0.0.1"
+
 function upstreamHostHeader(port: number): string {
   return `${PREVIEW_UPSTREAM_HOST}:${port}`
 }
 
 /**
- * Forward a plain HTTP request through to local.unleashlive.com:<port>
- * (which the container's /etc/hosts maps to 127.0.0.1:<port>).  Returns a
- * Response the collab middleware can hand back to the browser.  Headers
- * that don't survive a hop are stripped; everything else passes through.
+ * Forward a plain HTTP request through to the dev server on
+ * 127.0.0.1:<port>, rewriting the Host header to
+ * `local.unleashlive.com:<port>` so the dev server sees its expected
+ * hostname.  Returns a Response the collab middleware can hand back to
+ * the browser.  Hop-by-hop headers are stripped; everything else passes
+ * through.
  */
 export async function handlePreviewHttp(req: Request, port: number, rest: string): Promise<Response> {
   const url = new URL(req.url)
-  // Connect to the dev server via the hostname alias rather than raw
-  // 127.0.0.1.  Bun's fetch resolves via /etc/hosts so the alias resolves
-  // back to 127.0.0.1 for the actual TCP connect — but the Host header on
-  // the wire reads `local.unleashlive.com:<port>`, which the frontend
-  // expects.
-  const target = `http://${PREVIEW_UPSTREAM_HOST}:${port}${rest}${url.search}`
+  // TCP-connect to literal 127.0.0.1 (NOT the hostname alias).  Mirrors
+  // the WebSocket path below — see PREVIEW_UPSTREAM_TCP_HOST for the
+  // rationale (awsvpc bans container-level extraHosts, so an alias-
+  // based fetch would ENOTFOUND on ECS).  The Host header rewrite
+  // further down is what makes the dev server see its expected
+  // hostname on the wire.
+  const target = `http://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest}${url.search}`
 
   // Strip hop-by-hop headers + the Host header (we set it ourselves below
   // so the dev server sees its expected hostname; the browser's original
@@ -142,10 +160,10 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
       `<!doctype html><meta charset="utf-8"><title>Preview unavailable</title>` +
         `<div style="font-family:system-ui;margin:3rem auto;max-width:520px;line-height:1.5">` +
         `<h1 style="margin:0 0 .5rem 0">Preview unavailable</h1>` +
-        `<p>Couldn't reach <code>${PREVIEW_UPSTREAM_HOST}:${port}</code> from inside the workspace container.</p>` +
+        `<p>Couldn't reach <code>127.0.0.1:${port}</code> from inside the workspace container.</p>` +
         `<p>Is a dev server actually listening on port ${port}?  In the iframe terminal:</p>` +
         `<pre style="background:#111;color:#eee;padding:.75rem;border-radius:6px">ss -lntp | grep ${port}</pre>` +
-        `<p>If the dev server is up but this still 502s, check that <code>${PREVIEW_UPSTREAM_HOST}</code> resolves to <code>127.0.0.1</code> in the container's <code>/etc/hosts</code> (via the task definition's <code>extraHosts</code> entry).</p>` +
+        `<p>If the dev server is up but this still 502s, check that it's bound to <code>0.0.0.0</code> (or <code>127.0.0.1</code>) rather than an external interface.  Vite/Webpack default to localhost-only, which is fine; <code>--host 0.0.0.0</code> works too.</p>` +
         `<p>Error: <code>${detail.replace(/</g, "&lt;")}</code></p>` +
         `</div>`,
       { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
