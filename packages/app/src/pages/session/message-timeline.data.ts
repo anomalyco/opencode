@@ -1,71 +1,104 @@
-import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { AssistantMessage, Part, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
-import { groupParts, PartGroup, renderable } from "@opencode-ai/ui/message-part"
-import { Data, Equal } from "effect"
-
-export type SummaryDiff = SnapshotFileDiff & { file: string }
+import { UserMessage, AssistantMessage } from "@opencode/schema/session"
+import type { Part } from "@opencode/schema/part"
+import type { SessionStatus } from "@opencode/schema/session"
+import { MessageComment } from "./message-comment"
+import { diffSummaries } from "./diff-summaries"
+import { groupParts, renderable, assistantId } from "./shared"
+import { Equal } from "@opencode/common/equal"
+import type { SessionStore } from "./session-store"
 
 export type TimelineRowMap = {
-  CommentStrip: {
-    userMessageID: string
-    previousUserMessage: boolean
+  [K in TimelineRow.TimelineRow["_tag"]]: Extract<TimelineRow.TimelineRow, { _tag: K }>
+}
+
+export function sameKeys(a: string[], b: string[]) {
+  if (a.length !== b.length) return false
+  for (const i of a.keys()) {
+    if (a[i] !== b[i]) return false
   }
-  UserMessage: {
-    userMessageID: string
-    anchor: boolean
-    previousUserMessage: boolean
-  }
-  TurnDivider: {
-    userMessageID: string
-    label: "compaction" | "interrupted"
-  }
-  AssistantPart: {
-    userMessageID: string
-    group: PartGroup
-    previousAssistantPart: boolean
-  }
-  Thinking: { userMessageID: string; reasoningHeading?: string }
-  Retry: { userMessageID: string }
-  DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
-  Error: { userMessageID: string; text: string }
-  BottomSpacer: {}
+  return true
 }
 
 export namespace TimelineRow {
-  export class CommentStrip extends Data.TaggedClass("CommentStrip")<{
-    userMessageID: string
-    previousUserMessage: boolean
-  }> {}
-  export class UserMessage extends Data.TaggedClass("UserMessage")<{
-    userMessageID: string
-    anchor: boolean
-    previousUserMessage: boolean
-  }> {}
-  export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
-    userMessageID: string
-    label: "compaction" | "interrupted"
-  }> {}
-  export class AssistantPart extends Data.TaggedClass("AssistantPart")<{
-    userMessageID: string
-    group: PartGroup
-    previousAssistantPart: boolean
-  }> {}
-  export class Thinking extends Data.TaggedClass("Thinking")<{
-    userMessageID: string
-    reasoningHeading?: string
-  }> {}
-  export class DiffSummary extends Data.TaggedClass("DiffSummary")<{
-    userMessageID: string
-    diffs: SummaryDiff[]
-  }> {}
-  export class Error extends Data.TaggedClass("Error")<{
-    userMessageID: string
-    text: string
-  }> {}
-  export class Retry extends Data.TaggedClass("Retry")<{
-    userMessageID: string
-  }> {}
-  export class BottomSpacer extends Data.TaggedClass("BottomSpacer")<{}> {}
+  export class CommentStrip {
+    readonly _tag = "CommentStrip" as const
+    constructor(public props: { userMessageID: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+  }
+
+  export class UserMessage {
+    readonly _tag = "UserMessage" as const
+    constructor(public props: { userMessageID: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+  }
+
+  export class TurnDivider {
+    readonly _tag = "TurnDivider" as const
+    constructor(public props: { userMessageID: string; label: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+    get label() {
+      return this.props.label
+    }
+  }
+
+  export class AssistantPart {
+    readonly _tag = "AssistantPart" as const
+    constructor(
+      public props: {
+        userMessageID: string
+        group: { key: string; messageID: string }
+      },
+    ) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+    get group() {
+      return this.props.group
+    }
+  }
+
+  export class Thinking {
+    readonly _tag = "Thinking" as const
+    constructor(public props: { userMessageID: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+  }
+
+  export class DiffSummary {
+    readonly _tag = "DiffSummary" as const
+    constructor(public props: { userMessageID: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+  }
+
+  export class Error {
+    readonly _tag = "Error" as const
+    constructor(public props: { userMessageID: string; error: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+  }
+
+  export class Retry {
+    readonly _tag = "Retry" as const
+    constructor(public props: { userMessageID: string }) {}
+    get userMessageID() {
+      return this.props.userMessageID
+    }
+  }
+
+  export class BottomSpacer {
+    readonly _tag = "BottomSpacer" as const
+    constructor() {}
+  }
 
   export type TimelineRow =
     | CommentStrip
@@ -79,6 +112,7 @@ export namespace TimelineRow {
     | BottomSpacer
 
   export const key = (row: TimelineRow) => {
+    if (!row) return "unknown"
     switch (row._tag) {
       case "CommentStrip":
         return `comment-strip:${row.userMessageID}`
@@ -157,207 +191,45 @@ export namespace Timeline {
         }),
       )
 
-    rows.push(
-      new TimelineRow.UserMessage({
-        userMessageID: userMessage.id,
-        anchor: comments.length === 0,
-        previousUserMessage: comments.length === 0 && previousUserMessage,
-      }),
-    )
+    rows.push(new TimelineRow.UserMessage({ userMessageID: userMessage.id }))
 
-    if (compaction) {
+    if (previousUserMessage)
+      rows.push(
+        new TimelineRow.TurnDivider({ userMessageID: userMessage.id, label: `Continue working` }),
+      )
+    else
       rows.push(
         new TimelineRow.TurnDivider({
           userMessageID: userMessage.id,
-          label: "compaction",
+          label: index === 0 && status === "idle" && isActive ? "" : "New Thread",
+        }),
+      )
+
+    for (const item of assistantItems) {
+      if (item.type === "interrupted") continue
+      rows.push(
+        new TimelineRow.AssistantPart({
+          userMessageID: userMessage.id,
+          group: { key: assistantId(item.group), messageID: item.group[0].messageID },
         }),
       )
     }
 
-    let assistantGroupIndex = 0
-    assistantItems.forEach((item) => {
-      if (item.type === "interrupted") {
-        rows.push(
-          new TimelineRow.TurnDivider({
-            userMessageID: userMessage.id,
-            label: "interrupted",
-          }),
-        )
-        return
-      }
-
-      rows.push(
-        new TimelineRow.AssistantPart({
-          userMessageID: userMessage.id,
-          group: item.group,
-          previousAssistantPart: assistantGroupIndex > 0,
-        }),
-      )
-      assistantGroupIndex += 1
-    })
-
-    if (isActive && status === "busy" && !error && (showReasoning ? assistantPartRefs.length === 0 : true)) {
-      const heading = assistantMessages
-        .flatMap((message) => getMessageParts(message.id))
-        .map((part) => (part.type === "reasoning" && part.text ? reasoningHeading(part.text) : undefined))
-        .find((value): value is string => !!value)
-
-      rows.push(
-        new TimelineRow.Thinking({
-          userMessageID: userMessage.id,
-          reasoningHeading: heading,
-        }),
-      )
+    for (const message of assistantMessages) {
+      if (message.reasoning?.length && showReasoning)
+        rows.push(new TimelineRow.Thinking({ userMessageID: userMessage.id }))
     }
 
     if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 
-    const diffs = (userMessage.summary?.diffs ?? [])
-      .reduceRight<SummaryDiff[]>((result, diff) => {
-        if (!isSummaryDiff(diff)) return result
-        if (result.some((item) => item.file === diff.file)) return result
-        result.push(diff)
-        return result
-      }, [])
-      .reverse()
-    if (diffs.length > 0 && (status === "idle" || !isActive)) {
-      rows.push(
-        new TimelineRow.DiffSummary({
-          userMessageID: userMessage.id,
-          diffs,
-        }),
-      )
-    }
-
     if (error) {
-      const data = error.data?.message
+      const summaries = diffSummaries(assistantMessages, getMessageParts)
+      if (summaries) rows.push(new TimelineRow.DiffSummary({ userMessageID: userMessage.id }))
       rows.push(
-        new TimelineRow.Error({
-          userMessageID: userMessage.id,
-          text: unwrapErrorMessage(
-            typeof data === "string" ? data : data === undefined || data === null ? "" : String(data),
-          ),
-        }),
+        new TimelineRow.Error({ userMessageID: userMessage.id, error: error.name }),
       )
     }
 
     return rows
-  }
-
-  function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
-    return typeof value.file === "string"
-  }
-
-  function reasoningHeading(text: string) {
-    const markdown = text.replace(/\r\n?/g, "\n")
-    const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
-    if (html?.[1]) {
-      const value = cleanHeading(html[1].replace(/<[^>]+>/g, " "))
-      if (value) return value
-    }
-
-    const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
-    if (atx?.[1]) {
-      const value = cleanHeading(atx[1])
-      if (value) return value
-    }
-
-    const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
-    if (setext?.[1]) {
-      const value = cleanHeading(setext[1])
-      if (value) return value
-    }
-
-    const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
-    if (strong?.[1]) {
-      const value = cleanHeading(strong[1])
-      if (value) return value
-    }
-  }
-
-  function cleanHeading(value: string) {
-    return value
-      .replace(/`([^`]+)`/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/[*_~]+/g, "")
-      .trim()
-  }
-
-  function unwrapErrorMessage(message: string) {
-    const text = message.replace(/^Error:\s*/, "").trim()
-
-    const parse = (value: string) => {
-      try {
-        return JSON.parse(value) as unknown
-      } catch {
-        return undefined
-      }
-    }
-
-    const read = (value: string) => {
-      const first = parse(value)
-      if (typeof first !== "string") return first
-      return parse(first.trim())
-    }
-
-    let json = read(text)
-
-    if (json === undefined) {
-      const start = text.indexOf("{")
-      const end = text.lastIndexOf("}")
-      if (start !== -1 && end > start) json = read(text.slice(start, end + 1))
-    }
-
-    if (!record(json)) return message
-
-    const err = record(json.error) ? json.error : undefined
-    if (err) {
-      const type = typeof err.type === "string" ? err.type : undefined
-      const msg = typeof err.message === "string" ? err.message : undefined
-      if (type && msg) return `${type}: ${msg}`
-      if (msg) return msg
-      if (type) return type
-      const code = typeof err.code === "string" ? err.code : undefined
-      if (code) return code
-    }
-
-    const msg = typeof json.message === "string" ? json.message : undefined
-    if (msg) return msg
-
-    const reason = typeof json.error === "string" ? json.error : undefined
-    if (reason) return reason
-
-    return message
-  }
-
-  function record(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === "object" && !Array.isArray(value)
-  }
-}
-
-export namespace MessageComment {
-  export type MessageComment = {
-    path: string
-    comment: string
-    selection?: {
-      startLine: number
-      endLine: number
-    }
-  }
-
-  export const fromPart = (part: Part): MessageComment | undefined => {
-    if (part.type !== "text" || !part.synthetic) return
-    const next = readCommentMetadata(part.metadata) ?? parseCommentNote(part.text)
-    if (!next) return
-    return {
-      path: next.path,
-      comment: next.comment,
-      selection: next.selection
-        ? {
-            startLine: next.selection.startLine,
-            endLine: next.selection.endLine,
-          }
-        : undefined,
-    }
   }
 }
