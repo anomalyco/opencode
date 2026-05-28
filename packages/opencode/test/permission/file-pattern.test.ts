@@ -70,7 +70,7 @@ describe("issue #29674 full scenario", () => {
     expect(Permission.evaluate("read", "config/.env", ruleset).action).toBe("deny")
   })
 
-  test("default agent rules deny .env via *.env pattern", () => {
+  test("default agent rules match .env via *.env pattern (action: ask)", () => {
     // Simulates agent.ts defaults: "*.env": "ask", "*.env.*": "ask"
     const ruleset = Permission.fromConfig({ read: { "*.env": "ask", "*.env.*": "ask" } })
     expect(Permission.evaluate("read", ".env", ruleset).action).toBe("ask")
