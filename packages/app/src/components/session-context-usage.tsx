@@ -42,7 +42,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const variant = createMemo(() => props.variant ?? "button")
   const [shown, setShown] = createSignal(false)
-  const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
 
   const messages = createMemo(
     () => {
@@ -234,9 +233,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             <div
               class="w-[min(380px,calc(100vw-40px))] rounded-xl overflow-hidden border border-border-weak-base shadow-[var(--shadow-lg-border-base)]"
               style={{
-                "background-color": win() ? "var(--background-stronger)" : "color-mix(in srgb, var(--background-stronger) 70%, transparent)",
-                "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
-                "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+                "background-color":
+                  platform.platform === "desktop" && platform.os === "windows"
+                    ? "var(--surface-raised-stronger-non-alpha)"
+                    : "color-mix(in srgb, var(--background-stronger) 70%, transparent)",
+                "backdrop-filter":
+                  platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
+                "-webkit-backdrop-filter":
+                  platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
               }}
             >
               <div class="px-4 py-3 border-b border-border-weak-base flex items-center gap-2">
