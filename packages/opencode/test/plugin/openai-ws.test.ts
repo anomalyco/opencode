@@ -199,7 +199,7 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
-  test("keeps HTTP fallback active after its idle timeout", async () => {
+  test("prunes HTTP fallback after its idle timeout", async () => {
     let websocketAttempts = 0
     await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
@@ -215,7 +215,7 @@ describe("plugin.openai.ws-pool", () => {
     const second = await fetch(server.url, streamRequest())
 
     expect(await second.text()).toBe("http")
-    expect(websocketAttempts).toBe(1)
+    expect(websocketAttempts).toBe(2)
     expect(server.httpRequests).toHaveLength(2)
     fetch.close()
   })
