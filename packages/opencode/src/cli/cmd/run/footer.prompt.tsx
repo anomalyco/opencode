@@ -7,14 +7,17 @@
 /** @jsxImportSource @opentui/solid */
 import { pathToFileURL } from "bun"
 import { StyledText, bg, fg, type KeyBinding, type KeyEvent, type TextareaRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import * as Locale from "@/util/locale"
 import {
   createPromptHistory,
+  displayCharAt,
+  displaySlice,
   isExitCommand,
+  mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
   promptCycle,
@@ -63,6 +66,7 @@ type PromptInput = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
+  subagents: Accessor<number>
   resources: Accessor<RunResource[]>
   commands: Accessor<RunCommand[] | undefined>
   keybinds: FooterKeybinds
@@ -78,6 +82,7 @@ type PromptInput = {
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
+  onSubagentMenu?: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
@@ -85,6 +90,7 @@ type PromptInput = {
 export type PromptState = {
   placeholder: Accessor<StyledText | string>
   bindings: Accessor<KeyBinding[]>
+  shell: Accessor<boolean>
   visible: Accessor<boolean>
   options: Accessor<PromptOption[]>
   selected: Accessor<number>
@@ -107,7 +113,12 @@ function clonePrompt(prompt: RunPrompt): RunPrompt {
   return {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
+    ...(prompt.mode ? { mode: prompt.mode } : {}),
   }
+}
+
+function emptyPrompt(shell: boolean): RunPrompt {
+  return shell ? { text: "", parts: [], mode: "shell" } : { text: "", parts: [] }
 }
 
 function removeLineRange(input: string) {
@@ -194,13 +205,45 @@ export function RunPromptBody(props: {
   onContentChange: () => void
   bind: (area?: TextareaRenderable) => void
 }) {
+  const renderer = useRenderer()
   let area: TextareaRenderable | undefined
+  let pasteTick: ReturnType<typeof setTimeout> | undefined
+
+  const refreshPasteLayout = () => {
+    if (pasteTick) {
+      clearTimeout(pasteTick)
+    }
+
+    pasteTick = setTimeout(() => {
+      pasteTick = undefined
+      if (!area || area.isDestroyed) {
+        return
+      }
+
+      // Paste can leave the textarea layout stale until the next edit.
+      area.getLayoutNode().markDirty()
+      renderer.requestRender()
+      void renderer
+        .idle()
+        .then(() => {
+          if (!area || area.isDestroyed) {
+            return
+          }
+
+          props.onContentChange()
+        })
+        .catch(() => {})
+    }, 0)
+  }
 
   onMount(() => {
     props.bind(area)
   })
 
   onCleanup(() => {
+    if (pasteTick) {
+      clearTimeout(pasteTick)
+    }
     props.bind(undefined)
   })
 
@@ -223,6 +266,9 @@ export function RunPromptBody(props: {
           keyBindings={props.bindings()}
           onSubmit={props.onSubmit}
           onKeyDown={props.onKeyDown}
+          onPaste={() => {
+            refreshPasteLayout()
+          }}
           onContentChange={props.onContentChange}
           ref={(next) => {
             area = next
@@ -236,7 +282,12 @@ export function RunPromptBody(props: {
 export function createPromptState(input: PromptInput): PromptState {
   const keys = createMemo(() => promptKeys(input.keybinds))
   const bindings = createMemo(() => keys().bindings)
+  const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
+    if (shell()) {
+      return new StyledText([bg(input.theme().surface)(fg(input.theme().muted)('Run a command... "git status"'))])
+    }
+
     if (!input.state().first) {
       return ""
     }
@@ -262,6 +313,11 @@ export function createPromptState(input: PromptInput): PromptState {
   const [at, setAt] = createSignal(0)
   const [query, setQuery] = createSignal("")
   const visible = createMemo(() => mode() !== false)
+
+  const setShellMode = (value: boolean) => {
+    setShell(value)
+    draft = value ? { ...draft, mode: "shell" } : { text: draft.text, parts: structuredClone(draft.parts) }
+  }
 
   const width = createMemo(() => Math.max(20, input.width() - 8))
   const agents = createMemo<Auto[]>(() => {
@@ -537,8 +593,9 @@ export function createPromptState(input: PromptInput): PromptState {
     })
   }
 
-  const restore = (value: RunPrompt, cursor = value.text.length) => {
+  const restore = (value: RunPrompt, cursor = Bun.stringWidth(value.text)) => {
     draft = clonePrompt(value)
+    setShell(value.mode === "shell")
     if (!area || area.isDestroyed) {
       return
     }
@@ -546,7 +603,7 @@ export function createPromptState(input: PromptInput): PromptState {
     hide()
     area.setText(value.text)
     restoreParts(value.parts)
-    area.cursorOffset = Math.min(cursor, area.plainText.length)
+    area.cursorOffset = Math.min(cursor, Bun.stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -558,7 +615,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     clearParts()
     hide()
-    draft = { text: "", parts: [] }
+    draft = emptyPrompt(shell())
     if (!area || area.isDestroyed) {
       return
     }
@@ -568,7 +625,7 @@ export function createPromptState(input: PromptInput): PromptState {
   }
 
   const replaceDraft = (text: string) => {
-    draft = { text, parts: [] }
+    draft = shell() ? { text, parts: [], mode: "shell" } : { text, parts: [] }
     if (!area || area.isDestroyed) {
       return
     }
@@ -576,8 +633,8 @@ export function createPromptState(input: PromptInput): PromptState {
     hide()
     area.setText(text)
     clearParts()
-    draft = { text: area.plainText, parts: [] }
-    area.cursorOffset = Math.min(text.length, area.plainText.length)
+    draft = shell() ? { text: area.plainText, parts: [], mode: "shell" } : { text: area.plainText, parts: [] }
+    area.cursorOffset = Math.min(Bun.stringWidth(text), Bun.stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -610,12 +667,13 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (visible() && mode() === "mention") {
-      if (cursor <= at() || /\s/.test(text.slice(at(), cursor))) {
+      const query = displaySlice(text, at(), cursor)
+      if (cursor <= at() || /\s/.test(query)) {
         hide()
         return
       }
 
-      setQuery(text.slice(at() + 1, cursor))
+      setQuery(displaySlice(text, at() + 1, cursor))
       return
     }
 
@@ -623,19 +681,12 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const head = text.slice(0, cursor)
-    const idx = head.lastIndexOf("@")
-    if (idx === -1) {
-      return
-    }
-
-    const before = idx === 0 ? undefined : head[idx - 1]
-    const tail = head.slice(idx)
-    if ((before === undefined || /\s/.test(before)) && !/\s/.test(tail)) {
+    const idx = mentionTriggerIndex(text, cursor)
+    if (idx !== undefined) {
       setAt(idx)
       menu.reset()
       setMode("mention")
-      setQuery(head.slice(idx + 1))
+      setQuery(displaySlice(text, idx + 1, cursor))
     }
   }
 
@@ -673,10 +724,16 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     syncParts()
-    draft = {
-      text: area.plainText,
-      parts: structuredClone(parts),
-    }
+    draft = shell()
+      ? {
+          text: area.plainText,
+          parts: structuredClone(parts),
+          mode: "shell",
+        }
+      : {
+          text: area.plainText,
+          parts: structuredClone(parts),
+        }
   }
 
   const push = (value: RunPrompt) => {
@@ -782,7 +839,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const cursor = area.cursorOffset
-    const tail = area.plainText.at(cursor)
+    const tail = displayCharAt(area.plainText, cursor)
     const append = "@" + next.value + (tail === " " ? "" : " ")
     area.cursorOffset = at()
     const start = area.logicalCursor
@@ -911,6 +968,52 @@ export function createPromptState(input: PromptInput): PromptState {
       }
     }
 
+    if (
+      key.name === "!" &&
+      !shell() &&
+      !event.ctrl &&
+      !event.meta &&
+      !event.super &&
+      area &&
+      !area.isDestroyed &&
+      area.cursorOffset === 0
+    ) {
+      event.preventDefault()
+      setShellMode(true)
+      return
+    }
+
+    if (shell() && !visible()) {
+      if (key.name === "escape") {
+        event.preventDefault()
+        setShellMode(false)
+        return
+      }
+
+      if (key.name === "backspace" && area && !area.isDestroyed && area.cursorOffset === 0) {
+        event.preventDefault()
+        setShellMode(false)
+        return
+      }
+    }
+
+    if (
+      key.name === "down" &&
+      !visible() &&
+      !event.ctrl &&
+      !event.meta &&
+      !event.shift &&
+      !event.super &&
+      area &&
+      !area.isDestroyed &&
+      area.plainText.length === 0 &&
+      input.subagents() > 0
+    ) {
+      event.preventDefault()
+      input.onSubagentMenu?.()
+      return
+    }
+
     if (promptHit(keys().clear, key)) {
       const handled = requestExit()
       if (handled) {
@@ -941,7 +1044,8 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const dir = up ? -1 : 1
-    if ((dir === -1 && area.cursorOffset === 0) || (dir === 1 && area.cursorOffset === area.plainText.length)) {
+    const endOffset = Bun.stringWidth(area.plainText)
+    if ((dir === -1 && area.cursorOffset === 0) || (dir === 1 && area.cursorOffset === endOffset)) {
       move(dir, event)
       return
     }
@@ -955,7 +1059,7 @@ export function createPromptState(input: PromptInput): PromptState {
         ? area.height - 1
         : Math.max(0, (area.virtualLineCount ?? 1) - 1)
     if (dir === 1 && area.visualCursor.visualRow === end) {
-      area.cursorOffset = area.plainText.length
+      area.cursorOffset = endOffset
     }
   }
 
@@ -964,7 +1068,12 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    if (input.view() === "command" || input.view() === "model" || input.view() === "variant") {
+    if (
+      input.view() === "command" ||
+      input.view() === "model" ||
+      input.view() === "variant" ||
+      input.view() === "subagent-menu"
+    ) {
       return
     }
 
@@ -995,23 +1104,29 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    if (isExitCommand(next.text)) {
+    if (next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return
     }
 
-    const parsed = isNewCommand(next.text) ? undefined : parseSlashCommand(next.text, input.commands())
+    const parsed =
+      next.mode === "shell" || isNewCommand(next.text) ? undefined : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {
       input.onStatus("loading commands")
       return
     }
 
     const submit = parsed?.type === "command" ? { ...next, command: parsed.command } : next
+    const shellMode = next.mode === "shell"
 
     resetDraft()
     queueMicrotask(async () => {
       if (await input.onSubmit(submit)) {
         push(next)
+        if (shellMode) {
+          setShellMode(false)
+          draft = emptyPrompt(false)
+        }
         return
       }
 
@@ -1088,6 +1203,7 @@ export function createPromptState(input: PromptInput): PromptState {
   return {
     placeholder,
     bindings,
+    shell,
     visible,
     options,
     selected: menu.selected,

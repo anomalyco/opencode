@@ -4,6 +4,7 @@ import { parseResponse } from "../../src/tool/mcp-websearch"
 import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } from "../../src/tool/websearch"
 import { ProviderID } from "../../src/provider/schema"
 import { webSearchEnabled } from "../../src/tool/registry"
+import { it } from "../lib/effect"
 
 const SESSION_ID = "ses_0196aabbccddeeff001122334455"
 
@@ -74,17 +75,24 @@ describe("websearch MCP response parser", () => {
     },
   })
 
-  test("parses plain JSON-RPC responses", async () => {
-    await expect(Effect.runPromise(parseResponse(payload))).resolves.toBe("search results")
-  })
+  it.effect("parses plain JSON-RPC responses", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(payload)
+      expect(result).toBe("search results")
+    }),
+  )
 
-  test("parses SSE JSON-RPC responses", async () => {
-    await expect(Effect.runPromise(parseResponse(`event: message\ndata: ${payload}\n\n`))).resolves.toBe(
-      "search results",
-    )
-  })
+  it.effect("parses SSE JSON-RPC responses", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(`event: message\ndata: ${payload}\n\n`)
+      expect(result).toBe("search results")
+    }),
+  )
 
-  test("ignores non-JSON SSE data frames", async () => {
-    await expect(Effect.runPromise(parseResponse(`data: [DONE]\ndata: ${payload}\n\n`))).resolves.toBe("search results")
-  })
+  it.effect("ignores non-JSON SSE data frames", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(`data: [DONE]\ndata: ${payload}\n\n`)
+      expect(result).toBe("search results")
+    }),
+  )
 })

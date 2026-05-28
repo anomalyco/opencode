@@ -1,14 +1,14 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
+import { Config } from "@/config/config"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
-import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
@@ -18,6 +18,7 @@ import { Filesystem } from "@/util/filesystem"
 import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
+import { RepositoryCache } from "@/reference/repository-cache"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -36,17 +37,26 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const it = testEffect(
+const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  Reference.layer.pipe(
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
+
+const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
-    Reference.defaultLayer,
+    referenceLayer(flags),
     Truncate.defaultLayer,
-  ),
-)
+  )
+
+const it = testEffect(readLayer())
+const scout = testEffect(readLayer({ experimentalScout: true }))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
@@ -85,19 +95,6 @@ const fail = Effect.fn("ReadToolTest.fail")(function* (
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
-const experimentalScout = <A, E, R>(self: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Flag.OPENCODE_EXPERIMENTAL_SCOUT
-      Flag.OPENCODE_EXPERIMENTAL_SCOUT = true
-      return previous
-    }),
-    () => self,
-    (previous) =>
-      Effect.sync(() => {
-        Flag.OPENCODE_EXPERIMENTAL_SCOUT = previous
-      }),
-  )
 const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
@@ -260,44 +257,42 @@ describe("tool.read external_directory permission", () => {
     }),
   )
 
-  it.live("does not ask for external_directory permission when reading configured references", () =>
-    experimentalScout(
-      Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
-        const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")
-        yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
-        yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
+  scout.live("does not ask for external_directory permission when reading configured references", () =>
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")
+      yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
+      yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
 
-        const source = yield* tmpdirScoped({ git: true })
-        const remoteRoot = yield* tmpdirScoped()
-        const remoteDir = path.join(remoteRoot, "opencode-read-reference")
-        const remoteRepo = path.join(remoteDir, "repo.git")
-        yield* put(path.join(source, "notes.md"), "reference notes")
-        yield* git(source, ["add", "."])
-        yield* git(source, ["commit", "-m", "add notes"])
-        yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
-        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
+      const source = yield* tmpdirScoped({ git: true })
+      const remoteRoot = yield* tmpdirScoped()
+      const remoteDir = path.join(remoteRoot, "opencode-read-reference")
+      const remoteRepo = path.join(remoteDir, "repo.git")
+      yield* put(path.join(source, "notes.md"), "reference notes")
+      yield* git(source, ["add", "."])
+      yield* git(source, ["commit", "-m", "add notes"])
+      yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
+      yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
 
-        const dir = yield* tmpdirScoped({
-          git: true,
-          config: {
-            reference: {
-              docs: "opencode-read-reference/repo",
-            },
+      const dir = yield* tmpdirScoped({
+        git: true,
+        config: {
+          reference: {
+            docs: "opencode-read-reference/repo",
           },
-        })
+        },
+      })
 
-        const { items, next } = asks()
-        const result = yield* githubBase(
-          `file://${remoteRoot}/`,
-          exec(dir, { filePath: path.join(cache, "notes.md") }, next),
-        )
-        const ext = items.find((item) => item.permission === "external_directory")
+      const { items, next } = asks()
+      const result = yield* githubBase(
+        `file://${remoteRoot}/`,
+        exec(dir, { filePath: path.join(cache, "notes.md") }, next),
+      )
+      const ext = items.find((item) => item.permission === "external_directory")
 
-        expect(result.output).toContain("reference notes")
-        expect(ext).toBeUndefined()
-      }),
-    ),
+      expect(result.output).toContain("reference notes")
+      expect(ext).toBeUndefined()
+    }),
   )
 })
 
@@ -367,6 +362,38 @@ describe("tool.read truncation", () => {
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
+    }),
+  )
+
+  it.instance("stops streaming after the byte cap", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "huge.txt")
+      const content = `${"x".repeat(80)}\n`.repeat(50_000)
+      yield* put(filepath, content)
+
+      const fs = yield* AppFileSystem.Service
+      const counter = { bytes: 0 }
+      const result = yield* run({ filePath: filepath }).pipe(
+        Effect.provideService(
+          AppFileSystem.Service,
+          AppFileSystem.Service.of({
+            ...fs,
+            stream: (file, options) =>
+              fs.stream(file, options).pipe(
+                Stream.tap((chunk) =>
+                  Effect.sync(() => {
+                    counter.bytes += chunk.length
+                  }),
+                ),
+              ),
+          }),
+        ),
+      )
+
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Output capped at")
+      expect(counter.bytes).toBeLessThan(Buffer.byteLength(content, "utf-8") / 2)
     }),
   )
 

@@ -1,14 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import type { KeyEvent, Renderable } from "@opentui/core"
-import type { Binding } from "@opentui/keymap"
-import { createBindingLookup } from "@opentui/keymap/extras"
 import { OpencodeClient, type Provider } from "@opencode-ai/sdk/v2"
 import { TuiConfig, type Resolved } from "@/cli/cmd/tui/config/tui"
 import { formatBindings } from "@/cli/cmd/run/keymap.shared"
-import { TuiKeybind } from "@/cli/cmd/tui/config/keybind"
 import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo } from "@/cli/cmd/run/runtime.boot"
-
-type RunBinding = Binding<Renderable, KeyEvent>
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
   return {
@@ -61,45 +56,37 @@ function model(id: string, providerID: string, context: number, variants?: Recor
   }
 }
 
-function bindings(...keys: string[]) {
-  return keys.map((key) => ({ key }))
-}
-
 function config(input?: {
   leader?: string
   leaderTimeout?: number
   diff_style?: "auto" | "stacked"
   bindings?: Partial<{
-    commandList: RunBinding[]
-    variantCycle: RunBinding[]
-    interrupt: RunBinding[]
-    historyPrevious: RunBinding[]
-    historyNext: RunBinding[]
-    inputClear: RunBinding[]
-    inputSubmit: RunBinding[]
-    inputNewline: RunBinding[]
+    commandList: string[]
+    variantCycle: string[]
+    interrupt: string[]
+    historyPrevious: string[]
+    historyNext: string[]
+    inputClear: string[]
+    inputSubmit: string[]
+    inputNewline: string[]
   }>
 }): Resolved {
   const bind = input?.bindings
-  const keybinds = TuiKeybind.Keybinds.parse({
-    ...(input?.leader && { leader: input.leader }),
-    ...(bind?.commandList && { command_list: bind.commandList }),
-    ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
-    ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
-    ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
-    ...(bind?.historyNext && { history_next: bind.historyNext }),
-    ...(bind?.inputClear && { input_clear: bind.inputClear }),
-    ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
-    ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
-  })
-  return {
+  return createTuiResolvedConfig({
     diff_style: input?.diff_style,
-    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
-      commandMap: TuiKeybind.CommandMap,
-      bindingDefaults: TuiKeybind.bindingDefaults(),
-    }),
-    leader_timeout: input?.leaderTimeout ?? 2000,
-  }
+    leader_timeout: input?.leaderTimeout,
+    keybinds: {
+      ...(input?.leader && { leader: input.leader }),
+      ...(bind?.commandList && { command_list: bind.commandList }),
+      ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
+      ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
+      ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
+      ...(bind?.historyNext && { history_next: bind.historyNext }),
+      ...(bind?.inputClear && { input_clear: bind.inputClear }),
+      ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
+      ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
+    },
+  })
 }
 
 describe("run runtime boot", () => {
@@ -112,14 +99,14 @@ describe("run runtime boot", () => {
       config({
         leader: "ctrl+g",
         bindings: {
-          commandList: bindings("ctrl+p"),
-          variantCycle: bindings("ctrl+t", "alt+t"),
-          interrupt: bindings("ctrl+c"),
-          historyPrevious: bindings("k"),
-          historyNext: bindings("j"),
-          inputClear: bindings("ctrl+l"),
-          inputSubmit: bindings("ctrl+s"),
-          inputNewline: bindings("alt+return"),
+          commandList: ["ctrl+p"],
+          variantCycle: ["ctrl+t", "alt+t"],
+          interrupt: ["ctrl+c"],
+          historyPrevious: ["k"],
+          historyNext: ["j"],
+          inputClear: ["ctrl+l"],
+          inputSubmit: ["ctrl+s"],
+          inputNewline: ["alt+return"],
         },
       }),
     )

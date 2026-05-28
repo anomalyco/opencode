@@ -1,10 +1,11 @@
 import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { fileURLToPath } from "url"
 
 // Fast sync version for metadata checks
 export async function exists(p: string): Promise<boolean> {
@@ -140,6 +141,12 @@ export function resolve(p: string): string {
     if (isEnoent(e)) return normalizePath(resolved)
     throw e
   }
+}
+
+export function resolveFilePath(root: string, file: string): string {
+  const raw = file.startsWith("file://") ? fileURLToPath(file) : file
+  if (isAbsolute(raw)) return raw
+  return pathResolve(root, raw)
 }
 
 export function windowsPath(p: string): string {

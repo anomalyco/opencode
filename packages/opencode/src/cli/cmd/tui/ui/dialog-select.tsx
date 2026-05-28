@@ -38,6 +38,11 @@ export interface DialogSelectProps<T> {
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
+  footerHints?: {
+    title: string
+    label: string
+    side?: "left" | "right"
+  }[]
   bindings?: readonly Binding<Renderable, KeyEvent>[]
   current?: T
 }
@@ -46,6 +51,7 @@ export interface DialogSelectOption<T = any> {
   title: string
   value: T
   description?: string
+  details?: string[]
   footer?: JSX.Element | string
   category?: string
   categoryView?: JSX.Element
@@ -162,7 +168,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       if (!category) return acc
       return acc + (i > 0 ? 2 : 1)
     }, 0)
-    return flat().length + headers
+    return flat().reduce((acc, option) => acc + 1 + (option.details?.length ?? 0), headers)
   })
 
   const dimensions = useTerminalDimensions()
@@ -334,11 +340,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const visibleActions = createMemo(() =>
-    actions()
+  const visibleActions = createMemo(() => [
+    ...actions()
       .map((item) => ({ ...item, label: actionLabels().get(item.command) ?? "" }))
       .filter((item) => !item.disabled && item.label),
-  )
+    ...(props.footerHints ?? []),
+  ])
   const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 
@@ -420,7 +427,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                     return (
                       <box
                         id={JSON.stringify(option.value)}
-                        flexDirection="row"
+                        flexDirection="column"
                         position="relative"
                         onMouseMove={() => {
                           setStore("input", "mouse")
@@ -440,24 +447,37 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           if (index === -1) return
                           moveTo(index)
                         }}
-                        backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                        paddingLeft={current() || option.gutter ? 1 : 3}
-                        paddingRight={3}
-                        gap={1}
                       >
-                        <Show when={!current() && option.margin}>
-                          <box position="absolute" left={1} flexShrink={0}>
-                            {option.margin}
-                          </box>
-                        </Show>
-                        <Option
-                          title={option.title}
-                          footer={flatten() ? (option.category ?? option.footer) : option.footer}
-                          description={option.description !== category ? option.description : undefined}
-                          active={active()}
-                          current={current()}
-                          gutter={option.gutter}
-                        />
+                        <box
+                          flexDirection="row"
+                          paddingLeft={current() || option.gutter ? 1 : 3}
+                          paddingRight={3}
+                          gap={1}
+                          backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
+                        >
+                          <Show when={!current() && option.margin}>
+                            <box position="absolute" left={1} flexShrink={0}>
+                              {option.margin}
+                            </box>
+                          </Show>
+                          <Option
+                            title={option.title}
+                            footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                            description={option.description !== category ? option.description : undefined}
+                            active={active()}
+                            current={current()}
+                            gutter={option.gutter}
+                          />
+                        </box>
+                        <For each={option.details}>
+                          {(detail) => (
+                            <box paddingLeft={3} paddingRight={3}>
+                              <text fg={theme.textMuted} wrapMode="none">
+                                {Locale.truncateMiddle(detail, Math.max(1, Math.min(76, dimensions().width - 12)))}
+                              </text>
+                            </box>
+                          )}
+                        </For>
                       </box>
                     )
                   }}

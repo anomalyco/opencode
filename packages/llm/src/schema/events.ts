@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, ResponseID, RouteID, ToolCallID } from "./ids"
-import { ModelRef } from "./options"
+import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
+import { ModelSchema } from "./options"
 import { ToolResultValue } from "./messages"
 
 /**
@@ -66,14 +66,13 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   get visibleOutputTokens() {
     return Math.max(0, (this.outputTokens ?? 0) - (this.reasoningTokens ?? 0))
   }
+
+  static from(input: UsageInput) {
+    return input instanceof Usage ? input : new Usage(input)
+  }
 }
 
-export const RequestStart = Schema.Struct({
-  type: Schema.tag("request-start"),
-  id: ResponseID,
-  model: ModelRef,
-}).annotate({ identifier: "LLM.Event.RequestStart" })
-export type RequestStart = Schema.Schema.Type<typeof RequestStart>
+export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
 
 export const StepStart = Schema.Struct({
   type: Schema.tag("step-start"),
@@ -92,6 +91,7 @@ export const TextDelta = Schema.Struct({
   type: Schema.tag("text-delta"),
   id: ContentBlockID,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextDelta" })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
@@ -113,6 +113,7 @@ export const ReasoningDelta = Schema.Struct({
   type: Schema.tag("reasoning-delta"),
   id: ContentBlockID,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ReasoningDelta" })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
@@ -172,6 +173,7 @@ export const ToolError = Schema.Struct({
   id: ToolCallID,
   name: Schema.String,
   message: Schema.String,
+  error: Schema.optional(Schema.Defect),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolError" })
 export type ToolError = Schema.Schema.Type<typeof ToolError>
@@ -185,13 +187,13 @@ export const StepFinish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
-export const RequestFinish = Schema.Struct({
-  type: Schema.tag("request-finish"),
+export const Finish = Schema.Struct({
+  type: Schema.tag("finish"),
   reason: FinishReason,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "LLM.Event.RequestFinish" })
-export type RequestFinish = Schema.Schema.Type<typeof RequestFinish>
+}).annotate({ identifier: "LLM.Event.Finish" })
+export type Finish = Schema.Schema.Type<typeof Finish>
 
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
@@ -202,7 +204,6 @@ export const ProviderErrorEvent = Schema.Struct({
 export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
 
 const llmEventTagged = Schema.Union([
-  RequestStart,
   StepStart,
   TextStart,
   TextDelta,
@@ -217,13 +218,15 @@ const llmEventTagged = Schema.Union([
   ToolResult,
   ToolError,
   StepFinish,
-  RequestFinish,
+  Finish,
   ProviderErrorEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
+type WithUsage<Event extends { readonly usage?: Usage }> = Omit<Event, "type" | "usage"> & {
+  readonly usage?: UsageInput
+}
 
-const responseID = (value: ResponseID | string) => ResponseID.make(value)
 const contentBlockID = (value: ContentBlockID | string) => ContentBlockID.make(value)
 const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
 
@@ -233,7 +236,6 @@ const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
  * `events.filter(LLMEvent.guards["tool-call"])`.
  */
 export const LLMEvent = Object.assign(llmEventTagged, {
-  requestStart: (input: WithID<RequestStart, ResponseID>) => RequestStart.make({ ...input, id: responseID(input.id) }),
   stepStart: StepStart.make,
   textStart: (input: WithID<TextStart, ContentBlockID>) => TextStart.make({ ...input, id: contentBlockID(input.id) }),
   textDelta: (input: WithID<TextDelta, ContentBlockID>) => TextDelta.make({ ...input, id: contentBlockID(input.id) }),
@@ -252,11 +254,18 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
   toolResult: (input: WithID<ToolResult, ToolCallID>) => ToolResult.make({ ...input, id: toolCallID(input.id) }),
   toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
-  stepFinish: StepFinish.make,
-  requestFinish: RequestFinish.make,
+  stepFinish: (input: WithUsage<StepFinish>) =>
+    StepFinish.make({
+      ...input,
+      usage: input.usage === undefined ? undefined : Usage.from(input.usage),
+    }),
+  finish: (input: WithUsage<Finish>) =>
+    Finish.make({
+      ...input,
+      usage: input.usage === undefined ? undefined : Usage.from(input.usage),
+    }),
   providerError: ProviderErrorEvent.make,
   is: {
-    requestStart: llmEventTagged.guards["request-start"],
     stepStart: llmEventTagged.guards["step-start"],
     textStart: llmEventTagged.guards["text-start"],
     textDelta: llmEventTagged.guards["text-delta"],
@@ -271,7 +280,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
     stepFinish: llmEventTagged.guards["step-finish"],
-    requestFinish: llmEventTagged.guards["request-finish"],
+    finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
   },
 })
@@ -281,7 +290,7 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   id: Schema.String,
   route: RouteID,
   protocol: ProtocolID,
-  model: ModelRef,
+  model: ModelSchema,
   body: Schema.Unknown,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}

@@ -12,6 +12,7 @@
 // The leader-key cycle (promptCycle) uses a two-step pattern: first press
 // arms the leader, second press within the timeout fires the action.
 import type { KeyBinding } from "@opentui/core"
+export { displayCharAt, displaySlice, mentionTriggerIndex } from "../prompt-display"
 import { formatBinding, parseBindings } from "./keymap.shared"
 import type { FooterKeybinds, RunPrompt } from "./types"
 
@@ -64,11 +65,12 @@ export function promptCopy(prompt: RunPrompt): RunPrompt {
   return {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
+    ...(prompt.mode ? { mode: prompt.mode } : {}),
   }
 }
 
 export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
-  return a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
+  return a.mode === b.mode && a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
 }
 
 function promptKey(binding: ReturnType<typeof parseBindings>[number]): PromptInfo | undefined {
@@ -275,7 +277,7 @@ export function movePromptHistory(state: PromptHistoryState, dir: -1 | 1, text: 
     return { state, apply: false }
   }
 
-  if (dir === 1 && cursor !== text.length) {
+  if (dir === 1 && cursor !== Bun.stringWidth(text)) {
     return { state, apply: false }
   }
 
@@ -309,7 +311,7 @@ export function movePromptHistory(state: PromptHistoryState, dir: -1 | 1, text: 
         index: null,
       },
       text: state.draft,
-      cursor: state.draft.length,
+      cursor: Bun.stringWidth(state.draft),
       apply: true,
     }
   }
@@ -320,7 +322,7 @@ export function movePromptHistory(state: PromptHistoryState, dir: -1 | 1, text: 
       index: idx,
     },
     text: state.items[idx].text,
-    cursor: dir === -1 ? 0 : state.items[idx].text.length,
+    cursor: dir === -1 ? 0 : Bun.stringWidth(state.items[idx].text),
     apply: true,
   }
 }
