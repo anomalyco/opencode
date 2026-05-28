@@ -121,7 +121,7 @@ function ServerForm(props: ServerFormProps) {
   }
 
   return (
-    <div class="px-5">
+    <div class="">
       <div class="bg-surface-base rounded-md p-5 flex flex-col gap-3">
         <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
           <TextField
@@ -172,6 +172,14 @@ function ServerForm(props: ServerFormProps) {
 }
 
 export function DialogSelectServer() {
+  return <ServerManagement dialog />
+}
+
+export function ServerManagementSettings() {
+  return <ServerManagement />
+}
+
+function ServerManagement(props: { dialog?: boolean }) {
   const navigate = useNavigate()
   const dialog = useDialog()
   const server = useServer()
@@ -351,7 +359,7 @@ export function DialogSelectServer() {
 
   async function select(conn: ServerConnection.Any, persist?: boolean) {
     if (!persist && store.status[ServerConnection.key(conn)]?.healthy === false) return
-    dialog.close()
+    if (props.dialog) dialog.close()
     if (persist && conn.type === "http") {
       server.add(conn)
       navigate("/")
@@ -502,148 +510,151 @@ export function DialogSelectServer() {
     }
   }
 
-  return (
-    <Dialog title={formTitle()}>
-      <div class="flex flex-1 min-h-0 flex-col gap-2">
+  const content = () => (
+    <div class="flex flex-1 min-h-0 flex-col gap-4">
+      <Show when={!props.dialog && isFormMode()}>
+        <div class="text-16-medium text-text-strong">{formTitle()}</div>
+      </Show>
+      <Show
+        when={!isFormMode()}
+        fallback={
+          <ServerForm
+            value={isAddMode() ? store.addServer.url : store.editServer.value}
+            name={isAddMode() ? store.addServer.name : store.editServer.name}
+            username={isAddMode() ? store.addServer.username : store.editServer.username}
+            password={isAddMode() ? store.addServer.password : store.editServer.password}
+            placeholder={language.t("dialog.server.add.placeholder")}
+            busy={formBusy()}
+            error={isAddMode() ? store.addServer.error : store.editServer.error}
+            status={isAddMode() ? store.addServer.status : store.editServer.status}
+            onChange={isAddMode() ? handleAddChange : handleEditChange}
+            onNameChange={isAddMode() ? handleAddNameChange : handleEditNameChange}
+            onUsernameChange={isAddMode() ? handleAddUsernameChange : handleEditUsernameChange}
+            onPasswordChange={isAddMode() ? handleAddPasswordChange : handleEditPasswordChange}
+            onSubmit={submitForm}
+            onBack={resetForm}
+          />
+        }
+      >
+        <List
+          class="px-3 flex-1 min-h-0 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
+          search={{
+            placeholder: language.t("dialog.server.search.placeholder"),
+            autofocus: false,
+          }}
+          noInitialSelection
+          emptyMessage={language.t("dialog.server.empty")}
+          items={sortedItems}
+          key={(x) => x.http.url}
+          onSelect={(x) => {
+            if (x) void select(x)
+          }}
+          divider={true}
+        >
+          {(i) => {
+            const key = ServerConnection.key(i)
+            return (
+              <div class="flex items-center gap-3 min-w-0 flex-1 w-full group/item">
+                <div class="flex flex-col h-full items-start w-5">
+                  <ServerHealthIndicator health={store.status[key]} />
+                </div>
+                <ServerRow
+                  conn={i}
+                  dimmed={store.status[key]?.healthy === false}
+                  status={store.status[key]}
+                  class="flex items-center gap-3 min-w-0 flex-1"
+                  badge={
+                    <Show when={defaultKey() === ServerConnection.key(i)}>
+                      <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
+                        {language.t("dialog.server.status.default")}
+                      </span>
+                    </Show>
+                  }
+                  showCredentials
+                />
+                <div class="flex items-center justify-center gap-4 pl-4">
+                  <Show when={ServerConnection.key(current()) === key}>
+                    <Icon name="check" class="h-6" />
+                  </Show>
+
+                  <Show when={i.type === "http"}>
+                    <DropdownMenu>
+                      <DropdownMenu.Trigger
+                        as={IconButton}
+                        icon="dot-grid"
+                        variant="ghost"
+                        class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
+                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                        onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                      />
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content class="mt-1">
+                          <DropdownMenu.Item
+                            onSelect={() => {
+                              if (i.type !== "http") return
+                              startEdit(i)
+                            }}
+                          >
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                          <Show when={canDefault() && defaultKey() !== key}>
+                            <DropdownMenu.Item onSelect={() => setDefault(key)}>
+                              <DropdownMenu.ItemLabel>
+                                {language.t("dialog.server.menu.default")}
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </Show>
+                          <Show when={canDefault() && defaultKey() === key}>
+                            <DropdownMenu.Item onSelect={() => setDefault(null)}>
+                              <DropdownMenu.ItemLabel>
+                                {language.t("dialog.server.menu.defaultRemove")}
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </Show>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onSelect={() => handleRemove(ServerConnection.key(i))}
+                            class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                          >
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu>
+                  </Show>
+                </div>
+              </div>
+            )
+          }}
+        </List>
+      </Show>
+
+      <div class="shrink-0 pb-5">
         <Show
-          when={!isFormMode()}
+          when={isFormMode()}
           fallback={
-            <ServerForm
-              value={isAddMode() ? store.addServer.url : store.editServer.value}
-              name={isAddMode() ? store.addServer.name : store.editServer.name}
-              username={isAddMode() ? store.addServer.username : store.editServer.username}
-              password={isAddMode() ? store.addServer.password : store.editServer.password}
-              placeholder={language.t("dialog.server.add.placeholder")}
-              busy={formBusy()}
-              error={isAddMode() ? store.addServer.error : store.editServer.error}
-              status={isAddMode() ? store.addServer.status : store.editServer.status}
-              onChange={isAddMode() ? handleAddChange : handleEditChange}
-              onNameChange={isAddMode() ? handleAddNameChange : handleEditNameChange}
-              onUsernameChange={isAddMode() ? handleAddUsernameChange : handleEditUsernameChange}
-              onPasswordChange={isAddMode() ? handleAddPasswordChange : handleEditPasswordChange}
-              onSubmit={submitForm}
-              onBack={resetForm}
-            />
+            <Button
+              variant="secondary"
+              icon="plus-small"
+              size="large"
+              onClick={startAdd}
+              class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
+            >
+              {language.t("dialog.server.add.button")}
+            </Button>
           }
         >
-          <List
-            search={{
-              placeholder: language.t("dialog.server.search.placeholder"),
-              autofocus: false,
-            }}
-            noInitialSelection
-            emptyMessage={language.t("dialog.server.empty")}
-            items={sortedItems}
-            key={(x) => x.http.url}
-            onSelect={(x) => {
-              if (x) void select(x)
-            }}
-            divider={true}
-            class="flex-1 min-h-0 px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
-          >
-            {(i) => {
-              const key = ServerConnection.key(i)
-              return (
-                <div class="flex items-center gap-3 min-w-0 flex-1 w-full group/item">
-                  <div class="flex flex-col h-full items-start w-5">
-                    <ServerHealthIndicator health={store.status[key]} />
-                  </div>
-                  <ServerRow
-                    conn={i}
-                    dimmed={store.status[key]?.healthy === false}
-                    status={store.status[key]}
-                    class="flex items-center gap-3 min-w-0 flex-1"
-                    badge={
-                      <Show when={defaultKey() === ServerConnection.key(i)}>
-                        <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
-                          {language.t("dialog.server.status.default")}
-                        </span>
-                      </Show>
-                    }
-                    showCredentials
-                  />
-                  <div class="flex items-center justify-center gap-4 pl-4">
-                    <Show when={ServerConnection.key(current()) === key}>
-                      <Icon name="check" class="h-6" />
-                    </Show>
-
-                    <Show when={i.type === "http"}>
-                      <DropdownMenu>
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="dot-grid"
-                          variant="ghost"
-                          class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
-                          onClick={(e: MouseEvent) => e.stopPropagation()}
-                          onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content class="mt-1">
-                            <DropdownMenu.Item
-                              onSelect={() => {
-                                if (i.type !== "http") return
-                                startEdit(i)
-                              }}
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <Show when={canDefault() && defaultKey() !== key}>
-                              <DropdownMenu.Item onSelect={() => setDefault(key)}>
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.default")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canDefault() && defaultKey() === key}>
-                              <DropdownMenu.Item onSelect={() => setDefault(null)}>
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.defaultRemove")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item
-                              onSelect={() => handleRemove(ServerConnection.key(i))}
-                              class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                            >
-                              <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
-                    </Show>
-                  </div>
-                </div>
-              )
-            }}
-          </List>
+          <Button variant="primary" size="large" onClick={submitForm} disabled={formBusy()} class="px-3 py-1.5">
+            {formBusy()
+              ? language.t("dialog.server.add.checking")
+              : isAddMode()
+                ? language.t("dialog.server.add.button")
+                : language.t("common.save")}
+          </Button>
         </Show>
-
-        <div class="shrink-0 px-5 pb-5">
-          <Show
-            when={isFormMode()}
-            fallback={
-              <Button
-                variant="secondary"
-                icon="plus-small"
-                size="large"
-                onClick={startAdd}
-                class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
-              >
-                {language.t("dialog.server.add.button")}
-              </Button>
-            }
-          >
-            <Button variant="primary" size="large" onClick={submitForm} disabled={formBusy()} class="px-3 py-1.5">
-              {formBusy()
-                ? language.t("dialog.server.add.checking")
-                : isAddMode()
-                  ? language.t("dialog.server.add.button")
-                  : language.t("common.save")}
-            </Button>
-          </Show>
-        </div>
       </div>
-    </Dialog>
+    </div>
   )
+
+  return props.dialog ? <Dialog title={formTitle()}>{content()}</Dialog> : content()
 }
