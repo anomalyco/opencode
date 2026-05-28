@@ -3,9 +3,8 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 import desktopPlugin from "./vite"
 
-const appRoot = fileURLToPath(new URL(".", import.meta.url))
 const watchRoots = [
-  appRoot,
+  fileURLToPath(new URL(".", import.meta.url)),
   fileURLToPath(new URL("../core/", import.meta.url)),
   fileURLToPath(new URL("../sdk/js/", import.meta.url)),
   fileURLToPath(new URL("../ui/", import.meta.url)),
@@ -40,8 +39,7 @@ export default defineConfig({
     port: 3000,
     watch: {
       ignored: (file) =>
-        ignoredWatchRoots.some((root) => file.startsWith(root)) ||
-        !watchRoots.some((root) => file.startsWith(root)),
+        ignoredWatchRoots.some((root) => file.startsWith(root)) || !watchRoots.some((root) => file.startsWith(root)),
     },
   },
   build: {
