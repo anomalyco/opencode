@@ -96,8 +96,16 @@ export async function spawnLocalServer(
   })
   child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
 
-  child.stdout?.on("data", (chunk: Buffer) => options.onStdout?.(chunk.toString("utf8").trimEnd()))
-  child.stderr?.on("data", (chunk: Buffer) => options.onStderr?.(chunk.toString("utf8").trimEnd()))
+  child.stdout?.on("data", (chunk: Buffer) => {
+    const msg = chunk.toString("utf8").trimEnd()
+    if (options.onStdout) options.onStdout(msg)
+    console.log("[sidecar]", msg)
+  })
+  child.stderr?.on("data", (chunk: Buffer) => {
+    const msg = chunk.toString("utf8").trimEnd()
+    if (options.onStderr) options.onStderr(msg)
+    console.error("[sidecar]", msg)
+  })
 
   await new Promise<void>((resolve, reject) => {
     let done = false

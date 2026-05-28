@@ -1,6 +1,9 @@
 import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
+import { platform } from "node:os"
+import { exec } from "node:child_process"
+import { watch } from "node:fs"
 
 type NodeHttpWithEnvProxy = typeof http & {
   setGlobalProxyFromEnv: () => void
@@ -55,7 +58,9 @@ async function start(command: StartCommand) {
   try {
     prepareSidecarEnv(command.password, command.userDataPath)
     ensureLoopbackNoProxy()
+    console.info('[sidecar] Calling useSystemCertificates()')
     useSystemCertificates()
+    console.info('[sidecar] Finished useSystemCertificates()')
     useEnvProxy()
     const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
     await Log.init({ level: "WARN" })
@@ -127,20 +132,173 @@ function ensureLoopbackNoProxy() {
   upsert("no_proxy")
 }
 
+
 function useSystemCertificates() {
+  const plt = platform()
+  console.info(`[sidecar] useSystemCertificates() platform: ${plt}`)
+  if (plt === "darwin") {
+    console.info('[sidecar] Loading and watching macOS system CAs')
+    loadAndWatchMacSystemCAs()
+    return
+  }
+  if (plt === "win32") {
+    console.info('[sidecar] Loading and watching Windows system CAs')
+    loadAndWatchWindowsSystemCAs()
+    return
+  }
+  if (plt === "linux") {
+    console.info('[sidecar] Loading and watching Linux system CAs')
+    loadAndWatchLinuxSystemCAs()
+    return
+  }
   try {
     const nodeTls = tls as NodeTlsWithSystemCertificates
+    const defaultCAs = nodeTls.getCACertificates("default")
+    const systemCAs = nodeTls.getCACertificates("system")
+    console.info(`[sidecar] Default CAs: ${defaultCAs.length}, System CAs: ${systemCAs.length}`)
     nodeTls.setDefaultCACertificates([
-      ...new Set([...nodeTls.getCACertificates("default"), ...nodeTls.getCACertificates("system")]),
+      ...new Set([
+        ...defaultCAs,
+        ...systemCAs,
+      ]),
     ])
+    console.info(`[sidecar] Set default CA certificates: ${defaultCAs.length + systemCAs.length}`)
   } catch (error) {
     console.warn("failed to load system certificates", error)
   }
 }
+// --- Windows system trust integration ---
+function loadAndWatchWindowsSystemCAs() {
+  loadWindowsSystemCAs()
+  // No direct file to watch; poll every 60s
+  setInterval(loadWindowsSystemCAs, 60000)
+}
+
+function loadWindowsSystemCAs() {
+  console.info('[sidecar] Loading Windows system CAs')
+  exec(
+    'certutil -store -user Root',
+    (err, stdout, stderr) => {
+      if (err) {
+        console.warn("failed to extract Windows system CAs", err, stderr)
+        return
+      }
+      try {
+        // Extract PEM blocks from certutil output
+        const matches = stdout.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g)
+        const systemCAs = matches ? matches.map((block) => block.trim()) : []
+        const nodeTls = tls as NodeTlsWithSystemCertificates
+        const defaultCAs = nodeTls.getCACertificates("default")
+        console.info(`[sidecar] Windows: defaultCAs=${defaultCAs.length}, systemCAs=${systemCAs.length}`)
+        nodeTls.setDefaultCACertificates([...new Set([...defaultCAs, ...systemCAs])])
+        console.info(`[sidecar] Windows system trust store loaded (${systemCAs.length} certs)`)
+      } catch (e) {
+        console.warn("failed to set Windows system CAs", e)
+      }
+    }
+  )
+}
+
+// --- Linux system trust integration ---
+const LINUX_CA_PATHS = [
+  "/etc/ssl/certs/ca-certificates.crt", // Debian/Ubuntu/Gentoo etc.
+  "/etc/pki/tls/certs/ca-bundle.crt",   // Fedora/RHEL 6
+  "/etc/ssl/ca-bundle.pem",             // OpenSUSE
+  "/etc/pki/tls/cacert.pem",            // OpenELEC
+  "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS/RHEL 7
+]
+
+function loadAndWatchLinuxSystemCAs() {
+  loadLinuxSystemCAs()
+  for (const path of LINUX_CA_PATHS) {
+    try {
+      watch(path, { persistent: false }, () => {
+        loadLinuxSystemCAs()
+      })
+    } catch (err) {
+      // ignore
+    }
+  }
+}
+
+function loadLinuxSystemCAs() {
+  const fs = require("fs")
+  let found = false
+  for (const path of LINUX_CA_PATHS) {
+    try {
+      if (fs.existsSync(path)) {
+        const pem = fs.readFileSync(path, "utf8")
+        const systemCAs = pem
+          .split(/(?=-----BEGIN CERTIFICATE-----)/g)
+          .map((block: string) => block.trim())
+          .filter((block: string) => block.startsWith("-----BEGIN CERTIFICATE-----"))
+        const nodeTls = tls as NodeTlsWithSystemCertificates
+        const defaultCAs = nodeTls.getCACertificates("default")
+        console.info(`[sidecar] Linux: defaultCAs=${defaultCAs.length}, systemCAs=${systemCAs.length} from ${path}`)
+        nodeTls.setDefaultCACertificates([...new Set([...defaultCAs, ...systemCAs])])
+        console.info(`[sidecar] Linux system trust store loaded (${systemCAs.length} certs from ${path})`)
+        found = true
+        break
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  if (!found) {
+    console.warn("No Linux CA bundle found in known paths.")
+  }
+}
+
+// --- macOS system trust integration ---
+const MACOS_KEYCHAIN_PATHS = [
+  "/System/Library/Keychains/SystemRootCertificates.keychain",
+  "/Library/Keychains/System.keychain",
+]
+
+function loadAndWatchMacSystemCAs() {
+  loadMacSystemCAs()
+  for (const path of MACOS_KEYCHAIN_PATHS) {
+    try {
+      watch(path, { persistent: false }, () => {
+        console.info(`[sidecar] Detected change in macOS keychain: ${path}, reloading system CAs`)
+        loadMacSystemCAs()
+      })
+    } catch (err) {
+      // ignore
+    }
+  }
+}
+
+function loadMacSystemCAs() {
+  console.info('[sidecar] Loading macOS system CAs')
+  exec(
+    'security find-certificate -a -p ' + MACOS_KEYCHAIN_PATHS.join(' '),
+    (err, stdout, stderr) => {
+      if (err) {
+        console.warn("failed to extract macOS system CAs", err, stderr)
+        return
+      }
+      try {
+        const nodeTls = tls as NodeTlsWithSystemCertificates
+        // Merge with Node's default CAs
+        const defaultCAs = nodeTls.getCACertificates("default")
+        const systemCAs = stdout
+          .split(/(?=-----BEGIN CERTIFICATE-----)/g)
+          .map((block) => block.trim())
+          .filter((block) => block.startsWith("-----BEGIN CERTIFICATE-----"))
+        console.info(`[sidecar] macOS: defaultCAs=${defaultCAs.length}, systemCAs=${systemCAs.length}`)
+        nodeTls.setDefaultCACertificates([...new Set([...defaultCAs, ...systemCAs])])
+        console.info(`[sidecar] macOS system trust store loaded (${systemCAs.length} certs)`)
+      } catch (e) {
+        console.warn("failed to set macOS system CAs", e)
+      }
+    }
+  )
+}
 
 function useEnvProxy() {
   try {
-    ;(http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv()
+    ; (http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv()
   } catch (error) {
     console.warn("failed to load proxy environment", error)
   }

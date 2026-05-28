@@ -53,7 +53,7 @@ export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") { }
 
 export const use = serviceUse(Service)
 
@@ -92,6 +92,7 @@ const live: Layer.Layer<
         providerID: input.model.providerID,
       })
 
+      log.info("LLM dispatch: starting provider/model resolution")
       const [language, cfg, item, info] = yield* Effect.all(
         [
           provider.getLanguage(input.model),
@@ -101,8 +102,10 @@ const live: Layer.Layer<
         ],
         { concurrency: "unbounded" },
       )
+      log.info("LLM dispatch: provider/model resolved")
 
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
+      log.info("LLM dispatch: isWorkflow=" + isWorkflow)
       const prepared = yield* LLMRequestPrep.prepare({
         ...input,
         provider: item,
@@ -111,6 +114,7 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      log.info("LLM dispatch: request prepared")
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -204,20 +208,21 @@ const live: Layer.Layer<
         : undefined
       const telemetryTracer = tracer
         ? new Proxy(tracer, {
-            get(target, prop, receiver) {
-              if (prop !== "startSpan") return Reflect.get(target, prop, receiver)
-              return (...args: Parameters<typeof target.startSpan>) => {
-                const span = target.startSpan(...args)
-                span.setAttribute("session.id", input.sessionID)
-                return span
-              }
-            },
-          })
+          get(target, prop, receiver) {
+            if (prop !== "startSpan") return Reflect.get(target, prop, receiver)
+            return (...args: Parameters<typeof target.startSpan>) => {
+              const span = target.startSpan(...args)
+              span.setAttribute("session.id", input.sessionID)
+              return span
+            }
+          },
+        })
         : undefined
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
+        log.info("LLM dispatch: experimentalNativeLlm enabled")
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,
@@ -235,6 +240,7 @@ const live: Layer.Layer<
           abort: input.abort,
         })
         if (native.type === "supported") {
+          log.info("LLM dispatch: native runtime selected")
           yield* Effect.logInfo("llm runtime selected").pipe(
             Effect.annotateLogs({
               "llm.runtime": "native",
@@ -256,17 +262,13 @@ const live: Layer.Layer<
           }),
         )
         l.info("native runtime unavailable; falling back to ai-sdk", { reason: native.reason })
+        log.info("LLM dispatch: native runtime unavailable, falling back to ai-sdk")
       }
 
-      yield* Effect.logInfo("llm runtime selected").pipe(
-        Effect.annotateLogs({
-          "llm.runtime": "ai-sdk",
-          "llm.provider": input.model.providerID,
-          "llm.model": input.model.id,
-        }),
-      )
+      log.info("LLM dispatch: ai-sdk runtime selected")
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
+      log.info("LLM dispatch: returning ai-sdk streamText")
       return {
         type: "ai-sdk" as const,
         result: streamText({
@@ -274,6 +276,7 @@ const live: Layer.Layer<
             l.error("stream error", {
               error,
             })
+            log.error("LLM dispatch: streamText error", { error })
           },
           async experimental_repairToolCall(failed) {
             const lower = failed.toolCall.toolName.toLowerCase()

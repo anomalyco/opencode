@@ -165,9 +165,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       )
       const payload = decoded
         ? {
-            ...decoded,
-            permission: decoded.permission ? [...decoded.permission] : undefined,
-          }
+          ...decoded,
+          permission: decoded.permission ? [...decoded.permission] : undefined,
+        }
         : decoded
       return yield* create({ payload })
     })
@@ -303,6 +303,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
+      yield* Effect.logInfo("/prompt_async handler invoked").pipe(
+        Effect.annotateLogs({ sessionID: ctx.params.sessionID, payload: ctx.payload })
+      )
       yield* requireSession(ctx.params.sessionID)
       yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
         Effect.catchCause((cause) =>
@@ -317,6 +320,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           }),
         ),
         Effect.forkIn(scope, { startImmediately: true }),
+      )
+      yield* Effect.logInfo("/prompt_async handler completed").pipe(
+        Effect.annotateLogs({ sessionID: ctx.params.sessionID })
       )
       return HttpApiSchema.NoContent.make()
     })
