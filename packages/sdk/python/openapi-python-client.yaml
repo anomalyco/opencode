@@ -1,0 +1,3 @@
+project_name_override: opencode-sdk-gen
+package_name_override: opencode_sdk.gen
+package_version_override: 0.0.0
