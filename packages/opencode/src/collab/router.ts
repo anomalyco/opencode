@@ -20,6 +20,10 @@
  *   PUT  /collab/session/:id/participant/:ghId/role → change role
  *   GET  /collab/session/:id/events      → SSE stream of CollabEvents
  *   POST /collab/session/:id/reinit      → Driver retries failed workspace init
+ *   POST /collab/session/:id/preview/launch    → Driver launches frontend dev server
+ *   POST /collab/session/:id/preview/stop      → Driver stops the running dev server
+ *   POST /collab/session/:id/preview/restart   → Driver SIGTERMs + relaunches
+ *   GET  /collab/session/:id/preview/state     → snapshot of the running preview
  *   GET  /collab/claude-creds/status     → does the container have Claude auth?
  *   POST /collab/claude-creds            → upload a fresh Claude credentials JSON
  */
@@ -58,6 +62,13 @@ import { revokeInternalToken } from "./internal-token"
 import { encryptToken, decryptToken, isEncrypted } from "./crypto"
 import { checkRateLimit, callerIp, rateLimitedResponse } from "./rate-limit"
 import { getCredentialsStatus, writeCredentials } from "./claude-credentials"
+import * as Preview from "./preview-launcher"
+
+// Wire broadcastSse into the preview launcher once at module load.  Done
+// here (router.ts) rather than at Preview module init to avoid a circular
+// import — broadcastSse lives in this file and we don't want preview-launcher
+// pulling in the whole router for one function.
+Preview.setPreviewBroadcaster((collabSessionId, event) => broadcastSse(collabSessionId, event))
 import { resolveBranchName } from "./branch-resolve"
 import { disposeAllInstances } from "@/project/instance-runtime"
 
@@ -151,6 +162,11 @@ function registerQueueExecutor(collabSessionId: string): void {
     if (!cs) return
     const workspacePath = nativeSessionDirectory(collabSessionId, cs.repos)
     await executePromptOnNativeSession(cs, suggestion.content, workspacePath, suggestion.model, suggestion.agent, suggestion.variant)
+    // After every LLM turn, check whether git HEAD has moved (LLM did a
+    // checkout / pull / reset).  Mass file change confuses Vite/Webpack HMR,
+    // so we restart the dev server on every HEAD change — best-effort,
+    // fire-and-forget.
+    void Preview.maybeRestartOnBranchChange()
   })
 }
 
@@ -1184,11 +1200,23 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // Cache-Control: no-store — participant.isOnline flips frequently, we
     // can't risk a stale 200 sitting in a proxy/CDN/browser cache.
     const repoBranches = await readRepoBranches(sessionId, collabSession.repos, collabSession.branch)
+    // Surface preview-capability per repo so the SPA can render the "Launch
+    // Unleash live frontend" button conditionally.  null when no linked repo
+    // has either `.opencode-preview.json` or matches the "frontend" zero-config
+    // default.
+    const previewRepo = collabSession.repos.find((r) => Preview.repoHasPreview(sessionId, r)) ?? null
+    const availablePreview = previewRepo
+      ? {
+          repoFullName: previewRepo,
+          ...Preview.previewConfigForRepo(sessionId, previewRepo),
+        }
+      : null
     return new Response(
       JSON.stringify({
         ...collabSession,
         workspacePath: nativeSessionDirectory(sessionId, collabSession.repos),
         repoBranches,
+        availablePreview,
       }),
       {
         status: 200,
@@ -1204,7 +1232,9 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     broadcastSse(sessionId, { type: "collab:session_deleted", collabSessionId: sessionId })
     // Clean up server workspace + drop the internal-token mint (the
     // executor can't talk to a deleted session, so the token has no
-    // legitimate user left).
+    // legitimate user left).  Also stop any in-process preview that was
+    // pinned to this session — the workspace dir is about to be rm -rfed.
+    Preview.stopIfOwnedBySession(sessionId)
     cleanupSessionWorkspace(sessionId)
     revokeInternalToken(sessionId)
     return json({ ok: true })
@@ -1344,6 +1374,74 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     }
 
     return json({ ok: true }, 202)
+  }
+
+  // ── Preview launcher routes ────────────────────────────────────────────
+  // Frontend live-preview lifecycle.  See collab/preview-launcher.ts and
+  // ~/.claude/plans/frontend-live-preview.md.  Container-wide singleton —
+  // first session whose Driver clicks Launch wins.
+
+  // POST /collab/session/:id/preview/launch — Driver only.
+  // Body: `{ repo?: string }` (defaults to the session's first preview-capable repo).
+  // 202 with state, OR 409 with existing state, OR 4xx/5xx with error.
+  if (req.method === "POST" && parts[3] === "preview" && parts[4] === "launch") {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    // 10/hour/user — heavy operation (full pnpm install on first launch).
+    const rl = checkRateLimit(`preview-launch:${sess.githubId}`, 10, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+
+    // Pick the repo: caller-supplied, else first preview-capable repo on the session.
+    const body = (await req.json().catch(() => ({}))) as { repo?: string }
+    let repoFullName: string | null = null
+    if (typeof body.repo === "string" && collabSession.repos.includes(body.repo)) {
+      repoFullName = body.repo
+    } else {
+      repoFullName = collabSession.repos.find((r) => Preview.repoHasPreview(sessionId, r)) ?? null
+    }
+    if (!repoFullName) {
+      return json({ error: "No preview-capable repo linked to this session." }, 400)
+    }
+
+    const result = Preview.launchPreview(sessionId, repoFullName)
+    if (!result.ok) return json({ error: result.error, ...("existing" in result ? { existing: result.existing } : {}) }, result.status)
+    return json(result.state, 202)
+  }
+
+  // POST /collab/session/:id/preview/stop — Driver only.
+  if (req.method === "POST" && parts[3] === "preview" && parts[4] === "stop") {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    const cur = Preview.getPreviewState()
+    if (!cur || cur.collabSessionId !== sessionId) {
+      return json({ error: "No preview running for this session." }, 404)
+    }
+    Preview.stopPreview("explicit")
+    return json({ ok: true })
+  }
+
+  // POST /collab/session/:id/preview/restart — Driver only.
+  if (req.method === "POST" && parts[3] === "preview" && parts[4] === "restart") {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    const rl = checkRateLimit(`preview-launch:${sess.githubId}`, 10, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
+    const cur = Preview.getPreviewState()
+    if (!cur || cur.collabSessionId !== sessionId) {
+      return json({ error: "No preview running for this session." }, 404)
+    }
+    const result = Preview.restartPreview()
+    if (!result.ok) return json({ error: result.error }, result.status)
+    return json(result.state, 202)
+  }
+
+  // GET /collab/session/:id/preview/state — any participant.
+  // Snapshot of the running preview (if any) so the SPA can render its
+  // launcher banner on page load without waiting for the next SSE event.
+  if (req.method === "GET" && parts[3] === "preview" && parts[4] === "state") {
+    const cur = Preview.getPreviewState()
+    if (!cur || cur.collabSessionId !== sessionId) return json(null, 200)
+    return new Response(JSON.stringify(cur), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    })
   }
 
   // POST /collab/session/:id/pr — Driver only.  git push + open PR on GitHub.
@@ -1739,6 +1837,14 @@ function handleSse(
             sessionId: current.sessionId,
             directory: nativeSessionDirectory(collabSessionId, current.repos),
           })
+        }
+        // Replay the preview-launcher state if a preview is currently running
+        // FOR THIS session.  Without this, a SPA reload mid-preview would
+        // miss the started event and the launcher banner would show the
+        // "Launch" button as if nothing were running.
+        const previewState = Preview.getPreviewState()
+        if (previewState && previewState.collabSessionId === collabSessionId) {
+          send({ type: "collab:preview_started", state: previewState })
         }
       }
       unregister = registerSse(collabSessionId, send)
