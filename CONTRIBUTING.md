@@ -1,6 +1,8 @@
-# Contributing to OpenCode
+# Contributing to SimplicioCode
 
-We want to make it easy for you to contribute to OpenCode. Here are the most common type of changes that get merged:
+> SimplicioCode is the rebrand of OpenCode (in progress; see `docs/EVOLUTION.md`). The CLI binary is still called `opencode` until R5 Phase 2 lands.
+
+We want to make it easy for you to contribute to SimplicioCode. Here are the most common type of changes that get merged:
 
 - Bug fixes
 - Additional LSPs / Formatters

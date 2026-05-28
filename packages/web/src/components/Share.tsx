@@ -5,9 +5,9 @@ import { IconArrowDown } from "./icons"
 import { IconOpencode } from "./icons/custom"
 import { ShareI18nProvider, formatCurrency, formatNumber, normalizeLocale } from "./share/common"
 import styles from "./share.module.css"
-import type { MessageV2 } from "opencode/session/message-v2"
-import type { Message } from "opencode/session/message"
-import type { Session } from "opencode/session/index"
+import type { MessageV2 } from "simpliciocode/session/message-v2"
+import type { Message } from "simpliciocode/session/message"
+import type { Session } from "simpliciocode/session/index"
 import { Part, ProviderIcon } from "./share/part"
 
 type MessageWithParts = MessageV2.Info & { parts: MessageV2.Part[] }

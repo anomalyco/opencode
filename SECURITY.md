@@ -1,4 +1,6 @@
-# Security
+# Security — SimplicioCode
+
+> Project is being rebranded from OpenCode to SimplicioCode. Security policy applies to both names while the migration is in flight (see `docs/EVOLUTION.md`).
 
 ## IMPORTANT
 

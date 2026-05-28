@@ -1,9 +1,20 @@
+<!--
+  SimplicioCode — fork rebrand of OpenCode.
+  Migration is staged in docs/RENAME_PLAN.md; visible strings are updated first,
+  package/dir names later to keep diffs reviewable. Source of truth for the
+  rebrand, the mandatory toolchain (simplicio-mapper / simplicio-dev-cli /
+  simplicio-sprint), and the local AI Simplicio1 (Qwen 2.5 Coder 3B) is
+  docs/EVOLUTION.md.
+-->
+
+> **SimplicioCode** — rebrand em curso do OpenCode. Veja `docs/EVOLUTION.md`.
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Logo OpenCode">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Logo SimplicioCode">
     </picture>
   </a>
 </p>

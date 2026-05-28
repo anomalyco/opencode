@@ -1,4 +1,7 @@
-# Download Stats
+# Download Stats — SimplicioCode (formerly OpenCode)
+
+> Numbers below track the upstream `opencode-ai` npm package. After R5 Phase 2 lands they will switch to `simpliciocode` while preserving the OpenCode alias for one release.
+
 
 | Date       | GitHub Downloads     | npm Downloads        | Total                 |
 | ---------- | -------------------- | -------------------- | --------------------- |

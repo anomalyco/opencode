@@ -27,7 +27,7 @@ import { ContentBash } from "./content-bash"
 import { ContentError } from "./content-error"
 import { formatCount, formatDuration, formatNumber, normalizeLocale, useShareMessages } from "../share/common"
 import { ContentMarkdown } from "./content-markdown"
-import type { MessageV2 } from "opencode/session/message-v2"
+import type { MessageV2 } from "simpliciocode/session/message-v2"
 import type { Diagnostic } from "vscode-languageserver-types"
 
 import styles from "./part.module.css"
