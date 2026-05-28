@@ -20,6 +20,7 @@ import { MemoryRouter } from "@solidjs/router"
 import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
+import { findInPage } from "../find-in-page"
 import { initI18n, t } from "./i18n"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
@@ -305,6 +306,10 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
 
     filterDirectories: (paths: string[]) => window.api.filterDirectories(paths),
 
+    async find(query, dir) {
+      return findInPage(query, dir)
+    },
+
     listConfigFiles: (directory?: string | null) => window.api.listConfigFiles(directory),
 
     readConfigFile: (path: string) => window.api.readConfigFile(path),
@@ -394,6 +399,8 @@ render(() => {
   // Fetch sidecar credentials (available immediately, before health check)
   const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
   const [extraAgents] = createResource(extraAgentVersion, () => window.api.listExtraAgentServers().catch(() => []))
+  // Runtime extra-agent refreshes should update server state without remounting the app shell.
+  const extraAgentsInitialLoading = () => extraAgents.loading && extraAgents.latest === undefined
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {
@@ -432,6 +439,20 @@ render(() => {
 
     const theme = useTheme()
 
+    onMount(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+        if (event.key.toLowerCase() !== "f") return
+
+        event.preventDefault()
+        event.stopPropagation()
+        cmd.trigger("page.find", "keybind")
+      }
+
+      window.addEventListener("keydown", onKeyDown, { capture: true })
+      onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
+    })
+
     createEffect(() => {
       theme.themeId()
       theme.mode()
@@ -458,7 +479,7 @@ render(() => {
           when={
             !defaultServer.loading &&
             !sidecar.loading &&
-            !extraAgents.loading &&
+            !extraAgentsInitialLoading() &&
             !windowConfig.loading &&
             !windowCount.loading &&
             !locale.loading

@@ -33,6 +33,7 @@ import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
+import { findInPage } from "./find-in-page"
 import { createMenu } from "./menu"
 import { pathRoute, routeInitialPath } from "./path-route"
 
@@ -64,7 +65,7 @@ const os = (() => {
 if (os) document.documentElement.dataset.os = os
 
 let update: Update | null = null
-const [busy, setBusy] = createSignal(false)
+let reloadTask: Promise<void> | undefined
 const [openclawTick, setOpenclawTick] = createSignal(0)
 const [hermesTick, setHermesTick] = createSignal(0)
 const [genericagentTick, setGenericagentTick] = createSignal(0)
@@ -249,9 +250,14 @@ function startupShell() {
 }
 
 const reload = async () => {
-  if (busy()) return
-  setBusy(true)
-  await commands.reloadSidecar().finally(() => setBusy(false))
+  if (reloadTask) return reloadTask
+  reloadTask = commands
+    .reloadSidecar()
+    .then(() => undefined)
+    .finally(() => {
+      reloadTask = undefined
+    })
+  return reloadTask
 }
 
 const syncOpenclaw = async () => {
@@ -411,17 +417,7 @@ const createPlatform = (): DesktopPlatform => {
     },
 
     async find(query, dir) {
-      const q = query.trim()
-      if (!q) return
-      return (window as Window & { find?: (...args: unknown[]) => boolean }).find?.(
-        q,
-        false,
-        dir === -1,
-        true,
-        false,
-        false,
-        false,
-      )
+      return findInPage(query, dir)
     },
     async openPath(path: string, app?: string) {
       await commands.openPath(path, app ?? null)
@@ -1102,40 +1098,13 @@ render(() => {
         <Show when={ready()}>
           {(_) => {
             return (
-              <>
-                <AppInterface
-                  defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                  servers={servers()}
-                  disableHealthCheck={skipHealth}
-                >
-                  <Inner />
-                </AppInterface>
-                <Show when={busy()}>
-                  <div class="desktop-busy" aria-live="polite" aria-busy="true">
-                    <div class="desktop-busy-card">
-                      <div class="desktop-busy-stage" aria-hidden="true">
-                        <div class="desktop-busy-orbit">
-                          <div class="desktop-busy-orbit-track" />
-                          <div class="desktop-busy-orbit-arc" />
-                          <div class="desktop-busy-rotor desktop-busy-rotor-a">
-                            <div class="desktop-busy-dot desktop-busy-dot-a" />
-                          </div>
-                          <div class="desktop-busy-rotor desktop-busy-rotor-b">
-                            <div class="desktop-busy-dot desktop-busy-dot-b" />
-                          </div>
-                          <div class="desktop-busy-rotor desktop-busy-rotor-c">
-                            <div class="desktop-busy-dot desktop-busy-dot-c" />
-                          </div>
-                        </div>
-                      </div>
-                      <div class="desktop-busy-copy">
-                        <div class="desktop-busy-title">{t("desktop.loading.reload.title")}</div>
-                        <div class="desktop-busy-text">{t("desktop.loading.reload.message")}</div>
-                      </div>
-                    </div>
-                  </div>
-                </Show>
-              </>
+              <AppInterface
+                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+                servers={servers()}
+                disableHealthCheck={skipHealth}
+              >
+                <Inner />
+              </AppInterface>
             )
           }}
         </Show>

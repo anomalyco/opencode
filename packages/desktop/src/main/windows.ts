@@ -100,7 +100,8 @@ export function getPinchZoomEnabled() {
 
 export function setDockIcon() {
   if (process.platform !== "darwin") return
-  const icon = nativeImage.createFromPath(join(iconsDir(), "dock.png"))
+  let icon = nativeImage.createFromPath(join(iconsDir(), "icon.png"))
+  if (icon.isEmpty()) icon = nativeImage.createFromPath(join(iconsDir(), "dock.png"))
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 

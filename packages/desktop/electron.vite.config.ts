@@ -6,6 +6,25 @@ import path from "node:path"
 
 const OPENCODE_SERVER_DIST = path.resolve(import.meta.dirname, "../opencode/dist/node")
 
+function restoreStandardBackdropFilter(css: string) {
+  return css.replace(
+    /(-webkit-backdrop-filter\s*:\s*([^;{}]+);)(?!\s*backdrop-filter\s*:)/g,
+    "$1backdrop-filter:$2;",
+  )
+}
+
+function preserveBackdropFilter() {
+  return {
+    name: "opencode:preserve-standard-backdrop-filter",
+    generateBundle(_options, bundle) {
+      for (const asset of Object.values(bundle)) {
+        if (asset.type !== "asset" || !asset.fileName.endsWith(".css") || typeof asset.source !== "string") continue
+        asset.source = restoreStandardBackdropFilter(asset.source)
+      }
+    },
+  }
+}
+
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
@@ -81,7 +100,7 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [appPlugin, sentry],
+    plugins: [appPlugin, sentry, preserveBackdropFilter()],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {

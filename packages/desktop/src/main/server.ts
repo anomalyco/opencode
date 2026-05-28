@@ -1,8 +1,10 @@
+import { mkdir } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
+import { createSidecarEnv, sidecarDefaultCwd } from "./server-env"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import type { SqliteMigrationProgress } from "../preload/types"
@@ -73,9 +75,11 @@ export async function spawnLocalServer(
   options: SpawnLocalServerOptions,
 ) {
   const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
+  const cwd = sidecarDefaultCwd(options.userDataPath)
+  await mkdir(cwd, { recursive: true })
   const child = utilityProcess.fork(sidecar, [], {
-    cwd: process.cwd(),
-    env: createSidecarEnv(),
+    cwd,
+    env: createSidecarEnv({ cwd }),
     serviceName: SIDECAR_SERVICE_NAME,
     stdio: "pipe",
   })
@@ -225,15 +229,6 @@ export async function checkHealth(url: string, password?: string | null): Promis
   } catch {
     return false
   }
-}
-
-function createSidecarEnv(): Record<string, string> {
-  const env = Object.fromEntries(
-    Object.entries(process.env).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
-  )
-  delete env.DEBUG
-  if (process.platform === "linux") delete env.LD_PRELOAD
-  return env
 }
 
 function delay(ms: number) {

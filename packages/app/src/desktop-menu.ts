@@ -128,6 +128,9 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       { type: "item", label: "Copy", action: "edit.copy", role: "copy", accelerator: { windows: "Ctrl+C" } },
       { type: "item", label: "Paste", action: "edit.paste", role: "paste", accelerator: { windows: "Ctrl+V" } },
       { type: "item", label: "Delete", action: "edit.delete" },
+      { type: "separator" },
+      { type: "item", label: "Find...", command: "page.find", accelerator: { macos: "Cmd+F", windows: "Ctrl+F" } },
+      { type: "separator" },
       {
         type: "item",
         label: "Select All",
