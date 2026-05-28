@@ -182,6 +182,25 @@ Branch: `claude/simplicio-setup-config-9PXIm`.
 - [ ] Gateway/billing para o plano Pro (#11).
 - [ ] Feature flag bloqueando `sendsprint watch` para usuários free.
 
+### 2026-05-28 — R5 Fases 3+4+5 + lógica Simplicio1 com testes
+
+Branch: `claude/simplicio-setup-config-9PXIm`. Commits: `51f6d63`, `bee9821`, `592c127`, `<próximo>`.
+
+**R5 Fase 3** (`51f6d63`): `git mv packages/opencode → packages/simpliciocode` + 20 arquivos com paths atualizados. Typecheck PASS.
+
+**R5 Fase 4** (`bee9821`): scope `@opencode-ai/*` → `@simpliciocode/*` em **789 arquivos**. `bun turbo typecheck` → **19/19 packages PASS** em 31s.
+
+**R5 Fase 5** (`592c127`): URLs `anomalyco/opencode` → `wesleysimplicio/simplicio-code` em 84 arquivos. `nix/opencode.nix` → `nix/simpliciocode.nix` com `pname=simpliciocode`. `flake.nix` atualizado. Domínio `opencode.ai` mantido (aguarda decisão).
+
+**R8 lógica Simplicio1** (`<próximo>`):
+- Novo `packages/simpliciocode/src/provider/simplicio1.ts` com `selectTier()`:
+  - Override manual via env `SIMPLICIO_MODEL_TIER`.
+  - Prefere DeepSeek V4 Pro quando `HF_TOKEN` setado e saldo ≥ $0.10.
+  - Fallback ordenado: 14B → 7B → 3B → 1.5B conforme `os.totalmem()`.
+- Testes: `packages/simpliciocode/test/provider/simplicio1.test.ts` — **9/9 PASS**.
+
+Resultado: R5 efetivamente fechada (exceto domínio); R8 com lógica real + tests.
+
 ### Pendências para próximos commits
 
 - [ ] R5 — rename OpenCode→SimplicioCode (em fases, ver `docs/RENAME_PLAN.md`):
