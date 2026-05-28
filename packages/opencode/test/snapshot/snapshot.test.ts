@@ -608,6 +608,29 @@ it.live(
 )
 
 it.live(
+  "tracks changes when opened from a git subdirectory",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = path.join(tmp.path, "src")
+    yield* mkdirp(subdir)
+    yield* write(path.join(subdir, "file.txt"), "before")
+
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+
+      yield* write(path.join(subdir, "file.txt"), "after")
+      yield* write(path.join(subdir, "new.txt"), "new")
+
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(tmp.path, "src", "file.txt"))
+      expect(patch.files).toContain(fwd(tmp.path, "src", "new.txt"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
   "revert only removes files in invoking worktree",
   Effect.gen(function* () {
     const tmp = yield* bootstrapScoped()
