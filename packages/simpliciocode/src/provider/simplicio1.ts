@@ -18,7 +18,9 @@ import os from "node:os"
 export interface SimplicioTier {
   id: "1.5b" | "3b" | "7b" | "14b" | "deepseek-v4-pro"
   label: string
-  provider: "ollama" | "huggingface"
+  provider: "simplicio1" | "simplicio1-pro"
+  /** Underlying engine. Hidden from the model picker. */
+  backend: "ollama" | "huggingface"
   model: string
   baseUrl: string
   minRamGb?: number
@@ -30,8 +32,9 @@ export interface SimplicioTier {
 const TIERS: SimplicioTier[] = [
   {
     id: "deepseek-v4-pro",
-    label: "Simplicio1 — DeepSeek V4 Pro (HF, budget $5)",
-    provider: "huggingface",
+    label: "Simplicio1 Pro — DeepSeek V4 Pro (HF • budget $5)",
+    provider: "simplicio1-pro",
+    backend: "huggingface",
     model: "deepseek-ai/DeepSeek-V4-Pro",
     baseUrl: "https://api-inference.huggingface.co/v1",
     envToken: "HF_TOKEN",
@@ -40,8 +43,9 @@ const TIERS: SimplicioTier[] = [
   },
   {
     id: "14b",
-    label: "Simplicio1 — Qwen 2.5 Coder 14B (Local • Free)",
-    provider: "ollama",
+    label: "Simplicio1 14B (Free • Local)",
+    provider: "simplicio1",
+    backend: "ollama",
     model: "qwen2.5-coder:14b",
     baseUrl: "http://localhost:11434/v1",
     minRamGb: 16,
@@ -49,8 +53,9 @@ const TIERS: SimplicioTier[] = [
   },
   {
     id: "7b",
-    label: "Simplicio1 — Qwen 2.5 Coder 7B (Local • Free)",
-    provider: "ollama",
+    label: "Simplicio1 7B (Free • Local)",
+    provider: "simplicio1",
+    backend: "ollama",
     model: "qwen2.5-coder:7b",
     baseUrl: "http://localhost:11434/v1",
     minRamGb: 8,
@@ -58,8 +63,9 @@ const TIERS: SimplicioTier[] = [
   },
   {
     id: "3b",
-    label: "Simplicio1 — Qwen 2.5 Coder 3B (Local • Free)",
-    provider: "ollama",
+    label: "Simplicio1 3B (Free • Local)",
+    provider: "simplicio1",
+    backend: "ollama",
     model: "qwen2.5-coder:3b",
     baseUrl: "http://localhost:11434/v1",
     minRamGb: 4,
@@ -67,8 +73,9 @@ const TIERS: SimplicioTier[] = [
   },
   {
     id: "1.5b",
-    label: "Simplicio1 — Qwen 2.5 Coder 1.5B (Local • Free)",
-    provider: "ollama",
+    label: "Simplicio1 1.5B (Free • Local)",
+    provider: "simplicio1",
+    backend: "ollama",
     model: "qwen2.5-coder:1.5b",
     baseUrl: "http://localhost:11434/v1",
     minRamGb: 2,
@@ -78,6 +85,32 @@ const TIERS: SimplicioTier[] = [
 
 export function totalRamGb(): number {
   return os.totalmem() / 1024 / 1024 / 1024
+}
+
+/**
+ * Fetches the remaining HuggingFace Inference budget in USD.
+ * Returns 0 when the token is missing or the call fails — selectTier()
+ * treats either case as "no remote budget".
+ *
+ * Uses the billing summary endpoint. HF doesn't publish a per-request
+ * cost field in the public API, so we parse `total_spent` and subtract
+ * from the configured cap (default $5).
+ */
+export async function fetchHfBudgetRemaining(opts: { capUsd?: number; token?: string } = {}): Promise<number> {
+  const cap = opts.capUsd ?? 5
+  const token = opts.token ?? process.env.HF_TOKEN
+  if (!token) return 0
+  try {
+    const res = await fetch("https://huggingface.co/api/billing/usage", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return 0
+    const json = (await res.json()) as { total_spent?: number }
+    const spent = json.total_spent ?? 0
+    return Math.max(0, cap - spent)
+  } catch {
+    return 0
+  }
 }
 
 export function listTiers(): readonly SimplicioTier[] {

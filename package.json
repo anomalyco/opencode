@@ -23,7 +23,8 @@
     "simplicio:bootstrap": "bash script/simplicio/install-tools.sh && bash script/simplicio/flow.sh --map-only",
     "simplicio:update": "bash script/simplicio/update.sh",
     "simplicio:task": "bash script/simplicio/flow.sh",
-    "sprints": "bash script/simplicio/sprints.sh"
+    "sprints": "bash script/simplicio/sprints.sh",
+    "simplicio:which-tier": "bun script/simplicio/which-tier.ts"
   },
   "workspaces": {
     "packages": [
