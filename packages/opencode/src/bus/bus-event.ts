@@ -31,6 +31,7 @@ export function effectPayloads() {
       .toArray(),
     ...EventV2.registry
       .values()
+      .filter((definition) => !registry.has(definition.type))
       .map((definition) =>
         Schema.Struct({
           id: Schema.String,
