@@ -3,6 +3,7 @@ import "./init-projectors"
 import { handleCollabRequest } from "@/collab/router"
 import { parsePreviewPath, handlePreviewHttp, attachPreviewUpgrade } from "@/collab/preview-router"
 import { cookieAuthorizesRequest, lookupCookieIdentity } from "@/collab/cookie-auth"
+import { markPreviewTraffic } from "@/collab/preview-launcher"
 import { Database } from "@/storage/db"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
@@ -69,6 +70,10 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
           headers: new Headers({ "content-type": "text/plain" }),
         })
       }
+      // Bump the preview-launcher's idle timer.  Authenticated request
+      // means someone's actively using the preview; reset the 30-min
+      // idle SIGTERM window.  Cheap — single timestamp write.
+      markPreviewTraffic()
       const webResponse = yield* Effect.promise(() =>
         handlePreviewHttp(webRequest, previewParsed.port, previewParsed.rest),
       )

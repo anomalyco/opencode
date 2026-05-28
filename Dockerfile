@@ -54,6 +54,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git ca-certificates python3 make g++ nodejs npm && \
     rm -rf /var/lib/apt/lists/*
 
+# pnpm@10 — used by the frontend live-preview launcher to install + run dev
+# servers inside a collab workspace (see packages/opencode/src/collab/preview-launcher.ts).
+# Pre-installed here so the first "Launch" click doesn't pay the ~10s
+# `npx pnpm@10` cold-start every time.  Bound to a specific major to match
+# unleashlive/frontend's lockfile.
+RUN npm install --global pnpm@10 2>&1 | tail -3 && pnpm --version
+
 # Pre-install opencode-claude-auth into opencode's npm package cache.
 # Lives at /root/.cache/opencode/packages/<sanitized-pkg>/node_modules/<name>.
 # At runtime, @opencode-ai/core/npm.ts checks `existsSafe(...)` and short-circuits,

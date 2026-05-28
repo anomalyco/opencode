@@ -162,3 +162,32 @@ export type CollabEvent =
    * POST /collab/session/:id/reinit.
    */
   | { type: "collab:workspace_failed"; collabSessionId: string; error: string }
+  /**
+   * Frontend live-preview lifecycle (collab/preview-launcher.ts).  Driver
+   * launches a dev server inside the workspace; participants see updates
+   * via these events plus the existing /preview/<port>/* HTTP proxy.
+   *
+   * Snapshot shape (PreviewStateSnapshot) is duplicated rather than imported
+   * to keep @opencode-ai/collab self-contained.
+   */
+  | {
+      type: "collab:preview_started"
+      state: {
+        collabSessionId: string
+        repoFullName: string
+        port: number
+        label: string
+        status: "installing" | "running" | "stopped" | "failed"
+        startedAt: number
+        lastTraffic: number
+        recentLog: ReadonlyArray<{ stream: "stdout" | "stderr"; line: string; ts: number }>
+        errorMessage?: string
+      }
+    }
+  | { type: "collab:preview_stopped"; collabSessionId: string }
+  | { type: "collab:preview_failed"; collabSessionId: string; error: string }
+  /**
+   * Streaming line from the dev server's combined stdout/stderr.  Cheap fan-out
+   * — the SPA caps display at ~200 lines (matches LOG_LINES_RETAINED).
+   */
+  | { type: "collab:preview_log"; line: string; stream: "stdout" | "stderr" }
