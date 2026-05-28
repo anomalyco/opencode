@@ -259,21 +259,35 @@ export function make(input: {
         ),
       "session",
     )
-    const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+    const serverEntries = sessions.map(
+      (item): SessionInfo => ({
+        sessionId: item.id,
+        cwd: item.directory,
+        title: item.title,
+        updatedAt: new Date(item.time.updated).toISOString(),
+      }),
+    )
+    const liveEntries = (yield* session.list(params.cwd ?? undefined))
+      .filter((item) => !serverEntries.some((entry) => entry.sessionId === item.id))
+      .map(
+        (item): SessionInfo => ({
+          sessionId: item.id,
+          cwd: item.cwd,
+          updatedAt: item.createdAt.toISOString(),
+        }),
+      )
+    const sorted = [...liveEntries, ...serverEntries].toSorted(
+      (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
+    )
     const filtered =
-      cursor === undefined || !Number.isFinite(cursor) ? sorted : sorted.filter((item) => item.time.updated < cursor)
+      cursor === undefined || !Number.isFinite(cursor)
+        ? sorted
+        : sorted.filter((item) => new Date(item.updatedAt ?? 0).getTime() < cursor)
     const page = filtered.slice(0, limit)
     const last = page.at(-1)
     return {
-      sessions: page.map(
-        (item): SessionInfo => ({
-          sessionId: item.id,
-          cwd: item.directory,
-          title: item.title,
-          updatedAt: new Date(item.time.updated).toISOString(),
-        }),
-      ),
-      ...(filtered.length > limit && last ? { nextCursor: String(last.time.updated) } : {}),
+      sessions: page,
+      ...(filtered.length > limit && last ? { nextCursor: String(new Date(last.updatedAt ?? 0).getTime()) } : {}),
     }
   })
 
