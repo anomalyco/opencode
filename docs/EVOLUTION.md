@@ -201,6 +201,29 @@ Branch: `claude/simplicio-setup-config-9PXIm`. Commits: `51f6d63`, `bee9821`, `5
 
 Resultado: R5 efetivamente fechada (exceto domínio); R8 com lógica real + tests.
 
+### 2026-05-28 — Provider "Simplicio1" + Stripe (R9) + plan gating
+
+Branch: `claude/simplicio-setup-config-9PXIm`. Commit: `<próximo>`.
+
+**Decisões aplicadas (input do usuário):**
+- Domínio: mantém `opencode.ai` por enquanto (fica em aberto em R5).
+- Ollama: deixa de ser exposto como "ollama"; vira backend transparente do nosso provider **`simplicio1`** (com o variante **`simplicio1-pro`** para o HF/DeepSeek).
+- Billing: **Stripe** confirmado.
+
+**Mudanças:**
+- `.opencode/opencode.jsonc`: providers renomeados → `simplicio1` (ollama backend) + `simplicio1-pro` (HF backend). Usuário nunca vê "ollama" no seletor.
+- `.simplicio/config.json#localAi.tiers[]`: cada tier ganha `provider` (label voltado ao usuário) + `backend` (engine interno).
+- `.simplicio/config.json#subscription.billing`: bloco Stripe com envs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO` e URLs de success/cancel.
+- `packages/simpliciocode/src/billing/stripe.ts`: cliente Stripe sem SDK — `createCheckoutSession`, `subscriptionStatus`, `verifyWebhook` com HMAC SHA-256 nativo.
+- `packages/simpliciocode/src/billing/gate.ts`: `capabilities(plan)`, `requirePro(plan, feature)`, `ProRequiredError`, `resolvePlan({ lookup })`.
+- `packages/simpliciocode/test/billing/gate.test.ts`: **10 testes** (capabilities free/pro, require throw/no-throw, mensagem de upgrade, override `SIMPLICIO_PLAN`, lookup status).
+
+**Validação:**
+- `bun --cwd packages/simpliciocode typecheck` → PASS clean.
+- `bun test` em billing + provider → **19/19 PASS** em 1.4s.
+
+Resultado: R9 saiu de scaffold para implementação real (~50% — falta apenas wirar `requirePro("autoSprintWatcher")` no `sendsprint watch` e o endpoint `/billing/checkout`).
+
 ### Pendências para próximos commits
 
 - [ ] R5 — rename OpenCode→SimplicioCode (em fases, ver `docs/RENAME_PLAN.md`):

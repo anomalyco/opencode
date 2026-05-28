@@ -1,43 +1,47 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // SimplicioCode: Simplicio1 family with auto-selection by machine capability.
-  // Tiers (cheapest/lightest → heaviest): 1.5B → 3B → 7B → 14B → DeepSeek V4 Pro (HF, budget $5).
-  // See docs/EVOLUTION.md (R4/R8) and .simplicio/config.json#localAi.tiers.
+  // SimplicioCode owns the local inference layer.
+  // Backends (Ollama, HF Inference) are hidden behind the "simplicio1" provider
+  // brand. Users see only "Simplicio1 — <tier>" in the model picker.
+  // Selection logic lives in packages/simpliciocode/src/provider/simplicio1.ts
+  // and tiers/credentials in .simplicio/config.json#localAi.
   "provider": {
-    "ollama": {
+    "simplicio1": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Simplicio (Local)",
+      "name": "Simplicio1",
       "options": {
+        // Default backend: local Ollama daemon (OpenAI-compatible API).
         "baseURL": "http://localhost:11434/v1",
       },
       "models": {
         "qwen2.5-coder:1.5b": {
-          "name": "Simplicio1 1.5B (Qwen 2.5 Coder • Free • ≥2GB RAM)",
+          "name": "Simplicio1 1.5B (Free • Local • ≥2 GB RAM)",
           "limit": { "context": 32768, "output": 8192 },
         },
         "qwen2.5-coder:3b": {
-          "name": "Simplicio1 3B (Qwen 2.5 Coder • Free • ≥4GB RAM)",
+          "name": "Simplicio1 3B (Free • Local • ≥4 GB RAM)",
           "limit": { "context": 32768, "output": 8192 },
         },
         "qwen2.5-coder:7b": {
-          "name": "Simplicio1 7B (Qwen 2.5 Coder • Free • ≥8GB RAM)",
+          "name": "Simplicio1 7B (Free • Local • ≥8 GB RAM)",
           "limit": { "context": 32768, "output": 8192 },
         },
         "qwen2.5-coder:14b": {
-          "name": "Simplicio1 14B (Qwen 2.5 Coder • Free • ≥16GB RAM)",
+          "name": "Simplicio1 14B (Free • Local • ≥16 GB RAM)",
           "limit": { "context": 32768, "output": 8192 },
         },
       },
     },
-    "huggingface": {
+    "simplicio1-pro": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Simplicio (HF)",
+      "name": "Simplicio1 Pro",
       "options": {
+        // Premium backend: HuggingFace Inference behind our gateway.
         "baseURL": "https://api-inference.huggingface.co/v1",
       },
       "models": {
         "deepseek-ai/DeepSeek-V4-Pro": {
-          "name": "Simplicio1 DeepSeek V4 Pro (HF • budget $5)",
+          "name": "Simplicio1 Pro — DeepSeek V4 Pro (HF • budget $5)",
           "limit": { "context": 65536, "output": 16384 },
         },
       },

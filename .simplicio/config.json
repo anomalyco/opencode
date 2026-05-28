@@ -44,18 +44,20 @@
     "tiers": [
       {
         "id": "deepseek-v4-pro",
-        "label": "Simplicio1 — DeepSeek V4 Pro (HF, budget $5)",
-        "provider": "huggingface",
+        "label": "Simplicio1 Pro — DeepSeek V4 Pro (HF • budget $5)",
+        "provider": "simplicio1-pro",
+        "backend": "huggingface",
         "model": "deepseek-ai/DeepSeek-V4-Pro",
-        "baseUrl": "https://api-inference.huggingface.co/models",
+        "baseUrl": "https://api-inference.huggingface.co/v1",
         "envToken": "HF_TOKEN",
         "budgetUsd": 5.00,
         "kind": "remote"
       },
       {
         "id": "14b",
-        "label": "Simplicio1 — Qwen 2.5 Coder 14B (Local • Free)",
-        "provider": "ollama",
+        "label": "Simplicio1 14B (Free • Local)",
+        "provider": "simplicio1",
+        "backend": "ollama",
         "model": "qwen2.5-coder:14b",
         "baseUrl": "http://localhost:11434/v1",
         "minRamGb": 16,
@@ -63,8 +65,9 @@
       },
       {
         "id": "7b",
-        "label": "Simplicio1 — Qwen 2.5 Coder 7B (Local • Free)",
-        "provider": "ollama",
+        "label": "Simplicio1 7B (Free • Local)",
+        "provider": "simplicio1",
+        "backend": "ollama",
         "model": "qwen2.5-coder:7b",
         "baseUrl": "http://localhost:11434/v1",
         "minRamGb": 8,
@@ -72,8 +75,9 @@
       },
       {
         "id": "3b",
-        "label": "Simplicio1 — Qwen 2.5 Coder 3B (Local • Free)",
-        "provider": "ollama",
+        "label": "Simplicio1 3B (Free • Local)",
+        "provider": "simplicio1",
+        "backend": "ollama",
         "model": "qwen2.5-coder:3b",
         "baseUrl": "http://localhost:11434/v1",
         "minRamGb": 4,
@@ -81,8 +85,9 @@
       },
       {
         "id": "1.5b",
-        "label": "Simplicio1 — Qwen 2.5 Coder 1.5B (Local • Free)",
-        "provider": "ollama",
+        "label": "Simplicio1 1.5B (Free • Local)",
+        "provider": "simplicio1",
+        "backend": "ollama",
         "model": "qwen2.5-coder:1.5b",
         "baseUrl": "http://localhost:11434/v1",
         "minRamGb": 2,
@@ -91,6 +96,15 @@
     ]
   },
   "subscription": {
+    "billing": {
+      "provider": "stripe",
+      "priceIdEnv": "STRIPE_PRICE_ID_PRO",
+      "secretKeyEnv": "STRIPE_SECRET_KEY",
+      "webhookSecretEnv": "STRIPE_WEBHOOK_SECRET",
+      "checkoutSuccessUrl": "https://opencode.ai/pro/success",
+      "checkoutCancelUrl": "https://opencode.ai/pro/cancel",
+      "customerPortalUrl": "https://billing.stripe.com/p/login/test_simplicio"
+    },
     "free": {
       "models": ["simplicio1-auto"],
       "sprintMode": "manual",
