@@ -1809,7 +1809,7 @@ export default function Page() {
         }}
       />
 
-      <Show when={desktopSidePanelOpen()}>
+      <Show when={isDesktop()}>
         <div style={{ "--resize-gap-offset": "7px" }} onPointerDown={() => size.start()}>
           <ResizeHandle
             showHandle={true}
