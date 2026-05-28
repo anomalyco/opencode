@@ -153,6 +153,7 @@ declare module "sst" {
     }
     "STRIPE_WEBHOOK_SECRET": {
       "type": "sst.sst.Linkable"
+      "value": string
     }
     "Stat": import("@cloudflare/workers-types").Service
     "StatsDatabase": {

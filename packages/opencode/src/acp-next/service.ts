@@ -35,9 +35,12 @@ import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPNextError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
+import { promptContentToParts } from "./content"
 import { Directory } from "./directory"
 import { ACPNextEvent } from "./event"
 import { ACPNextSession } from "./session"
+import { UsageService } from "./usage"
+import { ACPNextProfile } from "./profile"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
@@ -46,6 +49,8 @@ export const AuthMethodID = "opencode-login"
 const log = Log.create({ service: "acp-next-service" })
 
 export type Error = ACPNextError.Error
+type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -69,9 +74,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AC
 
 export function make(input: {
   sdk: OpencodeClient
-  connection?: Pick<AgentSideConnection, "sessionUpdate">
+  connection?: ServiceConnection
   directory?: Directory.Interface
   session?: ACPNextSession.Interface
+  usage?: UsageService.Interface
   eventSubscription?: (subscription: ACPNextEvent.Subscription) => void
 }): Interface {
   const session = input.session ?? makeSessionService()
@@ -83,6 +89,7 @@ export function make(input: {
   if (events) input.eventSubscription?.(events)
 
   const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
+    const started = performance.now()
     const authMethod: AuthMethod = {
       description: "Run `opencode auth login` in the terminal",
       name: "Login with opencode",
@@ -99,7 +106,7 @@ export function make(input: {
       }
     }
 
-    return {
+    const response = {
       protocolVersion: 1,
       agentCapabilities: {
         loadSession: true,
@@ -124,6 +131,8 @@ export function make(input: {
         version: InstallationVersion,
       },
     }
+    ACPNextProfile.duration("acp.initialize", started)
+    return response
   })
 
   const authenticate = Effect.fn("ACPNext.authenticate")(function* (params: AuthenticateRequest) {
@@ -134,15 +143,20 @@ export function make(input: {
   })
 
   const directorySnapshot = Effect.fn("ACPNext.directorySnapshot")(function* (cwd: string) {
-    return yield* directoryService.get(cwd)
+    const started = performance.now()
+    const snapshot = yield* directoryService.get(cwd)
+    ACPNextProfile.duration("acp.directory.snapshot", started)
+    return snapshot
   })
 
   const newSession = Effect.fn("ACPNext.newSession")(function* (params: NewSessionRequest) {
+    const started = performance.now()
     const snapshot = yield* directorySnapshot(params.cwd)
     const selected = selectDefaultModel(snapshot)
     const variant = selectVariant(snapshot, selected)
     const modeId = snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined
-    const created = yield* request(
+    const created = yield* profiledRequest(
+      "acp.newSession.session.create",
       () =>
         input.sdk.session.create(
           {
@@ -170,7 +184,7 @@ export function make(input: {
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
-    return {
+    const response = {
       sessionId: state.id,
       configOptions: configOptions(snapshot, {
         model: state.model ?? selected,
@@ -178,6 +192,8 @@ export function make(input: {
         modeId: state.modeId,
       }),
     }
+    ACPNextProfile.duration("acp.newSession", started)
+    return response
   })
 
   const loadSession = Effect.fn("ACPNext.loadSession")(function* (params: LoadSessionRequest) {
@@ -443,8 +459,81 @@ export function make(input: {
     setSessionConfigOption,
     setSessionMode,
     setSessionModel,
-    prompt: Effect.fn("ACPNext.prompt")(function* (_input: PromptRequest) {
-      return yield* new ACPNextError.UnsupportedOperationError({ method: "session/prompt" })
+    prompt: Effect.fn("ACPNext.prompt")(function* (params: PromptRequest) {
+      const current = yield* session.get(params.sessionId)
+      const snapshot = yield* directorySnapshot(current.cwd)
+      const selected = current.model ?? selectDefaultModel(snapshot)
+      if (!current.model) {
+        yield* session.setModel(params.sessionId, selected)
+      }
+      const variant = current.variant ?? selectVariant(snapshot, selected)
+      const modeId = current.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined)
+      const parts = promptContentToParts(params.prompt)
+      const command = detectSlashCommand(parts)
+
+      if (!command) {
+        const response = yield* request(
+          () =>
+            input.sdk.session.prompt(
+              {
+                sessionID: current.id,
+                model: {
+                  providerID: selected.providerID,
+                  modelID: selected.modelID,
+                },
+                ...(variant ? { variant } : {}),
+                parts,
+                ...(modeId ? { agent: modeId } : {}),
+                directory: current.cwd,
+              },
+              { throwOnError: true },
+            ),
+          "session",
+        )
+        yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+        return promptResponse(response.info, params.messageId)
+      }
+
+      const known = snapshot.availableCommands.find((item) => item.name === command.name)
+      if (known) {
+        const response = yield* request(
+          () =>
+            input.sdk.session.command(
+              {
+                sessionID: current.id,
+                command: known.name,
+                arguments: command.args,
+                model: `${selected.providerID}/${selected.modelID}`,
+                ...(variant ? { variant } : {}),
+                ...(modeId ? { agent: modeId } : {}),
+                directory: current.cwd,
+              },
+              { throwOnError: true },
+            ),
+          "session",
+        )
+        yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+        return promptResponse(response.info, params.messageId)
+      }
+
+      if (command.name === "compact") {
+        yield* request(
+          () =>
+            input.sdk.session.summarize(
+              {
+                sessionID: current.id,
+                directory: current.cwd,
+                providerID: selected.providerID,
+                modelID: selected.modelID,
+              },
+              { throwOnError: true },
+            ),
+          "session",
+        )
+      }
+
+      yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
+      return promptResponse(undefined, params.messageId)
     }),
     cancel: Effect.fn("ACPNext.cancel")(function* (_input: CancelNotification) {
       return yield* new ACPNextError.UnsupportedOperationError({ method: "session/cancel" })
@@ -471,6 +560,91 @@ function makeDirectoryService(sdk: OpencodeClient) {
       ),
     ),
   ).runSync(Directory.Service.use((service) => Effect.succeed(service)))
+}
+
+function makeUsageService(sdk: OpencodeClient) {
+  const limits = new Map<string, Promise<number | undefined>>()
+  const contextLimit: UsageService.Interface["contextLimit"] = Effect.fn("ACPNext.promptUsage.contextLimit")(
+    function* (params) {
+      const key = `${params.directory}\u0000${params.providerID}\u0000${params.modelID}`
+      const current = limits.get(key)
+      if (current) return yield* Effect.promise(() => current)
+
+      const next = sdk.config
+        .providers({ directory: params.directory }, { throwOnError: true })
+        .then((response) => {
+          const providers = Object.fromEntries(
+            (response.data?.providers ?? []).map((provider) => [provider.id, provider]),
+          ) as Record<ProviderID, Provider.Info>
+          return UsageService.findContextLimit(providers, params.providerID, params.modelID)
+        })
+        .catch((error: unknown) => {
+          log.error("failed to get providers for usage context limit", { error })
+          return undefined
+        })
+      limits.set(key, next)
+      return yield* Effect.promise(() => next)
+    },
+  )
+
+  const sendUpdate: UsageService.Interface["sendUpdate"] = Effect.fn("ACPNext.promptUsage.sendUpdate")(
+    function* (params) {
+      const messages = yield* request(
+        () =>
+          sdk.session.messages(
+            {
+              sessionID: params.sessionID,
+              directory: params.directory,
+            },
+            { throwOnError: true },
+          ),
+        "session",
+      ).pipe(
+        Effect.map((messages) => messages as readonly UsageService.SessionMessage[]),
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            log.error("failed to fetch messages for usage update", { error })
+            return undefined
+          }),
+        ),
+      )
+      if (!messages) return
+
+      const message = UsageService.latestAssistantMessage(messages)
+      if (!message?.providerID || !message.modelID) return
+
+      const size = yield* contextLimit({
+        directory: params.directory,
+        providerID: ProviderID.make(message.providerID),
+        modelID: ModelID.make(message.modelID),
+      })
+      if (!size) return
+
+      yield* Effect.promise(() =>
+        params.connection
+          .sessionUpdate({
+            sessionId: params.sessionID,
+            update: {
+              sessionUpdate: "usage_update",
+              used: message.tokens.input + message.tokens.cache.read,
+              size,
+              cost: { amount: UsageService.totalSessionCost(messages), currency: "USD" },
+            },
+          })
+          .catch((error) => {
+            log.error("failed to send usage update", { error })
+          }),
+      )
+    },
+  )
+
+  return UsageService.Service.of({
+    buildUsage: UsageService.buildUsage,
+    latestAssistantMessage: UsageService.latestAssistantMessage,
+    totalSessionCost: UsageService.totalSessionCost,
+    contextLimit,
+    sendUpdate,
+  })
 }
 
 function replayMessages(subscription: ACPNextEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
@@ -505,6 +679,8 @@ type MessageInfo = {
   readonly agent?: Message["agent"]
 }
 
+type AssistantInfo = UsageService.AssistantTokenCost | undefined
+
 function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
   return Effect.tryPromise({
     try: async () => {
@@ -519,66 +695,79 @@ function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
   })
 }
 
-async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
-  const [providersResponse, agentsResponse, commandsResponse, skillsResponse] = await Promise.all([
-    sdk.config.providers({ directory }, { throwOnError: true }),
-    sdk.app.agents({ directory }, { throwOnError: true }),
-    sdk.command.list({ directory }, { throwOnError: true }),
-    sdk.app.skills({ directory }, { throwOnError: true }),
-  ])
-  const providersData = providersResponse.data!
-  const agents = agentsResponse.data!
-  const commandsData = commandsResponse.data!
-  const skills = skillsResponse.data!
-  const providers = Object.fromEntries(providersData.providers.map((provider) => [provider.id, provider])) as Record<
-    ProviderID,
-    Provider.Info
-  >
-  const defaultModel = await defaultModelFromSdk(sdk, directory, providers)
-  const modes = agents
-    .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
-    .map((agent) => ({
-      id: agent.name,
-      name: agent.name,
-      ...(agent.description ? { description: agent.description } : {}),
-    }))
-  const commands = [
-    ...commandsData,
-    ...skills
-      .filter((skill) => !commandsData.some((command) => command.name === skill.name))
-      .map((skill) => ({
-        name: skill.name,
-        description: skill.description,
-        source: "skill" as const,
-        template: skill.content,
-        hints: [],
-      })),
-  ] as Command.Info[]
+function profiledRequest<T>(name: string, fn: () => Promise<T | SdkResponse<T>>, service?: string) {
+  return request(() => ACPNextProfile.measure(name, fn), service)
+}
 
-  return Directory.build({
-    directory,
-    providers,
-    modes,
-    defaultModeID: agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)?.name ?? "build",
-    commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
-    ...(defaultModel ? { defaultModel } : {}),
+async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
+  return ACPNextProfile.measure("acp.directory.load", async () => {
+    const [providersResponse, agentsResponse, commandsResponse, skillsResponse, configResponse] = await Promise.all([
+      ACPNextProfile.measure("acp.directory.provider.list", () =>
+        sdk.config.providers({ directory }, { throwOnError: true }),
+      ),
+      ACPNextProfile.measure("acp.directory.mode.defaultAgent.load", () =>
+        sdk.app.agents({ directory }, { throwOnError: true }),
+      ),
+      ACPNextProfile.measure("acp.directory.command.list", () =>
+        sdk.command.list({ directory }, { throwOnError: true }),
+      ),
+      ACPNextProfile.measure("acp.directory.skill.list", () => sdk.app.skills({ directory }, { throwOnError: true })),
+      ACPNextProfile.measure("acp.directory.defaultModel.config", () =>
+        sdk.config.get({ directory }, { throwOnError: true }).catch(() => undefined),
+      ),
+    ])
+    const providersData = providersResponse.data!
+    const agents = agentsResponse.data!
+    const commandsData = commandsResponse.data!
+    const skills = skillsResponse.data!
+    const providers = Object.fromEntries(providersData.providers.map((provider) => [provider.id, provider])) as Record<
+      ProviderID,
+      Provider.Info
+    >
+    const defaultModelStarted = performance.now()
+    const defaultModel = defaultModelFromConfig(configResponse?.data?.model, providers)
+    ACPNextProfile.duration("acp.directory.defaultModel.resolve", defaultModelStarted, { configured: !!defaultModel })
+    const modes = agents
+      .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
+      .map((agent) => ({
+        id: agent.name,
+        name: agent.name,
+        ...(agent.description ? { description: agent.description } : {}),
+      }))
+    const commands = [
+      ...commandsData,
+      ...skills
+        .filter((skill) => !commandsData.some((command) => command.name === skill.name))
+        .map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          source: "skill" as const,
+          template: skill.content,
+          hints: [],
+        })),
+    ] as Command.Info[]
+
+    return Directory.build({
+      directory,
+      providers,
+      modes,
+      defaultModeID: agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)?.name ?? "build",
+      commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
+      ...(defaultModel ? { defaultModel } : {}),
+    })
   })
 }
 
-async function defaultModelFromSdk(
-  sdk: OpencodeClient,
-  directory: string,
+function defaultModelFromConfig(
+  configuredModel: string | undefined,
   providers: Record<ProviderID, Provider.Info>,
-): Promise<Directory.DefaultModel | undefined> {
-  const configured = await sdk.config
-    .get({ directory }, { throwOnError: true })
-    .then((response) => (response.data?.model ? Provider.parseModel(response.data.model) : undefined))
-    .catch(() => undefined)
+): Directory.DefaultModel | undefined {
+  const configured = configuredModel ? Provider.parseModel(configuredModel) : undefined
   if (configured && providers[configured.providerID]?.models[configured.modelID]) return configured
 
-  const lastUsed = await lastUsedModel(sdk, directory, providers)
-  if (lastUsed) return lastUsed
-
+  // First-session ACP startup must not scan historical sessions just to infer
+  // a default. Configured model, opencode provider, then sorted best model keep
+  // the protocol response deterministic without extra session/message reads.
   const opencodeProvider = providers[ProviderID.make("opencode")]
   const opencodeModel = opencodeProvider ? Provider.sort(Object.values(opencodeProvider.models))[0] : undefined
   if (opencodeProvider && opencodeModel) return { providerID: opencodeProvider.id, modelID: opencodeModel.id }
@@ -588,35 +777,48 @@ async function defaultModelFromSdk(
   if (configured) return configured
 }
 
-async function lastUsedModel(
-  sdk: OpencodeClient,
-  directory: string,
-  providers: Record<ProviderID, Provider.Info>,
-): Promise<Directory.DefaultModel | undefined> {
-  const session = await sdk.session
-    .list({ directory, roots: true, limit: 1 }, { throwOnError: true })
-    .then((response) => response.data?.[0])
-    .catch(() => undefined)
-  if (!session) return
-
-  const lastUser = await sdk.session
-    .messages({ directory, sessionID: session.id, limit: 20 }, { throwOnError: true })
-    .then((response) => response.data?.findLast((message) => message.info.role === "user")?.info)
-    .catch(() => undefined)
-  if (lastUser?.role !== "user") return
-  if (!providers[ProviderID.make(lastUser.model.providerID)]?.models[ModelID.make(lastUser.model.modelID)]) return
-
-  return {
-    providerID: ProviderID.make(lastUser.model.providerID),
-    modelID: ModelID.make(lastUser.model.modelID),
-  }
-}
-
 function selectDefaultModel(snapshot: Directory.Snapshot) {
   if (snapshot.defaultModel) return snapshot.defaultModel
   const model = snapshot.modelOptions[0]
   if (model) return { providerID: model.providerID, modelID: model.modelID }
   return { providerID: "unknown" as ProviderID, modelID: "unknown" as ModelID }
+}
+
+function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
+  const text = parts
+    .filter((part): part is Extract<(typeof parts)[number], { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("")
+    .trim()
+  if (!text.startsWith("/")) return
+
+  const [name, ...rest] = text.slice(1).split(/\s+/)
+  if (!name) return
+  return { name, args: rest.join(" ").trim() }
+}
+
+function promptResponse(info: AssistantInfo, messageId: string | null | undefined): PromptResponse {
+  return {
+    stopReason: "end_turn",
+    ...(info ? { usage: UsageService.buildUsage(info) } : {}),
+    ...(messageId ? { userMessageId: messageId } : {}),
+    _meta: {},
+  }
+}
+
+function sendUsageUpdate(
+  usage: UsageService.Interface | undefined,
+  sdk: OpencodeClient,
+  connection: ServiceConnection | undefined,
+  sessionID: string,
+  directory: string,
+) {
+  if (!connection) return Effect.void
+  return (usage ?? makeUsageService(sdk)).sendUpdate({
+    connection,
+    sessionID,
+    directory,
+  })
 }
 
 function selectVariant(snapshot: Directory.Snapshot, model: Directory.DefaultModel) {
@@ -689,6 +891,7 @@ function registerMcpServers(
   sessionId: string,
   servers: readonly McpServer[],
 ) {
+  const started = performance.now()
   const current = registered.get(sessionId) ?? new Set<string>()
   registered.set(sessionId, current)
   const pending = new Set<string>()
@@ -720,7 +923,16 @@ function registerMcpServers(
         ),
       ),
     { concurrency: "unbounded" },
-  ).pipe(Effect.asVoid)
+  ).pipe(
+    Effect.tap(() =>
+      Effect.sync(() =>
+        ACPNextProfile.duration("acp.mcp.register", started, {
+          count: pending.size,
+        }),
+      ),
+    ),
+    Effect.asVoid,
+  )
 }
 
 function mcpRegistrationKey(name: string, config: ReturnType<typeof mcpConfig>) {
