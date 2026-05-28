@@ -14,6 +14,7 @@ type TabsInput = {
   pathFromTab: (tab: string) => string | undefined
   normalizeTab: (tab: string) => string
   review?: Accessor<boolean>
+  preview?: Accessor<boolean>
   hasReview?: Accessor<boolean>
 }
 
@@ -21,6 +22,7 @@ export const getSessionKey = (dir: string | undefined, id: string | undefined) =
 
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
+  const preview = input.preview ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const openedTabs = createMemo(
@@ -43,7 +45,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
-    if (active === "preview") return active
+    if (active === "preview" && preview()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
@@ -136,7 +138,10 @@ export const createOpenSessionFileTab = (input: {
     input.openTab(next)
 
     const path = input.pathFromTab(next)
-    if (!path) return
+    if (!path) {
+      if (next === "review" || next === "preview") input.openReviewPanel()
+      return
+    }
 
     input.loadFile(path)
     input.openReviewPanel()

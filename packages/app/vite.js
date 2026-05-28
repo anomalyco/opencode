@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs"
+import react from "@vitejs/plugin-react"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
+
+const excalidraw = /[/\\]excalidraw[/\\]/
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
 
@@ -17,6 +20,14 @@ export default [
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
           },
+        },
+        optimizeDeps: {
+          include: [
+            "@blocksuite/presets",
+            "@blocksuite/blocks",
+            "@blocksuite/store",
+            "@blocksuite/block-std",
+          ],
         },
         worker: {
           format: "es",
@@ -34,5 +45,6 @@ export default [
     },
   },
   tailwindcss(),
-  solidPlugin(),
+  react({ include: excalidraw }),
+  solidPlugin({ exclude: excalidraw }),
 ]

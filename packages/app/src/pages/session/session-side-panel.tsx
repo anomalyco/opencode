@@ -14,6 +14,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
+import { useClientEnv } from "@/context/client-env"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -23,6 +24,7 @@ import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
+import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
@@ -35,6 +37,7 @@ export function SessionSidePanel(props: {
   const layout = useLayout()
   const sync = useSync()
   const file = useFile()
+  const env = useClientEnv()
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
@@ -45,7 +48,8 @@ export function SessionSidePanel(props: {
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const open = createMemo(() => reviewOpen() || fileOpen())
-  const reviewTab = createMemo(() => isDesktop())
+  const reviewTab = createMemo(() => isDesktop() && !env.productionLayout())
+  const previewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
@@ -135,6 +139,7 @@ export function SessionSidePanel(props: {
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
+    preview: previewTab,
     hasReview,
   })
   const contextOpen = tabState.contextOpen
@@ -251,6 +256,11 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Show when={previewTab()}>
+                        <Tabs.Trigger value="preview">
+                          <div>{language.t("session.tab.preview")}</div>
+                        </Tabs.Trigger>
+                      </Show>
                       <Show when={contextOpen()}>
                         <Tabs.Trigger
                           value="context"
@@ -308,6 +318,14 @@ export function SessionSidePanel(props: {
                   <Show when={reviewTab()}>
                     <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                       <Show when={activeTab() === "review"}>{props.reviewPanel()}</Show>
+                    </Tabs.Content>
+                  </Show>
+
+                  <Show when={previewTab()}>
+                    <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "preview"}>
+                        <SessionPreviewPanel />
+                      </Show>
                     </Tabs.Content>
                   </Show>
 
@@ -439,7 +457,7 @@ export function SessionSidePanel(props: {
                   edge="start"
                   size={layout.fileTree.width()}
                   min={200}
-                  max={480}
+                  max={360}
                   onResize={(width) => {
                     props.size.touch()
                     layout.fileTree.resize(width)

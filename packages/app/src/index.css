@@ -211,14 +211,24 @@
     max-width: min(78%, 58ch);
   }
 
+  [data-component="codle-session"] [data-slot="user-message-body"][data-doc="true"] {
+    width: min(82%, 760px);
+    max-width: min(82%, 760px);
+  }
+
   [data-component="codle-session"] [data-slot="user-message-text"] {
     background: var(--app-user-bubble);
     border: 0;
-    border-radius: 999px;
+    border-radius: 20px;
     color: var(--app-user-bubble-text);
     padding: 10px 16px;
     line-height: 1.45;
     box-shadow: 0 1px 0 color-mix(in srgb, white 42%, transparent) inset;
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-text"][data-doc="true"] {
+    display: block;
+    width: 100%;
   }
 
   [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-text"] {
@@ -259,6 +269,143 @@
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input"] {
     min-height: 86px;
     padding-top: 14px;
+  }
+
+  /* Embedded Excalidraw: flat toolbars (parent dock shell already has frame/shadow). */
+  [data-component="prompt-drawing"] .excalidraw {
+    --shadow-island: none;
+    --library-dropdown-shadow: none;
+    --island-bg-color: var(--surface-raised-stronger-non-alpha);
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .Island {
+    box-shadow: none;
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-bottom-bar {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Desktop: hand is in the shapes row — pin it to the toolbar end. */
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar .Stack.Stack_horizontal label:has([data-testid="toolbar-hand"]) {
+    order: 99;
+    margin: 0;
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-top-bar,
+  [data-component="prompt-drawing"] .excalidraw .FixedSideContainer_side_top {
+    overflow: visible;
+    z-index: 2;
+  }
+
+  /* Mobile shapes bar: same hit target for shape tools, hand, and "more tools". */
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile {
+    --default-button-size: var(--lg-button-size);
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal {
+    flex-wrap: nowrap;
+    max-width: min(100%, 28rem);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal::-webkit-scrollbar,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal .ToolIcon__icon,
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal .dropdown-menu-button--mobile,
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal .App-toolbar__extra-tools-trigger,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal .ToolIcon__icon,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal .dropdown-menu-button--mobile,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal .App-toolbar__extra-tools-trigger {
+    width: var(--lg-button-size);
+    height: var(--lg-button-size);
+    min-width: var(--lg-button-size);
+    min-height: var(--lg-button-size);
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal .dropdown-menu-button--mobile,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal .dropdown-menu-button--mobile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+  }
+
+  [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal label.ToolIcon,
+  [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal label.ToolIcon {
+    margin: 0;
+    padding: 0;
+  }
+
+  @media screen and (max-width: 450px) {
+    [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal .ToolIcon__icon,
+    [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal .ToolIcon__icon {
+      width: var(--lg-button-size);
+      height: var(--lg-button-size);
+    }
+  }
+
+  @media screen and (max-width: 379px) {
+    [data-component="prompt-drawing"] .excalidraw .App-toolbar--mobile > .Stack.Stack_horizontal .ToolIcon__icon,
+    [data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar .Stack.Stack_horizontal .ToolIcon__icon {
+      width: var(--lg-button-size);
+      height: var(--lg-button-size);
+    }
+  }
+
+  /* Draw undo/redo — Excalidraw ToolButton: strong icon when enabled, color-disabled when empty. */
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"],
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"] {
+    border: none;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled) [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled) [data-slot="icon-svg"] {
+    color: var(--icon-strong-base);
+  }
+
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled):hover,
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):hover {
+    background-color: var(--surface-base-hover);
+  }
+
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled):active,
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):active {
+    background-color: var(--surface-base-active);
+  }
+
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"]:disabled,
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled {
+    opacity: 1;
+    background-color: transparent;
+    border: none;
+    color: var(--icon-weak-disabled);
+    cursor: default;
+    box-shadow: none;
+  }
+
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"]:disabled:hover,
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled:hover {
+    background-color: transparent;
+  }
+
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"]:disabled [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled [data-slot="icon-svg"] {
+    color: var(--icon-weak-disabled);
   }
 
   [data-component="codle-session"] [data-action="prompt-attach"],
@@ -436,12 +583,139 @@
     background: transparent;
   }
 
-  [data-component="codle-preview-panel"],
   [data-component="codle-side-panel"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
     border-radius: 18px;
     box-shadow: 0 14px 42px rgba(0, 0, 0, 0.08);
+  }
+
+  [data-component="codle-preview-panel"] {
+    background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
+    border-radius: 0;
+  }
+
+  [data-slot="preview-fallback"] {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%),
+        color-mix(in srgb, var(--app-paper) 92%, var(--app-mix) 8%)
+      );
+  }
+
+  [data-component="codle-preview-loader"] {
+    position: relative;
+    width: 86px;
+    height: 70px;
+    color: var(--app-ink);
+  }
+
+  [data-component="codle-preview-loader"]::before,
+  [data-component="codle-preview-loader"]::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 18%, transparent);
+  }
+
+  [data-component="codle-preview-loader"]::before {
+    top: 7px;
+    height: 2px;
+    transform-origin: 50% 50%;
+    animation: codle-preview-scan 2.4s ease-in-out infinite;
+  }
+
+  [data-component="codle-preview-loader"]::after {
+    bottom: 0;
+    height: 1px;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"] {
+    position: absolute;
+    width: 22px;
+    height: 14px;
+    border-radius: 4px;
+    background: currentColor;
+    opacity: 0.2;
+    transform: translateY(7px) scale(0.9);
+    animation: codle-preview-build 2.4s ease-in-out infinite;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(1) {
+    left: 15px;
+    bottom: 6px;
+    animation-delay: 0s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(2) {
+    left: 41px;
+    bottom: 6px;
+    animation-delay: 0.2s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(3) {
+    left: 28px;
+    bottom: 24px;
+    animation-delay: 0.4s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(4) {
+    left: 15px;
+    bottom: 42px;
+    animation-delay: 0.6s;
+  }
+
+  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(5) {
+    left: 41px;
+    bottom: 42px;
+    animation-delay: 0.8s;
+  }
+
+  @keyframes codle-preview-build {
+    0%,
+    18% {
+      opacity: 0.12;
+      transform: translateY(7px) scale(0.9);
+    }
+
+    34%,
+    74% {
+      opacity: 0.72;
+      transform: translateY(0) scale(1);
+    }
+
+    100% {
+      opacity: 0.18;
+      transform: translateY(-2px) scale(0.96);
+    }
+  }
+
+  @keyframes codle-preview-scan {
+    0%,
+    100% {
+      transform: translateY(0) scaleX(0.55);
+      opacity: 0.22;
+    }
+
+    50% {
+      transform: translateY(50px) scaleX(1);
+      opacity: 0.45;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="codle-preview-loader"]::before,
+    [data-component="codle-preview-loader"] [data-slot="block"] {
+      animation: none;
+    }
+
+    [data-component="codle-preview-loader"] [data-slot="block"] {
+      opacity: 0.55;
+      transform: none;
+    }
   }
 
   @media (prefers-color-scheme: dark) {

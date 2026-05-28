@@ -14,6 +14,9 @@ interface PartBase {
 
 export interface TextPart extends PartBase {
   type: "text"
+  format?: "markdown"
+  source?: "doc"
+  docID?: string
 }
 
 export interface FileAttachmentPart extends PartBase {
@@ -116,7 +119,13 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
-function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
+export function isLineContextItem(
+  item: ContextItem | (ContextItem & { key: string }),
+): item is FileContextItem & { commentID: string } {
+  return item.type === "file" && !!item.commentID
+}
+
+export function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
   return item.type === "file" && !!item.comment?.trim()
 }
 
@@ -218,6 +227,12 @@ function createPromptSession(dir: string, id: string | undefined) {
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
         ])
       },
+      replaceLineContexts(items: FileContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isLineContextItem(item)),
+          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
+      },
     },
     set: actions.set,
     reset: actions.reset,
@@ -289,6 +304,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
+        replaceLineContexts: (items: FileContextItem[]) => session().context.replaceLineContexts(items),
       },
       set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
       reset: (scope?: Scope) => pick(scope).reset(),

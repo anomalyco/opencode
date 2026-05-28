@@ -1,0 +1,116 @@
+@import "@toeverything/theme/style.css";
+
+[data-component="prompt-doc"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  --affine-editor-width: 100%;
+  --affine-editor-side-padding: 12px;
+}
+
+[data-component="prompt-doc"] page-editor,
+[data-component="prompt-doc"] editor-host,
+[data-component="prompt-doc"] affine-page-root {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+[data-component="prompt-doc"] page-editor {
+  height: 100%;
+  font-family: var(--affine-font-family);
+  background: var(--affine-background-primary-color);
+  color: var(--affine-text-primary-color);
+}
+
+[data-component="prompt-doc"] .affine-page-viewport {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
+[data-component="prompt-doc"] .affine-page-root-block-container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-top: 6px;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+[data-component="prompt-doc"] doc-title .doc-title-container {
+  max-width: none;
+  margin: 0;
+}
+
+[data-component="prompt-doc-viewer"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 40px;
+  max-height: 650px;
+  overflow: hidden;
+  white-space: normal;
+  --affine-editor-width: 100%;
+  --affine-editor-side-padding: 12px;
+  --affine-editor-bottom-padding: 16px;
+  --affine-background-primary-color: transparent;
+}
+
+[data-component="prompt-doc-viewer"] page-editor,
+[data-component="prompt-doc-viewer"] editor-host,
+[data-component="prompt-doc-viewer"] affine-preview-root,
+[data-component="prompt-doc-viewer"] affine-page-root {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+[data-component="prompt-doc-viewer"] page-editor {
+  height: 100%;
+  font-family: var(--affine-font-family);
+  background: transparent;
+  color: var(--affine-text-primary-color);
+}
+
+[data-component="prompt-doc-viewer"] .affine-page-viewport {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow-y: auto;
+  background: transparent;
+}
+
+[data-component="prompt-doc-viewer"] .affine-page-root-block-container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+[data-component="prompt-doc-viewer"] affine-preview-root {
+  padding: 6px 0 16px;
+  background: transparent;
+}
+
+[data-component="prompt-doc-viewer"] editor-host,
+[data-component="prompt-doc-viewer"] .affine-preview-root,
+[data-component="prompt-doc-viewer"] .affine-note-block-container {
+  background: transparent;
+}
+
+[data-component="prompt-doc-viewer-error"] {
+  color: var(--text-weak);
+}

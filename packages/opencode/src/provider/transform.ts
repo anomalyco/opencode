@@ -8,6 +8,7 @@ import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
+type Data = string | Uint8Array | ArrayBuffer | URL
 
 function mimeToModality(mime: string): Modality | undefined {
   if (mime.startsWith("image/")) return "image"
@@ -15,6 +16,36 @@ function mimeToModality(mime: string): Modality | undefined {
   if (mime.startsWith("video/")) return "video"
   if (mime === "application/pdf") return "pdf"
   return undefined
+}
+
+function head(data: Data) {
+  if (data instanceof URL) return
+  if (data instanceof Uint8Array) return data.subarray(0, 16)
+  if (data instanceof ArrayBuffer) return new Uint8Array(data).subarray(0, 16)
+  const raw = data.startsWith("data:") ? data.slice(data.indexOf(",") + 1) : data
+  if (!raw) return new Uint8Array()
+  return new Uint8Array(Buffer.from(raw.slice(0, 64), "base64")).subarray(0, 16)
+}
+
+function image(bytes: Uint8Array) {
+  if (bytes.length < 4) return false
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return true
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return true
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return true
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) return true
+  if (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) return true
+  if (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a) return true
+  const text = String.fromCharCode(...bytes)
+  if (text.startsWith("RIFF") && text.slice(8, 12) === "WEBP") return true
+  if (text.slice(4, 8) === "ftyp") return /avif|heic|heix|hevc|mif1/.test(text.slice(8, 16))
+  return false
+}
+
+function bad(mime: string, data: Data) {
+  if (!mime.startsWith("image/")) return false
+  const bytes = head(data)
+  if (!bytes) return false
+  return !image(bytes)
 }
 
 export namespace ProviderTransform {
@@ -260,6 +291,14 @@ export namespace ProviderTransform {
 
         const mime = part.type === "image" ? part.image.toString().split(";")[0].replace("data:", "") : part.mediaType
         const filename = part.type === "file" ? part.filename : undefined
+        const data = part.type === "image" ? part.image : part.data
+        if (bad(mime, data)) {
+          const name = filename ? `"${filename}"` : "image"
+          return {
+            type: "text" as const,
+            text: `ERROR: Cannot read ${name} (declared ${mime}, but the file content is not a supported image). Inform the user.`,
+          }
+        }
         const modality = mimeToModality(mime)
         if (!modality) return part
         if (model.capabilities.input[modality]) return part

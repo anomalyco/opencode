@@ -515,6 +515,16 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventDocPromptRotated = {
+  type: "doc.prompt.rotated"
+  properties: {
+    sessionID: string
+    docID: string
+    clientID?: string
+    init?: boolean
+  }
+}
+
 export type OutputFormatText = {
   type: "text"
 }
@@ -1002,6 +1012,7 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventDocPromptRotated
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1794,9 +1805,9 @@ export type WorktreeResetInput = {
 }
 
 export type ProjectSummary = {
-  id: string
-  name?: string
-  worktree: string
+  title: string
+  description: string
+  usage: string
 }
 
 export type GlobalSession = {
@@ -1887,6 +1898,47 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+}
+
+export type SessionPromptDoc = {
+  docID: string
+  sessionID: string
+}
+
+export type DocSubmitStatus = "pending" | "sent" | "cancelled" | "expired"
+
+export type DocSubmitActor = {
+  actorID: string
+  name: string
+  status: "pending" | "approved"
+}
+
+export type DocSubmit = {
+  submitID: string
+  sessionID: string
+  docID: string
+  actorID: string
+  status: DocSubmitStatus
+  actors: Array<DocSubmitActor>
+  cancelledBy?: DocSubmitActor
+  timeoutMs: number
+  expiresAt: number
+}
+
+export type SessionActor = {
+  actorID: string
+  sessionID: string
+  userID?: string
+  name: string
+  color: string
+}
+
+export type DocAsset = {
+  assetID: string
+  docID: string
+  mime: string
+  size: number
+  url: string
 }
 
 export type ProviderAuthMethod = {
@@ -2997,6 +3049,42 @@ export type ExperimentalResourceListResponses = {
 export type ExperimentalResourceListResponse =
   ExperimentalResourceListResponses[keyof ExperimentalResourceListResponses]
 
+export type ProjectSummaryGenerateData = {
+  body?: {
+    sessionID: string
+    providerID?: string
+    modelID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project-summary/generate"
+}
+
+export type ProjectSummaryGenerateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectSummaryGenerateError = ProjectSummaryGenerateErrors[keyof ProjectSummaryGenerateErrors]
+
+export type ProjectSummaryGenerateResponses = {
+  /**
+   * Generated summary
+   */
+  200: ProjectSummary
+}
+
+export type ProjectSummaryGenerateResponse = ProjectSummaryGenerateResponses[keyof ProjectSummaryGenerateResponses]
+
 export type SessionListData = {
   body?: never
   path?: never
@@ -3990,6 +4078,469 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type SessionPromptDocData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prompt-doc"
+}
+
+export type SessionPromptDocErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocError = SessionPromptDocErrors[keyof SessionPromptDocErrors]
+
+export type SessionPromptDocResponses = {
+  /**
+   * Prompt doc
+   */
+  200: SessionPromptDoc
+}
+
+export type SessionPromptDocResponse = SessionPromptDocResponses[keyof SessionPromptDocResponses]
+
+export type SessionPromptDocAdvanceData = {
+  body?: {
+    clientID?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prompt-doc/advance"
+}
+
+export type SessionPromptDocAdvanceErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocAdvanceError = SessionPromptDocAdvanceErrors[keyof SessionPromptDocAdvanceErrors]
+
+export type SessionPromptDocAdvanceResponses = {
+  /**
+   * New prompt doc
+   */
+  200: SessionPromptDoc
+}
+
+export type SessionPromptDocAdvanceResponse = SessionPromptDocAdvanceResponses[keyof SessionPromptDocAdvanceResponses]
+
+export type SessionPromptDocReadyData = {
+  body?: {
+    docID: string
+    clientID?: string
+    init?: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prompt-doc/ready"
+}
+
+export type SessionPromptDocReadyErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocReadyError = SessionPromptDocReadyErrors[keyof SessionPromptDocReadyErrors]
+
+export type SessionPromptDocReadyResponses = {
+  /**
+   * Ready prompt doc
+   */
+  200: SessionPromptDoc
+}
+
+export type SessionPromptDocReadyResponse = SessionPromptDocReadyResponses[keyof SessionPromptDocReadyResponses]
+
+export type SessionPromptDocSubmitData = {
+  body?: {
+    docID: string
+    actorID: string
+    actorIDs: Array<string>
+    prompt: {
+      messageID?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      agent?: string
+      noReply?: boolean
+      /**
+       * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
+       */
+      tools?: {
+        [key: string]: boolean
+      }
+      format?: OutputFormat
+      system?: string
+      variant?: string
+      parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    }
+    timeoutMs?: number
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prompt-doc/submit"
+}
+
+export type SessionPromptDocSubmitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocSubmitError = SessionPromptDocSubmitErrors[keyof SessionPromptDocSubmitErrors]
+
+export type SessionPromptDocSubmitResponses = {
+  /**
+   * Submit approval state
+   */
+  200: DocSubmit
+}
+
+export type SessionPromptDocSubmitResponse = SessionPromptDocSubmitResponses[keyof SessionPromptDocSubmitResponses]
+
+export type SessionPromptDocSubmitRespondData = {
+  body?: {
+    actorID: string
+    action: "approve" | "cancel"
+  }
+  path: {
+    sessionID: string
+    submitID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prompt-doc/submit/{submitID}/respond"
+}
+
+export type SessionPromptDocSubmitRespondErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocSubmitRespondError =
+  SessionPromptDocSubmitRespondErrors[keyof SessionPromptDocSubmitRespondErrors]
+
+export type SessionPromptDocSubmitRespondResponses = {
+  /**
+   * Submit approval state
+   */
+  200: DocSubmit
+}
+
+export type SessionPromptDocSubmitRespondResponse =
+  SessionPromptDocSubmitRespondResponses[keyof SessionPromptDocSubmitRespondResponses]
+
+export type SessionPromptDocSubmitConnectData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    docID: string
+    actorID: string
+  }
+  url: "/session/{sessionID}/prompt-doc/submit/connect"
+}
+
+export type SessionPromptDocSubmitConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocSubmitConnectError =
+  SessionPromptDocSubmitConnectErrors[keyof SessionPromptDocSubmitConnectErrors]
+
+export type SessionPromptDocSubmitConnectResponses = {
+  /**
+   * Connected
+   */
+  200: boolean
+}
+
+export type SessionPromptDocSubmitConnectResponse =
+  SessionPromptDocSubmitConnectResponses[keyof SessionPromptDocSubmitConnectResponses]
+
+export type SessionActorListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/actor"
+}
+
+export type SessionActorListErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionActorListError = SessionActorListErrors[keyof SessionActorListErrors]
+
+export type SessionActorListResponses = {
+  /**
+   * Actors
+   */
+  200: Array<SessionActor>
+}
+
+export type SessionActorListResponse = SessionActorListResponses[keyof SessionActorListResponses]
+
+export type SessionActorUpsertData = {
+  body?: {
+    actorID?: string
+    userID?: string
+    name?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/actor"
+}
+
+export type SessionActorUpsertErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionActorUpsertError = SessionActorUpsertErrors[keyof SessionActorUpsertErrors]
+
+export type SessionActorUpsertResponses = {
+  /**
+   * Actor
+   */
+  200: SessionActor
+}
+
+export type SessionActorUpsertResponse = SessionActorUpsertResponses[keyof SessionActorUpsertResponses]
+
+export type DocSyncPullData = {
+  body?: never
+  path: {
+    docID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    state?: string
+    guid?: string
+  }
+  url: "/doc/{docID}/sync"
+}
+
+export type DocSyncPullErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DocSyncPullError = DocSyncPullErrors[keyof DocSyncPullErrors]
+
+export type DocSyncPullResponses = {
+  /**
+   * Sync state
+   */
+  200: {
+    data: string
+    state?: string
+  } | null
+}
+
+export type DocSyncPullResponse = DocSyncPullResponses[keyof DocSyncPullResponses]
+
+export type DocSyncPushData = {
+  body?: {
+    data: string
+    guid?: string
+  }
+  path: {
+    docID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/doc/{docID}/sync"
+}
+
+export type DocSyncPushErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DocSyncPushError = DocSyncPushErrors[keyof DocSyncPushErrors]
+
+export type DocSyncPushResponses = {
+  /**
+   * Update applied
+   */
+  204: void
+}
+
+export type DocSyncPushResponse = DocSyncPushResponses[keyof DocSyncPushResponses]
+
+export type DocAssetCreateData = {
+  body?: {
+    id?: string
+    mime: string
+    data: string
+  }
+  path: {
+    docID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/doc/{docID}/asset"
+}
+
+export type DocAssetCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DocAssetCreateError = DocAssetCreateErrors[keyof DocAssetCreateErrors]
+
+export type DocAssetCreateResponses = {
+  /**
+   * Stored asset
+   */
+  200: DocAsset
+}
+
+export type DocAssetCreateResponse = DocAssetCreateResponses[keyof DocAssetCreateResponses]
+
+export type DocAssetGetData = {
+  body?: never
+  path: {
+    docID: string
+    assetID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/doc/{docID}/asset/{assetID}"
+}
+
+export type DocAssetGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DocAssetGetError = DocAssetGetErrors[keyof DocAssetGetErrors]
+
+export type DocAssetGetResponses = {
+  /**
+   * Asset data
+   */
+  200: Blob | File
+}
+
+export type DocAssetGetResponse = DocAssetGetResponses[keyof DocAssetGetResponses]
+
+export type DocConnectData = {
+  body?: never
+  path: {
+    docID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/doc/{docID}/connect"
+}
+
+export type DocConnectErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DocConnectError = DocConnectErrors[keyof DocConnectErrors]
+
+export type DocConnectResponses = {
+  /**
+   * Connected
+   */
+  200: boolean
+}
+
+export type DocConnectResponse = DocConnectResponses[keyof DocConnectResponses]
 
 export type PermissionReplyData = {
   body?: {

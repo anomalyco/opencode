@@ -4,7 +4,6 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
-import type { FileSelection } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -44,6 +43,19 @@ type FollowupSendInput = {
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
+}
+
+type RequestParts = ReturnType<typeof buildRequestParts>["requestParts"]
+
+export type PromptApprovalInput = {
+  client: ReturnType<typeof useSDK>["client"]
+  sessionID: string
+  sessionDirectory: string
+  messageID: string
+  agent: string
+  model: { providerID: string; modelID: string }
+  variant?: string
+  parts: RequestParts
 }
 
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
@@ -170,14 +182,14 @@ type PromptSubmitInput = {
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
-  mode: Accessor<"normal" | "shell">
+  mode: Accessor<"normal" | "shell" | "draw" | "doc">
   working: Accessor<boolean>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   promptLength: (prompt: Prompt) => number
-  addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
+  addToHistory: (prompt: Prompt, mode: "normal" | "shell" | "draw" | "doc") => void
   resetHistoryNavigation: () => void
-  setMode: (mode: "normal" | "shell") => void
+  setMode: (mode: "normal" | "shell" | "draw" | "doc") => void
   setPopover: (popover: "at" | "slash" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
@@ -185,16 +197,15 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  approve?: (input: PromptApprovalInput) => Promise<boolean> | boolean
 }
 
-type CommentItem = {
-  path: string
-  selection?: FileSelection
-  comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
-  preview?: string
-}
+type Override =
+  | Prompt
+  | {
+      prompt: Prompt
+      prepare: (sessionID: string) => Promise<Prompt>
+    }
 
 export function createPromptSubmit(input: PromptSubmitInput) {
   const navigate = useNavigate()
@@ -241,7 +252,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       .catch(() => {})
   }
 
-  const restoreCommentItems = (items: CommentItem[]) => {
+  const restoreContext = (items: (ContextItem & { key: string })[]) => {
     for (const item of items) {
       prompt.context.add({
         type: "file",
@@ -252,12 +263,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         commentOrigin: item.commentOrigin,
         preview: item.preview,
       })
-    }
-  }
-
-  const removeCommentItems = (items: { key: string }[]) => {
-    for (const item of items) {
-      prompt.context.remove(item.key)
     }
   }
 
@@ -281,12 +286,15 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  const handleSubmit = async (event: Event) => {
-    event.preventDefault()
+  const handleSubmit = async (event?: Event, override?: Override) => {
+    event?.preventDefault()
 
-    const currentPrompt = prompt.current()
+    const saved = prompt.current()
+    const currentPrompt = Array.isArray(override) ? override : (override?.prompt ?? saved)
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = input.imageAttachments().slice()
+    const images = override
+      ? currentPrompt.filter((part): part is ImageAttachmentPart => part.type === "image")
+      : input.imageAttachments().slice()
     const mode = input.mode()
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
@@ -305,7 +313,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    input.addToHistory(currentPrompt, mode)
+    input.addToHistory(currentPrompt, mode === "draw" || mode === "doc" ? "normal" : mode)
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk.directory
@@ -384,6 +392,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    const prepared = !Array.isArray(override) && override?.prepare ? await override.prepare(session.id) : currentPrompt
+    const body = prepared.map((part) => ("content" in part ? part.content : "")).join("")
+    const files = !Array.isArray(override) && override?.prepare
+      ? prepared.filter((part): part is ImageAttachmentPart => part.type === "image")
+      : images
+
     const model = {
       modelID: currentModel.id,
       providerID: currentModel.provider.id,
@@ -393,7 +407,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
-      prompt: currentPrompt,
+      prompt: prepared,
       context,
       agent,
       model,
@@ -402,12 +416,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const clearInput = () => {
       prompt.reset()
-      input.setMode("normal")
+      input.setMode(mode === "doc" ? "doc" : "normal")
       input.setPopover(null)
     }
 
     const restoreInput = () => {
-      prompt.set(currentPrompt, input.promptLength(currentPrompt))
+      prompt.set(saved, input.promptLength(saved))
       input.setMode(mode)
       input.setPopover(null)
       requestAnimationFrame(() => {
@@ -435,7 +449,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sessionID: session.id,
           agent,
           model,
-          command: text,
+          command: body,
         })
         .catch((err) => {
           showToast({
@@ -444,11 +458,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           restoreInput()
         })
-      return
+      return session.id
     }
 
-    if (text.startsWith("/")) {
-      const [cmdName, ...args] = text.split(" ")
+    if (body.startsWith("/")) {
+      const [cmdName, ...args] = body.split(" ")
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
@@ -461,7 +475,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
-            parts: images.map((attachment) => ({
+            parts: files.map((attachment) => ({
               id: Identifier.ascending("part"),
               type: "file" as const,
               mime: attachment.mime,
@@ -476,12 +490,36 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             })
             restoreInput()
           })
-        return
+        return session.id
       }
     }
 
-    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
     const messageID = Identifier.ascending("message")
+
+    const { requestParts } = buildRequestParts({
+      prompt: draft.prompt,
+      context: draft.context,
+      images: files,
+      text: body,
+      sessionID: session.id,
+      messageID,
+      sessionDirectory,
+    })
+
+    if (
+      await input.approve?.({
+        client,
+        sessionID: session.id,
+        sessionDirectory,
+        messageID,
+        agent,
+        model,
+        variant,
+        parts: requestParts,
+      })
+    ) {
+      return session.id
+    }
 
     const removeOptimisticMessage = () => {
       sync.session.optimistic.remove({
@@ -491,7 +529,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    removeCommentItems(commentItems)
+    clearContext()
     clearInput()
 
     const waitForWorktree = async () => {
@@ -508,7 +546,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sync.set("session_status", session.id, { type: "idle" })
         }
         removeOptimisticMessage()
-        restoreCommentItems(commentItems)
+        restoreContext(context)
         restoreInput()
       }
 
@@ -567,9 +605,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: errorMessage(err),
       })
       removeOptimisticMessage()
-      restoreCommentItems(commentItems)
+      restoreContext(context)
       restoreInput()
     })
+    return session.id
   }
 
   return {

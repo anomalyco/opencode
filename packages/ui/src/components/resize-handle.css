@@ -17,14 +17,14 @@
   &[data-direction="horizontal"] {
     inset-block: 0;
     inset-inline-end: 0;
-    width: 8px;
-    transform: translateX(50%);
+    width: 12px;
+    transform: translateX(calc(50% + var(--resize-gap-offset, 0px)));
     cursor: col-resize;
 
     &[data-edge="start"] {
       inset-inline-start: 0;
       inset-inline-end: auto;
-      transform: translateX(-50%);
+      transform: translateX(calc(-50% - var(--resize-gap-offset, 0px)));
     }
 
     &::after {

@@ -1,0 +1,163 @@
+/* Loaded after @excalidraw/excalidraw/index.css — unlayered so it beats Excalidraw defaults. */
+
+/* Wide prompt: default `.App-toolbar { width: 100% }` stretches the Island past its icons. */
+[data-component="prompt-drawing"] .excalidraw .App-menu_top {
+  grid-template-columns: 1fr auto 1fr;
+  grid-gap: 0.5rem;
+}
+
+[data-component="prompt-drawing"] .excalidraw .App-menu_top .shapes-section {
+  display: flex;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: center;
+}
+
+[data-component="prompt-drawing"] .excalidraw .App-toolbar-container {
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+}
+
+[data-component="prompt-drawing"] .excalidraw .App-toolbar,
+[data-component="prompt-drawing"] .excalidraw .shapes-section .App-toolbar {
+  width: fit-content;
+  max-width: 100%;
+}
+
+[data-component="prompt-drawing"] .excalidraw .App-toolbar .Stack.Stack_horizontal {
+  width: fit-content;
+  max-width: 100%;
+}
+
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0;
+  --default-button-size: var(--lg-button-size);
+}
+
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container > *:has(.ToolIcon__penMode) {
+  display: none !important;
+}
+
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container label.ToolIcon {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+}
+
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container .ToolIcon__icon,
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container .ToolIcon__icon:hover,
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container .ToolIcon__icon:active,
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container .ToolIcon_type_checkbox:checked + .ToolIcon__icon {
+  width: var(--lg-button-size);
+  height: var(--lg-button-size);
+  min-width: var(--lg-button-size);
+  min-height: var(--lg-button-size);
+  border-radius: 0;
+}
+
+/* Library: paint like .ToolIcon__icon (lock / hand), not outline tab trigger. */
+[data-component="prompt-drawing"] .excalidraw .mobile-misc-tools-container label.sidebar-trigger__label-element {
+  margin: 0;
+  padding: 0;
+  align-self: center;
+  cursor: pointer;
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  label.sidebar-trigger__label-element
+  > .sidebar-trigger.default-sidebar-trigger {
+  box-sizing: border-box;
+  width: var(--lg-button-size);
+  height: var(--lg-button-size);
+  min-width: var(--lg-button-size);
+  min-height: var(--lg-button-size);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  box-shadow: none;
+  background-color: transparent;
+  background-image: none;
+  border-radius: 0;
+  color: var(--icon-fill-color);
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  label.sidebar-trigger__label-element
+  > .sidebar-trigger.default-sidebar-trigger:hover,
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  label.sidebar-trigger__label-element
+  > .sidebar-trigger.default-sidebar-trigger:active,
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  .ToolIcon_type_checkbox:checked
+  + .sidebar-trigger.default-sidebar-trigger {
+  border-radius: 0;
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  label.sidebar-trigger__label-element
+  > .sidebar-trigger.default-sidebar-trigger:hover {
+  background-color: var(--button-hover-bg);
+  border: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  label.sidebar-trigger__label-element
+  > .sidebar-trigger.default-sidebar-trigger:active {
+  background-color: var(--button-hover-bg);
+  border: 1px solid var(--button-active-border);
+  box-shadow: none;
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  .ToolIcon_type_checkbox:checked
+  + .sidebar-trigger.default-sidebar-trigger {
+  background: var(--color-surface-primary-container);
+  border: none;
+  box-shadow: none;
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  .ToolIcon_type_checkbox:checked
+  + .sidebar-trigger.default-sidebar-trigger
+  svg {
+  color: var(--color-on-primary-container);
+}
+
+[data-component="prompt-drawing"]
+  .excalidraw
+  .mobile-misc-tools-container
+  label.sidebar-trigger__label-element
+  > .sidebar-trigger.default-sidebar-trigger
+  svg {
+  width: var(--default-icon-size);
+  height: var(--default-icon-size);
+  color: var(--icon-fill-color);
+}

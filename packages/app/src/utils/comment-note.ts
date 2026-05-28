@@ -65,6 +65,18 @@ export function formatCommentNote(input: { path: string; selection?: FileSelecti
   return `The user made the following comment regarding ${range} of ${input.path}: ${input.comment}`
 }
 
+export function formatReferenceNote(input: { path: string; selection?: FileSelection }) {
+  const start = input.selection ? Math.min(input.selection.startLine, input.selection.endLine) : undefined
+  const end = input.selection ? Math.max(input.selection.startLine, input.selection.endLine) : undefined
+  const range =
+    start === undefined || end === undefined
+      ? "this file"
+      : start === end
+        ? `line ${start}`
+        : `lines ${start} through ${end}`
+  return `The user referenced ${range} of ${input.path} for context.`
+}
+
 export function parseCommentNote(text: string) {
   const match = text.match(
     /^The user made the following comment regarding (this file|line (\d+)|lines (\d+) through (\d+)) of (.+?): ([\s\S]+)$/,

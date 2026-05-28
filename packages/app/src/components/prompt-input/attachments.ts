@@ -25,6 +25,7 @@ function dataUrl(file: File, mime: string) {
 }
 
 type PromptAttachmentsInput = {
+  enabled: () => boolean
   editor: () => HTMLDivElement | undefined
   isDialogActive: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
@@ -140,6 +141,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {
+    if (!input.enabled()) return
     if (input.isDialogActive()) return
 
     event.preventDefault()
@@ -153,6 +155,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handleGlobalDragLeave = (event: DragEvent) => {
+    if (!input.enabled()) return
     if (input.isDialogActive()) return
     if (!event.relatedTarget) {
       input.setDraggingType(null)
@@ -160,6 +163,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handleGlobalDrop = async (event: DragEvent) => {
+    if (!input.enabled()) return
     if (input.isDialogActive()) return
 
     event.preventDefault()

@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { SessionPreviewFallback } from "./session-preview-fallback"
 
 function createSessionPreview() {
   const sdk = useSDK()
@@ -71,16 +72,16 @@ export function SessionPreviewPanel() {
   const { previewSrc } = createSessionPreview()
 
   return (
-    <Show when={previewSrc()}>
-      {(src) => (
-        <div data-component="codle-preview-panel" class="flex-1 min-w-0 h-full overflow-hidden">
+    <div data-component="codle-preview-panel" class="size-full min-w-0 overflow-hidden rounded-none">
+      <Show when={previewSrc()} fallback={<SessionPreviewFallback />}>
+        {(src) => (
           <iframe
             src={src()}
             class="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           />
-        </div>
-      )}
-    </Show>
+        )}
+      </Show>
+    </div>
   )
 }

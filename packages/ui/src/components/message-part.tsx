@@ -130,6 +130,14 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
   )
 }
 
+function decodeAttachment(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
@@ -933,6 +941,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
+  const [mode, setMode] = createSignal<"doc" | "prompt">("doc")
   const [state, setState] = createStore({
     copied: false,
     busy: false,
@@ -948,11 +957,54 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
-  const attachments = createMemo(() => files().filter(attached))
+  const markdown = createMemo(() => textPart()?.metadata?.format === "markdown")
+
+  const doc = createMemo(() => {
+    const meta = textPart()?.metadata
+    if (meta?.source !== "doc") return
+    return typeof meta.docID === "string" ? meta.docID : undefined
+  })
+  const raw = createMemo(() => !!doc() && mode() === "prompt")
+
+  const view = createMemo(() => {
+    const id = doc()
+    const comp = data.doc
+    if (!id || !comp) return
+    return { id, comp }
+  })
+
+  const referenced = createMemo(() => {
+    if (!markdown()) return new Set<string>()
+    return new Set(
+      Array.from(text().matchAll(/attachment:\/\/([^\s)]+)/g), (match) => decodeAttachment(match[1] ?? "")),
+    )
+  })
+
+  const docText = createMemo(() => {
+    if (!markdown()) return text()
+    const refs = new Map(files().map((file) => [file.filename ?? "", file.url]))
+    return text().replace(/attachment:\/\/([^\s)]+)/g, (value, raw: string) => refs.get(decodeAttachment(raw)) ?? value)
+  })
+
+  const attachments = createMemo(() =>
+    files().filter((file) => attached(file) && !referenced().has(file.filename ?? "")),
+  )
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
+
+  const content = () => (
+    <Show when={markdown() && !raw()} fallback={<HighlightedText text={text()} references={inlineFiles()} agents={agents()} />}>
+      <Markdown text={docText()} cacheKey={textPart()?.id} />
+    </Show>
+  )
+
+  const label = createMemo(() =>
+    mode() === "doc" ? i18n.t("ui.message.viewPromptSnapshot") : i18n.t("ui.message.viewDocument"),
+  )
+
+  const toggle = () => setMode(mode() === "doc" ? "prompt" : "doc")
 
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
@@ -1042,9 +1094,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       </Show>
       <Show when={text()}>
         <>
-          <div data-slot="user-message-body">
-            <div data-slot="user-message-text">
-              <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          <div data-slot="user-message-body" data-doc={doc() ? "true" : undefined}>
+            <div data-slot="user-message-text" data-doc={doc() ? "true" : undefined} data-raw={raw() ? "true" : undefined}>
+              <Show when={mode() === "doc" ? view() : undefined} keyed fallback={content()}>
+                {(next) => <Dynamic component={next.comp} id={next.id} fallback={content()} />}
+              </Show>
             </div>
           </div>
           <div data-slot="user-message-copy-wrapper">
@@ -1066,6 +1120,22 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   </span>
                 </Show>
               </span>
+            </Show>
+            <Show when={view()}>
+              <Tooltip value={label()} placement="top" gutter={4}>
+                <IconButton
+                  icon={mode() === "doc" ? "code" : "window-cursor"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggle()
+                  }}
+                  aria-label={label()}
+                  aria-pressed={mode() === "prompt"}
+                />
+              </Tooltip>
             </Show>
             <Show when={props.actions?.revert}>
               <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
@@ -1885,9 +1955,7 @@ ToolRegistry.register({
                       </span>
                     </Show>
                     <TextShimmer
-                      text={
-                        pending() ? i18n.t("ui.messagePart.title.editActive") : i18n.t("ui.messagePart.title.edit")
-                      }
+                      text={pending() ? i18n.t("ui.messagePart.title.editActive") : i18n.t("ui.messagePart.title.edit")}
                       active={pending()}
                     />
                   </span>

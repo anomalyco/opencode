@@ -8,6 +8,7 @@ import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+import { DocMessage } from "@/components/blocksuite/doc-message"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -35,6 +36,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+      doc={(props) => <DocMessage id={props.id} fallback={props.fallback} />}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>

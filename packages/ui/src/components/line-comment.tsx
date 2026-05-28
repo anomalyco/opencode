@@ -222,9 +222,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   })
 
   const submit = () => {
-    const value = text().trim()
-    if (!value) return
-    split.onSubmit(value)
+    split.onSubmit(text().trim())
   }
 
   onMount(() => {
@@ -287,7 +285,6 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                   type="button"
                   data-slot="line-comment-action"
                   data-variant="primary"
-                  disabled={text().trim().length === 0}
                   on:mousedown={hold as any}
                   on:click={click(submit) as any}
                 >
@@ -299,7 +296,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             <Button size="small" variant="ghost" onClick={split.onCancel}>
               {split.cancelLabel ?? i18n.t("ui.common.cancel")}
             </Button>
-            <Button size="small" variant="primary" disabled={text().trim().length === 0} onClick={submit}>
+            <Button size="small" variant="primary" onClick={submit}>
               {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </Show>

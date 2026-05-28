@@ -1,4 +1,4 @@
-import { splitProps, type JSX } from "solid-js"
+import { Show, splitProps, type JSX } from "solid-js"
 
 export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onResize"> {
   direction: "horizontal" | "vertical"
@@ -9,6 +9,7 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
   onResize: (size: number) => void
   onCollapse?: () => void
   collapseThreshold?: number
+  showHandle?: boolean
 }
 
 export function ResizeHandle(props: ResizeHandleProps) {
@@ -23,6 +24,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "collapseThreshold",
     "class",
     "classList",
+    "showHandle",
   ])
 
   const handleMouseDown = (e: MouseEvent) => {
@@ -74,9 +76,14 @@ export function ResizeHandle(props: ResizeHandleProps) {
       data-edge={local.edge ?? (local.direction === "vertical" ? "start" : "end")}
       classList={{
         ...(local.classList ?? {}),
+        "justify-center items-center group flex": true,
         [local.class ?? ""]: !!local.class,
       }}
       onMouseDown={handleMouseDown}
-    />
+    >
+      <Show when={local.showHandle}>
+        <div class="h-18 w-0.5 rounded-full bg-border-base transition-colors group-hover:bg-border-strong-base" />
+      </Show>
+    </div>
   )
 }

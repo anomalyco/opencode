@@ -121,6 +121,11 @@
     align-items: flex-end;
   }
 
+  [data-slot="user-message-body"][data-doc="true"] {
+    width: min(82%, 760px);
+    max-width: min(82%, 760px);
+  }
+
   [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
     margin-top: 8px;
   }
@@ -144,6 +149,17 @@
     }
 
     max-width: 100%;
+  }
+
+  [data-slot="user-message-text"][data-doc="true"] {
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+
+  [data-slot="user-message-text"][data-raw="true"] {
+    white-space: pre-wrap;
+    font-family: var(--font-family-mono);
   }
 
   [data-slot="user-message-copy-wrapper"] {

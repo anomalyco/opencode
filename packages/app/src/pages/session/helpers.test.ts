@@ -59,6 +59,22 @@ describe("createOpenSessionFileTab", () => {
       "active:file://src/a.ts",
     ])
   })
+
+  test("opens review panel for preview tab", () => {
+    const calls: string[] = []
+    const openTab = createOpenSessionFileTab({
+      normalizeTab: (value) => value,
+      openTab: (tab) => calls.push(`open:${tab}`),
+      pathFromTab: () => undefined,
+      loadFile: () => calls.push("load"),
+      openReviewPanel: () => calls.push("panel"),
+      setActive: (tab) => calls.push(`active:${tab}`),
+    })
+
+    openTab("preview")
+
+    expect(calls).toEqual(["open:preview", "panel"])
+  })
 })
 
 describe("focusTerminalById", () => {

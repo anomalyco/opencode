@@ -17,6 +17,11 @@ interface ImportMetaEnv {
    */
   readonly VITE_SESSION_HEADER: string
   /**
+   * Set exactly to the string `true` to use the production/minimal app layout unless devMode is enabled.
+   * @example VITE_PRODUCTION_LAYOUT=true
+   */
+  readonly VITE_PRODUCTION_LAYOUT?: string
+  /**
    * Set exactly to the string `true` to disable @ mention / file popover, / slash-command popover,
    * and the leading `!` shell shortcut in the prompt input.
    * @example VITE_DISABLE_PROMPT_TRIGGERS=true
@@ -27,6 +32,16 @@ interface ImportMetaEnv {
    * @example VITE_DISABLE_PROMPT_PERMISSIONS=true
    */
   readonly VITE_DISABLE_PROMPT_PERMISSIONS?: string
+  /**
+   * Hide the prompt dock footer (agent, model, variant, permissions).
+   * @example VITE_DISABLE_PROMPT_FOOTER=true
+   */
+  readonly VITE_DISABLE_PROMPT_FOOTER?: string
+  /**
+   * Hide prompt mode selection controls.
+   * @example VITE_DISABLE_WYSIWYG_ONLY=true
+   */
+  readonly VITE_DISABLE_WYSIWYG_ONLY?: string
 }
 
 interface ImportMeta {

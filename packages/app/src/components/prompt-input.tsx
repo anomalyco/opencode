@@ -1,12 +1,17 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { useNavigate } from "@solidjs/router"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { Binary } from "@opencode-ai/util/binary"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
   ContentPart,
   DEFAULT_PROMPT,
+  isLineContextItem,
   isPromptEqual,
   Prompt,
   usePrompt,
@@ -16,11 +21,14 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
+import { showToast } from "@opencode-ai/ui/toast"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -54,6 +62,13 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
+import { PromptDrawingShell } from "./prompt-input/drawing-shell"
+import { createPromptDrawing } from "./prompt-input/drawing"
+import { createPromptDoc } from "./prompt-input/doc"
+import { createPromptContextSync } from "./prompt-input/context-sync"
+import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
+import { DialogDocSubmit } from "./dialog-doc-submit"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
 interface PromptInputProps {
@@ -99,11 +114,23 @@ const EXAMPLES = [
 
 const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true"
 const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
+const footerOff = import.meta.env.VITE_DISABLE_PROMPT_FOOTER === "true"
+const wysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === "true"
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
+type PromptMode = "normal" | "shell" | "draw" | "doc"
+
+const canvasMode = (mode: PromptMode) => mode === "draw" || mode === "doc"
+const DOC_MIN = 150
+const DOC_HEIGHT = 300
+const DOC_RATIO = 0.8
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const navigate = useNavigate()
+  const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const sync = useSync()
   const local = useLocal()
   const files = useFile()
@@ -121,6 +148,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let pending: Promise<string | undefined> | undefined
 
   const mirror = { input: false }
   const inset = 56
@@ -273,7 +301,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: PromptHistoryEntry | null
     placeholder: number
     draggingType: "image" | "@mention" | null
-    mode: "normal" | "shell"
+    mode: PromptMode
     applyingHistory: boolean
   }>({
     popover: null,
@@ -281,11 +309,94 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: null as PromptHistoryEntry | null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
     draggingType: null,
-    mode: "normal",
+    mode: "doc",
     applyingHistory: false,
   })
+  const [height, setHeight] = createSignal(DOC_HEIGHT)
 
-  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
+  const seed = (info: Session) => {
+    const [, setStore] = globalSync.child(sdk.directory)
+    setStore("session", (list: Session[]) => {
+      const result = Binary.search(list, info.id, (item) => item.id)
+      const next = [...list]
+      if (result.found) {
+        next[result.index] = info
+        return next
+      }
+      next.splice(result.index, 0, info)
+      return next
+    })
+  }
+
+  const ensure = async () => {
+    if (params.id) return params.id
+    if (pending) return pending
+    pending = sdk.client.session
+      .create()
+      .then((res) => {
+        const info = res.data
+        if (!info) return undefined
+        seed(info)
+        if (accepting()) permission.enableAutoAccept(info.id, sdk.directory)
+        local.session.promote(sdk.directory, info.id)
+        layout.handoff.setTabs(base64Encode(sdk.directory), info.id)
+        navigate(`/${base64Encode(sdk.directory)}/session/${info.id}`)
+        return info.id
+      })
+      .catch(() => {
+        showToast({
+          title: language.t("prompt.toast.sessionCreateFailed.title"),
+          description: language.t("common.requestFailed"),
+        })
+        return undefined
+      })
+      .finally(() => {
+        pending = undefined
+      })
+    return pending
+  }
+
+  const max = () => Math.max(DOC_MIN, Math.floor(window.innerHeight * DOC_RATIO))
+  const clamp = (value: number) => Math.min(max(), Math.max(DOC_MIN, value))
+  const fit = () => {
+    if (store.mode !== "doc") return
+    setHeight((value) => clamp(value))
+  }
+  const resize = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const start = height()
+    const y = event.clientY
+    const html = document.documentElement
+    const body = document.body
+    const cursor = html.style.cursor
+    const select = body.style.userSelect
+    html.style.cursor = "ns-resize"
+    body.style.userSelect = "none"
+
+    const move = (event: PointerEvent) => {
+      setHeight(clamp(start + y - event.clientY))
+    }
+    const up = () => {
+      html.style.cursor = cursor
+      body.style.userSelect = select
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+      window.removeEventListener("pointercancel", up)
+    }
+
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+    window.addEventListener("pointercancel", up)
+  }
+
+  window.addEventListener("resize", fit)
+  onCleanup(() => window.removeEventListener("resize", fit))
+  createEffect(fit)
+
+  const buttonsSpring = useSpring(() => (store.mode === "shell" ? 0 : 1), { visualDuration: 0.2, bounce: 0 })
   const motion = (value: number) => ({
     opacity: value,
     transform: `scale(${0.95 + value * 0.05})`,
@@ -293,18 +404,174 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     "pointer-events": value > 0.5 ? ("auto" as const) : ("none" as const),
   })
   const buttons = createMemo(() => motion(buttonsSpring()))
+  const submitStyle = createMemo(() => (canvasMode(store.mode) ? motion(1) : buttons()))
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
 
   const commentCount = createMemo(() => {
-    if (store.mode === "shell") return 0
+    if (store.mode !== "normal") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+  })
+
+  const drawing = createPromptDrawing({
+    t: (key) => language.t(key as Parameters<typeof language.t>[0]),
+  })
+  const doc = createPromptDoc({
+    sessionID: () => params.id,
+    url: () => sdk.url,
+    directory: () => sdk.directory,
+    client: sdk.client,
+    submit: () => void submit(false),
+  })
+  createPromptContextSync({
+    sync: doc.sync,
+    comments: comments.all,
+    context: prompt.context,
+    replace: comments.replace,
+  })
+  const [approval, setApproval] = createSignal<DocSubmitState | undefined>()
+  let approvalID: string | undefined
+  let approvalSession: string | undefined
+
+  const approvalActor = () => doc.actorID()
+  const clearContext = () => {
+    for (const item of prompt.context.items()) {
+      prompt.context.remove(item.key)
+    }
+  }
+  const closeApproval = () => {
+    dialog.close()
+    approvalID = undefined
+    setApproval(undefined)
+  }
+  const showApproval = (state: DocSubmitState) => {
+    const actorID = approvalActor()
+    if (!actorID) return
+    if (!state.actors.some((item) => item.actorID === actorID)) return
+    if (state.status === "sent") {
+      clearContext()
+      if (approvalID === state.submitID) closeApproval()
+      return
+    }
+    setApproval(state)
+    if (approvalID === state.submitID) return
+    approvalID = state.submitID
+    dialog.show(
+      () => (
+        <DialogDocSubmit
+          state={approval}
+          actorID={actorID}
+          approve={() => {
+            const current = approval()
+            if (!current) return
+            void respondSubmit({
+              baseUrl: sdk.url,
+              directory: sdk.directory,
+              sessionID: current.sessionID,
+              submitID: current.submitID,
+              actorID,
+              action: "approve",
+            })
+              .then(setApproval)
+              .catch(() =>
+                showToast({
+                  title: "전송 동의 실패",
+                  description: language.t("common.requestFailed"),
+                }),
+              )
+          }}
+          cancel={() => {
+            const current = approval()
+            if (!current) return
+            void respondSubmit({
+              baseUrl: sdk.url,
+              directory: sdk.directory,
+              sessionID: current.sessionID,
+              submitID: current.submitID,
+              actorID,
+              action: "cancel",
+            })
+              .then(setApproval)
+              .catch(() =>
+                showToast({
+                  title: "전송 동의 취소 실패",
+                  description: language.t("common.requestFailed"),
+                }),
+              )
+          }}
+          close={closeApproval}
+        />
+      ),
+      () => {
+        const current = approval()
+        if (current?.status === "pending") {
+          approvalID = undefined
+          window.setTimeout(() => {
+            const next = approval()
+            if (next?.status === "pending") showApproval(next)
+          }, 120)
+          return
+        }
+        approvalID = undefined
+        setApproval(undefined)
+      },
+    )
+  }
+
+  createEffect((prev) => {
+    const id = params.id
+    if (prev === id) return id
+    doc.reset()
+    return id
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void doc.refresh(id)
+  })
+
+  createEffect(() => {
+    const sessionID = params.id
+    const docID = doc.docID()
+    const actorID = doc.actorID()
+    if (store.mode !== "doc" || !sessionID || !docID || !actorID) return
+    const stop = connectSubmit({
+      baseUrl: sdk.url,
+      directory: sdk.directory,
+      sessionID,
+      docID,
+      actorID,
+      event: (event) => showApproval(event.state),
+    })
+    onCleanup(stop)
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void globalSDK.event.start()
+    const unsub = globalSDK.event.on(sdk.directory, (event) => {
+      const item = event as {
+        type: string
+        properties: { sessionID: string; docID: string; clientID?: string; init?: boolean }
+      }
+      if (item.type !== "doc.prompt.rotated") return
+      const props = item.properties
+      if (props.sessionID !== id) return
+      if (props.clientID === doc.clientID) return
+      void doc.pivot(props.sessionID, props.docID, { init: props.init ?? false }).then(() => {
+        if (store.mode === "doc") return
+        setStore("mode", "doc")
+      })
+    })
+    onCleanup(unsub)
   })
 
   const contextItems = createMemo(() => {
     const items = prompt.context.items()
     if (store.mode !== "shell") return items
-    return items.filter((item) => !item.comment?.trim())
+    return items.filter((item) => !isLineContextItem(item) && !item.comment?.trim())
   })
 
   const hasUserPrompt = createMemo(() => {
@@ -434,14 +701,53 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const pick = () => fileInputRef?.click()
 
-  const setMode = (mode: "normal" | "shell") => {
+  const setMode = (mode: PromptMode) => {
+    if (store.mode === mode) return
+    if (store.mode === "doc" && mode !== "doc") doc.detach()
+    if (canvasMode(store.mode) && !canvasMode(mode)) drawing.dispose()
     setStore("mode", mode)
     setStore("popover", null)
-    requestAnimationFrame(() => editorRef?.focus())
+    if (mode === "normal") requestAnimationFrame(() => editorRef?.focus())
   }
 
   const shellModeKey = "mod+shift+x"
   const normalModeKey = "mod+shift+e"
+  const modes = [
+    { mode: "doc", icon: "code-lines", label: "prompt.mode.doc", action: "prompt-doc" },
+    { mode: "draw", icon: "pencil-line", label: "prompt.mode.draw", action: "prompt-draw" },
+    { mode: "normal", icon: "prompt", label: "prompt.mode.normal", action: "prompt-normal" },
+  ] as const
+
+  const modeButtons = () => (
+    <Show when={!wysiwygOnly}>
+      {modes.map((item) => {
+        const selected = store.mode === item.mode
+        return (
+          <Tooltip placement="top" value={language.t(item.label)}>
+            <Button
+              data-action={item.action}
+              data-selected={selected ? "true" : undefined}
+              type="button"
+              variant="ghost"
+              classList={{
+                "size-7.5 p-0": true,
+                "pointer-events-none bg-surface-base-active text-text-strong [&_[data-slot=icon-svg]]:text-icon-strong":
+                  selected,
+              }}
+              style={canvasMode(store.mode) ? undefined : buttons()}
+              aria-disabled={selected}
+              tabIndex={selected ? -1 : undefined}
+              onClick={() => setMode(item.mode)}
+              aria-label={language.t(item.label)}
+              aria-pressed={selected}
+            >
+              <Icon name={item.icon} class="size-4.5" />
+            </Button>
+          </Tooltip>
+        )
+      })}
+    </Show>
+  )
 
   command.register("prompt-input", () => [
     {
@@ -467,6 +773,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: normalModeKey,
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
+    },
+    {
+      id: "prompt.mode.draw",
+      title: language.t("command.prompt.mode.draw"),
+      category: language.t("command.category.session"),
+      disabled: store.mode === "draw",
+      onSelect: () => setMode("draw"),
+    },
+    {
+      id: "prompt.mode.doc",
+      title: language.t("command.prompt.mode.doc"),
+      category: language.t("command.category.session"),
+      disabled: store.mode === "doc",
+      onSelect: () => setMode("doc"),
     },
   ])
 
@@ -768,10 +1088,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (parts) => {
         if (composing()) return
+        if (canvasMode(store.mode)) return
+        if (!editorRef) return
         reconcile(parts.filter((part) => part.type !== "image"))
       },
     ),
   )
+
+  createEffect(() => {
+    if (canvasMode(store.mode)) return
+    requestAnimationFrame(() => {
+      if (!editorRef) return
+      reconcile(prompt.current().filter((part) => part.type !== "image"))
+    })
+  })
 
   const parseFromDOM = (): Prompt => {
     const parts: Prompt = []
@@ -988,7 +1318,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
+  const addToHistory = (prompt: Prompt, mode: PromptMode) => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
     const next = prependHistoryEntry(currentHistory.entries, prompt, mode === "shell" ? [] : historyComments())
@@ -1052,6 +1382,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
+    enabled: () => !canvasMode(store.mode),
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
@@ -1081,6 +1412,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     permission.toggleAutoAccept(params.id, sdk.directory)
   }
 
+  createEffect(() => {
+    if (store.mode !== "doc") return
+    if (params.id) return
+    void ensure().then((id) => {
+      if (!id) return
+      void doc.refresh(id)
+    })
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
@@ -1097,13 +1437,130 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
-    newSessionWorktree: () => props.newSessionWorktree,
+    newSessionWorktree: () => (store.mode === "doc" ? "main" : props.newSessionWorktree),
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
+    approve: async (input) => {
+      if (store.mode !== "doc") return false
+      const docID = doc.docID()
+      const actorID = doc.actorID()
+      if (!docID || !actorID) return false
+      const ids = Array.from(new Set([actorID, ...doc.actors().map((item) => item.actorID)]))
+      if (ids.length <= 1) return false
+      try {
+        const state = await startSubmit({
+          baseUrl: sdk.url,
+          directory: input.sessionDirectory,
+          sessionID: input.sessionID,
+          docID,
+          actorID,
+          actorIDs: ids,
+          prompt: {
+            messageID: input.messageID,
+            agent: input.agent,
+            model: input.model,
+            variant: input.variant,
+            parts: input.parts,
+          },
+        })
+        approvalSession = input.sessionID
+        showApproval(state)
+        return true
+      } catch {
+        approvalSession = input.sessionID
+        showToast({
+          title: "전송 동의 요청 실패",
+          description: language.t("common.requestFailed"),
+        })
+        return true
+      }
+    },
   })
+
+  const exitDoc = () => {
+    doc.detach()
+    setStore("mode", "normal")
+    setStore("popover", null)
+    requestAnimationFrame(() => editorRef?.focus())
+  }
+
+  async function submit(stop: boolean) {
+    if (store.mode === "draw") {
+      const part = await drawing.commit()
+      if (!part) {
+        if (working() && stop) {
+          await abort()
+          return
+        }
+        if (working()) return
+        showToast({
+          title: language.t("prompt.toast.drawEmpty.title"),
+          description: language.t("prompt.toast.drawEmpty.description"),
+        })
+        return
+      }
+      drawing.dispose()
+      await handleSubmit(undefined, [part])
+      return
+    }
+
+    if (store.mode === "doc") {
+      if (working() && !stop) return
+      const next = await doc.commitMarkdown()
+      const text = next?.text
+      if (!text) {
+        if (working() && stop) {
+          await abort()
+          return
+        }
+        if (working()) return
+        showToast({
+          title: language.t("prompt.toast.docEmpty.title"),
+          description: language.t("prompt.toast.docEmpty.description"),
+        })
+        return
+      }
+      const base = [
+        ...promptFromDocMarkdown(text, prompt.current(), doc.docID()),
+        ...(next?.assets.map((asset) => ({
+          type: "image" as const,
+          id: asset.id,
+          filename: asset.filename,
+          mime: asset.mime,
+          dataUrl: asset.dataUrl,
+        })) ?? []),
+      ]
+      approvalSession = undefined
+      const sessionID = await handleSubmit(undefined, {
+        prompt: base,
+        prepare: async (id) => [
+          ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id)),
+          ...base.filter((part) => part.type === "image"),
+        ],
+      })
+      if (!sessionID) return
+      if (approvalSession === sessionID) return
+      try {
+        await doc.advance(sessionID)
+      } catch {
+        showToast({
+          title: language.t("prompt.toast.docAdvanceFailed.title"),
+          description: language.t("prompt.toast.docAdvanceFailed.description"),
+        })
+      }
+      return
+    }
+
+    await handleSubmit()
+  }
+
+  const handleFormSubmit = (event: Event) => {
+    event.preventDefault()
+    void submit(true)
+  }
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
@@ -1151,6 +1608,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       if (store.mode === "shell") {
         setStore("mode", "normal")
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      if (store.mode === "doc") {
+        void exitDoc()
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      if (store.mode === "draw") {
+        setMode("normal")
         event.preventDefault()
         event.stopPropagation()
         return
@@ -1263,12 +1734,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ) {
         return
       }
-      handleSubmit(event)
+      void handleSubmit(event)
     }
   }
 
   return (
-    <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
+    <div
+      classList={{
+        "relative flex w-full flex-col gap-0": true,
+        "h-[300px] max-h-[512px]": store.mode === "draw",
+        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw",
+      }}
+      style={
+        store.mode === "doc"
+          ? {
+              height: `${height()}px`,
+              "min-height": `${DOC_MIN}px`,
+              "max-height": `${max()}px`,
+            }
+          : undefined
+      }
+    >
+      <Show when={store.mode === "doc"}>
+        <div
+          data-component="prompt-doc-resize-handle"
+          class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
+          onPointerDown={resize}
+        >
+          <div class="h-0.5 w-18 rounded-full bg-border-base transition-colors group-hover:bg-border-strong-base" />
+        </div>
+      </Show>
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1285,18 +1780,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <DockShellForm
-        onSubmit={handleSubmit}
+        onSubmit={handleFormSubmit}
         classList={{
           "group/prompt-input": true,
           "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
+          "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <PromptDragOverlay
-          type={store.draggingType}
-          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
-        />
+        <Show when={!canvasMode(store.mode)}>
+          <PromptDragOverlay
+            type={store.draggingType}
+            label={language.t(
+              store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
+            )}
+          />
+        </Show>
         <PromptContextItems
           items={contextItems()}
           active={(item) => {
@@ -1319,13 +1819,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
-          class="relative"
+          classList={{
+            relative: true,
+            "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
+          }}
           onMouseDown={(e) => {
+            if (canvasMode(store.mode)) return
             const target = e.target
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-normal"], [data-action="prompt-draw"], [data-action="prompt-doc"], [data-action="prompt-draw-exit"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
               )
             ) {
               return
@@ -1333,136 +1837,178 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div
-            class="relative max-h-[240px] overflow-y-auto no-scrollbar"
-            ref={(el) => (scrollRef = el)}
-            style={{ "scroll-padding-bottom": space }}
-          >
-            <div
-              data-component="prompt-input"
-              ref={(el) => {
-                editorRef = el
-                props.ref?.(el)
-              }}
-              role="textbox"
-              aria-multiline="true"
-              aria-label={placeholder()}
-              contenteditable="true"
-              autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-              autocorrect={store.mode === "normal" ? "on" : "off"}
-              spellcheck={store.mode === "normal"}
-              onInput={handleInput}
-              onPaste={handlePaste}
-              onCompositionStart={handleCompositionStart}
-              onCompositionEnd={handleCompositionEnd}
-              onBlur={handleBlur}
-              onKeyDown={handleKeyDown}
-              classList={{
-                "select-text": true,
-                "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-                "[&_[data-type=file]]:text-syntax-property": true,
-                "[&_[data-type=agent]]:text-syntax-type": true,
-                "font-mono!": store.mode === "shell",
-              }}
-              style={{ "padding-bottom": space }}
-            />
-            <Show when={!prompt.dirty()}>
-              <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
-                classList={{ "font-mono!": store.mode === "shell" }}
-                style={{ "padding-bottom": space }}
+          <Show
+            when={store.mode === "draw"}
+            keyed
+            fallback={
+              <Show
+                when={store.mode === "doc"}
+                fallback={
+                  <div
+                    class="relative max-h-[240px] overflow-y-auto no-scrollbar"
+                    ref={(el) => (scrollRef = el)}
+                    style={{ "scroll-padding-bottom": space }}
+                  >
+                    <div
+                      data-component="prompt-input"
+                      ref={(el) => {
+                        editorRef = el
+                        props.ref?.(el)
+                      }}
+                      role="textbox"
+                      aria-multiline="true"
+                      aria-label={placeholder()}
+                      contenteditable="true"
+                      autocapitalize={store.mode === "normal" ? "sentences" : "off"}
+                      autocorrect={store.mode === "normal" ? "on" : "off"}
+                      spellcheck={store.mode === "normal"}
+                      onInput={handleInput}
+                      onPaste={handlePaste}
+                      onCompositionStart={handleCompositionStart}
+                      onCompositionEnd={handleCompositionEnd}
+                      onBlur={handleBlur}
+                      onKeyDown={handleKeyDown}
+                      classList={{
+                        "select-text": true,
+                        "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                        "[&_[data-type=file]]:text-syntax-property": true,
+                        "[&_[data-type=agent]]:text-syntax-type": true,
+                        "font-mono!": store.mode === "shell",
+                      }}
+                      style={{ "padding-bottom": space }}
+                    />
+                    <Show when={!prompt.dirty()}>
+                      <div
+                        class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                        classList={{ "font-mono!": store.mode === "shell" }}
+                        style={{ "padding-bottom": space }}
+                      >
+                        {placeholder()}
+                      </div>
+                    </Show>
+                  </div>
+                }
               >
-                {placeholder()}
-              </div>
-            </Show>
-          </div>
-
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-x-0 bottom-0"
-            style={{
-              height: space,
-              background:
-                "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
-            }}
-          />
-
-          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ACCEPTED_FILE_TYPES.join(",")}
-              class="hidden"
-              onChange={(e) => {
-                const list = e.currentTarget.files
-                if (list) void addAttachments(Array.from(list))
-                e.currentTarget.value = ""
-              }}
-            />
-
-            <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={working() ? "stop" : "arrow-up"}
-                  variant="primary"
-                  class="size-7.5"
-                  style={buttons()}
-                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                <PromptDrawingShell
+                  variant="doc"
+                  drawing={drawing}
+                  doc={doc}
+                  working={working}
+                  tip={tip}
+                  onExit={exitDoc}
+                  modes={modeButtons()}
                 />
-              </Tooltip>
-            </div>
-          </div>
+              </Show>
+            }
+          >
+            <PromptDrawingShell
+              variant="draw"
+              drawing={drawing}
+              doc={doc}
+              working={working}
+              tip={tip}
+              onExit={() => setMode("normal")}
+              modes={modeButtons()}
+            />
+          </Show>
 
-          <div class="pointer-events-none absolute bottom-2 left-2">
+          <Show when={!canvasMode(store.mode)}>
             <div
-              aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-x-0 bottom-0"
               style={{
-                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                height: space,
+                background:
+                  "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
               }}
-            >
-              <TooltipKeybind
-                placement="top"
-                title={language.t("prompt.action.attachFile")}
-                keybind={command.keybind("file.attach")}
-              >
-                <Button
-                  data-action="prompt-attach"
-                  type="button"
-                  variant="ghost"
-                  class="size-7.5 p-0"
-                  style={buttons()}
-                  onClick={pick}
-                  disabled={store.mode !== "normal"}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
-                >
-                  <Icon name="plus" class="size-4.5" />
-                </Button>
-              </TooltipKeybind>
+            />
+          </Show>
+
+          <Show when={!canvasMode(store.mode)}>
+            <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_FILE_TYPES.join(",")}
+                hidden
+                tabindex={-1}
+                aria-hidden="true"
+                onChange={(e) => {
+                  const list = e.currentTarget.files
+                  if (list) void addAttachments(Array.from(list))
+                  e.currentTarget.value = ""
+                }}
+              />
+
+              <div class="flex items-center gap-1 pointer-events-auto">
+                <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
+                  <IconButton
+                    data-action="prompt-submit"
+                    type="submit"
+                    disabled={
+                      store.mode === "shell" ||
+                      (store.mode === "normal" && !prompt.dirty() && !working() && commentCount() === 0)
+                    }
+                    tabIndex={store.mode === "shell" ? -1 : undefined}
+                    icon={working() ? "stop" : "arrow-up"}
+                    variant="primary"
+                    class="size-7.5"
+                    style={submitStyle()}
+                    aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  />
+                </Tooltip>
+              </div>
             </div>
-          </div>
+
+            <div class="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1">
+              <Show when={store.mode === "normal"}>
+                <div
+                  class="pointer-events-auto flex items-center gap-1"
+                  style={{
+                    "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                  }}
+                >
+                  <TooltipKeybind
+                    placement="top"
+                    title={language.t("prompt.action.attachFile")}
+                    keybind={command.keybind("file.attach")}
+                  >
+                    <Button
+                      data-action="prompt-attach"
+                      type="button"
+                      variant="ghost"
+                      class="size-7.5 p-0"
+                      style={buttons()}
+                      onClick={pick}
+                      aria-label={language.t("prompt.action.attachFile")}
+                    >
+                      <Icon name="plus" class="size-4.5" />
+                    </Button>
+                  </TooltipKeybind>
+                  {modeButtons()}
+                </div>
+              </Show>
+            </div>
+          </Show>
         </div>
       </DockShellForm>
-      <Show when={store.mode === "normal" || store.mode === "shell"}>
+      <Show when={!footerOff && (store.mode === "normal" || store.mode === "shell" || canvasMode(store.mode))}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
-              <div
-                class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
-                style={{
-                  padding: "0 4px 0 8px",
-                  ...shell(),
-                }}
-              >
-                <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
-                <div class="size-4 shrink-0" />
-              </div>
+              <Show when={store.mode === "shell"}>
+                <div
+                  class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
+                  style={{
+                    padding: "0 4px 0 8px",
+                    ...shell(),
+                  }}
+                >
+                  <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
+                  <div class="size-4 shrink-0" />
+                </div>
+              </Show>
               <div class="flex items-center gap-1.5 min-w-0 flex-1">
                 <div data-component="prompt-agent-control">
                   <TooltipKeybind
