@@ -658,7 +658,21 @@ export function DialogConnectProvider(props: { provider: string }) {
             </Switch>
           </div>
           <Show when={isCollabEmbed() && props.provider === "anthropic"}>
-            <ClaudeCredentialsSection onComplete={complete} />
+            <ClaudeCredentialsSection
+              onUploadComplete={() => {
+                // The server's disposeAllInstances() already tore down every
+                // workspace instance when it processed the upload — calling
+                // global.dispose() here would hit a dead instance and 401.
+                // Just close the dialog and show the success toast.
+                dialog.close()
+                showToast({
+                  variant: "success",
+                  icon: "circle-check",
+                  title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
+                  description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+                })
+              }}
+            />
           </Show>
         </div>
       </div>
@@ -673,7 +687,7 @@ interface CredentialsStatus {
   bytes?: number
 }
 
-function ClaudeCredentialsSection(props: { onComplete: () => Promise<void> }) {
+function ClaudeCredentialsSection(props: { onUploadComplete: () => void }) {
   const [status, setStatus] = createSignal<CredentialsStatus | null>(null)
   const [showUpload, setShowUpload] = createSignal(false)
   const [json, setJson] = createSignal("")
@@ -710,8 +724,8 @@ function ClaudeCredentialsSection(props: { onComplete: () => Promise<void> }) {
       setJson("")
       setShowUpload(false)
       await refresh()
-      // re-bootstrap providers so the newly written creds are picked up
-      await props.onComplete()
+      // The server already called disposeAllInstances() — just close the dialog.
+      props.onUploadComplete()
     } catch (err) {
       setUploadErr(err instanceof Error ? err.message : String(err))
     } finally {
