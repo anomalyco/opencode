@@ -7,6 +7,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderID } from "../../src/provider/schema"
+import { ProviderError } from "../../src/provider/error"
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -161,6 +162,25 @@ describe("session.retry.retryable", () => {
     const msg = "Too many requests, please slow down"
     const error = wrap(msg)
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
+  })
+
+  test("retries transport timeout errors", () => {
+    const request = MessageV2.fromError(new ProviderError.HeaderTimeoutError(10000), { providerID })
+    expect(MessageV2.APIError.isInstance(request)).toBe(true)
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message: "Provider response headers timed out after 10000ms",
+    })
+  })
+
+  test("retries websocket stream transport errors", () => {
+    const request = MessageV2.fromError(
+      new ProviderError.ResponseStreamError("WebSocket closed before response.completed (code 1006: Connection ended)"),
+      { providerID },
+    )
+    expect(MessageV2.APIError.isInstance(request)).toBe(true)
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message: "WebSocket closed before response.completed (code 1006: Connection ended)",
+    })
   })
 
   test("does not retry context overflow errors", () => {

@@ -21,7 +21,7 @@
   gap: 8px;
   min-width: 0;
   width: 100%;
-  font-family: var(--font-family-sans), var(--sans), system-ui, sans-serif;
+  font-family: var(--v2-font-family-sans), var(--sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 
   [data-slot="basic-tool-v2-trigger"] {

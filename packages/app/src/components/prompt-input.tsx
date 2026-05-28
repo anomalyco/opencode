@@ -4,6 +4,8 @@ import {
   createEffect,
   on,
   Component,
+  splitProps,
+  For,
   Show,
   onCleanup,
   createMemo,
@@ -11,7 +13,10 @@ import {
   createResource,
   Switch,
   Match,
+  type ComponentProps,
+  type JSX,
 } from "solid-js"
+import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -26,12 +31,14 @@ import {
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
+import { useNavigate } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -44,6 +51,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -66,16 +74,16 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
-import { useQueryOptions } from "@/context/global-sync"
+import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { displayName } from "@/pages/layout/helpers"
 
 interface PromptInputProps {
   class?: string
   variant?: "dock" | "new-session"
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
-  onNewSessionWorktreeChange?: (worktree: string) => void
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void
@@ -113,11 +121,9 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
-const MAIN_WORKTREE = "main"
-const CREATE_WORKTREE = "create"
-
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const navigate = useNavigate()
   const queryOptions = useQueryOptions()
 
   const sync = useSync()
@@ -125,6 +131,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
+  const server = useServer()
   const comments = useComments()
   const dialog = useDialog()
   const providers = useProviders()
@@ -132,11 +139,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const settings = useSettings()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let projectSearchRef: HTMLInputElement | undefined
 
   const mirror = { input: false }
   const inset = 56
@@ -276,6 +285,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+  })
+  const [picker, setPicker] = createStore({
+    projectOpen: false,
+    projectSearch: "",
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1303,91 +1316,124 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return "Ask anything, / for commands, @ for context..."
   }
 
-  const modelControl = () => (
-    <Show when={!providersLoading()}>
-      <Show
-        when={providers.paid().length > 0}
-        fallback={
-          <TooltipKeybind
-            placement="top"
-            gutter={4}
-            title={language.t("command.model.choose")}
-            keybind={command.keybind("model.choose")}
-          >
-            <Button
-              data-action="prompt-model"
-              as="div"
-              variant="ghost"
-              size="normal"
-              class="min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group"
-              style={control()}
-              onClick={() => {
-                void import("@/components/dialog-select-model-unpaid").then((x) => {
-                  dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
-                })
-              }}
-            >
-              <Show when={local.model.current()?.provider?.id}>
-                <ProviderIcon
-                  id={local.model.current()?.provider?.id ?? ""}
-                  class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                  style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                />
-              </Show>
-              <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
-              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-            </Button>
-          </TooltipKeybind>
-        }
-      >
-        <TooltipKeybind
-          placement="top"
-          gutter={4}
-          title={language.t("command.model.choose")}
-          keybind={command.keybind("model.choose")}
-        >
-          <ModelSelectorPopover
-            model={local.model}
-            triggerAs={Button}
-            triggerProps={{
-              variant: "ghost",
-              size: "normal",
-              style: control(),
-              class:
-                "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group",
-              "data-action": "prompt-model",
-            }}
-            onClose={restoreFocus}
-          >
-            <Show when={local.model.current()?.provider?.id}>
-              <ProviderIcon
-                id={local.model.current()?.provider?.id ?? ""}
-                class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-              />
-            </Show>
-            <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
-            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-          </ModelSelectorPopover>
-        </TooltipKeybind>
-      </Show>
-    </Show>
-  )
+  const modelControlState = createMemo<ComposerModelControlState>(() => ({
+    loading: providersLoading(),
+    paid: providers.paid().length > 0,
+    title: language.t("command.model.choose"),
+    keybind: command.keybind("model.choose"),
+    model: local.model,
+    providerID: local.model.current()?.provider?.id,
+    modelName: local.model.current()?.name ?? language.t("dialog.model.select.title"),
+    style: control(),
+    onClose: restoreFocus,
+    onUnpaidClick: () => {
+      void import("@/components/dialog-select-model-unpaid").then((x) => {
+        dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
+      })
+    },
+  }))
 
   const newSession = () => props.variant === "new-session"
-  const worktrees = createMemo(() => [MAIN_WORKTREE, ...(sync.project?.sandboxes ?? []), CREATE_WORKTREE])
-  const currentWorktree = createMemo(() => {
-    if (worktrees().includes(props.newSessionWorktree ?? MAIN_WORKTREE))
-      return props.newSessionWorktree ?? MAIN_WORKTREE
-    return MAIN_WORKTREE
+  const projects = createMemo(() => layout.projects.list())
+  const projectForDirectory = (directory: string | undefined) => {
+    if (!directory) return
+    const key = pathKey(directory)
+    return projects().find(
+      (project) => pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
+    )
+  }
+  const selectedProject = createMemo(() => projectForDirectory(sdk.directory))
+  const projectResults = createMemo(() => {
+    const search = picker.projectSearch.trim().toLowerCase()
+    if (!search) return projects()
+    return projects().filter((project) => displayName(project).toLowerCase().includes(search))
   })
-  const worktreeLabel = (value: string) => {
-    if (value === MAIN_WORKTREE) return MAIN_WORKTREE
-    if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
-    return getFilename(value)
+  const showAgentControl = createMemo(() => settings.general.showCustomAgents() && agentNames().length > 0)
+  const selectProject = (worktree: string) => {
+    setPicker({
+      projectOpen: false,
+      projectSearch: "",
+    })
+    if (pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "")) {
+      restoreFocus()
+      return
+    }
+    layout.projects.open(worktree)
+    server.projects.touch(worktree)
+    navigate(`/${base64Encode(worktree)}/session`)
+  }
+  const addProject = async () => {
+    const select = (result: string | string[] | null) => {
+      const directory = Array.isArray(result) ? result[0] : result
+      if (!directory) return
+      selectProject(directory)
+    }
+    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+      select(await platform.openDirectoryPickerDialog({ title: language.t("command.project.open") }))
+      return
+    }
+    void import("@/components/dialog-select-directory").then((x) => {
+      dialog.show(
+        () => <x.DialogSelectDirectory onSelect={select} />,
+        () => select(null),
+      )
+    })
   }
 
-  const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+  const projectPickerState = createMemo<ComposerPickerState>(() => ({
+    open: picker.projectOpen,
+    trigger: {
+      action: "prompt-project",
+      icon: "folder",
+      label: selectedProject() ? displayName(selectedProject()!) : language.t("session.new.project.new"),
+      class: "max-w-[203px]",
+      style: control(),
+      onPress: () => setPicker("projectOpen", true),
+    },
+    search: picker.projectSearch,
+    searchPlaceholder: language.t("session.new.project.search"),
+    clearLabel: language.t("common.clear"),
+    items: projectResults().map((project) => ({
+      icon: "folder",
+      label: displayName(project),
+      selected: selectedProject()?.worktree === project.worktree,
+      onSelect: () => selectProject(project.worktree),
+    })),
+    action: {
+      icon: "plus",
+      label: language.t("session.new.project.add"),
+      onSelect: () => {
+        setPicker("projectOpen", false)
+        void addProject()
+      },
+    },
+    onOpenChange: (open) => {
+      setPicker("projectOpen", open)
+      if (open) requestAnimationFrame(() => projectSearchRef?.focus())
+    },
+    onSearchInput: (value) => setPicker("projectSearch", value),
+    onSearchClear: () => setPicker("projectSearch", ""),
+    searchRef: (el) => (projectSearchRef = el),
+  }))
+  const agentControlState = createMemo<ComposerAgentControlState>(() => ({
+    title: language.t("command.agent.cycle"),
+    keybind: command.keybind("agent.cycle"),
+    options: agentNames(),
+    current: local.agent.current()?.name ?? "",
+    style: control(),
+    onSelect: (value) => {
+      local.agent.set(value)
+      restoreFocus()
+    },
+  }))
+  const newProjectTriggerState = createMemo<ComposerPickerTriggerState>(() => ({
+    action: "prompt-project",
+    icon: "folder-add-left",
+    label: language.t("session.new.project.new"),
+    class: "max-w-[160px]",
+    style: control(),
+    onPress: () => void addProject(),
+  }))
 
   return (
     <div class="relative size-full flex flex-col gap-0">
@@ -1408,155 +1454,146 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <Switch>
-        <Match when={USE_V2_INPUT}>
-          <DockShellForm
-            data-component={newSession() ? "session-new-composer" : "session-composer"}
-            onSubmit={handleSubmit}
-            classList={{
-              "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
-              "border-icon-info-active border-dashed": store.draggingType !== null,
-              [props.class ?? ""]: !!props.class,
-            }}
-          >
-            <PromptDragOverlay
-              type={store.draggingType}
-              label={language.t(
-                store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
-              )}
-            />
-            <PromptContextItems
-              items={contextItems()}
-              active={(item) => {
-                const active = comments.active()
-                return !!item.commentID && item.commentID === active?.id && item.path === active?.file
-              }}
-              openComment={openComment}
-              remove={(item) => {
-                if (item.commentID) comments.remove(item.path, item.commentID)
-                prompt.context.remove(item.key)
-              }}
-              t={(key) => language.t(key as Parameters<typeof language.t>[0])}
-            />
-            <PromptImageAttachments
-              attachments={imageAttachments()}
-              onOpen={(attachment) =>
-                dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
-              }
-              onRemove={removeAttachment}
-              removeLabel={language.t("prompt.attachment.remove")}
-            />
-            <div
-              class="relative min-h-[52px]"
-              onMouseDown={(e) => {
-                const target = e.target
-                if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) return
-                editorRef?.focus()
+        <Match when={settings.general.newLayoutDesigns()}>
+          <div class="flex flex-col gap-3">
+            <DockShellForm
+              data-component={newSession() ? "session-new-composer" : "session-composer"}
+              onSubmit={handleSubmit}
+              classList={{
+                "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
+                "border-icon-info-active border-dashed": store.draggingType !== null,
+                [props.class ?? ""]: !!props.class,
               }}
             >
-              <div class="relative max-h-[180px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
-                <div
-                  data-component="prompt-input"
-                  ref={(el) => {
-                    editorRef = el
-                    props.ref?.(el)
-                  }}
-                  role="textbox"
-                  aria-multiline="true"
-                  aria-label={designPlaceholder()}
-                  contenteditable="true"
-                  autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-                  autocorrect={store.mode === "normal" ? "on" : "off"}
-                  spellcheck={store.mode === "normal"}
-                  inputMode="text"
-                  // @ts-expect-error
-                  autocomplete="off"
-                  onInput={handleInput}
-                  onPaste={handlePaste}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  onBlur={handleBlur}
-                  onKeyDown={handleKeyDown}
-                  classList={{
-                    "select-text": true,
-                    "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]": true,
-                    "[&_[data-type=file]]:text-syntax-property": true,
-                    "[&_[data-type=agent]]:text-syntax-type": true,
-                    "font-mono!": store.mode === "shell",
-                  }}
-                />
-                <div
-                  data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
-                  class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]"
-                  classList={{ "font-mono!": store.mode === "shell", hidden: prompt.dirty() }}
-                >
-                  {designPlaceholder()}
+              <PromptDragOverlay
+                type={store.draggingType}
+                label={language.t(
+                  store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
+                )}
+              />
+              <PromptContextItems
+                items={contextItems()}
+                active={(item) => {
+                  const active = comments.active()
+                  return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+                }}
+                openComment={openComment}
+                remove={(item) => {
+                  if (item.commentID) comments.remove(item.path, item.commentID)
+                  prompt.context.remove(item.key)
+                }}
+                t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+              />
+              <PromptImageAttachments
+                attachments={imageAttachments()}
+                onOpen={(attachment) =>
+                  dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+                }
+                onRemove={removeAttachment}
+                removeLabel={language.t("prompt.attachment.remove")}
+              />
+              <div
+                class="relative min-h-[52px]"
+                onMouseDown={(e) => {
+                  const target = e.target
+                  if (!(target instanceof HTMLElement)) return
+                  if (target.closest('[data-action^="prompt-"]')) return
+                  editorRef?.focus()
+                }}
+              >
+                <div class="relative max-h-[180px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+                  <div
+                    data-component="prompt-input"
+                    ref={(el) => {
+                      editorRef = el
+                      props.ref?.(el)
+                    }}
+                    role="textbox"
+                    aria-multiline="true"
+                    aria-label={designPlaceholder()}
+                    contenteditable="true"
+                    autocapitalize={store.mode === "normal" ? "sentences" : "off"}
+                    autocorrect={store.mode === "normal" ? "on" : "off"}
+                    spellcheck={store.mode === "normal"}
+                    inputMode="text"
+                    // @ts-expect-error
+                    autocomplete="off"
+                    onInput={handleInput}
+                    onPaste={handlePaste}
+                    onCompositionStart={handleCompositionStart}
+                    onCompositionEnd={handleCompositionEnd}
+                    onBlur={handleBlur}
+                    onKeyDown={handleKeyDown}
+                    classList={{
+                      "select-text": true,
+                      "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-base": true,
+                      "[&_[data-type=file]]:text-syntax-property": true,
+                      "[&_[data-type=agent]]:text-syntax-type": true,
+                      "font-mono!": store.mode === "shell",
+                    }}
+                  />
+                  <div
+                    data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
+                    class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]"
+                    classList={{ "font-mono!": store.mode === "shell", hidden: prompt.dirty() }}
+                  >
+                    {designPlaceholder()}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="flex h-11 items-center px-2">
-              <div class="flex min-w-0 flex-1 items-center gap-0">
-                {fileAttachmentInput()}
-                <TooltipKeybind
-                  placement="top"
-                  title={language.t("prompt.action.attachFile")}
-                  keybind={command.keybind("file.attach")}
-                >
-                  <IconButton
-                    data-action="prompt-attach"
-                    type="button"
-                    icon="plus"
-                    variant="ghost"
-                    class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
-                    style={buttons()}
-                    onClick={pick}
-                    disabled={store.mode !== "normal"}
-                    tabIndex={store.mode === "normal" ? undefined : -1}
-                    aria-label={language.t("prompt.action.attachFile")}
-                  />
-                </TooltipKeybind>
-                <Show when={newSession()}>
-                  <div class="relative">
-                    <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center">
-                      <Icon name="sliders" size="small" />
-                    </div>
-                    <Select
-                      size="normal"
-                      options={worktrees()}
-                      current={currentWorktree()}
-                      label={worktreeLabel}
-                      onSelect={(value) => {
-                        if (value) props.onNewSessionWorktreeChange?.(value)
-                        restoreFocus()
-                      }}
-                      class="max-w-[175px] justify-start text-text-base [&_[data-component=icon]]:text-v2-icon-icon-muted"
-                      valueClass="truncate pl-5 text-[13px] font-[440] leading-4 text-v2-text-text-faint"
-                      triggerStyle={control()}
-                      triggerProps={{ "data-action": "prompt-workspace" }}
+              <div class="flex h-11 items-center px-2">
+                <div class="flex min-w-0 flex-1 items-center gap-0">
+                  {fileAttachmentInput()}
+                  <TooltipKeybind
+                    placement="top"
+                    title={language.t("prompt.action.attachFile")}
+                    keybind={command.keybind("file.attach")}
+                  >
+                    <IconButton
+                      data-action="prompt-attach"
+                      type="button"
+                      icon="plus"
                       variant="ghost"
+                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                      style={buttons()}
+                      onClick={pick}
+                      disabled={store.mode !== "normal"}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      aria-label={language.t("prompt.action.attachFile")}
                     />
-                  </div>
-                </Show>
-                {modelControl()}
+                  </TooltipKeybind>
+                  <Show when={showAgentControl()}>
+                    <ComposerAgentControl state={agentControlState()} />
+                  </Show>
+                  <Show when={newSession() && !selectedProject()}>
+                    <ComposerPickerTrigger state={newProjectTriggerState()} />
+                  </Show>
+                  <ComposerModelControl state={modelControlState()} />
+                </div>
+                <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
+                  <IconButton
+                    data-action="prompt-submit"
+                    type="submit"
+                    disabled={!working() && blank()}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
+                    variant="primary"
+                    class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+                    style={{
+                      "background-image":
+                        "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
+                    }}
+                    aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  />
+                </Tooltip>
               </div>
-              <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={!working() && blank()}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
-                  variant="primary"
-                  class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-                  style={{
-                    "background-image":
-                      "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
-                  }}
-                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                />
-              </Tooltip>
-            </div>
-          </DockShellForm>
+            </DockShellForm>
+            <Show when={newSession() && selectedProject()}>
+              <div class="flex h-7 min-w-0 items-center gap-0 px-2">
+                <ComposerPicker state={projectPickerState()} />
+              </div>
+            </Show>
+          </div>
         </Match>
         <Match when>
           <DockShellForm
@@ -1890,5 +1927,228 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </Match>
       </Switch>
     </div>
+  )
+}
+
+type ComposerPickerItemState = {
+  icon: IconProps["name"]
+  label: string
+  selected?: boolean
+  onSelect: () => void
+}
+
+type ComposerPickerTriggerState = {
+  action: string
+  icon?: IconProps["name"]
+  label: string
+  class?: string
+  style: JSX.CSSProperties | undefined
+  onPress: () => void
+}
+
+type ComposerPickerState = {
+  open: boolean
+  trigger: ComposerPickerTriggerState
+  search: string
+  searchPlaceholder: string
+  clearLabel: string
+  items: ComposerPickerItemState[]
+  action: ComposerPickerItemState
+  listClass?: string
+  searchRef: (el: HTMLInputElement) => void
+  onOpenChange: (open: boolean) => void
+  onSearchInput: (value: string) => void
+  onSearchClear: () => void
+}
+
+type ComposerAgentControlState = {
+  title: string
+  keybind: string
+  options: string[]
+  current: string
+  style: JSX.CSSProperties | undefined
+  onSelect: (value: string | undefined) => void
+}
+
+type ComposerModelControlState = {
+  loading: boolean
+  paid: boolean
+  title: string
+  keybind: string
+  model: ReturnType<typeof useLocal>["model"]
+  providerID?: string
+  modelName: string
+  style: JSX.CSSProperties | undefined
+  onClose: () => void
+  onUnpaidClick: () => void
+}
+
+function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: ComposerPickerTriggerState }) {
+  const [local, rest] = splitProps(props, ["state", "class", "style", "onClick"])
+  return (
+    <button
+      {...rest}
+      data-action={local.state.action}
+      type="button"
+      class={`flex h-7 min-w-0 items-center gap-1.5 rounded px-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none ${local.state.class ?? ""}`}
+      style={local.state.style}
+      onClick={() => local.state.onPress()}
+    >
+      <Show when={local.state.icon}>
+        {(icon) => <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
+      </Show>
+      <span class="min-w-0 truncate leading-5">{local.state.label}</span>
+      <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+    </button>
+  )
+}
+
+function ComposerPickerMenuItem(props: { state: ComposerPickerItemState }) {
+  return (
+    <button
+      type="button"
+      class="flex h-7 w-full items-center gap-2 rounded px-3 text-left text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      onClick={props.state.onSelect}
+    >
+      <Icon name={props.state.icon} size="small" class="shrink-0 text-v2-icon-icon-base" />
+      <span class="min-w-0 flex-1 truncate leading-5">{props.state.label}</span>
+      <Show when={props.state.selected}>
+        <Icon name="check-small" size="small" class="shrink-0 text-v2-icon-icon-base" />
+      </Show>
+    </button>
+  )
+}
+
+function ComposerPicker(props: { state: ComposerPickerState }) {
+  return (
+    <KobaltePopover
+      open={props.state.open}
+      placement="bottom-start"
+      gutter={4}
+      modal={false}
+      onOpenChange={props.state.onOpenChange}
+    >
+      <KobaltePopover.Trigger as={ComposerPickerTrigger} state={props.state.trigger} />
+      <KobaltePopover.Portal>
+        <KobaltePopover.Content
+          class="w-[243px] overflow-hidden rounded-md bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <div class={`flex flex-col p-0.5 ${props.state.listClass ?? ""}`}>
+            <div class="flex h-7 items-center gap-2 rounded px-3 text-v2-icon-icon-muted">
+              <Icon name="magnifying-glass" size="small" class="shrink-0" />
+              <input
+                ref={props.state.searchRef}
+                value={props.state.search}
+                placeholder={props.state.searchPlaceholder}
+                class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                onInput={(event) => props.state.onSearchInput(event.currentTarget.value)}
+              />
+              <Show when={props.state.search.trim()}>
+                <button
+                  type="button"
+                  class="flex size-5 items-center justify-center rounded text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                  onClick={props.state.onSearchClear}
+                  aria-label={props.state.clearLabel}
+                >
+                  <Icon name="close-small" size="small" />
+                </button>
+              </Show>
+            </div>
+            <For each={props.state.items}>{(item) => <ComposerPickerMenuItem state={item} />}</For>
+          </div>
+          <div class="h-px bg-v2-border-border-muted" />
+          <div class="flex flex-col p-0.5">
+            <ComposerPickerMenuItem state={props.state.action} />
+          </div>
+        </KobaltePopover.Content>
+      </KobaltePopover.Portal>
+    </KobaltePopover>
+  )
+}
+
+function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
+  return (
+    <div class="relative">
+      <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
+        <Icon name="sliders" size="small" />
+      </div>
+      <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+        <Select
+          size="normal"
+          options={props.state.options}
+          current={props.state.current}
+          onSelect={props.state.onSelect}
+          class="max-w-[175px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
+          valueClass="truncate pl-5 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+          triggerStyle={props.state.style}
+          triggerProps={{ "data-action": "prompt-agent" }}
+          variant="ghost"
+        />
+      </TooltipKeybind>
+    </div>
+  )
+}
+
+function ComposerModelControl(props: { state: ComposerModelControlState }) {
+  return (
+    <Show when={!props.state.loading}>
+      <Show
+        when={props.state.paid}
+        fallback={
+          <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+            <Button
+              data-action="prompt-model"
+              as="div"
+              variant="ghost"
+              size="normal"
+              class="min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-5 text-v2-text-text-faint group"
+              style={props.state.style}
+              onClick={props.state.onUnpaidClick}
+            >
+              <Show when={props.state.providerID}>
+                {(providerID) => (
+                  <ProviderIcon
+                    id={providerID()}
+                    class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                    style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                  />
+                )}
+              </Show>
+              <span class="truncate">{props.state.modelName}</span>
+              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+            </Button>
+          </TooltipKeybind>
+        }
+      >
+        <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+          <ModelSelectorPopover
+            model={props.state.model}
+            triggerAs={Button}
+            triggerProps={{
+              variant: "ghost",
+              size: "normal",
+              style: props.state.style,
+              class:
+                "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-5 text-v2-text-text-faint group",
+              "data-action": "prompt-model",
+            }}
+            onClose={props.state.onClose}
+          >
+            <Show when={props.state.providerID}>
+              {(providerID) => (
+                <ProviderIcon
+                  id={providerID()}
+                  class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                  style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                />
+              )}
+            </Show>
+            <span class="truncate">{props.state.modelName}</span>
+            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+          </ModelSelectorPopover>
+        </TooltipKeybind>
+      </Show>
+    </Show>
   )
 }

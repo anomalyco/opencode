@@ -158,7 +158,7 @@ const normalizeImageText = (value: string) =>
 const encryptedReasoningOptions = {
   openai: {
     store: false,
-    includeEncryptedReasoning: true,
+    include: ["reasoning.encrypted_content"],
     reasoningEffort: "low",
     reasoningSummary: "auto",
   },

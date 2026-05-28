@@ -215,6 +215,22 @@ describe("Worktree", () => {
     )
 
     it.instance(
+      "lists the active linked worktree but not the project checkout",
+      () =>
+        withCreatedWorktree(undefined, ({ info }) =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const svc = yield* Worktree.Service
+            const list = yield* svc.list().pipe(provideInstance(info.directory))
+
+            expect(list.map((item) => item.name)).toContain(info.name)
+            expect(list.map((item) => item.name)).not.toContain(path.basename(test.directory).toLowerCase())
+          }),
+        ),
+      { git: true },
+    )
+
+    it.instance(
       "create with custom name",
       () =>
         withCreatedWorktree({ name: "test-workspace" }, ({ info }) =>
