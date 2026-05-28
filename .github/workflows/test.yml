@@ -29,8 +29,6 @@ jobs:
         settings:
           - name: linux
             host: ubuntu-24.04
-          - name: windows
-            host: windows-2025
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -63,30 +61,10 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
             turbo-${{ runner.os }}-
 
-      - name: Print debug info (windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "=== versions ==="
-          bun --version
-          node --version
-          powershell -NoProfile -Command '$PSVersionTable | Format-List' || true
-          echo "=== disk ==="
-          df -h . || true
-          echo "=== memory (MB) ==="
-          powershell -NoProfile -Command '$cs = Get-CimInstance Win32_ComputerSystem; $os = Get-CimInstance Win32_OperatingSystem; "total: {0:N0}" -f ($cs.TotalPhysicalMemory / 1MB); "free:  {0:N0}" -f ($os.FreePhysicalMemory / 1024)' || true
-          echo "=== relevant env ==="
-          env | grep -iE 'RUNNER|TEMP|BUN|OPENCODE|TEST_TIMEOUT|GITHUB_WORKSPACE' | sort || true
-          echo "=== user config dirs ==="
-          for d in "${LOCALAPPDATA:-}" "${APPDATA:-}" "${XDG_CONFIG_HOME:-$HOME/.config}"; do
-            [ -n "$d" ] && [ -d "$d" ] && echo "--- $d (top 2 levels) ---" && find "$d" -maxdepth 2 -type d 2>/dev/null | head -40 || true
-          done
-
       - name: Run unit tests
         run: |
           set -o pipefail
           bun turbo test:ci 2>&1 | tee unit-stdout.log
-        env:
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Run HttpApi exerciser gates
         if: runner.os == 'Linux'
@@ -125,8 +103,6 @@ jobs:
         settings:
           - name: linux
             host: ubuntu-24.04
-          - name: windows
-            host: windows-2025
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
