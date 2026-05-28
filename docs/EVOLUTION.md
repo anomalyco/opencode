@@ -5,15 +5,17 @@
 
 ## Sumário dos Requisitos (origem: sessão 2026-05-28)
 
-| # | Requisito | Status |
-|---|-----------|--------|
-| R1 | Mapeamento do projeto com `simplicio-mapper` antes de programar | EM ANDAMENTO |
-| R2 | Programar sempre com `simplicio-dev-cli` (pip `simplicio-cli`) | EM ANDAMENTO |
-| R3 | Menu **Sprints** espelhando Jira/Azure/GitHub Issues via `simplicio-sprint` | EM ANDAMENTO |
-| R4 | IA local obrigatória **Qwen 2.5 Coder 3B** apelidada **Simplicio1**, gratuita, sem limite de tokens | EM ANDAMENTO |
-| R5 | Renomear **OpenCode → SimplicioCode** em todo o repositório | EM ANDAMENTO |
-| R6 | Cron diário às **10:00** e **17:30** para verificar atualizações das ferramentas Simplicio | EM ANDAMENTO |
-| R7 | Modo CLI sempre executa o mesmo fluxo (mapper → dev-cli → sprint quando aplicável) | EM ANDAMENTO |
+| # | Issue | Requisito | Status |
+|---|-------|-----------|--------|
+| R1 | [#3](https://github.com/wesleysimplicio/Simplicio-code/issues/3) | Mapeamento do projeto com `simplicio-mapper` antes de programar | EM ANDAMENTO |
+| R2 | [#4](https://github.com/wesleysimplicio/Simplicio-code/issues/4) | Programar sempre com `simplicio-dev-cli` (pip `simplicio-cli`) | EM ANDAMENTO |
+| R3 | [#5](https://github.com/wesleysimplicio/Simplicio-code/issues/5) | Menu **Sprints** espelhando Jira/Azure/GitHub Issues via `simplicio-sprint` | EM ANDAMENTO |
+| R4 | [#6](https://github.com/wesleysimplicio/Simplicio-code/issues/6) | IA local obrigatória **Qwen 2.5 Coder 3B** apelidada **Simplicio1**, gratuita, sem limite de tokens | EM ANDAMENTO |
+| R5 | [#7](https://github.com/wesleysimplicio/Simplicio-code/issues/7) | Renomear **OpenCode → SimplicioCode** em todo o repositório | EM ANDAMENTO |
+| R6 | [#8](https://github.com/wesleysimplicio/Simplicio-code/issues/8) | Cron diário às **10:00** e **17:30** para verificar atualizações das ferramentas Simplicio | EM ANDAMENTO |
+| R7 | [#9](https://github.com/wesleysimplicio/Simplicio-code/issues/9) | Modo CLI sempre executa o mesmo fluxo (mapper → dev-cli → sprint quando aplicável) | EM ANDAMENTO |
+
+Issue mestre: [#2](https://github.com/wesleysimplicio/Simplicio-code/issues/2).
 
 ## Repositórios upstream (sempre instalar a última versão)
 
@@ -72,6 +74,19 @@ Branch: `claude/simplicio-setup-config-9PXIm`
 - **.github/workflows/simplicio-update.yml** — cron diário 10:00 e 17:30 BRT.
 - **docs/RENAME_PLAN.md** — plano detalhado da renomeação OpenCode→SimplicioCode (a executar em commits seguintes para manter o diff revisável).
 - **README.md** — adicionado bloco "SimplicioCode" no topo apontando para este documento de evolução.
+
+### 2026-05-28 — Issues criadas para rastreio item a item
+
+Branch: `claude/simplicio-setup-config-9PXIm`
+
+- Habilitada a feature Issues no repositório.
+- Criada issue mestre [#2](https://github.com/wesleysimplicio/Simplicio-code/issues/2) com checklist R1–R7.
+- Criadas 7 sub-issues: [#3](https://github.com/wesleysimplicio/Simplicio-code/issues/3) R1, [#4](https://github.com/wesleysimplicio/Simplicio-code/issues/4) R2, [#5](https://github.com/wesleysimplicio/Simplicio-code/issues/5) R3, [#6](https://github.com/wesleysimplicio/Simplicio-code/issues/6) R4, [#7](https://github.com/wesleysimplicio/Simplicio-code/issues/7) R5, [#8](https://github.com/wesleysimplicio/Simplicio-code/issues/8) R6, [#9](https://github.com/wesleysimplicio/Simplicio-code/issues/9) R7.
+- Cada sub-issue contém: objetivo, repo upstream, estado atual (o que já entrou no PR #1), pendências e critério de aceite.
+- Sub-issues linkadas via `sub_issue_write` à mestre para hierarquia nativa do GitHub.
+- `docs/EVOLUTION.md`: tabela de requisitos passou a referenciar as issues.
+
+Resultado: PARCIAL — issues abertas e rastreáveis; trabalho a partir daqui sempre referencia a sub-issue correspondente via `Refs #N` ou `Closes #N`.
 
 ### Pendências para próximos commits
 
