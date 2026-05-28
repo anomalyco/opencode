@@ -2,6 +2,7 @@ import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
+import { SessionGoal } from "@/session/goal"
 import { PermissionID } from "@/permission/schema"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
@@ -24,6 +25,7 @@ import {
   CommandPayload,
   DiffQuery,
   ForkPayload,
+  GoalPayload,
   InitPayload,
   ListQuery,
   MessagesQuery,
@@ -48,6 +50,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const session = yield* Session.Service
     const shareSvc = yield* SessionShare.Service
     const promptSvc = yield* SessionPrompt.Service
+    const goalSvc = yield* SessionGoal.Service
     const revertSvc = yield* SessionRevert.Service
     const compactSvc = yield* SessionCompaction.Service
     const runState = yield* SessionRunState.Service
@@ -403,6 +406,30 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* session.updatePart(payload)
     })
 
+    const getGoal = Effect.fn("SessionHttpApi.getGoal")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const opt = yield* goalSvc.get(ctx.params.sessionID)
+      return opt._tag === "Some" ? opt.value : null
+    })
+
+    const setGoal = Effect.fn("SessionHttpApi.setGoal")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* goalSvc.set(ctx.params.sessionID, ctx.payload.condition)
+    })
+
+    const clearGoal = Effect.fn("SessionHttpApi.clearGoal")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* goalSvc.clear(ctx.params.sessionID)
+      return true
+    })
+
     return handlers
       .handle("list", list)
       .handle("status", status)
@@ -431,5 +458,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("deleteMessage", deleteMessage)
       .handle("deletePart", deletePart)
       .handle("updatePart", updatePart)
+      .handle("getGoal", getGoal)
+      .handle("setGoal", setGoal)
+      .handle("clearGoal", clearGoal)
   }),
 )

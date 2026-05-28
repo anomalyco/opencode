@@ -1219,6 +1219,41 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .get("/session/{sessionID}/goal", "session.getGoal")
+    .seeded((ctx) => ctx.session({ title: "Goal get session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === null, "getGoal should return null when no goal is set")
+    }),
+  http.protected
+    .post("/session/{sessionID}/goal", "session.setGoal")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Goal set session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { condition: "all tests pass" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.status === "active", "setGoal should return an active goal")
+      check(body.condition === "all tests pass", "setGoal should store the condition")
+    }),
+  http.protected
+    .delete("/session/{sessionID}/goal", "session.clearGoal")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Goal clear session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === true, "clearGoal should return true")
+    }),
+  http.protected
     .post("/session/{sessionID}/permissions/{permissionID}", "permission.respond")
     .seeded((ctx) => ctx.session({ title: "Deprecated permission session" }))
     .at((ctx) => ({

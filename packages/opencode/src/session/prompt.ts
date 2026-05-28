@@ -61,6 +61,7 @@ import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { SessionGoal } from "./goal"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -129,6 +130,7 @@ export const layer = Layer.effect(
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const goal = yield* SessionGoal.Service
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
@@ -1241,6 +1243,155 @@ export const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    // Evaluate whether the active goal condition is met using the small model.
+    const evalGoal = Effect.fn("SessionPrompt.evalGoal")(function* (
+      sessionID: SessionID,
+      providerID: ProviderID,
+      modelID: ModelID,
+      messages: MessageV2.WithParts[],
+    ) {
+      const model = yield* provider
+        .getSmallModel(providerID)
+        .pipe(Effect.flatMap((m) => (m ? Effect.succeed(m) : provider.getModel(providerID, modelID))))
+        .pipe(Effect.catch(() => provider.getModel(providerID, modelID)))
+        .pipe(Effect.orDie)
+      const ag = yield* agents.get("title")
+      if (!ag) return { met: false, reason: "Evaluator agent unavailable" } satisfies SessionGoal.EvalResult
+
+      const transcript = SessionGoal.extractTranscript(messages)
+      const evalPrompt = SessionGoal.buildEvalPrompt(
+        (yield* goal.get(sessionID)).pipe(Option.map((g) => g.condition), Option.getOrElse(() => "")),
+        transcript,
+      )
+
+      const fakeUser: MessageV2.User = {
+        id: "" as any,
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: ag.name,
+        model: { providerID: model.providerID, modelID: model.id as ModelID },
+      }
+
+      const text = yield* llm
+        .stream({
+          agent: ag,
+          user: fakeUser,
+          sessionID,
+          system: [SessionGoal.EVAL_SYSTEM],
+          small: true,
+          tools: {},
+          model,
+          retries: 0,
+          messages: [{ role: "user", content: evalPrompt }],
+        })
+        .pipe(
+          Stream.filter(LLMEvent.is.textDelta),
+          Stream.map((e) => e.text),
+          Stream.mkString,
+          Effect.catch(() => Effect.succeed("no\nEvaluation failed")),
+        )
+
+      const result = SessionGoal.parseEvalResponse(text)
+      yield* bus.publish(SessionGoal.Event.Evaluated, {
+        sessionID,
+        met: result.met,
+        reason: result.reason,
+        turns: (yield* goal.get(sessionID)).pipe(Option.map((g) => g.turns), Option.getOrElse(() => 0)),
+      })
+      yield* goal.updateLastReason(sessionID, result.reason)
+      return result satisfies SessionGoal.EvalResult
+    })
+
+    // Build a synthetic assistant response for /goal status/clear/set feedback.
+    const goalSyntheticReply = Effect.fn("SessionPrompt.goalSyntheticReply")(function* (
+      sessionID: SessionID,
+      text: string,
+      parentID: MessageID,
+    ) {
+      const ag = yield* agents.defaultInfo()
+      const model = yield* currentModel(sessionID)
+      const msg: MessageV2.Assistant = {
+        id: MessageID.ascending(),
+        sessionID,
+        parentID,
+        role: "assistant",
+        mode: ag.name,
+        agent: ag.name,
+        cost: 0,
+        path: { cwd: "", root: "" },
+        time: { created: Date.now(), completed: Date.now() },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: model.modelID,
+        providerID: model.providerID,
+        finish: "stop",
+      }
+      yield* sessions.updateMessage(msg)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: msg.id,
+        sessionID,
+        type: "text",
+        text,
+        synthetic: false,
+      } satisfies MessageV2.TextPart)
+      return { info: msg, parts: [] as MessageV2.Part[] } as MessageV2.WithParts
+    })
+
+    const handleGoalCommand = Effect.fn("SessionPrompt.handleGoalCommand")(function* (input: CommandInput) {
+      const { sessionID } = input
+      const arg = input.arguments.trim()
+
+      // Create a minimal user message to anchor the reply.
+      const agentInfo = yield* agents.defaultInfo()
+      const model = yield* currentModel(sessionID)
+      const userMsg: MessageV2.User = {
+        id: input.messageID ?? MessageID.ascending(),
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: agentInfo.name,
+        model: { providerID: model.providerID, modelID: model.modelID },
+      }
+      yield* sessions.updateMessage(userMsg)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: userMsg.id,
+        sessionID,
+        type: "text",
+        text: arg ? `/goal ${arg}` : "/goal",
+        synthetic: true,
+      } satisfies MessageV2.TextPart)
+
+      // /goal clear (and aliases) — remove active goal
+      if (arg && SessionGoal.isClearAlias(arg)) {
+        yield* goal.clear(sessionID)
+        return yield* goalSyntheticReply(sessionID, "Goal cleared.", userMsg.id)
+      }
+
+      // /goal — show current status
+      if (!arg) {
+        const current = yield* goal.get(sessionID)
+        if (Option.isNone(current)) {
+          return yield* goalSyntheticReply(sessionID, "No active goal.", userMsg.id)
+        }
+        const g = current.value
+        const duration = Math.round((Date.now() - g.time.started) / 1000)
+        const lines = [
+          `Goal: ${g.condition}`,
+          `Status: ${g.status}`,
+          `Turns: ${g.turns}`,
+          `Running for: ${duration}s`,
+          ...(g.lastReason ? [`Last evaluation: ${g.lastReason}`] : []),
+        ]
+        return yield* goalSyntheticReply(sessionID, lines.join("\n"), userMsg.id)
+      }
+
+      // /goal <condition> — set new goal and start AI loop
+      yield* goal.set(sessionID, arg)
+      return yield* loop({ sessionID })
+    })
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1287,6 +1438,48 @@ export const layer = Layer.effect(
               })
             }
             yield* slog.info("exiting loop")
+
+            // Check if a goal is active; if so evaluate before breaking.
+            const activeGoal = yield* goal
+              .get(sessionID)
+              .pipe(Effect.map(Option.filter((g) => g.status === "active")))
+            if (Option.isSome(activeGoal)) {
+              const evalMsgs = yield* MessageV2.filterCompactedEffect(sessionID)
+              const turnTokens =
+                (lastFinished?.tokens?.input ?? 0) + (lastFinished?.tokens?.output ?? 0)
+              yield* goal.afterTurn(sessionID, turnTokens)
+              const evalResult = yield* evalGoal(sessionID, lastUser.model.providerID, lastUser.model.modelID, evalMsgs)
+              if (evalResult.met) {
+                yield* goal.achieve(sessionID)
+                break
+              }
+              // Inject a synthetic user message so the AI continues working.
+              const contMsg: MessageV2.User = {
+                id: MessageID.ascending(),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(contMsg)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: contMsg.id,
+                sessionID,
+                type: "text",
+                text: [
+                  "<system-reminder>",
+                  `Goal not yet met. Evaluator says: ${evalResult.reason}`,
+                  `Goal condition: ${activeGoal.value.condition}`,
+                  "Please continue working toward the goal.",
+                  "</system-reminder>",
+                ].join("\n"),
+                synthetic: true,
+              } satisfies MessageV2.TextPart)
+              continue
+            }
+
             break
           }
 
@@ -1512,6 +1705,13 @@ export const layer = Layer.effect(
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
       yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
+
+      // Handle /goal as a built-in command – it manipulates session state
+      // directly rather than dispatching to the template engine.
+      if (input.command === "goal") {
+        return yield* handleGoalCommand(input)
+      }
+
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
@@ -1669,6 +1869,7 @@ export const defaultLayer = Layer.suspend(() =>
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
+        SessionGoal.defaultLayer,
       ),
     ),
   ),

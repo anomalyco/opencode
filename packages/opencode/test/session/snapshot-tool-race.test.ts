@@ -18,6 +18,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
+import { SessionGoal } from "../../src/session/goal"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
@@ -177,6 +178,7 @@ function makeHttp() {
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+      Layer.provide(SessionGoal.layer),
       Layer.provideMerge(deps),
     ),
   )

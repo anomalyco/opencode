@@ -2,6 +2,7 @@ import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session/session"
+import { SessionGoal } from "@/session/goal"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
@@ -98,7 +99,12 @@ export const SessionPaths = {
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
+  getGoal: `${root}/:sessionID/goal`,
+  setGoal: `${root}/:sessionID/goal`,
+  clearGoal: `${root}/:sessionID/goal`,
 } as const
+
+export const GoalPayload = Schema.Struct({ condition: Schema.String })
 
 export const SessionApi = HttpApi.make("session")
   .add(
@@ -436,6 +442,47 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "part.update",
             description: "Update a part in a message.",
+          }),
+        ),
+        HttpApiEndpoint.get("getGoal", SessionPaths.getGoal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.NullOr(SessionGoal.Goal),
+            "Current or most recent goal for the session",
+          ),
+          error: [ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.getGoal",
+            summary: "Get goal",
+            description: "Get the current or most recently achieved/cleared goal for a session.",
+          }),
+        ),
+        HttpApiEndpoint.post("setGoal", SessionPaths.setGoal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: GoalPayload,
+          success: described(SessionGoal.Goal, "Goal set and AI loop started"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.setGoal",
+            summary: "Set goal",
+            description:
+              "Set a goal condition. The AI keeps working until the condition is met or the goal is cleared.",
+          }),
+        ),
+        HttpApiEndpoint.delete("clearGoal", SessionPaths.clearGoal, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Goal cleared"),
+          error: [ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.clearGoal",
+            summary: "Clear goal",
+            description: "Remove an active goal early.",
           }),
         ),
       )
