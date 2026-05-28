@@ -466,6 +466,24 @@ export function SessionSidePanel(props: {
               </div>
             </Show>
           </div>
+          <Show when={reviewOpen() || fileOpen()}>
+            <TooltipKeybind title={language.t("command.fileTree.toggle")} keybind={command.keybind("fileTree.toggle")}>
+              <IconButton
+                icon={fileOpen() ? "chevron-right" : "chevron-left"}
+                variant="secondary"
+                size="small"
+                class="absolute right-1 top-1/2 z-20 !h-8 !w-5 -translate-y-1/2 -mr-1 rounded-r-none border-r-0 bg-background-stronger"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  layout.fileTree.toggle()
+                }}
+                aria-label={language.t("command.fileTree.toggle")}
+                aria-expanded={layout.fileTree.opened()}
+                aria-controls="file-tree-panel"
+              />
+            </TooltipKeybind>
+          </Show>
         </div>
       </aside>
     </Show>
