@@ -128,19 +128,6 @@ const allTargets: {
     arch: "x64",
     avx2: false,
   },
-  {
-    os: "win32",
-    arch: "arm64",
-  },
-  {
-    os: "win32",
-    arch: "x64",
-  },
-  {
-    os: "win32",
-    arch: "x64",
-    avx2: false,
-  },
 ]
 
 const targets = singleFlag
