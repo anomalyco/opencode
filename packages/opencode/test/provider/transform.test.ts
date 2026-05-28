@@ -2193,6 +2193,117 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
   })
 })
 
+describe("ProviderTransform.message - bedrock skips cachePoint on DocumentBlock messages", () => {
+  // https://github.com/sst/opencode/issues/17300
+  // Bedrock rejects `cachePoint` when it lands on a message whose only
+  // cacheable content is a non-image file (PDF, CSV, etc.) with
+  // "There is nothing available to cache. Please remove the invalid cache point".
+  const bedrockModel = {
+    id: "amazon-bedrock/anthropic.claude-opus-4-6",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "anthropic.claude-opus-4-6",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude Opus 4.6",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("skips cachePoint on user message containing a PDF file", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Summarize this PDF" },
+          { type: "file", mediaType: "application/pdf", data: "data:application/pdf;base64,abcd" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("still applies cachePoint on a text-only message before the PDF message", () => {
+    const msgs = [
+      { role: "user", content: "first turn, plain text" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Summarize this" },
+          { type: "file", mediaType: "application/pdf", data: "data:application/pdf;base64,abcd" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    // The text-only message still gets the cachePoint applied
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+    // The PDF-bearing message does not
+    expect(result[1].providerOptions?.bedrock?.cachePoint).toBeUndefined()
+  })
+
+  test("does not skip cachePoint on messages containing only an image file", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Describe this image" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,abcd" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    // Images are cacheable, cachePoint should still apply
+    expect(result[0].providerOptions?.bedrock?.cachePoint).toEqual({ type: "default" })
+  })
+
+  test("non-bedrock providers still cache PDF messages (issue is bedrock-specific)", () => {
+    const anthropicModel = {
+      ...bedrockModel,
+      providerID: "anthropic",
+      api: {
+        id: "claude-3-5-sonnet-20241022",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Summarize this PDF" },
+          { type: "file", mediaType: "application/pdf", data: "data:application/pdf;base64,abcd" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    // Anthropic direct does not have the cache point limitation
+    expect(result[0].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" })
+  })
+})
+
 describe("ProviderTransform.message - cache control on gateway", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({

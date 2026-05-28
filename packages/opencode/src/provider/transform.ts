@@ -367,7 +367,26 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     },
   }
 
+  const targetsBedrock = model.providerID.includes("bedrock") || model.api.npm === "@ai-sdk/amazon-bedrock"
+
   for (const msg of unique([...system, ...final])) {
+    // Bedrock rejects cachePoint on messages whose only cacheable content is
+    // a DocumentBlock (PDF/CSV/etc.) with "nothing available to cache".
+    // DocumentBlocks are processed server-side and don't count toward the
+    // cacheable token budget. Skip the message so the next-most-recent
+    // eligible message in `unique([...system, ...final])` still gets cached.
+    // See https://github.com/sst/opencode/issues/17300
+    if (
+      targetsBedrock &&
+      Array.isArray(msg.content) &&
+      msg.content.some(
+        (part: any) =>
+          part.type === "file" && typeof part.mediaType === "string" && !part.mediaType.startsWith("image/"),
+      )
+    ) {
+      continue
+    }
+
     const useMessageLevelOptions =
       model.providerID === "anthropic" ||
       model.providerID.includes("bedrock") ||
