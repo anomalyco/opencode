@@ -106,7 +106,9 @@ export async function verifyJwt(token: string, secret: string): Promise<Simplici
     )
     const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`)
     const signature = b64UrlDecode(sigB64)
-    const ok = await crypto.subtle.verify("HMAC", key, signature, data)
+    // Slice to a fresh ArrayBuffer to satisfy WebCrypto's BufferSource type.
+    const sigBuf = signature.buffer.slice(signature.byteOffset, signature.byteOffset + signature.byteLength) as ArrayBuffer
+    const ok = await crypto.subtle.verify("HMAC", key, sigBuf, data)
     if (!ok) return null
     const claims = JSON.parse(new TextDecoder().decode(b64UrlDecode(payloadB64))) as SimplicioClaims
     if (claims.exp * 1000 < Date.now()) return null
