@@ -1099,6 +1099,21 @@ export function Prompt(props: PromptProps) {
     const messageID = MessageID.ascending()
     let inputText = store.prompt.input
 
+    // Extmark start/end are display-width offsets, NOT JS string indices.
+    // Convert them to char indices before slicing.
+    function visualOffsetToCharIndex(text: string, visualOffset: number): number {
+      let seen = 0
+      let idx = 0
+      while (idx < text.length) {
+        if (seen >= visualOffset) return idx
+        const cp = text.codePointAt(idx)!
+        const char = String.fromCodePoint(cp)
+        seen += char === "\n" ? 1 : Bun.stringWidth(char)
+        idx += char.length
+      }
+      return idx
+    }
+
     // Expand pasted text inline before submitting
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
     const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
@@ -1108,8 +1123,10 @@ export function Prompt(props: PromptProps) {
       if (partIndex !== undefined) {
         const part = store.prompt.parts[partIndex]
         if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
+          const charStart = visualOffsetToCharIndex(inputText, extmark.start)
+          const charEnd = visualOffsetToCharIndex(inputText, extmark.end)
+          const before = inputText.slice(0, charStart)
+          const after = inputText.slice(charEnd)
           inputText = before + part.text + after
         }
       }
