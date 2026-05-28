@@ -1189,7 +1189,10 @@ export const layer = Layer.effect(
               modelID: lastUser.model.modelID,
               providerID: lastUser.model.providerID,
               history: msgs,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
+            }).pipe(
+              Effect.catchCause((cause) => elog.warn("title generation failed", { error: Cause.squash(cause) })),
+              Effect.forkIn(scope),
+            )
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
