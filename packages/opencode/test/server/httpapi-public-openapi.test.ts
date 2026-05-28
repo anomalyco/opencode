@@ -9,6 +9,7 @@ type OpenApiResponse = {
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
+  readonly parameters?: ReadonlyArray<{ readonly name: string; readonly in: string }>
   readonly responses?: Record<string, OpenApiResponse>
   readonly security?: unknown
 }
@@ -207,6 +208,11 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(componentName(responseRef(spec.paths["/pty/{ptyID}/connect-token"]?.post?.responses?.["403"]) ?? "")).toBe(
       "PtyForbiddenError",
     )
+    expect(
+      spec.paths["/pty/{ptyID}/connect"]?.get?.parameters
+        ?.filter((parameter) => parameter.in === "query")
+        .map((parameter) => parameter.name),
+    ).toEqual(["directory", "workspace", "cursor", "ticket"])
   })
 
   test("documents project not-found errors", () => {

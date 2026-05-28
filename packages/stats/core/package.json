@@ -20,6 +20,7 @@
     "db:migrate": "bun src/migrate.ts",
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
+    "honeycomb:backfill": "bun src/honeycomb-backfill.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
