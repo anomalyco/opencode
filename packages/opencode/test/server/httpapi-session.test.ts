@@ -397,10 +397,6 @@ describe("session HttpApi", () => {
       expect(response.status).toBe(200)
       yield* responseJson(response)
 
-      // The prompt records the active instance directory on the assistant
-      // message; that's the resolved cwd used for tools, snapshots, and the
-      // system prompt. Asserting it directly avoids substring-matching a
-      // multi-thousand-token LLM payload.
       const messages = yield* Session.use
         .messages({ sessionID: session.id })
         .pipe(provideInstanceEffect(sessionDirectory), Effect.orDie)
