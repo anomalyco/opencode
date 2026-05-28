@@ -143,6 +143,71 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode config --help 1`] = `
+"opencode config
+
+manage configuration files
+
+Commands:
+  opencode config check   validate configuration files
+  opencode config repair  remove safely repairable configuration errors
+  opencode config reset   back up and reset config files to an empty config
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode config check --help 1`] = `
+"opencode config check
+
+validate configuration files
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --global      only use global config                                                 [boolean]
+      --project     only use project config                                                [boolean]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode config repair --help 1`] = `
+"opencode config repair
+
+remove safely repairable configuration errors
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --global      only use global config                                                 [boolean]
+      --project     only use project config                                                [boolean]"
+`;
+
+exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode config reset --help 1`] = `
+"opencode config reset
+
+back up and reset config files to an empty config
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure        run without external plugins                                           [boolean]
+      --global      only use global config                                                 [boolean]
+      --project     only use project config                                                [boolean]
+      --yes         skip confirmation prompt                                               [boolean]
+      --all         reset valid config files too                                           [boolean]"
+`;
+
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers --help 1`] = `
 "opencode providers
 

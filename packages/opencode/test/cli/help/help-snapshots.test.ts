@@ -48,6 +48,7 @@ const TOP_LEVEL = [
   "attach",
   "run",
   "debug",
+  "config",
   "providers", // aliased to `auth`
   "agent",
   "upgrade",
@@ -73,6 +74,9 @@ const SUBCOMMANDS = [
   ["mcp", "add"],
   ["mcp", "auth"],
   ["mcp", "logout"],
+  ["config", "check"],
+  ["config", "repair"],
+  ["config", "reset"],
   ["providers", "list"],
   ["providers", "login"],
   ["providers", "logout"],

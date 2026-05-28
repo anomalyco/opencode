@@ -4,6 +4,7 @@ import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConsoleCommand } from "./cli/cmd/account"
+import { ConfigCommand } from "./cli/cmd/config"
 import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
@@ -162,6 +163,7 @@ const cli = yargs(args)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
+  .command(ConfigCommand)
   .command(ConsoleCommand)
   .command(ProvidersCommand)
   .command(AgentCommand)

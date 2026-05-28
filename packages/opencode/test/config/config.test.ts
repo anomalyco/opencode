@@ -5,6 +5,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
+import { ConfigRepair } from "../../src/config/repair"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
@@ -1305,6 +1306,85 @@ test("config parser preserves permission order while rejecting unknown top-level
     const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
     expect(error.data?.issues?.[0]).toMatchObject({ code: "unrecognized_keys", keys: ["invalid_field"], path: [] })
   }
+})
+
+test("config repair derives removable keys from unrecognized_keys parser issues", async () => {
+  const text = JSON.stringify(
+    {
+      $schema: "https://opencode.ai/config.json",
+      model: "anthropic/claude-sonnet-4-5",
+      invalid_field: true,
+      typo: "remove me",
+    },
+    null,
+    2,
+  )
+
+  const inspection = await Effect.runPromise(ConfigRepair.inspect(text, "test"))
+
+  expect(inspection.valid).toBe(false)
+  expect(inspection.error).toBe("invalid")
+  expect(inspection.fixPaths).toEqual([["invalid_field"], ["typo"]])
+
+  const repaired = ConfigRepair.applyFixes(text, inspection)
+  expect(JSON.parse(repaired)).toEqual({
+    $schema: "https://opencode.ai/config.json",
+    model: "anthropic/claude-sonnet-4-5",
+  })
+  expect(await Effect.runPromise(ConfigRepair.inspect(repaired, "test"))).toMatchObject({
+    valid: true,
+    fixPaths: [],
+  })
+})
+
+test("config repair reports JSON parser errors without fix paths", async () => {
+  const invalidJson = await Effect.runPromise(ConfigRepair.inspect('{"model":', "test"))
+  expect(invalidJson).toMatchObject({
+    valid: false,
+    error: "json",
+    fixPaths: [],
+  })
+})
+
+test("config repair can remove nested invalid fields when the result validates", async () => {
+  const text = JSON.stringify({
+    $schema: "https://opencode.ai/config.json",
+    share: "auto",
+    tool_output: {
+      max_lines: -1,
+      max_bytes: 1000,
+    },
+  })
+
+  const inspection = await Effect.runPromise(ConfigRepair.inspect(text, "test"))
+
+  expect(inspection.fixPaths).toEqual([["tool_output", "max_lines"]])
+  expect(JSON.parse(ConfigRepair.applyFixes(text, inspection))).toEqual({
+    $schema: "https://opencode.ai/config.json",
+    share: "auto",
+    tool_output: {
+      max_bytes: 1000,
+    },
+  })
+})
+
+test("config repair skips partial fixes that do not make the config valid", async () => {
+  const inspection = await Effect.runPromise(
+    ConfigRepair.inspect(
+      JSON.stringify({
+        mcp: {
+          broken: {
+            type: "local",
+            command: 123,
+          },
+        },
+      }),
+      "test",
+    ),
+  )
+
+  expect(inspection.candidatePaths).toEqual([["mcp", "broken", "command"]])
+  expect(inspection.fixPaths).toEqual([])
 })
 
 // MCP config merging tests
