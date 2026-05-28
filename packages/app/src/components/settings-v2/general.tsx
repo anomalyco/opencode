@@ -12,8 +12,8 @@ import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
-import { useGlobalSync } from "@/context/global-sync"
-import { useGlobalSDK } from "@/context/global-sdk"
+import { useServerSync } from "@/context/server-sync"
+import { useServerSDK } from "@/context/server-sdk"
 import {
   monoDefault,
   monoFontFamily,
@@ -177,8 +177,8 @@ export const SettingsGeneralV2: Component = () => {
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
-  const globalSync = useGlobalSync()
-  const globalSdk = useGlobalSDK()
+  const globalSync = useServerSync()
+  const globalSdk = useServerSDK()
 
   const [shells] = createResource(
     () =>

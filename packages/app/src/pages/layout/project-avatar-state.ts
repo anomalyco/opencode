@@ -1,11 +1,11 @@
 import { createMemo, type Accessor } from "solid-js"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 
 export function useSessionTabAvatarState(directory: Accessor<string>, sessionId: Accessor<string>) {
-  const globalSync = useGlobalSync()
+  const globalSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
   const hasPermissions = createMemo(() => {

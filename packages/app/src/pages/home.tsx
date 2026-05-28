@@ -21,7 +21,8 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
+import { useServers } from "@/context/servers"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
@@ -66,7 +67,7 @@ const HOME_SEARCH_RESULT_META =
   "min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]"
 
 function buildHomeSessionRecords(input: {
-  sync: ReturnType<typeof useGlobalSync>
+  sync: ReturnType<typeof useServerSync>
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
@@ -105,7 +106,7 @@ export default function Home() {
 }
 
 function HomeDesign() {
-  const sync = useGlobalSync()
+  const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -606,7 +607,7 @@ function HomeSessionSearchResultRow(props: {
   onHighlight: () => void
   onSelect: (session: Session) => void
 }) {
-  const globalSync = useGlobalSync()
+  const globalSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
   const [sessionStore] = globalSync.child(props.record.session.directory, { bootstrap: false })
@@ -709,7 +710,7 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
 }
 
 function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (session: Session) => void }) {
-  const globalSync = useGlobalSync()
+  const globalSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
   const [sessionStore] = globalSync.child(props.record.session.directory, { bootstrap: false })
@@ -817,12 +818,13 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
 }
 
 function LegacyHome() {
-  const sync = useGlobalSync()
+  const sync = useServerSync()
   const layout = useLayout()
   const platform = usePlatform()
   const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
+  const servers = useServers()
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
   const recent = createMemo(() => {
@@ -833,7 +835,7 @@ function LegacyHome() {
   })
 
   const serverDotClass = createMemo(() => {
-    const healthy = server.healthy()
+    const healthy = servers.health[server.key]?.healthy
     if (healthy === true) return "bg-icon-success-base"
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"
