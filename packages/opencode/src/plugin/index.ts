@@ -28,11 +28,8 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-<<<<<<< HEAD
 import { EventV2Bridge } from "@/event-v2-bridge"
-=======
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
->>>>>>> origin/dev
 
 const log = Log.create({ service: "plugin" })
 
@@ -258,17 +255,6 @@ export const layer = Layer.effect(
           }).pipe(Effect.ignore)
         }
 
-<<<<<<< HEAD
-        const unsubscribe = yield* events.listen((event) => {
-          if (event.location?.directory !== ctx.directory) return Effect.void
-          return Effect.sync(() => {
-            for (const hook of hooks) {
-              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
-            }
-          })
-        })
-        yield* Effect.addFinalizer(() => unsubscribe)
-=======
         yield* Effect.addFinalizer(() =>
           Effect.forEach(
             hooks,
@@ -283,18 +269,15 @@ export const layer = Layer.effect(
           ),
         )
 
-        // Subscribe to bus events, fiber interrupted when scope closes
-        yield* (yield* bus.subscribeAll()).pipe(
-          Stream.runForEach((input) =>
-            Effect.sync(() => {
-              for (const hook of hooks) {
-                void hook["event"]?.({ event: input as any })
-              }
-            }),
-          ),
-          Effect.forkScoped,
-        )
->>>>>>> origin/dev
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.location?.directory !== ctx.directory) return Effect.void
+          return Effect.sync(() => {
+            for (const hook of hooks) {
+              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
+            }
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
 
         return { hooks }
       }),

@@ -282,14 +282,9 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.anthropic]).toBeDefined()
     // Config options should be merged
-<<<<<<< HEAD
     expect(providers[ProviderV2.ID.anthropic].options.timeout).toBe(60000)
+    expect(providers[ProviderV2.ID.anthropic].options.headerTimeout).toBe(10000)
     expect(providers[ProviderV2.ID.anthropic].options.chunkTimeout).toBe(15000)
-=======
-    expect(providers[ProviderID.anthropic].options.timeout).toBe(60000)
-    expect(providers[ProviderID.anthropic].options.headerTimeout).toBe(10000)
-    expect(providers[ProviderID.anthropic].options.chunkTimeout).toBe(15000)
->>>>>>> origin/dev
   }),
   { config: { provider: { anthropic: { options: { timeout: 60000, headerTimeout: 10000, chunkTimeout: 15000 } } } } },
 )

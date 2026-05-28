@@ -7,12 +7,7 @@ import { Effect, Layer, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
-<<<<<<< HEAD
-
-=======
-import { ProviderID } from "../../src/provider/schema"
 import { ProviderError } from "../../src/provider/error"
->>>>>>> origin/dev
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { testEffect } from "../lib/effect"
