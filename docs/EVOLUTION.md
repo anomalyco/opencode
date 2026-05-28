@@ -14,6 +14,8 @@
 | R5 | [#7](https://github.com/wesleysimplicio/Simplicio-code/issues/7) | Renomear **OpenCode → SimplicioCode** em todo o repositório | EM ANDAMENTO |
 | R6 | [#8](https://github.com/wesleysimplicio/Simplicio-code/issues/8) | Cron diário às **10:00** e **17:30** para verificar atualizações das ferramentas Simplicio | EM ANDAMENTO |
 | R7 | [#9](https://github.com/wesleysimplicio/Simplicio-code/issues/9) | Modo CLI sempre executa o mesmo fluxo (mapper → dev-cli → sprint quando aplicável) | EM ANDAMENTO |
+| R8 | [#10](https://github.com/wesleysimplicio/Simplicio-code/issues/10) | Simplicio1 = família com auto-seleção (Qwen 1.5B/3B/7B/14B + DeepSeek V4 Pro via HF, budget US$5) | EM ANDAMENTO |
+| R9 | [#11](https://github.com/wesleysimplicio/Simplicio-code/issues/11) | Plano Pro US$20/mês — sem cobrança por token + Auto-Sprints exclusivo | TODO |
 
 Issue mestre: [#2](https://github.com/wesleysimplicio/Simplicio-code/issues/2).
 
@@ -158,6 +160,27 @@ Branch: `claude/simplicio-setup-config-9PXIm`. Commit: `9e2e020`.
 **`.specs/sprints/sprint-01/SPRINT.md`** atualizado com o board real de R1–R7 ligado às issues #3–#9.
 
 Resultado: PARCIAL avançado — Fase 2 do rename validada via typecheck. Falta Fases 3–5 (dirs, imports profundos, URLs).
+
+### 2026-05-28 — R8 (família de modelos) + R9 (plano Pro) abertas
+
+Branch: `claude/simplicio-setup-config-9PXIm`.
+
+**Novos requisitos do usuário:**
+- **R8 (#10)**: Simplicio1 deixa de ser um único modelo e vira uma **família com auto-seleção** baseada em RAM/saldo HF.
+  - 5 tiers: 1.5B / 3B / 7B / 14B (Qwen local) + DeepSeek V4 Pro (HF, budget US$5).
+  - Quando saldo HF acaba, cai automaticamente para o maior Qwen que a máquina aguenta.
+- **R9 (#11)**: Assinatura Pro US$20/mês — tokens ilimitados em modelos premium + **Auto-Sprints** (sendsprint watch 24/7) exclusivo para pagantes.
+
+**Configuração materializada agora:**
+- `.simplicio/config.json` → `localAi.tiers[]` com 5 entradas + `localAi.autoSelect: true` + bloco `subscription.{free,pro}`.
+- `.opencode/opencode.jsonc` → providers `ollama` (4 modelos Qwen) e `huggingface` (DeepSeek V4 Pro) registrados.
+- Issues #10 e #11 linkadas como sub-issues de #2.
+
+**Falta (em PRs futuros):**
+- [ ] Lógica de detecção de RAM em `packages/opencode/src/provider/`.
+- [ ] Tracker de saldo HF (consumindo `https://huggingface.co/api/billing/usage`).
+- [ ] Gateway/billing para o plano Pro (#11).
+- [ ] Feature flag bloqueando `sendsprint watch` para usuários free.
 
 ### Pendências para próximos commits
 

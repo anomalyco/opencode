@@ -1,7 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // SimplicioCode: register Simplicio1 (Qwen 2.5 Coder 3B served by local Ollama)
-  // as the free, unlimited-tokens local provider. See docs/EVOLUTION.md (R4).
+  // SimplicioCode: Simplicio1 family with auto-selection by machine capability.
+  // Tiers (cheapest/lightest → heaviest): 1.5B → 3B → 7B → 14B → DeepSeek V4 Pro (HF, budget $5).
+  // See docs/EVOLUTION.md (R4/R8) and .simplicio/config.json#localAi.tiers.
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -10,12 +11,34 @@
         "baseURL": "http://localhost:11434/v1",
       },
       "models": {
+        "qwen2.5-coder:1.5b": {
+          "name": "Simplicio1 1.5B (Qwen 2.5 Coder • Free • ≥2GB RAM)",
+          "limit": { "context": 32768, "output": 8192 },
+        },
         "qwen2.5-coder:3b": {
-          "name": "Simplicio1 (Qwen 2.5 Coder 3B • Free • Unlimited)",
-          "limit": {
-            "context": 32768,
-            "output": 8192,
-          },
+          "name": "Simplicio1 3B (Qwen 2.5 Coder • Free • ≥4GB RAM)",
+          "limit": { "context": 32768, "output": 8192 },
+        },
+        "qwen2.5-coder:7b": {
+          "name": "Simplicio1 7B (Qwen 2.5 Coder • Free • ≥8GB RAM)",
+          "limit": { "context": 32768, "output": 8192 },
+        },
+        "qwen2.5-coder:14b": {
+          "name": "Simplicio1 14B (Qwen 2.5 Coder • Free • ≥16GB RAM)",
+          "limit": { "context": 32768, "output": 8192 },
+        },
+      },
+    },
+    "huggingface": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Simplicio (HF)",
+      "options": {
+        "baseURL": "https://api-inference.huggingface.co/v1",
+      },
+      "models": {
+        "deepseek-ai/DeepSeek-V4-Pro": {
+          "name": "Simplicio1 DeepSeek V4 Pro (HF • budget $5)",
+          "limit": { "context": 65536, "output": 16384 },
         },
       },
     },
