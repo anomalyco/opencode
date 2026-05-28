@@ -602,6 +602,46 @@ describe("ACP next service sessions", () => {
     expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/configured-model")
   })
 
+  it("does not scan last-used sessions when resolving the new session default", async () => {
+    const historyCalls: string[] = []
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        get: () => Promise.resolve({ data: {} }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: (input: { model?: { id?: string } }) => Promise.resolve({ data: { id: input.model?.id } }),
+        list: () => {
+          historyCalls.push("list")
+          return Promise.resolve({ data: [{ id: "ses_recent" }] })
+        },
+        messages: () => {
+          historyCalls.push("messages")
+          return Promise.resolve({
+            data: [{ info: { role: "user", model: { providerID: "test", modelID: "second-model" } } }],
+          })
+        },
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(result.sessionId).toBe("test-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/test-model")
+    expect(historyCalls).toEqual([])
+  })
+
   it("switches model and returns updated model and effort options", async () => {
     const { service } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
