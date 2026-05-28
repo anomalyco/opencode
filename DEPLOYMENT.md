@@ -617,6 +617,52 @@ to `deploy/*` and has no benefit over the explicit dispatch.
 6. Watch CloudWatch Logs (`/ecs/opencode-collab`) for `[collab.auth]` entries on OAuth and `[collab.typing]` entries when participants type — confirms full data flow end-to-end.
 7. **Second participant**: invite a different unleashlive member, have them click the invite link in a fresh browser / incognito tab.  Their avatar's online dot should turn green on both sides within 1–2 s of SSE connect.
 
+## Deploy continuity guarantees
+
+The deploy workflow re-asserts ADR-0009's single-replica contract on every
+run via `--deployment-configuration "minimumHealthyPercent=0,maximumPercent=100"`
+on the `aws ecs update-service` call (`.github/workflows/deploy-collab.yml`).
+This guarantees the cutover is **stop-old → start-new** with NO overlap window —
+no two-writer SQLite-over-EFS race during the rollout, at the cost of a
+30–90 s gap where the service is unreachable.
+
+**What survives a deploy automatically** (no operator action, no Driver re-click):
+
+| Item | How |
+|---|---|
+| Collab session rows (name, repos, participants, queue mode) | `collab_session` SQLite table on EFS.  `GET /collab/session` re-populates the "Rejoin Session" sidebar on `/collab/new` from disk after boot. |
+| GitHub OAuth cookies | `collab_auth_session` row (encrypted token per ADR-0004) keyed by the cookie's `collab_sid`.  Re-validated on the first request after boot. |
+| LLM message history | Opencode's native session storage on EFS — the iframe re-mounts with the same `<nativeSessionId>` in its URL and the conversation is intact. |
+| Workspace clones + Claude credentials | EFS-backed paths (`/var/opencode/workspaces/`, `/home/opencode/.local/share/opencode/claude-credentials.json`). |
+| In-flight LLM dispatches | Two-phase suggestion status (`approved` → `in_flight` → `submitted`) in `packages/opencode/src/collab/router.ts`.  Mid-stream rows survive on disk as `in_flight`; `runCollabMigrations()` boot-sweep flips them back to `approved`, the executor re-dispatches, and the Driver sees the LLM response start over rather than vanish silently. |
+| Running frontend preview | `collab_session.preview_intent` column persists the Driver's Launch wish across restart.  `Preview.resumePreviewsOnBoot()` (called from `serve.ts` after migrations) re-spawns the most-recently-active preview without operator action. |
+
+**What's lost on a deploy** (by design — acceptable for single-replica):
+
+- 30–90 s of SSE connectivity during the cutover.  The SPA's EventSource
+  auto-reconnects (`packages/app/src/context/collab.tsx`) and the server's
+  connect-time state replay (`handleSse` in `router.ts`) re-emits the
+  current state on reconnect — UX shows a "Reconnecting…" banner, then a
+  clean green pill, with no manual refresh required.
+- The exact partial-stream bytes of an LLM response that was mid-flight
+  at SIGTERM.  We redispatch the whole prompt instead of trying to
+  preserve stream bytes — `in_flight` re-flips to `approved`, the executor
+  picks it up again, and the LLM produces a fresh response.
+
+**Operator deploy checklist:**
+
+1. Trigger `Deploy collab` from the GitHub Actions tab (default `image_tag=latest`).
+2. Watch the workflow log — the `Wait for service stable` step blocks until
+   the new task is `ACTIVE` and the ALB has marked it healthy on `/healthz`.
+3. Confirm in the AWS Console (ECS → cluster `opencode-collab`) that the
+   running task count was 1→0→1 during cutover (NOT 1→2→1) — verifies the
+   pinned deployment configuration took effect.
+4. Reload `/collab/new` in your browser: previously-created sessions still
+   appear in the Rejoin Session sidebar with intact participant lists.
+5. Open a session whose preview was running before the deploy — the
+   `Installing…` → `Running` banner re-appears within ~60 s without any
+   Driver click.
+
 ## Future enhancements (post-MVP)
 
 - **Live dev-server preview** — add the `/preview/<port>/*` path-based proxy described in Part A.  ~150 LOC; no infra change.

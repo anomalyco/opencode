@@ -197,6 +197,61 @@ export function linkNativeSession(collabSessionId: string, sessionId: string | n
 }
 
 /**
+ * Persist the Driver's preview-launch wish so it survives a container restart.
+ *
+ *   repoFullName = "<org>/<repo>" → Driver clicked Launch.  Stores the repo +
+ *                                   a timestamp so `resumePreviewsOnBoot()`
+ *                                   can pick the most-recently active one on
+ *                                   the next boot.
+ *   repoFullName = null            → Driver clicked Stop, or session was
+ *                                   deleted.  Clears the intent so reboot
+ *                                   doesn't resurrect a preview the user no
+ *                                   longer wants.
+ *
+ * Idempotent.  Safe to call against a deleted session (the UPDATE just
+ * affects zero rows).
+ */
+export function setPreviewIntent(collabSessionId: string, repoFullName: string | null): void {
+  Database.use((db) => {
+    db.update(CollabSessionTable)
+      .set({
+        preview_intent: repoFullName,
+        preview_intent_at: repoFullName ? new Date() : null,
+      })
+      .where(eq(CollabSessionTable.id, collabSessionId))
+      .run()
+  })
+}
+
+/**
+ * Return the collab sessions with a non-null `preview_intent`, ordered by
+ * `preview_intent_at` descending so the caller (resumePreviewsOnBoot) can
+ * pick the most-recently-active one.  Soft-deleted sessions are excluded —
+ * we never resurrect a preview for a session the Driver tore down.
+ */
+export function listPreviewIntents(): Array<{ collabSessionId: string; repoFullName: string; at: number }> {
+  return Database.use((db) => {
+    const rows = db
+      .select({
+        id: CollabSessionTable.id,
+        repo: CollabSessionTable.preview_intent,
+        at: CollabSessionTable.preview_intent_at,
+        deleted_at: CollabSessionTable.deleted_at,
+      })
+      .from(CollabSessionTable)
+      .all()
+    return rows
+      .filter((r) => r.repo !== null && r.deleted_at === null)
+      .map((r) => ({
+        collabSessionId: r.id,
+        repoFullName: r.repo as string,
+        at: r.at ? r.at.getTime() : 0,
+      }))
+      .sort((a, b) => b.at - a.at)
+  })
+}
+
+/**
  * Append `repos` to the collab session's linked-repo list.
  *
  * - Idempotent: existing repos in the set are skipped, returning only the

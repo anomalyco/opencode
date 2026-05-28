@@ -25,6 +25,12 @@ const executors = new Map<string, (suggestion: PromptSuggestion) => Promise<void
 export function registerSession(collabSessionId: string, db: CollabDB, executor: (s: PromptSuggestion) => Promise<void>) {
   dbs.set(collabSessionId, db)
   executors.set(collabSessionId, executor)
+  // Drain any approved rows that survived from a previous process — typically
+  // the migrate.ts boot sweep flipping `in_flight` rows back to `approved`
+  // (see runCollabMigrations), but also covers re-registration via
+  // ensureQueueRegistered after the in-memory queue state was lost.  Idempotent
+  // because `_scheduleNext` short-circuits when the per-session lock is held.
+  _scheduleNext(collabSessionId)
 }
 
 export function unregisterSession(collabSessionId: string) {

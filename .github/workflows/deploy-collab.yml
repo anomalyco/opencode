@@ -122,10 +122,26 @@ jobs:
 
       - name: Update ECS service
         run: |
+          # ADR-0009: collab is single-replica.  SQLite-over-EFS does not
+          # tolerate two writers, so the cutover must be "stop old → start
+          # new" with NO overlap window.  ECS's default
+          # deploymentConfiguration (minimumHealthyPercent=100,
+          # maximumPercent=200) would briefly run two tasks side-by-side
+          # during a rollout — both opening the same .db file over EFS —
+          # which risks corruption.
+          #
+          # We re-assert minimumHealthyPercent=0, maximumPercent=100 on
+          # every deploy — same "the workflow IS the IaC" pattern we use
+          # elsewhere (the previous extraHosts jq patch from 0ce95018a
+          # before it was reverted in 67ca17df2 for awsvpc incompatibility).
+          # Trade-off: 30–90s of downtime per deploy instead of zero, but
+          # no two-writer race.  The SPA's SSE reconnect logic +
+          # connect-time state replay covers the gap UX-side.
           aws ecs update-service \
             --cluster "${ECS_CLUSTER}" \
             --service "${ECS_SERVICE}" \
             --task-definition "${{ steps.register.outputs.task_definition_arn }}" \
+            --deployment-configuration "minimumHealthyPercent=0,maximumPercent=100" \
             --force-new-deployment \
             > /dev/null
           echo "Update issued; waiting for stable…"

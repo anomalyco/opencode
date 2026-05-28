@@ -99,6 +99,24 @@ export const ServeCommand = effectCmd({
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
+    // After the collab schema is migrated AND the HTTP server is up, ask the
+    // preview-launcher to re-spawn the previously-running preview (if any).
+    // Fire-and-forget — a stuck preview must not gate the rest of the
+    // collab API.  Dynamic import so non-collab modes don't pay the
+    // preview-launcher load cost at startup.
+    if (isCollabMode) {
+      yield* Effect.promise(async () => {
+        try {
+          const Preview = await import("../../collab/preview-launcher")
+          // Don't await — boot continues immediately; preview install can
+          // take minutes on a cold cache.
+          void Preview.resumePreviewsOnBoot()
+        } catch (err) {
+          console.warn("[collab] preview-launcher boot resume skipped:", err)
+        }
+      })
+    }
+
     yield* Effect.never
   }),
 })
