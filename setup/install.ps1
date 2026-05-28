@@ -5,6 +5,6 @@ Write-Host "WSL のインストール:"
 Write-Host "  https://learn.microsoft.com/windows/wsl/install"
 Write-Host ""
 Write-Host "WSL をインストール後、WSL のターミナルを開き以下を実行してください:"
-Write-Host "  gh release download -R acompany-develop/securecode-release --pattern install -O - | bash"
+Write-Host "  curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash"
 Write-Host ""
 exit 1

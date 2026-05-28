@@ -140,7 +140,7 @@ detect_target() {
       err "WSL のインストール: https://learn.microsoft.com/windows/wsl/install"
       err ""
       err "WSL をインストール後、WSL のターミナルを開き以下を実行してください:"
-      err "  gh release download -R acompany-develop/securecode-release --pattern install -O - | bash"
+      err "  curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash"
       exit 1 ;;
     *) err "Unsupported OS: $raw_os"; exit 1 ;;
   esac
@@ -354,6 +354,24 @@ add_to_path_rc() {
   info "Appended PATH entry to $rc"
 }
 
+check_linux_deps() {
+  [ "$(uname -s)" = "Linux" ] || return 0
+  local missing=()
+  command -v rg    >/dev/null 2>&1 || missing+=("ripgrep")
+  command -v bwrap >/dev/null 2>&1 || missing+=("bubblewrap")
+  command -v socat >/dev/null 2>&1 || missing+=("socat")
+  [ ${#missing[@]} -eq 0 ] && return 0
+  echo
+  echo -e "${ORANGE}SecureCode requires the following system packages that are not yet installed:${NC}"
+  for pkg in "${missing[@]}"; do
+    echo "  - $pkg"
+  done
+  echo
+  echo "Install them with:"
+  echo "  sudo apt-get install -y ${missing[*]}"
+  echo "(or the equivalent command for your distribution)"
+}
+
 modify_path_for_shell() {
   local dir="$1"
   case "$(basename "${SHELL:-bash}")" in
@@ -452,6 +470,8 @@ main() {
   if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" = "true" ]; then
     echo "$install_dir" >> "$GITHUB_PATH"
   fi
+
+  check_linux_deps
 
   echo
   if "$install_dir/$APP" --version 2>/dev/null; then

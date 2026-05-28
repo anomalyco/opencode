@@ -6,7 +6,7 @@ echo WSL のインストール:
 echo   https://learn.microsoft.com/windows/wsl/install
 echo.
 echo WSL をインストール後、WSL のターミナルを開き以下を実行してください:
-echo   gh release download -R acompany-develop/securecode-release --pattern install -O - ^| bash
+echo   curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install ^| bash
 echo.
 pause
 exit /b 1
