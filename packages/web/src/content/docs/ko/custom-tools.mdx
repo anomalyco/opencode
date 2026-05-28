@@ -79,6 +79,32 @@ export const multiply = tool({
 
 ---
 
+#### 기본 도구와 이름 충돌
+
+커스텀 도구는 도구 이름으로 식별됩니다. 커스텀 도구가 기본 도구와 같은 이름을 사용하면 커스텀 도구가 우선순위를 갖습니다.
+
+예를 들어, 이 파일은 기본 `bash` 도구를 대체합니다:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+의도적으로 기본 도구를 대체하려는 경우가 아니라면 고유한 이름을 사용하는 것이 좋습니다. 도구를 오버라이드하지 않고 비활성화만 하려면 [permissions](/docs/permissions)를 사용하세요.
+:::
+
+---
+
 ### 인자
 
 인자 타입은 `tool.schema`로 정의할 수 있습니다. `tool.schema`는 [Zod](https://zod.dev) 기반입니다.

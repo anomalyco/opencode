@@ -22,22 +22,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "Api": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "AuthApi": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "AuthStorage": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
-    "Bucket": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "Api": import("@cloudflare/workers-types").Service
+    "AuthApi": import("@cloudflare/workers-types").Service
+    "AuthStorage": import("@cloudflare/workers-types").KVNamespace
+    "Bucket": import("@cloudflare/workers-types").R2Bucket
     "CLOUDFLARE_API_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -49,6 +37,10 @@ declare module "sst" {
     "Console": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
+    }
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "DISCORD_SUPPORT_BOT_TOKEN": {
       "type": "sst.sst.Secret"
@@ -70,10 +62,7 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "EnterpriseStorage": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "EnterpriseStorage": import("@cloudflare/workers-types").R2Bucket
     "FEISHU_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string
@@ -102,22 +91,32 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "GatewayKv": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "LogProcessor": {
-      "type": "sst.cloudflare.Worker"
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
+      "value": string
     }
+    "LogProcessor": import("@cloudflare/workers-types").Service
     "R2AccessKey": {
       "type": "sst.sst.Secret"
       "value": string
     }
     "R2SecretKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "SALESFORCE_CLIENT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "SALESFORCE_CLIENT_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "SALESFORCE_INSTANCE_URL": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -133,9 +132,18 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "Stat": import("@cloudflare/workers-types").Service
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
+    }
+    "UpstashRedisRestToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "UpstashRedisRestUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "Web": {
       "type": "sst.cloudflare.Astro"
@@ -145,10 +153,6 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
-    "ZEN_BLACK_LIMITS": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "ZEN_BLACK_PRICE": {
       "plan100": string
       "plan20": string
@@ -156,13 +160,19 @@ declare module "sst" {
       "product": string
       "type": "sst.sst.Linkable"
     }
-    "ZEN_LITE_LIMITS": {
+    "ZEN_LIMITS": {
       "type": "sst.sst.Secret"
       "value": string
     }
     "ZEN_LITE_PRICE": {
+      "firstMonth100Coupon": string
+      "firstMonth50Coupon": string
       "price": string
+      "priceInr": number
       "product": string
+      "sixMonths100Coupon": string
+      "threeMonths100Coupon": string
+      "twelveMonths100Coupon": string
       "type": "sst.sst.Linkable"
     }
     "ZEN_MODELS1": {
@@ -289,17 +299,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "ZenData": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
-    "ZenDataNew": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "ZenData": import("@cloudflare/workers-types").R2Bucket
+    "ZenDataNew": import("@cloudflare/workers-types").R2Bucket
   }
 }
-/// <reference path="sst-env.d.ts" />
 
 import "sst"
 export {}

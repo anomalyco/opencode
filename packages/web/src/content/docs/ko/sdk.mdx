@@ -117,13 +117,85 @@ try {
 
 ---
 
+## 구조화된 출력
+
+JSON 스키마와 함께 `format`을 지정하여 모델에서 구조화된 JSON 출력을 요청할 수 있습니다. 모델은 `StructuredOutput` 도구를 사용하여 스키마와 일치하는 검증된 JSON을 반환합니다.
+
+### 기본 사용법
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### 출력 형식 유형
+
+| 유형          | 설명                                              |
+| ------------- | ------------------------------------------------- |
+| `text`        | 기본값. 표준 텍스트 응답 (구조화된 출력 없음)     |
+| `json_schema` | 제공된 스키마와 일치하는 검증된 JSON을 반환합니다 |
+
+### JSON 스키마 형식
+
+`type: 'json_schema'`를 사용할 때 다음을 제공하십시오:
+
+| 필드         | 유형            | 설명                                        |
+| ------------ | --------------- | ------------------------------------------- |
+| `type`       | `'json_schema'` | 필수. JSON 스키마 모드를 지정합니다         |
+| `schema`     | `object`        | 필수. 출력 구조를 정의하는 JSON 스키마 객체 |
+| `retryCount` | `number`        | 선택 사항. 검증 재시도 횟수 (기본값: 2)     |
+
+### 오류 처리
+
+모델이 모든 재시도 후에도 유효한 구조화된 출력을 생성하지 못하면 응답에 `StructuredOutputError`가 포함됩니다:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### 모범 사례
+
+1. **명확한 설명 제공**: 모델이 추출할 데이터를 이해하는 데 도움이 되도록 스키마 속성에 명확한 설명을 제공하십시오.
+2. **`required` 사용**: 필수 필드를 지정하려면 `required`를 사용하십시오.
+3. **스키마를 집중적으로 유지**: 복잡한 중첩 스키마는 모델이 올바르게 채우기 더 어려울 수 있습니다.
+4. **적절한 `retryCount` 설정**: 복잡한 스키마의 경우 늘리고 단순한 스키마의 경우 줄이십시오.
+
+---
+
 ## API
 
 SDK는 type-safe 클라이언트를 통해 모든 서버 API를 노출합니다.
 
 ---
 
-## 글로벌
+### 글로벌
 
 | 메서드            | 설명                   | 응답                                 |
 | ----------------- | ---------------------- | ------------------------------------ |
@@ -142,10 +214,10 @@ console.log(health.data.version)
 
 ### 앱
 
-| 방법           | 설명                      | 응답                                            |
-| -------------- | ------------------------- | ----------------------------------------------- |
-| `app.log()`    | 로그 항목 작성            | `boolean`                                       |
-| `app.agents()` | 이용 가능한 모든 에이전트 | <a href={typesUrl}><code> 에이전트[]</code></a> |
+| 방법           | 설명                      | 응답                                        |
+| -------------- | ------------------------- | ------------------------------------------- |
+| `app.log()`    | 로그 항목 작성            | `boolean`                                   |
+| `app.agents()` | 이용 가능한 모든 에이전트 | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
@@ -167,7 +239,7 @@ const agents = await client.app.agents()
 
 ---
 
-## 프로젝트
+### 프로젝트
 
 | 방법                | 설명                    | 응답                                          |
 | ------------------- | ----------------------- | --------------------------------------------- |
@@ -205,7 +277,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-#### 구성
+### 구성
 
 | 방법                 | 설명                       | 응답                                                                                                  |
 | -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -224,29 +296,29 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-## 세션
+### 세션
 
-| 메서드                                                     | 설명                          | 비고                                                                                                                             |
-| ---------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | 세션 일람                     | <a href={typesUrl}><code>Session[]</code></a>                                                                                    |
-| `session.get({ path })`                                    | 세션 가져 오기                | <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.children({ path })`                               | 하위 세션 목록                | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.create({ body })`                                 | 세션 만들기                   | 리턴 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.delete({ path })`                                 | 세션 삭제                     | `boolean` 반품                                                                                                                   |
-| `session.update({ path, body })`                           | 업데이트 세션 속성            | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.init({ path, body })`                             | 앱 초기화 및 `AGENTS.md` 분석 | `boolean`를 반환                                                                                                                 |
-| `session.abort({ path })`                                  | 운영 중인 세션                | 반품 `boolean`                                                                                                                   |
-| `session.share({ path })`                                  | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.unshare({ path })`                                | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `session.summarize({ path, body })`                        | 세션 요약                     | 반품 `boolean`                                                                                                                   |
-| `session.messages({ path })`                               | 세션의 메시지 목록            | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part</code></a>`}[]`                    |
-| `session.message({ path })`                                | 메시지 상세정보               | 반품 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`               |
-| `session.prompt({ path, body })`                           | prompt 메시지 보내기          | `body.noReply: true` 반환 UserMessage (콘텍스트 전용). 기본 반환 <a href={typesUrl}><code>AssistantMessage</code></a> 에 AI 응답 |
-| `session.command({ path, body })`                          | 세션으로 명령을 전송          | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`           |
-| `session.shell({ path, body })`                            | shell 명령을 실행             | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
-| `session.revert({ path, body })`                           | 메시지 다시 변환              | <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.unrevert({ path })`                               | 메시지 되돌리기 취소          | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                 |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | 허가 요청 대응                | 반품 `boolean`                                                                                                                   |
+| 메서드                                                     | 설명                          | 비고                                                                                                                                                                                                                               |
+| ---------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | 세션 일람                     | <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                                      |
+| `session.get({ path })`                                    | 세션 가져 오기                | <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                        |
+| `session.children({ path })`                               | 하위 세션 목록                | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                   |
+| `session.create({ body })`                                 | 세션 만들기                   | 리턴 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                   |
+| `session.delete({ path })`                                 | 세션 삭제                     | `boolean` 반품                                                                                                                                                                                                                     |
+| `session.update({ path, body })`                           | 업데이트 세션 속성            | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                   |
+| `session.init({ path, body })`                             | 앱 초기화 및 `AGENTS.md` 분석 | `boolean`를 반환                                                                                                                                                                                                                   |
+| `session.abort({ path })`                                  | 운영 중인 세션                | 반품 `boolean`                                                                                                                                                                                                                     |
+| `session.share({ path })`                                  | 공유 세션                     | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                   |
+| `session.unshare({ path })`                                | 공유 세션 취소                | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                   |
+| `session.summarize({ path, body })`                        | 세션 요약                     | 반품 `boolean`                                                                                                                                                                                                                     |
+| `session.messages({ path })`                               | 세션의 메시지 목록            | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part</code></a>`}[]`                                                                                                                      |
+| `session.message({ path })`                                | 메시지 상세정보               | 반품 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                                 |
+| `session.prompt({ path, body })`                           | prompt 메시지 보내기          | `body.noReply: true`는 UserMessage(컨텍스트 전용)를 반환합니다. 기본값은 AI 응답과 함께 <a href={typesUrl}><code>AssistantMessage</code></a>를 반환합니다. [구조화된 출력](#구조화된-출력)을 위한 `body.outputFormat`을 지원합니다 |
+| `session.command({ path, body })`                          | 세션으로 명령을 전송          | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                             |
+| `session.shell({ path, body })`                            | shell 명령을 실행             | <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                               |
+| `session.revert({ path, body })`                           | 메시지 다시 변환              | <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                        |
+| `session.unrevert({ path })`                               | 메시지 되돌리기 취소          | 반품 <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                   |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | 허가 요청 대응                | 반품 `boolean`                                                                                                                                                                                                                     |
 
 ---
 
@@ -281,7 +353,7 @@ await client.session.prompt({
 
 ---
 
-## 파일
+### 파일
 
 | 방법                      | 설명                         | 응답                                                                                   |
 | ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- |
@@ -322,7 +394,7 @@ const content = await client.file.read({
 
 ---
 
-#### TUI
+### TUI
 
 | 방법                           | 설명                     | 응답      |
 | ------------------------------ | ------------------------ | --------- |
@@ -353,7 +425,7 @@ await client.tui.showToast({
 
 ---
 
-##### 인증
+### 인증
 
 | 방법                | 설명           | 응답      |
 | ------------------- | -------------- | --------- |
@@ -372,7 +444,7 @@ await client.auth.set({
 
 ---
 
-## 이벤트
+### 이벤트
 
 | 방법                | 설명                    | 응답                    |
 | ------------------- | ----------------------- | ----------------------- |

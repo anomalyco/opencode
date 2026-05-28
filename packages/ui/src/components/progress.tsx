@@ -15,7 +15,7 @@ export function Progress(props: ProgressProps) {
       {...others}
       data-component="progress"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >

@@ -56,8 +56,9 @@ function detectLocale() {
 
 function UiI18nBridge(props: ParentProps) {
   const locale = createMemo(() => detectLocale())
+  const zh = uiZh as Partial<Record<string, string>>
   const t = (key: keyof typeof uiEn, params?: UiI18nParams) => {
-    const value = locale() === "zh" ? (uiZh[key] ?? uiEn[key]) : uiEn[key]
+    const value = locale() === "zh" ? (zh[key] ?? uiEn[key]) : uiEn[key]
     const text = value ?? String(key)
     return resolveTemplate(text, params)
   }

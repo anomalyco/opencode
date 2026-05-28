@@ -4,16 +4,18 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { useNavigate, useParams } from "@solidjs/router"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { useNavigate } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
 
@@ -105,7 +107,8 @@ function createCommandEntries(props: {
   const allowed = createMemo(() => {
     if (props.filesOnly()) return []
     return props.command.options.filter(
-      (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
+      (option) =>
+        !option.disabled && !option.hidden && !option.id.startsWith("suggested.") && option.id !== "file.open",
     )
   })
 
@@ -132,9 +135,14 @@ function createFileEntries(props: {
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   language: ReturnType<typeof useLanguage>
 }) {
+  const tabState = createSessionTabs({
+    tabs: props.tabs,
+    pathFromTab: props.file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? props.file.tab(tab) : tab),
+  })
   const recent = createMemo(() => {
-    const all = props.tabs().all()
-    const active = props.tabs().active()
+    const all = tabState.openedTabs()
+    const active = tabState.activeFileTab()
     const order = active ? [active, ...all.filter((item) => item !== active)] : all
     const seen = new Set<string>()
     const category = props.language.t("palette.group.files")
@@ -167,7 +175,7 @@ function createFileEntries(props: {
 function createSessionEntries(props: {
   workspaces: () => string[]
   label: (directory: string) => string
-  globalSDK: ReturnType<typeof useGlobalSDK>
+  serverSDK: ReturnType<typeof useServerSDK>
   language: ReturnType<typeof useLanguage>
 }) {
   const state: {
@@ -199,7 +207,7 @@ function createSessionEntries(props: {
     state.inflight = Promise.all(
       dirs.map((directory) => {
         const description = props.label(directory)
-        return props.globalSDK.client.session
+        return props.serverSDK.client.session
           .list({ directory, roots: true })
           .then((x) =>
             (x.data ?? [])
@@ -259,14 +267,11 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const layout = useLayout()
   const file = useFile()
   const dialog = useDialog()
-  const params = useParams()
   const navigate = useNavigate()
-  const globalSDK = useGlobalSDK()
-  const globalSync = useGlobalSync()
+  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
+  const { params, tabs, view } = useSessionLayout()
   const filesOnly = () => props.mode === "files"
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
   const commandEntries = createCommandEntries({ filesOnly, command, language })
@@ -287,21 +292,21 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     if (directory && !dirs.includes(directory)) return [...dirs, directory]
     return dirs
   })
-  const homedir = createMemo(() => globalSync.data.path.home)
+  const homedir = createMemo(() => serverSync.data.path.home)
   const label = (directory: string) => {
     const current = project()
     const kind =
       current && directory === current.worktree
         ? language.t("workspace.type.local")
         : language.t("workspace.type.sandbox")
-    const [store] = globalSync.child(directory, { bootstrap: false })
+    const [store] = serverSync.child(directory, { bootstrap: false })
     const home = homedir()
     const path = home ? directory.replace(home, "~") : directory
     const name = store.vcs?.branch ?? getFilename(directory)
     return `${kind} : ${name || path}`
   }
 
-  const { sessions } = createSessionEntries({ workspaces, label, globalSDK, language })
+  const { sessions } = createSessionEntries({ workspaces, label, serverSDK, language })
 
   const items = async (text: string) => {
     const query = text.trim()
@@ -344,8 +349,8 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
   const open = (path: string) => {
     const value = file.tab(path)
-    tabs().open(value)
-    file.load(path)
+    void tabs().open(value)
+    void file.load(path)
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
     layout.fileTree.setTab("all")
     props.onOpenFile?.(path)
@@ -422,7 +427,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                   </Show>
                 </div>
                 <Show when={item.keybind}>
-                  <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
+                  <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "", language.t)}</Keybind>
                 </Show>
               </div>
             </Match>
@@ -449,7 +454,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                 </div>
                 <Show when={item.updated}>
                   <span class="text-12-regular text-text-weak whitespace-nowrap ml-2">
-                    {getRelativeTime(new Date(item.updated!).toISOString())}
+                    {getRelativeTime(new Date(item.updated!).toISOString(), language.t)}
                   </span>
                 </Show>
               </div>

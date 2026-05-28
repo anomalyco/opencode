@@ -15,7 +15,7 @@ function CollapsibleRoot(props: CollapsibleProps) {
       data-component="collapsible"
       data-variant={local.variant || "normal"}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
       {...others}

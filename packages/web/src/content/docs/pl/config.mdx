@@ -94,7 +94,9 @@ Możesz włączyć serwer w konfiguracji projektu:
 
 ### Globalna
 
-Umieść swoją globalną konfigurację OpenCode w `~/.config/opencode/opencode.json`. Użyj jej do ustawień ogólnych dla użytkownika, takich jak motywy, domyślny dostawca lub skróty klawiszowe.
+Umieść swoją globalną konfigurację OpenCode w `~/.config/opencode/opencode.json`. Użyj jej do ustawień ogólnych dla użytkownika, takich jak dostawcy, modele i uprawnienia.
+
+Dla ustawień specyficznych dla TUI, użyj `~/.config/opencode/tui.json`.
 
 Konfiguracja globalna ma pierwszeństwo przed konfiguracją zdalną.
 
@@ -104,8 +106,10 @@ Konfiguracja globalna ma pierwszeństwo przed konfiguracją zdalną.
 
 Dodaj `opencode.json` w katalogu głównym projektu. Konfiguracja projektu ma najwyższy priorytet wśród plików konfiguracyjnych — nadpisuje konfiguracje globalne i zdalne.
 
+Dla ustawień TUI specyficznych dla projektu, dodaj plik `tui.json` obok niego.
+
 :::tip
-Dodaj ten plik do kontroli wersji, aby udostępniać konfigurację zespołowi.
+Umieść konfigurację specyficzną dla projektu w katalogu głównym projektu.
 :::
 
 Kiedy OpenCode się uruchamia, szuka pliku konfiguracyjnego w katalogu głównym repozytorium Git.
@@ -150,28 +154,24 @@ Twój edytor powinien zapewniać walidację i autouzupełnianie na podstawie teg
 
 ### TUI
 
-Możesz skonfigurować zachowanie TUI za pomocą opcji `tui`.
+Użyj dedykowanego pliku `tui.json` (lub `tui.jsonc`) dla ustawień specyficznych dla TUI.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    },
-    "diff_style": "auto"
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
-Dostępne opcje:
+Użyj `OPENCODE_TUI_CONFIG`, aby wskazać niestandardowy plik konfiguracyjny TUI.
 
-- `scroll_acceleration.enabled` - Włącz przyspieszenie przewijania na gładzikach macOS. **Ma pierwszeństwo przed `scroll_speed`.**
-- `scroll_speed` - Niestandardowy mnożnik szybkości przewijania (domyślnie: `3`, minimalnie: `1`). Ignorowane, jeśli `scroll_acceleration.enabled` ustawiono na `true`.
-- `diff_style` – Sterowanie renderowaniem różnic. `"auto"` przełącza się w zależności od szerokości terminala, `"stacked"` zawsze wymusza pojedynczą kolumnę.
+Przestarzałe klucze `theme`, `keybinds` i `tui` w `opencode.json` są wycofywane i automatycznie migrowane, gdy to możliwe.
 
-[Dowiedz się więcej o korzystaniu z TUI](/docs/tui).
+[Dowiedz się więcej o konfiguracji TUI tutaj](/docs/tui#configure).
 
 ---
 
@@ -297,16 +297,16 @@ Token okaziciela (`AWS_BEARER_TOKEN_BEDROCK` lub `/connect`) ma pierwszeństwo p
 
 ### Theme (Motyw)
 
-Skonfiguruj motyw interfejsu OpenCode za pomocą opcji `theme`.
+Ustaw motyw interfejsu użytkownika w `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
 }
 ```
 
-[Dowiedz się więcej o motywach](/docs/themes).
+[Dowiedz się więcej tutaj](/docs/themes).
 
 ---
 
@@ -402,16 +402,16 @@ Możesz także definiować polecenia przy użyciu plików Markdown w `~/.config/
 
 ### Keybinds (Skróty klawiszowe)
 
-Możesz dostosować skróty klawiszowe za pomocą opcji `keybinds`.
+Dostosuj skróty klawiszowe w `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {}
 }
 ```
 
-[Dowiedz się więcej o skrótach klawiszowych](/docs/keybinds).
+[Dowiedz się więcej tutaj](/docs/keybinds).
 
 ---
 

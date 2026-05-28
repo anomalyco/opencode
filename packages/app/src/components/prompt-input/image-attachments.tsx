@@ -1,5 +1,6 @@
 import { Component, For, Show } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { ImageAttachmentPart } from "@/context/prompt"
 
 type PromptImageAttachmentsProps = {
@@ -22,34 +23,36 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
       <div class="flex flex-wrap gap-2 px-3 pt-3">
         <For each={props.attachments}>
           {(attachment) => (
-            <div class="relative group">
-              <Show
-                when={attachment.mime.startsWith("image/")}
-                fallback={
-                  <div class={fallbackClass}>
-                    <Icon name="folder" class="size-6 text-text-weak" />
-                  </div>
-                }
-              >
-                <img
-                  src={attachment.dataUrl}
-                  alt={attachment.filename}
-                  class={imageClass}
-                  onClick={() => props.onOpen(attachment)}
-                />
-              </Show>
-              <button
-                type="button"
-                onClick={() => props.onRemove(attachment.id)}
-                class={removeClass}
-                aria-label={props.removeLabel}
-              >
-                <Icon name="close" class="size-3 text-text-weak" />
-              </button>
-              <div class={nameClass}>
-                <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
+            <Tooltip value={attachment.filename} placement="top" contentClass="break-all">
+              <div class="relative group">
+                <Show
+                  when={attachment.mime.startsWith("image/")}
+                  fallback={
+                    <div class={fallbackClass}>
+                      <Icon name="folder" class="size-6 text-text-weak" />
+                    </div>
+                  }
+                >
+                  <img
+                    src={attachment.dataUrl}
+                    alt={attachment.filename}
+                    class={imageClass}
+                    onClick={() => props.onOpen(attachment)}
+                  />
+                </Show>
+                <button
+                  type="button"
+                  onClick={() => props.onRemove(attachment.id)}
+                  class={removeClass}
+                  aria-label={props.removeLabel}
+                >
+                  <Icon name="close" class="size-3 text-text-weak" />
+                </button>
+                <div class={nameClass}>
+                  <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
+                </div>
               </div>
-            </div>
+            </Tooltip>
           )}
         </For>
       </div>

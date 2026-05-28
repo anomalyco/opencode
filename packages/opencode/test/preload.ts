@@ -3,6 +3,7 @@
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
+import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll } from "bun:test"
 
 // Set XDG env vars FIRST, before any src/ imports
@@ -15,7 +16,7 @@ afterAll(async () => {
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
   const rm = async (left: number): Promise<void> => {
     Bun.gc(true)
-    await Bun.sleep(100)
+    await sleep(100)
     return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
       if (!busy(error)) throw error
       if (left <= 1) throw error
@@ -33,6 +34,8 @@ process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
+process.env["OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
+process.env["OPENCODE_EXPERIMENTAL_WORKSPACES"] = "true"
 
 // Set test home directory to isolate tests from user's actual home directory
 // This prevents tests from picking up real user configs/skills from ~/.claude/skills
@@ -49,7 +52,7 @@ const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
 await fs.writeFile(path.join(cacheDir, "version"), "14")
 
-// Clear provider env vars to ensure clean test state
+// Clear provider and server auth env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]
 delete process.env["OPENAI_API_KEY"]
 delete process.env["GOOGLE_API_KEY"]
@@ -60,6 +63,7 @@ delete process.env["AWS_PROFILE"]
 delete process.env["AWS_REGION"]
 delete process.env["AWS_BEARER_TOKEN_BEDROCK"]
 delete process.env["OPENROUTER_API_KEY"]
+delete process.env["LLM_GATEWAY_API_KEY"]
 delete process.env["GROQ_API_KEY"]
 delete process.env["MISTRAL_API_KEY"]
 delete process.env["PERPLEXITY_API_KEY"]
@@ -69,12 +73,20 @@ delete process.env["DEEPSEEK_API_KEY"]
 delete process.env["FIREWORKS_API_KEY"]
 delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
+delete process.env["OPENCODE_SERVER_PASSWORD"]
+delete process.env["OPENCODE_SERVER_USERNAME"]
+
+// Use in-memory sqlite
+process.env["OPENCODE_DB"] = ":memory:"
 
 // Now safe to import from src/
-const { Log } = await import("../src/util/log")
+const { Log } = await import("@opencode-ai/core/util/log")
+const { initProjectors } = await import("../src/server/projectors")
 
-Log.init({
+void Log.init({
   print: false,
   dev: true,
   level: "DEBUG",
 })
+
+initProjectors()

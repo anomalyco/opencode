@@ -79,6 +79,32 @@ export const multiply = tool({
 
 ---
 
+#### 与内置工具的名称冲突
+
+自定义工具通过工具名称进行索引。如果自定义工具使用了与内置工具相同的名称，则优先使用自定义工具。
+
+例如，这个文件取代了内置的bash工具：
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+除非你有意替换内置工具，否则最好用独特的名字。如果你想禁用内置工具但不想覆盖它，使用 [权限](/docs/permissions).
+:::
+
+---
+
 ### 参数
 
 你可以使用 `tool.schema`（即 [Zod](https://zod.dev)）来定义参数类型。

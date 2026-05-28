@@ -36,13 +36,13 @@ se på disse nedenfor.
 
 Subagenter er specialiserede assistenter, som primære agenter kan påbegynde sig til specifikke opgaver. Du kan også kalde dem manuelt ved at **@ nævne** dem i dine beskeder.
 
-OpenCode leveres med to indbyggede underagenter, **Generelt** og **Udforsk**. Vi vil se på dette nedenfor.
+OpenCode leveres med tre indbyggede subagenter, **General**, **Explore** og **Scout**. Vi ser nærmere på dem nedenfor.
 
 ---
 
 ## Indbyggede
 
-OpenCode leveres med to indbyggede primære agenter og to indbyggede subagenter.
+OpenCode leveres med to indbyggede primære agenter og tre indbyggede subagenter.
 
 ---
 
@@ -81,6 +81,14 @@ En agent til generelt formål at undersøge komplekse spørgsmål og udføre opg
 _Tilstand_: `subagent`
 
 En hurtig, skrivebeskyttet agent til at udforske kodebaser. Kan ikke ændre filer. Brug dette, når du hurtigt skal finde filer efter mønstre, søge kode efter nøgleord eller besvare spørgsmål om kodebasen.
+
+---
+
+### Scout-agenten
+
+_Tilstand_: `subagent`
+
+En skrivebeskyttet agent til eksterne docs og research af dependencies. Brug denne, når du har brug for at klone et dependency-repository ind i OpenCode's administrerede cache, inspicere kildekoden i et bibliotek eller krydstjekke lokal kode mod upstream-implementeringer uden at ændre dit workspace.
 
 ---
 

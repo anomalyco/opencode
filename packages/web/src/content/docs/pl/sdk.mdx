@@ -117,6 +117,78 @@ try {
 
 ---
 
+## Ustrukturyzowane Dane Wyjściowe
+
+Możesz zażądać ustrukturyzowanych danych wyjściowych JSON od modelu, określając `format` za pomocą schematu JSON. Model użyje narzędzia `StructuredOutput`, aby zwrócić zweryfikowany kod JSON pasujący do Twojego schematu.
+
+### Podstawowe użycie
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Typy formatu wyjściowego
+
+| Typ           | Opis                                                                      |
+| ------------- | ------------------------------------------------------------------------- |
+| `text`        | Domyślny. Standardowa odpowiedź tekstowa (brak ustrukturyzowanych danych) |
+| `json_schema` | Zwraca zweryfikowany JSON pasujący do dostarczonego schematu              |
+
+### Format JSON Schema
+
+Używając `type: 'json_schema'`, podaj:
+
+| Pole         | Typ             | Opis                                                         |
+| ------------ | --------------- | ------------------------------------------------------------ |
+| `type`       | `'json_schema'` | Wymagane. Określa tryb schematu JSON                         |
+| `schema`     | `object`        | Wymagane. Obiekt JSON Schema definiujący strukturę wyjściową |
+| `retryCount` | `number`        | Opcjonalne. Liczba ponownych prób walidacji (domyślnie: 2)   |
+
+### Obsługa błędów
+
+Jeśli model nie wygeneruje prawidłowych ustrukturyzowanych danych wyjściowych po wszystkich próbach, odpowiedź będzie zawierać `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### Najlepsze praktyki
+
+1. **Podawaj jasne opisy** we właściwościach schematu, aby pomóc modelowi zrozumieć, jakie dane wyodrębnić
+2. **Używaj `required`**, aby określić, które pola muszą być obecne
+3. **Zachowaj schematy skoncentrowane** - złożone zagnieżdżone schematy mogą być trudniejsze dla modelu do poprawnego wypełnienia
+4. **Ustaw odpowiedni `retryCount`** - zwiększ dla złożonych schematów, zmniejsz dla prostych
+
+---
+
 ## API
 
 Zestaw SDK udostępnia wszystkie interfejsy API serwera za pośrednictwem klienta bezpiecznego typu.

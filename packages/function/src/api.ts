@@ -12,21 +12,8 @@ type Env = {
   WEB_DOMAIN: string
 }
 
-async function getFeishuTenantToken(): Promise<string> {
-  const response = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      app_id: Resource.FEISHU_APP_ID.value,
-      app_secret: Resource.FEISHU_APP_SECRET.value,
-    }),
-  })
-  const data = (await response.json()) as { tenant_access_token?: string }
-  if (!data.tenant_access_token) throw new Error("Failed to get Feishu tenant token")
-  return data.tenant_access_token
-}
-
 export class SyncServer extends DurableObject<Env> {
+  // oxlint-disable-next-line no-useless-constructor
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
   }
@@ -49,9 +36,9 @@ export class SyncServer extends DurableObject<Env> {
     })
   }
 
-  async webSocketMessage(ws, message) {}
+  async webSocketMessage(_ws, _message) {}
 
-  async webSocketClose(ws, code, reason, wasClean) {
+  async webSocketClose(ws, code, _reason, _wasClean) {
     ws.close(code, "Durable Object is closing WebSocket")
   }
 
@@ -195,7 +182,7 @@ export default new Hono<{ Bindings: Env }>()
     let info
     const messages: Record<string, any> = {}
     data.forEach((d) => {
-      const [root, type, ...splits] = d.key.split("/")
+      const [root, type] = d.key.split("/")
       if (root !== "session") return
       if (type === "info") {
         info = d.content

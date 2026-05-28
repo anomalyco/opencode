@@ -77,7 +77,7 @@ export default function Download() {
 
   const handleCopyClick = (command: string) => (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
-    navigator.clipboard.writeText(command)
+    void navigator.clipboard.writeText(command)
     button.setAttribute("data-copied", "")
     setTimeout(() => {
       button.removeAttribute("data-copied")

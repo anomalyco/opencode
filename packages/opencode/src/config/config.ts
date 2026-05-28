@@ -1,1503 +1,884 @@
-import { Log } from "../util/log"
+import * as Log from "@opencode-ai/core/util/log"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
-import { createRequire } from "module"
+import { pathToFileURL } from "url"
 import os from "os"
-import z from "zod"
-import { Filesystem } from "../util/filesystem"
-import { ModelsDev } from "../provider/models"
-import { mergeDeep, pipe, unique } from "remeda"
-import { Global } from "../global"
-import fs from "fs/promises"
-import { lazy } from "../util/lazy"
-import { NamedError } from "@opencode-ai/util/error"
-import { Flag } from "../flag/flag"
+import { mergeDeep } from "remeda"
+import { Global } from "@opencode-ai/core/global"
+import fsNode from "fs/promises"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
-import {
-  type ParseError as JsoncParseError,
-  applyEdits,
-  modify,
-  parse as parseJsonc,
-  printParseErrorCode,
-} from "jsonc-parser"
-import { Instance } from "../project/instance"
-import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
-import { Installation } from "@/installation"
-import { ConfigMarkdown } from "./markdown"
-import { constants, existsSync } from "fs"
-import { Bus } from "@/bus"
-import { GlobalBus } from "@/bus/global"
-import { Event } from "../server/event"
-import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
-import { proxied } from "@/util/proxied"
-import { iife } from "@/util/iife"
-import { Control } from "@/control"
+import { Env } from "../env"
+import { applyEdits, modify } from "jsonc-parser"
+import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { existsSync } from "fs"
+import { Account } from "@/account/account"
+import { isRecord } from "@/util/record"
+import type { ConsoleState } from "./console-state"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { InstanceState } from "@/effect/instance-state"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { containsPath, type InstanceContext } from "../project/instance-context"
+import { NonNegativeInt, PositiveInt, type DeepMutable } from "@opencode-ai/core/schema"
+import { ConfigAgent } from "./agent"
+import { ConfigAttachment } from "./attachment"
+import { ConfigCommand } from "./command"
+import { ConfigFormatter } from "./formatter"
+import { ConfigLayout } from "./layout"
+import { ConfigLSP } from "./lsp"
+import { ConfigManaged } from "./managed"
+import { ConfigMCP } from "./mcp"
+import { ConfigModelID } from "./model-id"
+import { ConfigParse } from "./parse"
+import { ConfigPaths } from "./paths"
+import { ConfigPermission } from "./permission"
+import { ConfigPlugin } from "./plugin"
+import { ConfigProvider } from "./provider"
+import { ConfigReference } from "./reference"
+import { ConfigServer } from "./server"
+import { ConfigSkills } from "./skills"
+import { ConfigVariable } from "./variable"
+import { Npm } from "@opencode-ai/core/npm"
+import { withTransientReadRetry } from "@/util/effect-http-client"
 
-export namespace Config {
-  const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+const log = Log.create({ service: "config" })
 
-  const log = Log.create({ service: "config" })
+// Custom merge function that concatenates array fields instead of replacing them
+// Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
+function mergeConfig(target: Info, source: Info): Info {
+  return mergeDeep(target, source) as Info
+}
 
-  // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
-  // These settings override all user and project settings
-  function getManagedConfigDir(): string {
-    switch (process.platform) {
-      case "darwin":
-        return "/Library/Application Support/opencode"
-      case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
-      default:
-        return "/etc/opencode"
-    }
+function mergeConfigConcatArrays(target: Info, source: Info): Info {
+  const merged = mergeConfig(target, source)
+  if (target.instructions && source.instructions) {
+    merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
+  return merged
+}
 
-  const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || getManagedConfigDir()
+function normalizeLoadedConfig(data: unknown, source: string) {
+  if (!isRecord(data)) return data
+  const copy = { ...data }
+  const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
+  if (!hadLegacy) return copy
+  delete copy.theme
+  delete copy.keybinds
+  delete copy.tui
+  log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
+  return copy
+}
 
-  // Custom merge function that concatenates array fields instead of replacing them
-  function merge(target: Info, source: Info): Info {
-    const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
-    }
-    if (target.instructions && source.instructions) {
-      merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
-    }
-    return merged
-  }
+async function substituteWellKnownRemoteConfig(input: {
+  value: unknown
+  dir: string
+  source: string
+  env: Record<string, string>
+}) {
+  if (!isRecord(input.value) || typeof input.value.url !== "string") return undefined
 
-  export const state = Instance.state(async () => {
-    const auth = await Auth.all()
-
-    // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
-    // 1) Remote .well-known/opencode (org defaults)
-    // 2) Global config (~/.config/opencode/opencode.json{,c})
-    // 3) Custom config (OPENCODE_CONFIG)
-    // 4) Project config (opencode.json{,c})
-    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
-    // 6) Inline config (OPENCODE_CONFIG_CONTENT)
-    // Managed config directory is enterprise-only and always overrides everything above.
-    let result: Info = {}
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        process.env[value.key] = value.token
-        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
-        }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = merge(
-          result,
-          await load(JSON.stringify(remoteConfig), {
-            dir: path.dirname(`${key}/.well-known/opencode`),
-            source: `${key}/.well-known/opencode`,
-          }),
-        )
-        log.debug("loaded remote config from well-known", { url: key })
-      }
-    }
-
-    const token = await Control.token()
-    if (token) {
-    }
-
-    // Global user config overrides remote config.
-    result = merge(result, await global())
-
-    // Custom config path overrides global config.
-    if (Flag.OPENCODE_CONFIG) {
-      result = merge(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-    }
-
-    // Project config overrides global and remote config.
-    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-        for (const resolved of found.toReversed()) {
-          result = merge(result, await loadFile(resolved))
-        }
-      }
-    }
-
-    result.agent = result.agent || {}
-    result.mode = result.mode || {}
-    result.plugin = result.plugin || []
-
-    const directories = [
-      Global.Path.config,
-      // Only scan project .opencode/ directories when project discovery is enabled
-      ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-        ? await Array.fromAsync(
-            Filesystem.up({
-              targets: [".opencode"],
-              start: Instance.directory,
-              stop: Instance.worktree,
-            }),
-          )
-        : []),
-      // Always scan ~/.opencode/ (user home directory)
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Global.Path.home,
-          stop: Global.Path.home,
-        }),
-      )),
-    ]
-
-    // .opencode directory config overrides (project and global) config sources.
-    if (Flag.OPENCODE_CONFIG_DIR) {
-      directories.push(Flag.OPENCODE_CONFIG_DIR)
-      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
-    }
-
-    const deps = []
-
-    for (const dir of unique(directories)) {
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
-          log.debug(`loading config from ${path.join(dir, file)}`)
-          result = merge(result, await loadFile(path.join(dir, file)))
-          // to satisfy the type checker
-          result.agent ??= {}
-          result.mode ??= {}
-          result.plugin ??= []
-        }
-      }
-
-      deps.push(
-        iife(async () => {
-          const shouldInstall = await needsInstall(dir)
-          if (shouldInstall) await installDependencies(dir)
-        }),
-      )
-
-      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
-      result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
-    }
-
-    // Inline config content overrides all non-managed config sources.
-    if (process.env.OPENCODE_CONFIG_CONTENT) {
-      result = merge(
-        result,
-        await load(process.env.OPENCODE_CONFIG_CONTENT, {
-          dir: Instance.directory,
-          source: "OPENCODE_CONFIG_CONTENT",
-        }),
-      )
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
-
-    // Load managed config files last (highest priority) - enterprise admin-controlled
-    // Kept separate from directories array to avoid write operations when installing plugins
-    // which would fail on system directories requiring elevated permissions
-    // This way it only loads config file and not skills/plugins/commands
-    if (existsSync(managedConfigDir)) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        result = merge(result, await loadFile(path.join(managedConfigDir, file)))
-      }
-    }
-
-    // Migrate deprecated mode field to agent field
-    for (const [name, mode] of Object.entries(result.mode ?? {})) {
-      result.agent = mergeDeep(result.agent ?? {}, {
-        [name]: {
-          ...mode,
-          mode: "primary" as const,
-        },
-      })
-    }
-
-    if (Flag.OPENCODE_PERMISSION) {
-      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
-    }
-
-    // Backwards compatibility: legacy top-level `tools` config
-    if (result.tools) {
-      const perms: Record<string, Config.PermissionAction> = {}
-      for (const [tool, enabled] of Object.entries(result.tools)) {
-        const action: Config.PermissionAction = enabled ? "allow" : "deny"
-        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
-          perms.edit = action
-          continue
-        }
-        perms[tool] = action
-      }
-      result.permission = mergeDeep(perms, result.permission ?? {})
-    }
-
-    if (!result.username) result.username = os.userInfo().username
-
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
-
-    if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
-
-    // Apply flag overrides for compaction settings
-    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
-      result.compaction = { ...result.compaction, auto: false }
-    }
-    if (Flag.OPENCODE_DISABLE_PRUNE) {
-      result.compaction = { ...result.compaction, prune: false }
-    }
-
-    result.plugin = deduplicatePlugins(result.plugin ?? [])
-
-    return {
-      config: result,
-      directories,
-      deps,
-    }
+  const url = await ConfigVariable.substitute({
+    text: input.value.url,
+    type: "virtual",
+    dir: input.dir,
+    source: input.source,
+    env: input.env,
   })
-
-  export async function waitForDependencies() {
-    const deps = await state().then((x) => x.deps)
-    await Promise.all(deps)
-  }
-
-  export async function installDependencies(dir: string) {
-    const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
-
-    const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
-      dependencies: {},
-    }))
-    json.dependencies = {
-      ...json.dependencies,
-      "@opencode-ai/plugin": targetVersion,
-    }
-    await Filesystem.writeJson(pkg, json)
-
-    const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Filesystem.exists(gitignore)
-    if (!hasGitIgnore)
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
-
-    // Install any additional dependencies defined in the package.json
-    // This allows local plugins and custom tools to use external packages
-    await BunProc.run(
-      [
-        "install",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
-      ],
-      { cwd: dir },
-    ).catch((err) => {
-      log.warn("failed to install dependencies", { dir, error: err })
-    })
-  }
-
-  async function isWritable(dir: string) {
-    try {
-      await fs.access(dir, constants.W_OK)
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  async function needsInstall(dir: string) {
-    // Some config dirs may be read-only.
-    // Installing deps there will fail; skip installation in that case.
-    const writable = await isWritable(dir)
-    if (!writable) {
-      log.debug("config dir is not writable, skipping dependency install", { dir })
-      return false
-    }
-
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
-
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
-
-    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
-
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!isOutdated) return false
-      log.info("Cached version is outdated, proceeding with install", {
-        pkg: "@opencode-ai/plugin",
-        cachedVersion: depVersion,
-      })
-      return true
-    }
-    if (depVersion === targetVersion) return false
-    return true
-  }
-
-  function rel(item: string, patterns: string[]) {
-    const normalizedItem = item.replaceAll("\\", "/")
-    for (const pattern of patterns) {
-      const index = normalizedItem.indexOf(pattern)
-      if (index === -1) continue
-      return normalizedItem.slice(index + pattern.length)
-    }
-  }
-
-  function trim(file: string) {
-    const ext = path.extname(file)
-    return ext.length ? file.slice(0, -ext.length) : file
-  }
-
-  async function loadCommand(dir: string) {
-    const result: Record<string, Command> = {}
-    for (const item of await Glob.scan("{command,commands}/**/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse command ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load command", { command: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const name = trim(file)
-
-      const config = {
-        name,
-        ...md.data,
-        template: md.content.trim(),
-      }
-      const parsed = Command.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
-    }
-    return result
-  }
-
-  async function loadAgent(dir: string) {
-    const result: Record<string, Agent> = {}
-
-    for (const item of await Glob.scan("{agent,agents}/**/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse agent ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load agent", { agent: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const agentName = trim(file)
-
-      const config = {
-        name: agentName,
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
-    }
-    return result
-  }
-
-  async function loadMode(dir: string) {
-    const result: Record<string, Agent> = {}
-    for (const item of await Glob.scan("{mode,modes}/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse mode ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load mode", { mode: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const config = {
-        name: path.basename(item, ".md"),
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = {
-          ...parsed.data,
-          mode: "primary" as const,
-        }
-        continue
-      }
-    }
-    return result
-  }
-
-  async function loadPlugin(dir: string) {
-    const plugins: string[] = []
-
-    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      plugins.push(pathToFileURL(item).href)
-    }
-    return plugins
-  }
-
-  /**
-   * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
-   * - For npm packages: extracts package name without version
-   *
-   * @example
-   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
-   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
-   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
-   */
-  export function getPluginName(plugin: string): string {
-    if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
-    }
-    const lastAt = plugin.lastIndexOf("@")
-    if (lastAt > 0) {
-      return plugin.substring(0, lastAt)
-    }
-    return plugin
-  }
-
-  /**
-   * Deduplicates plugins by name, with later entries (higher priority) winning.
-   * Priority order (highest to lowest):
-   * 1. Local plugin/ directory
-   * 2. Local opencode.json
-   * 3. Global plugin/ directory
-   * 4. Global opencode.json
-   *
-   * Since plugins are added in low-to-high priority order,
-   * we reverse, deduplicate (keeping first occurrence), then restore order.
-   */
-  export function deduplicatePlugins(plugins: string[]): string[] {
-    // seenNames: canonical plugin names for duplicate detection
-    // e.g., "oh-my-opencode", "@scope/pkg"
-    const seenNames = new Set<string>()
-
-    // uniqueSpecifiers: full plugin specifiers to return
-    // e.g., "oh-my-opencode@2.4.3", "file:///path/to/plugin.js"
-    const uniqueSpecifiers: string[] = []
-
-    for (const specifier of plugins.toReversed()) {
-      const name = getPluginName(specifier)
-      if (!seenNames.has(name)) {
-        seenNames.add(name)
-        uniqueSpecifiers.push(specifier)
-      }
-    }
-
-    return uniqueSpecifiers.toReversed()
-  }
-
-  export const McpLocal = z
-    .object({
-      type: z.literal("local").describe("Type of MCP server connection"),
-      command: z.string().array().describe("Command and arguments to run the MCP server"),
-      environment: z
-        .record(z.string(), z.string())
-        .optional()
-        .describe("Environment variables to set when running the MCP server"),
-      enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
-      timeout: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
-    })
-    .strict()
-    .meta({
-      ref: "McpLocalConfig",
-    })
-
-  export const McpOAuth = z
-    .object({
-      clientId: z
-        .string()
-        .optional()
-        .describe("OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted."),
-      clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
-      scope: z.string().optional().describe("OAuth scopes to request during authorization"),
-    })
-    .strict()
-    .meta({
-      ref: "McpOAuthConfig",
-    })
-  export type McpOAuth = z.infer<typeof McpOAuth>
-
-  export const McpRemote = z
-    .object({
-      type: z.literal("remote").describe("Type of MCP server connection"),
-      url: z.string().describe("URL of the remote MCP server"),
-      enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
-      headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
-      oauth: z
-        .union([McpOAuth, z.literal(false)])
-        .optional()
-        .describe(
-          "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
-        ),
-      timeout: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
-    })
-    .strict()
-    .meta({
-      ref: "McpRemoteConfig",
-    })
-
-  export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
-  export type Mcp = z.infer<typeof Mcp>
-
-  export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
-    ref: "PermissionActionConfig",
-  })
-  export type PermissionAction = z.infer<typeof PermissionAction>
-
-  export const PermissionObject = z.record(z.string(), PermissionAction).meta({
-    ref: "PermissionObjectConfig",
-  })
-  export type PermissionObject = z.infer<typeof PermissionObject>
-
-  export const PermissionRule = z.union([PermissionAction, PermissionObject]).meta({
-    ref: "PermissionRuleConfig",
-  })
-  export type PermissionRule = z.infer<typeof PermissionRule>
-
-  // Capture original key order before zod reorders, then rebuild in original order
-  const permissionPreprocess = (val: unknown) => {
-    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
-      return { __originalKeys: Object.keys(val), ...val }
-    }
-    return val
-  }
-
-  const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
-    if (typeof x === "string") return { "*": x as PermissionAction }
-    const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
-    const { __originalKeys, ...rest } = obj
-    if (!__originalKeys) return rest as Record<string, PermissionRule>
-    const result: Record<string, PermissionRule> = {}
-    for (const key of __originalKeys) {
-      if (key in rest) result[key] = rest[key] as PermissionRule
-    }
-    return result
-  }
-
-  export const Permission = z
-    .preprocess(
-      permissionPreprocess,
-      z
-        .object({
-          __originalKeys: z.string().array().optional(),
-          read: PermissionRule.optional(),
-          edit: PermissionRule.optional(),
-          glob: PermissionRule.optional(),
-          grep: PermissionRule.optional(),
-          list: PermissionRule.optional(),
-          bash: PermissionRule.optional(),
-          task: PermissionRule.optional(),
-          external_directory: PermissionRule.optional(),
-          todowrite: PermissionAction.optional(),
-          todoread: PermissionAction.optional(),
-          question: PermissionAction.optional(),
-          webfetch: PermissionAction.optional(),
-          websearch: PermissionAction.optional(),
-          codesearch: PermissionAction.optional(),
-          lsp: PermissionRule.optional(),
-          doom_loop: PermissionAction.optional(),
-          skill: PermissionRule.optional(),
-        })
-        .catchall(PermissionRule)
-        .or(PermissionAction),
-    )
-    .transform(permissionTransform)
-    .meta({
-      ref: "PermissionConfig",
-    })
-  export type Permission = z.infer<typeof Permission>
-
-  export const Command = z.object({
-    template: z.string(),
-    description: z.string().optional(),
-    agent: z.string().optional(),
-    model: ModelId.optional(),
-    subtask: z.boolean().optional(),
-  })
-  export type Command = z.infer<typeof Command>
-
-  export const Skills = z.object({
-    paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
-    urls: z
-      .array(z.string())
-      .optional()
-      .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
-  })
-  export type Skills = z.infer<typeof Skills>
-
-  export const Agent = z
-    .object({
-      model: ModelId.optional(),
-      variant: z
-        .string()
-        .optional()
-        .describe("Default model variant for this agent (applies only when using the agent's configured model)."),
-      temperature: z.number().optional(),
-      top_p: z.number().optional(),
-      prompt: z.string().optional(),
-      tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
-      disable: z.boolean().optional(),
-      description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.enum(["subagent", "primary", "all"]).optional(),
-      hidden: z
-        .boolean()
-        .optional()
-        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
-      options: z.record(z.string(), z.any()).optional(),
-      color: z
-        .union([
-          z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format"),
-          z.enum(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
-        ])
-        .optional()
-        .describe("Hex color code (e.g., #FF5733) or theme color (e.g., primary)"),
-      steps: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Maximum number of agentic iterations before forcing text-only response"),
-      maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
-      permission: Permission.optional(),
-    })
-    .catchall(z.any())
-    .transform((agent, ctx) => {
-      const knownKeys = new Set([
-        "name",
-        "model",
-        "variant",
-        "prompt",
-        "description",
-        "temperature",
-        "top_p",
-        "mode",
-        "hidden",
-        "color",
-        "steps",
-        "maxSteps",
-        "options",
-        "permission",
-        "disable",
-        "tools",
-      ])
-
-      // Extract unknown properties into options
-      const options: Record<string, unknown> = { ...agent.options }
-      for (const [key, value] of Object.entries(agent)) {
-        if (!knownKeys.has(key)) options[key] = value
-      }
-
-      // Convert legacy tools config to permissions
-      const permission: Permission = {}
-      for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
-        const action = enabled ? "allow" : "deny"
-        // write, edit, patch, multiedit all map to edit permission
-        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
-          permission.edit = action
-        } else {
-          permission[tool] = action
-        }
-      }
-      Object.assign(permission, agent.permission)
-
-      // Convert legacy maxSteps to steps
-      const steps = agent.steps ?? agent.maxSteps
-
-      return { ...agent, options, permission, steps } as typeof agent & {
-        options?: Record<string, unknown>
-        permission?: Permission
-        steps?: number
-      }
-    })
-    .meta({
-      ref: "AgentConfig",
-    })
-  export type Agent = z.infer<typeof Agent>
-
-  export const Keybinds = z
-    .object({
-      leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
-      app_exit: z.string().optional().default("ctrl+c,ctrl+d,<leader>q").describe("Exit the application"),
-      editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
-      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
-      sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
-      scrollbar_toggle: z.string().optional().default("none").describe("Toggle session scrollbar"),
-      username_toggle: z.string().optional().default("none").describe("Toggle username visibility"),
-      status_view: z.string().optional().default("<leader>s").describe("View status"),
-      session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
-      session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
-      session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
-      session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
-      session_fork: z.string().optional().default("none").describe("Fork session from message"),
-      session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
-      session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
-      stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
-      model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
-      model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
-      session_share: z.string().optional().default("none").describe("Share current session"),
-      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
-      session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
-      session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      messages_page_up: z.string().optional().default("pageup,ctrl+alt+b").describe("Scroll messages up by one page"),
-      messages_page_down: z
-        .string()
-        .optional()
-        .default("pagedown,ctrl+alt+f")
-        .describe("Scroll messages down by one page"),
-      messages_line_up: z.string().optional().default("ctrl+alt+y").describe("Scroll messages up by one line"),
-      messages_line_down: z.string().optional().default("ctrl+alt+e").describe("Scroll messages down by one line"),
-      messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
-      messages_half_page_down: z
-        .string()
-        .optional()
-        .default("ctrl+alt+d")
-        .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
-      messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
-      messages_next: z.string().optional().default("none").describe("Navigate to next message"),
-      messages_previous: z.string().optional().default("none").describe("Navigate to previous message"),
-      messages_last_user: z.string().optional().default("none").describe("Navigate to last user message"),
-      messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
-      messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
-      messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
-      messages_toggle_conceal: z
-        .string()
-        .optional()
-        .default("<leader>h")
-        .describe("Toggle code block concealment in messages"),
-      tool_details: z.string().optional().default("none").describe("Toggle tool details visibility"),
-      model_list: z.string().optional().default("<leader>m").describe("List available models"),
-      model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
-      model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
-      model_cycle_favorite: z.string().optional().default("none").describe("Next favorite model"),
-      model_cycle_favorite_reverse: z.string().optional().default("none").describe("Previous favorite model"),
-      command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
-      agent_list: z.string().optional().default("<leader>a").describe("List agents"),
-      agent_cycle: z.string().optional().default("tab").describe("Next agent"),
-      agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
-      variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
-      input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
-      input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
-      input_submit: z.string().optional().default("return").describe("Submit input"),
-      input_newline: z
-        .string()
-        .optional()
-        .default("shift+return,ctrl+return,alt+return,ctrl+j")
-        .describe("Insert newline in input"),
-      input_move_left: z.string().optional().default("left,ctrl+b").describe("Move cursor left in input"),
-      input_move_right: z.string().optional().default("right,ctrl+f").describe("Move cursor right in input"),
-      input_move_up: z.string().optional().default("up").describe("Move cursor up in input"),
-      input_move_down: z.string().optional().default("down").describe("Move cursor down in input"),
-      input_select_left: z.string().optional().default("shift+left").describe("Select left in input"),
-      input_select_right: z.string().optional().default("shift+right").describe("Select right in input"),
-      input_select_up: z.string().optional().default("shift+up").describe("Select up in input"),
-      input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
-      input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
-      input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
-      input_select_line_home: z
-        .string()
-        .optional()
-        .default("ctrl+shift+a")
-        .describe("Select to start of line in input"),
-      input_select_line_end: z.string().optional().default("ctrl+shift+e").describe("Select to end of line in input"),
-      input_visual_line_home: z.string().optional().default("alt+a").describe("Move to start of visual line in input"),
-      input_visual_line_end: z.string().optional().default("alt+e").describe("Move to end of visual line in input"),
-      input_select_visual_line_home: z
-        .string()
-        .optional()
-        .default("alt+shift+a")
-        .describe("Select to start of visual line in input"),
-      input_select_visual_line_end: z
-        .string()
-        .optional()
-        .default("alt+shift+e")
-        .describe("Select to end of visual line in input"),
-      input_buffer_home: z.string().optional().default("home").describe("Move to start of buffer in input"),
-      input_buffer_end: z.string().optional().default("end").describe("Move to end of buffer in input"),
-      input_select_buffer_home: z
-        .string()
-        .optional()
-        .default("shift+home")
-        .describe("Select to start of buffer in input"),
-      input_select_buffer_end: z.string().optional().default("shift+end").describe("Select to end of buffer in input"),
-      input_delete_line: z.string().optional().default("ctrl+shift+d").describe("Delete line in input"),
-      input_delete_to_line_end: z.string().optional().default("ctrl+k").describe("Delete to end of line in input"),
-      input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
-      input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
-      input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
-      input_undo: z.string().optional().default("ctrl+-,super+z").describe("Undo in input"),
-      input_redo: z.string().optional().default("ctrl+.,super+shift+z").describe("Redo in input"),
-      input_word_forward: z
-        .string()
-        .optional()
-        .default("alt+f,alt+right,ctrl+right")
-        .describe("Move word forward in input"),
-      input_word_backward: z
-        .string()
-        .optional()
-        .default("alt+b,alt+left,ctrl+left")
-        .describe("Move word backward in input"),
-      input_select_word_forward: z
-        .string()
-        .optional()
-        .default("alt+shift+f,alt+shift+right")
-        .describe("Select word forward in input"),
-      input_select_word_backward: z
-        .string()
-        .optional()
-        .default("alt+shift+b,alt+shift+left")
-        .describe("Select word backward in input"),
-      input_delete_word_forward: z
-        .string()
-        .optional()
-        .default("alt+d,alt+delete,ctrl+delete")
-        .describe("Delete word forward in input"),
-      input_delete_word_backward: z
-        .string()
-        .optional()
-        .default("ctrl+w,ctrl+backspace,alt+backspace")
-        .describe("Delete word backward in input"),
-      history_previous: z.string().optional().default("up").describe("Previous history item"),
-      history_next: z.string().optional().default("down").describe("Next history item"),
-      session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
-      session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
-      session_parent: z.string().optional().default("<leader>up").describe("Go to parent session"),
-      terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
-      terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
-      tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
-      display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
-    })
-    .strict()
-    .meta({
-      ref: "KeybindsConfig",
-    })
-
-  export const TUI = z.object({
-    scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
-    scroll_acceleration: z
-      .object({
-        enabled: z.boolean().describe("Enable scroll acceleration"),
-      })
-      .optional()
-      .describe("Scroll acceleration settings"),
-    diff_style: z
-      .enum(["auto", "stacked"])
-      .optional()
-      .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
-  })
-
-  export const Server = z
-    .object({
-      port: z.number().int().positive().optional().describe("Port to listen on"),
-      hostname: z.string().optional().describe("Hostname to listen on"),
-      mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
-      cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
-    })
-    .strict()
-    .meta({
-      ref: "ServerConfig",
-    })
-
-  export const Layout = z.enum(["auto", "stretch"]).meta({
-    ref: "LayoutConfig",
-  })
-  export type Layout = z.infer<typeof Layout>
-
-  export const Provider = ModelsDev.Provider.partial()
-    .extend({
-      whitelist: z.array(z.string()).optional(),
-      blacklist: z.array(z.string()).optional(),
-      models: z
-        .record(
-          z.string(),
-          ModelsDev.Model.partial().extend({
-            variants: z
-              .record(
-                z.string(),
-                z
-                  .object({
-                    disabled: z.boolean().optional().describe("Disable this variant for the model"),
-                  })
-                  .catchall(z.any()),
-              )
-              .optional()
-              .describe("Variant-specific configuration"),
-          }),
-        )
-        .optional(),
-      options: z
-        .object({
-          apiKey: z.string().optional(),
-          baseURL: z.string().optional(),
-          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-          setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
-          timeout: z
-            .union([
-              z
-                .number()
-                .int()
-                .positive()
-                .describe(
-                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                ),
-              z.literal(false).describe("Disable timeout for this provider entirely."),
-            ])
-            .optional()
-            .describe(
-              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-            ),
-        })
-        .catchall(z.any())
-        .optional(),
-    })
-    .strict()
-    .meta({
-      ref: "ProviderConfig",
-    })
-  export type Provider = z.infer<typeof Provider>
-
-  export const Info = z
-    .object({
-      $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
-      theme: z.string().optional().describe("Theme name to use for the interface"),
-      keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      logLevel: Log.Level.optional().describe("Log level"),
-      tui: TUI.optional().describe("TUI specific settings"),
-      server: Server.optional().describe("Server configuration for opencode serve and web commands"),
-      command: z
-        .record(z.string(), Command)
-        .optional()
-        .describe("Command configuration, see https://opencode.ai/docs/commands"),
-      skills: Skills.optional().describe("Additional skill folder paths"),
-      watcher: z
-        .object({
-          ignore: z.array(z.string()).optional(),
-        })
-        .optional(),
-      plugin: z.string().array().optional(),
-      snapshot: z.boolean().optional(),
-      share: z
-        .enum(["manual", "auto", "disabled"])
-        .optional()
-        .describe(
-          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
-        ),
-      autoshare: z
-        .boolean()
-        .optional()
-        .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z
-        .union([z.boolean(), z.literal("notify")])
-        .optional()
-        .describe(
-          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
-        ),
-      disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
-      enabled_providers: z
-        .array(z.string())
-        .optional()
-        .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-      model: ModelId.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
-      small_model: ModelId.describe(
-        "Small model to use for tasks like title generation in the format of provider/model",
-      ).optional(),
-      default_agent: z
-        .string()
-        .optional()
-        .describe(
-          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
-        ),
-      username: z
-        .string()
-        .optional()
-        .describe("Custom username to display in conversations instead of system username"),
-      mode: z
-        .object({
-          build: Agent.optional(),
-          plan: Agent.optional(),
-        })
-        .catchall(Agent)
-        .optional()
-        .describe("@deprecated Use `agent` field instead."),
-      agent: z
-        .object({
-          // primary
-          plan: Agent.optional(),
-          build: Agent.optional(),
-          // subagent
-          general: Agent.optional(),
-          explore: Agent.optional(),
-          // specialized
-          title: Agent.optional(),
-          summary: Agent.optional(),
-          compaction: Agent.optional(),
-        })
-        .catchall(Agent)
-        .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agents"),
-      provider: z
-        .record(z.string(), Provider)
-        .optional()
-        .describe("Custom provider configurations and model overrides"),
-      mcp: z
-        .record(
-          z.string(),
-          z.union([
-            Mcp,
-            z
-              .object({
-                enabled: z.boolean(),
-              })
-              .strict(),
-          ]),
-        )
-        .optional()
-        .describe("MCP (Model Context Protocol) server configurations"),
-      formatter: z
-        .union([
-          z.literal(false),
-          z.record(
-            z.string(),
-            z.object({
-              disabled: z.boolean().optional(),
-              command: z.array(z.string()).optional(),
-              environment: z.record(z.string(), z.string()).optional(),
-              extensions: z.array(z.string()).optional(),
-            }),
-          ),
-        ])
-        .optional(),
-      lsp: z
-        .union([
-          z.literal(false),
-          z.record(
-            z.string(),
-            z.union([
-              z.object({
-                disabled: z.literal(true),
-              }),
-              z.object({
-                command: z.array(z.string()),
-                extensions: z.array(z.string()).optional(),
-                disabled: z.boolean().optional(),
-                env: z.record(z.string(), z.string()).optional(),
-                initialization: z.record(z.string(), z.any()).optional(),
+  const headers = isRecord(input.value.headers)
+    ? Object.fromEntries(
+        await Promise.all(
+          Object.entries(input.value.headers)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+            .map(async ([key, value]) => [
+              key,
+              await ConfigVariable.substitute({
+                text: value,
+                type: "virtual",
+                dir: input.dir,
+                source: input.source,
+                env: input.env,
               }),
             ]),
-          ),
-        ])
-        .optional()
-        .refine(
-          (data) => {
-            if (!data) return true
-            if (typeof data === "boolean") return true
-            const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
-
-            return Object.entries(data).every(([id, config]) => {
-              if (config.disabled) return true
-              if (serverIds.has(id)) return true
-              return Boolean(config.extensions)
-            })
-          },
-          {
-            error: "For custom LSP servers, 'extensions' array is required.",
-          },
         ),
-      instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
-      layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
-      permission: Permission.optional(),
-      tools: z.record(z.string(), z.boolean()).optional(),
-      enterprise: z
-        .object({
-          url: z.string().optional().describe("Enterprise URL"),
-        })
-        .optional(),
-      compaction: z
-        .object({
-          auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
-          prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
-          reserved: z
-            .number()
-            .int()
-            .min(0)
-            .optional()
-            .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
-        })
-        .optional(),
-      experimental: z
-        .object({
-          disable_paste_summary: z.boolean().optional(),
-          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-          openTelemetry: z
-            .boolean()
-            .optional()
-            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
-          primary_tools: z
-            .array(z.string())
-            .optional()
-            .describe("Tools that should only be available to primary agents."),
-          continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
-          mcp_timeout: z
-            .number()
-            .int()
-            .positive()
-            .optional()
-            .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
-        })
-        .optional(),
+      )
+    : undefined
+
+  return { url, headers }
+}
+
+const WellKnownConfig = Schema.Struct({
+  config: Schema.optional(Schema.Json),
+  remote_config: Schema.optional(Schema.Json),
+})
+
+async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
+  if (!config.plugin) return config
+  for (let i = 0; i < config.plugin.length; i++) {
+    // Normalize path-like plugin specs while we still know which config file declared them.
+    // This prevents `./plugin.ts` from being reinterpreted relative to some later merge location.
+    config.plugin[i] = await ConfigPlugin.resolvePluginSpec(config.plugin[i], filepath)
+  }
+  return config
+}
+
+export type Layout = ConfigLayout.Layout
+
+const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
+  identifier: "LogLevel",
+  description: "Log level",
+})
+
+export const Info = Schema.Struct({
+  $schema: Schema.optional(Schema.String).annotate({
+    description: "JSON schema reference for configuration validation",
+  }),
+  shell: Schema.optional(Schema.String).annotate({
+    description: "Default shell to use for terminal and bash tool",
+  }),
+  logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
+  server: Schema.optional(ConfigServer.Server).annotate({
+    description: "Server configuration for opencode serve and web commands",
+  }),
+  command: Schema.optional(Schema.Record(Schema.String, ConfigCommand.Info)).annotate({
+    description: "Command configuration, see https://opencode.ai/docs/commands",
+  }),
+  skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
+  reference: Schema.optional(ConfigReference.Info).annotate({
+    description: "Named git or local directory references that can be mentioned as @alias or @alias/path",
+  }),
+  watcher: Schema.optional(
+    Schema.Struct({
+      ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+    }),
+  ),
+  snapshot: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+  }),
+  // User-facing plugin config is stored as Specs; provenance gets attached later while configs are merged.
+  plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPlugin.Spec))),
+  share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({
+    description:
+      "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+  }),
+  autoshare: Schema.optional(Schema.Boolean).annotate({
+    description: "@deprecated Use 'share' field instead. Share newly created sessions automatically",
+  }),
+  autoupdate: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("notify")])).annotate({
+    description:
+      "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
+  }),
+  disabled_providers: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Disable providers that are loaded automatically",
+  }),
+  enabled_providers: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "When set, ONLY these providers will be enabled. All other providers will be ignored",
+  }),
+  model: Schema.optional(ConfigModelID).annotate({
+    description: "Model to use in the format of provider/model, eg anthropic/claude-2",
+  }),
+  small_model: Schema.optional(ConfigModelID).annotate({
+    description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  default_agent: Schema.optional(Schema.String).annotate({
+    description:
+      "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+  }),
+  username: Schema.optional(Schema.String).annotate({
+    description: "Custom username to display in conversations instead of system username",
+  }),
+  mode: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
+        build: Schema.optional(ConfigAgent.Info),
+        plan: Schema.optional(ConfigAgent.Info),
+      }),
+      [Schema.Record(Schema.String, ConfigAgent.Info)],
+    ),
+  ).annotate({ description: "@deprecated Use `agent` field instead." }),
+  agent: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
+        // primary
+        plan: Schema.optional(ConfigAgent.Info),
+        build: Schema.optional(ConfigAgent.Info),
+        // subagent
+        general: Schema.optional(ConfigAgent.Info),
+        explore: Schema.optional(ConfigAgent.Info),
+        scout: Schema.optional(ConfigAgent.Info),
+        // specialized
+        title: Schema.optional(ConfigAgent.Info),
+        summary: Schema.optional(ConfigAgent.Info),
+        compaction: Schema.optional(ConfigAgent.Info),
+      }),
+      [Schema.Record(Schema.String, ConfigAgent.Info)],
+    ),
+  ).annotate({ description: "Agent configuration, see https://opencode.ai/docs/agents" }),
+  provider: Schema.optional(Schema.Record(Schema.String, ConfigProvider.Info)).annotate({
+    description: "Custom provider configurations and model overrides",
+  }),
+  mcp: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Union([
+        ConfigMCP.Info,
+        // Matches the legacy `{ enabled: false }` form used to disable a server.
+        Schema.Struct({ enabled: Schema.Boolean }),
+      ]),
+    ),
+  ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
+  formatter: Schema.optional(ConfigFormatter.Info).annotate({
+    description:
+      "Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
+  }),
+  lsp: Schema.optional(ConfigLSP.Info).annotate({
+    description:
+      "Enable or configure LSP servers. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
+  }),
+  instructions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Additional instruction files or patterns to include",
+  }),
+  layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
+  permission: Schema.optional(ConfigPermission.Info),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  attachment: Schema.optional(ConfigAttachment.Info).annotate({
+    description: "Attachment processing configuration, including image size limits and resizing behavior",
+  }),
+  enterprise: Schema.optional(
+    Schema.Struct({
+      url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
+    }),
+  ),
+  tool_output: Schema.optional(
+    Schema.Struct({
+      max_lines: Schema.optional(PositiveInt).annotate({
+        description: "Maximum lines of tool output before it is truncated and saved to disk (default: 2000)",
+      }),
+      max_bytes: Schema.optional(PositiveInt).annotate({
+        description: "Maximum bytes of tool output before it is truncated and saved to disk (default: 51200)",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
+  }),
+  compaction: Schema.optional(
+    Schema.Struct({
+      auto: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable automatic compaction when context is full (default: true)",
+      }),
+      prune: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable pruning of old tool outputs (default: true)",
+      }),
+      tail_turns: Schema.optional(NonNegativeInt).annotate({
+        description:
+          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
+      }),
+      preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
+        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
+      }),
+      reserved: Schema.optional(NonNegativeInt).annotate({
+        description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+      }),
+    }),
+  ),
+  experimental: Schema.optional(
+    Schema.Struct({
+      disable_paste_summary: Schema.optional(Schema.Boolean),
+      batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
+      openTelemetry: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
+      }),
+      primary_tools: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description: "Tools that should only be available to primary agents.",
+      }),
+      continue_loop_on_deny: Schema.optional(Schema.Boolean).annotate({
+        description: "Continue the agent loop when a tool call is denied",
+      }),
+      mcp_timeout: Schema.optional(PositiveInt).annotate({
+        description: "Timeout in milliseconds for model context protocol (MCP) requests",
+      }),
+    }),
+  ),
+}).annotate({ identifier: "Config" })
+
+// Uses the shared `DeepMutable` from `@opencode-ai/core/schema`. See the definition
+// there for why the local variant is needed over `Types.DeepMutable` from
+// effect-smol (the upstream version collapses `unknown` to `{}`).
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
+  // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
+  // with the file and scope it came from so later runtime code can make location-sensitive decisions.
+  plugin_origins?: ConfigPlugin.Origin[]
+}
+
+type State = {
+  config: Info
+  directories: string[]
+  deps: Fiber.Fiber<void>[]
+  consoleState: ConsoleState
+}
+
+export interface Interface {
+  readonly get: () => Effect.Effect<Info>
+  readonly getGlobal: () => Effect.Effect<Info>
+  readonly getConsoleState: () => Effect.Effect<ConsoleState>
+  readonly update: (config: Info) => Effect.Effect<void>
+  readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly invalidate: () => Effect.Effect<void>
+  readonly directories: () => Effect.Effect<string[]>
+  readonly waitForDependencies: () => Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+
+export const use = serviceUse(Service)
+
+function globalConfigFile() {
+  const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    path.join(Global.Path.config, file),
+  )
+  for (const file of candidates) {
+    if (existsSync(file)) return file
+  }
+  return candidates[0]
+}
+
+function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
+  if (!isRecord(patch)) {
+    const edits = modify(input, path, patch, {
+      formattingOptions: {
+        insertSpaces: true,
+        tabSize: 2,
+      },
     })
-    .strict()
-    .meta({
-      ref: "Config",
-    })
-
-  export type Info = z.output<typeof Info>
-
-  export const global = lazy(async () => {
-    let result: Info = pipe(
-      {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
-    )
-
-    const legacy = path.join(Global.Path.config, "config")
-    if (existsSync(legacy)) {
-      await import(pathToFileURL(legacy).href, {
-        with: {
-          type: "toml",
-        },
-      })
-        .then(async (mod) => {
-          const { provider, model, ...rest } = mod.default
-          if (provider && model) result.model = `${provider}/${model}`
-          result["$schema"] = "https://opencode.ai/config.json"
-          result = mergeDeep(result, rest)
-          await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
-          await fs.unlink(legacy)
-        })
-        .catch(() => {})
-    }
-
-    return result
-  })
-
-  async function loadFile(filepath: string): Promise<Info> {
-    log.info("loading", { path: filepath })
-    let text = await Filesystem.readText(filepath).catch((err: any) => {
-      if (err.code === "ENOENT") return
-      throw new JsonError({ path: filepath }, { cause: err })
-    })
-    if (!text) return {}
-    return load(text, { path: filepath })
+    return applyEdits(input, edits)
   }
 
-  async function load(text: string, options: { path: string } | { dir: string; source: string }) {
-    const original = text
-    const configDir = "path" in options ? path.dirname(options.path) : options.dir
-    const source = "path" in options ? options.path : options.source
-    const isFile = "path" in options
+  return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
+}
 
-    text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-      return process.env[varName] || ""
+function writable(info: Info) {
+  const { plugin_origins: _plugin_origins, ...next } = info
+  return next
+}
+
+function writableGlobal(info: Info) {
+  const next = writable(info)
+  // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
+  if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
+  return next
+}
+
+export const ConfigDirectoryTypoError = NamedError.create("ConfigDirectoryTypoError", {
+  path: Schema.String,
+  dir: Schema.String,
+  suggestion: Schema.String,
+})
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const fs = yield* AppFileSystem.Service
+    const authSvc = yield* Auth.Service
+    const accountSvc = yield* Account.Service
+    const env = yield* Env.Service
+    const npmSvc = yield* Npm.Service
+    const http = yield* HttpClient.HttpClient
+
+    const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
+
+    const fetchRemoteJson = Effect.fnUntraced(function* <S extends Schema.Top>(
+      url: string,
+      headers: Record<string, string> | undefined,
+      schema: S,
+    ) {
+      const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
+        .execute(
+          HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers ?? {})),
+        )
+        .pipe(
+          Effect.catch((error) => Effect.die(new Error(`failed to fetch remote config from ${url}: ${String(error)}`))),
+        )
+      return yield* HttpClientResponse.schemaBodyJson(schema)(response).pipe(
+        Effect.catch((error) => Effect.die(new Error(`failed to decode remote config from ${url}: ${String(error)}`))),
+      )
     })
 
-    const fileMatches = text.match(/\{file:[^}]+\}/g)
-    if (fileMatches) {
-      const lines = text.split("\n")
+    const loadConfig = Effect.fnUntraced(function* (
+      text: string,
+      options: { path: string } | { dir: string; source: string },
+      env?: Record<string, string>,
+    ) {
+      const source = "path" in options ? options.path : options.source
+      const expanded = yield* Effect.promise(() =>
+        ConfigVariable.substitute(
+          "path" in options
+            ? { text, type: "path", path: options.path, env }
+            : { text, type: "virtual", ...options, env },
+        ),
+      )
+      const parsed = ConfigParse.jsonc(expanded, source)
+      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+      if (!("path" in options)) return data
 
-      for (const match of fileMatches) {
-        const lineIndex = lines.findIndex((line) => line.includes(match))
-        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-          continue
-        }
-        let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
-        if (filePath.startsWith("~/")) {
-          filePath = path.join(os.homedir(), filePath.slice(2))
-        }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = (
-          await Bun.file(resolvedPath)
-            .text()
-            .catch((error) => {
-              const errMsg = `bad file reference: "${match}"`
-              if (error.code === "ENOENT") {
-                throw new InvalidError(
-                  {
-                    path: source,
-                    message: errMsg + ` ${resolvedPath} does not exist`,
-                  },
-                  { cause: error },
-                )
-              }
-              throw new InvalidError({ path: source, message: errMsg }, { cause: error })
-            })
-        ).trim()
-        text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
-      }
-    }
-
-    const errors: JsoncParseError[] = []
-    const data = parseJsonc(text, errors, { allowTrailingComma: true })
-    if (errors.length) {
-      const lines = text.split("\n")
-      const errorDetails = errors
-        .map((e) => {
-          const beforeOffset = text.substring(0, e.offset).split("\n")
-          const line = beforeOffset.length
-          const column = beforeOffset[beforeOffset.length - 1].length + 1
-          const problemLine = lines[line - 1]
-
-          const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
-          if (!problemLine) return error
-
-          return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
-        })
-        .join("\n")
-
-      throw new JsonError({
-        path: source,
-        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
-      })
-    }
-
-    const parsed = Info.safeParse(data)
-    if (parsed.success) {
-      if (!parsed.data.$schema && isFile) {
-        parsed.data.$schema = "https://opencode.ai/config.json"
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(options.path, updated).catch(() => {})
-      }
-      const data = parsed.data
-      if (data.plugin && isFile) {
-        for (let i = 0; i < data.plugin.length; i++) {
-          const plugin = data.plugin[i]
-          try {
-            data.plugin[i] = import.meta.resolve!(plugin, options.path)
-          } catch (e) {
-            try {
-              // import.meta.resolve sometimes fails with newly created node_modules
-              const require = createRequire(options.path)
-              const resolvedPath = require.resolve(plugin)
-              data.plugin[i] = pathToFileURL(resolvedPath).href
-            } catch {
-              // Ignore, plugin might be a generic string identifier like "mcp-server"
-            }
-          }
-        }
+      yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
+      if (!data.$schema) {
+        data.$schema = "https://opencode.ai/config.json"
+        const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
       }
       return data
-    }
-
-    throw new InvalidError({
-      path: source,
-      issues: parsed.error.issues,
-    })
-  }
-  export const JsonError = NamedError.create(
-    "ConfigJsonError",
-    z.object({
-      path: z.string(),
-      message: z.string().optional(),
-    }),
-  )
-
-  export const ConfigDirectoryTypoError = NamedError.create(
-    "ConfigDirectoryTypoError",
-    z.object({
-      path: z.string(),
-      dir: z.string(),
-      suggestion: z.string(),
-    }),
-  )
-
-  export const InvalidError = NamedError.create(
-    "ConfigInvalidError",
-    z.object({
-      path: z.string(),
-      issues: z.custom<z.core.$ZodIssue[]>().optional(),
-      message: z.string().optional(),
-    }),
-  )
-
-  export async function get() {
-    return state().then((x) => x.config)
-  }
-
-  export async function getGlobal() {
-    return global()
-  }
-
-  export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
-    const existing = await loadFile(filepath)
-    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
-    await Instance.dispose()
-  }
-
-  function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
-      path.join(Global.Path.config, file),
-    )
-    for (const file of candidates) {
-      if (existsSync(file)) return file
-    }
-    return candidates[0]
-  }
-
-  function isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === "object" && !Array.isArray(value)
-  }
-
-  function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
-    if (!isRecord(patch)) {
-      const edits = modify(input, path, patch, {
-        formattingOptions: {
-          insertSpaces: true,
-          tabSize: 2,
-        },
-      })
-      return applyEdits(input, edits)
-    }
-
-    return Object.entries(patch).reduce((result, [key, value]) => {
-      if (value === undefined) return result
-      return patchJsonc(result, value, [...path, key])
-    }, input)
-  }
-
-  function parseConfig(text: string, filepath: string): Info {
-    const errors: JsoncParseError[] = []
-    const data = parseJsonc(text, errors, { allowTrailingComma: true })
-    if (errors.length) {
-      const lines = text.split("\n")
-      const errorDetails = errors
-        .map((e) => {
-          const beforeOffset = text.substring(0, e.offset).split("\n")
-          const line = beforeOffset.length
-          const column = beforeOffset[beforeOffset.length - 1].length + 1
-          const problemLine = lines[line - 1]
-
-          const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
-          if (!problemLine) return error
-
-          return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
-        })
-        .join("\n")
-
-      throw new JsonError({
-        path: filepath,
-        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
-      })
-    }
-
-    const parsed = Info.safeParse(data)
-    if (parsed.success) return parsed.data
-
-    throw new InvalidError({
-      path: filepath,
-      issues: parsed.error.issues,
-    })
-  }
-
-  export async function updateGlobal(config: Info) {
-    const filepath = globalConfigFile()
-    const before = await Filesystem.readText(filepath).catch((err: any) => {
-      if (err.code === "ENOENT") return "{}"
-      throw new JsonError({ path: filepath }, { cause: err })
     })
 
-    const next = await (async () => {
-      if (!filepath.endsWith(".jsonc")) {
-        const existing = parseConfig(before, filepath)
-        const merged = mergeDeep(existing, config)
-        await Filesystem.writeJson(filepath, merged)
-        return merged
+    const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
+      log.info("loading", { path: filepath })
+      const text = yield* readConfigFile(filepath)
+      if (!text) return {} as Info
+      return yield* loadConfig(text, { path: filepath }, env)
+    })
+
+    const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
+      let result: Info = {}
+      // Seed the default global config with the schema for editor completion, but avoid writing when the user
+      // explicitly routes config through env-provided paths or content.
+      if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
+        const file = globalConfigFile()
+        if (!existsSync(file)) {
+          yield* fs
+            .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
+            .pipe(Effect.catch(() => Effect.void))
+        }
+      }
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
+
+      const legacy = path.join(Global.Path.config, "config")
+      if (existsSync(legacy)) {
+        yield* Effect.promise(() =>
+          import(pathToFileURL(legacy).href, { with: { type: "toml" } })
+            .then(async (mod) => {
+              const { provider, model, ...rest } = mod.default
+              if (provider && model) result.model = `${provider}/${model}`
+              result["$schema"] = "https://opencode.ai/config.json"
+              result = mergeConfig(result, rest)
+              await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+              await fsNode.unlink(legacy)
+            })
+            .catch(() => {}),
+        )
       }
 
-      const updated = patchJsonc(before, config)
-      const merged = parseConfig(updated, filepath)
-      await Filesystem.write(filepath, updated)
-      return merged
-    })()
+      return result
+    })
 
-    global.reset()
+    const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
+      loadGlobal().pipe(
+        Effect.tapError((error) =>
+          Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
+        ),
+        Effect.orElseSucceed((): Info => ({})),
+      ),
+      Duration.infinity,
+    )
 
-    void Instance.disposeAll()
-      .catch(() => undefined)
-      .finally(() => {
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: {
-            type: Event.Disposed.type,
-            properties: {},
-          },
+    const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+      return yield* cachedGlobal
+    })
+
+    const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
+      const gitignore = path.join(dir, ".gitignore")
+      const hasIgnore = yield* fs.existsSafe(gitignore)
+      if (!hasIgnore) {
+        yield* fs
+          .writeFileString(
+            gitignore,
+            ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+          )
+          .pipe(
+            Effect.catchIf(
+              (e) => e.reason._tag === "PermissionDenied",
+              () => Effect.void,
+            ),
+          )
+      }
+    })
+
+    const loadInstanceState = Effect.fn("Config.loadInstanceState")(
+      function* (ctx: InstanceContext) {
+        const auth = yield* authSvc.all().pipe(Effect.orDie)
+
+        let result: Info = {}
+        const authEnv: Record<string, string> = {}
+        const consoleManagedProviders = new Set<string>()
+        let activeOrgName: string | undefined
+
+        const pluginScopeForSource = Effect.fnUntraced(function* (source: string) {
+          if (source.startsWith("http://") || source.startsWith("https://")) return "global"
+          if (source === "OPENCODE_CONFIG_CONTENT") return "local"
+          if (containsPath(source, ctx)) return "local"
+          return "global"
         })
-      })
 
-    return next
-  }
+        const mergePluginOrigins = Effect.fnUntraced(function* (
+          source: string,
+          // mergePluginOrigins receives raw Specs from one config source, before provenance for this merge step
+          // is attached.
+          list: ConfigPlugin.Spec[] | undefined,
+          // Scope can be inferred from the source path, but some callers already know whether the config should
+          // behave as global or local and can pass that explicitly.
+          kind?: ConfigPlugin.Scope,
+        ) {
+          if (!list?.length) return
+          const hit = kind ?? (yield* pluginScopeForSource(source))
+          // Merge newly seen plugin origins with previously collected ones, then dedupe by plugin identity while
+          // keeping the winning source/scope metadata for downstream installs, writes, and diagnostics.
+          const plugins = ConfigPlugin.deduplicatePluginOrigins([
+            ...(result.plugin_origins ?? []),
+            ...list.map((spec) => ({ spec, source, scope: hit })),
+          ])
+          result.plugin = plugins.map((item) => item.spec)
+          result.plugin_origins = plugins
+        })
 
-  export async function directories() {
-    return state().then((x) => x.directories)
-  }
-}
+        const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
+          result = mergeConfigConcatArrays(result, next)
+          return mergePluginOrigins(source, next.plugin, kind)
+        }
+
+        for (const [key, value] of Object.entries(auth)) {
+          if (value.type === "wellknown") {
+            const url = key.replace(/\/+$/, "")
+            authEnv[value.key] = value.token
+            const wellknownURL = `${url}/.well-known/opencode`
+            log.debug("fetching remote config", { url: wellknownURL })
+            const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, WellKnownConfig)
+            const remote = yield* Effect.promise(() =>
+              substituteWellKnownRemoteConfig({
+                value: wellknown.remote_config,
+                dir: url,
+                source: wellknownURL,
+                env: authEnv,
+              }),
+            )
+            const fetchedConfig = remote
+              ? yield* Effect.gen(function* () {
+                  log.debug("fetching remote config", { url: remote.url })
+                  const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json)
+                  if (isRecord(data) && isRecord(data.config)) return data.config
+                  if (isRecord(data)) return data
+                  return yield* Effect.die(
+                    new Error(`failed to decode remote config from ${remote.url}: expected object`),
+                  )
+                })
+              : {}
+            const remoteConfig = mergeConfig(isRecord(wellknown.config) ? wellknown.config : {}, fetchedConfig)
+            if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+            const source = wellknownURL
+            const next = yield* loadConfig(
+              JSON.stringify(remoteConfig),
+              {
+                dir: path.dirname(source),
+                source,
+              },
+              authEnv,
+            )
+            yield* merge(source, next, "global")
+            log.debug("loaded remote config from well-known", { url })
+          }
+        }
+
+        const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
+        yield* merge(Global.Path.config, global, "global")
+
+        if (Flag.OPENCODE_CONFIG) {
+          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
+          log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+        }
+
+        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+            yield* merge(file, yield* loadFile(file, authEnv), "local")
+          }
+        }
+
+        result.agent = result.agent || {}
+        result.mode = result.mode || {}
+        result.plugin = result.plugin || []
+
+        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+
+        if (Flag.OPENCODE_CONFIG_DIR) {
+          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+        }
+
+        const deps: Fiber.Fiber<void>[] = []
+
+        for (const dir of directories) {
+          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+            for (const file of ["opencode.json", "opencode.jsonc"]) {
+              const source = path.join(dir, file)
+              log.debug(`loading config from ${source}`)
+              yield* merge(source, yield* loadFile(source, authEnv))
+              result.agent ??= {}
+              result.mode ??= {}
+              result.plugin ??= []
+            }
+          }
+
+          yield* ensureGitignore(dir).pipe(Effect.orDie)
+
+          const dep = yield* npmSvc
+            .install(dir, {
+              add: [
+                {
+                  name: "@opencode-ai/plugin",
+                  version: InstallationLocal ? undefined : InstallationVersion,
+                },
+              ],
+            })
+            .pipe(
+              Effect.exit,
+              Effect.tap((exit) =>
+                Exit.isFailure(exit)
+                  ? Effect.sync(() => {
+                      log.warn("background dependency install failed", { dir, error: String(exit.cause) })
+                    })
+                  : Effect.void,
+              ),
+              Effect.asVoid,
+              Effect.forkDetach,
+            )
+          deps.push(dep)
+
+          result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
+          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
+          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
+          // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
+          // returns normalized Specs and we only need to attach origin metadata here.
+          const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
+          yield* mergePluginOrigins(dir, list)
+        }
+
+        if (process.env.OPENCODE_CONFIG_CONTENT) {
+          const source = "OPENCODE_CONFIG_CONTENT"
+          const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+            dir: ctx.directory,
+            source,
+          })
+          yield* merge(source, next, "local")
+          log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+        }
+
+        const activeAccount = Option.getOrUndefined(
+          yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+        )
+        if (activeAccount?.active_org_id) {
+          const accountID = activeAccount.id
+          const orgID = activeAccount.active_org_id
+          const url = activeAccount.url
+          yield* Effect.gen(function* () {
+            const [configOpt, tokenOpt] = yield* Effect.all(
+              [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
+              { concurrency: 2 },
+            )
+            if (Option.isSome(tokenOpt)) {
+              process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
+              yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
+            }
+
+            if (Option.isSome(configOpt)) {
+              const source = `${url}/api/config`
+              const next = yield* loadConfig(JSON.stringify(configOpt.value), {
+                dir: path.dirname(source),
+                source,
+              })
+              for (const providerID of Object.keys(next.provider ?? {})) {
+                consoleManagedProviders.add(providerID)
+              }
+              yield* merge(source, next, "global")
+            }
+          }).pipe(
+            Effect.withSpan("Config.loadActiveOrgConfig"),
+            Effect.catch((err) => {
+              log.debug("failed to fetch remote account config", {
+                error: err instanceof Error ? err.message : String(err),
+              })
+              return Effect.void
+            }),
+          )
+        }
+
+        const managedDir = ConfigManaged.managedConfigDir()
+        if (existsSync(managedDir)) {
+          for (const file of ["opencode.json", "opencode.jsonc"]) {
+            const source = path.join(managedDir, file)
+            yield* merge(source, yield* loadFile(source), "global")
+          }
+        }
+
+        // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+        const managed = yield* Effect.promise(() => ConfigManaged.readManagedPreferences())
+        if (managed) {
+          result = mergeConfigConcatArrays(
+            result,
+            yield* loadConfig(managed.text, {
+              dir: path.dirname(managed.source),
+              source: managed.source,
+            }),
+          )
+        }
+
+        for (const [name, mode] of Object.entries(result.mode ?? {})) {
+          result.agent = mergeDeep(result.agent ?? {}, {
+            [name]: {
+              ...mode,
+              mode: "primary" as const,
+            },
+          })
+        }
+
+        if (Flag.OPENCODE_PERMISSION) {
+          try {
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          } catch (err) {
+            log.warn("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
+          }
+        }
+
+        if (result.tools) {
+          const perms: Record<string, ConfigPermission.Action> = {}
+          for (const [tool, enabled] of Object.entries(result.tools)) {
+            const action: ConfigPermission.Action = enabled ? "allow" : "deny"
+            if (tool === "write" || tool === "edit" || tool === "patch") {
+              perms.edit = action
+              continue
+            }
+            perms[tool] = action
+          }
+          result.permission = mergeDeep(perms, result.permission ?? {})
+        }
+
+        if (!result.username) {
+          try {
+            result.username = os.userInfo().username || "user"
+          } catch (err) {
+            log.warn("failed to read system username, using fallback", { err })
+            result.username = "user"
+          }
+        }
+
+        if (result.autoshare === true && !result.share) {
+          result.share = "auto"
+        }
+
+        if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+          result.compaction = { ...result.compaction, auto: false }
+        }
+        if (Flag.OPENCODE_DISABLE_PRUNE) {
+          result.compaction = { ...result.compaction, prune: false }
+        }
+
+        return {
+          config: result,
+          directories,
+          deps,
+          consoleState: {
+            consoleManagedProviders: Array.from(consoleManagedProviders),
+            activeOrgName,
+            switchableOrgCount: 0,
+          },
+        }
+      },
+      Effect.provideService(AppFileSystem.Service, fs),
+    )
+
+    const state = yield* InstanceState.make<State>(
+      Effect.fn("Config.state")(function* (ctx) {
+        return yield* loadInstanceState(ctx).pipe(Effect.orDie)
+      }),
+    )
+
+    const get = Effect.fn("Config.get")(function* () {
+      return yield* InstanceState.use(state, (s) => s.config)
+    })
+
+    const directories = Effect.fn("Config.directories")(function* () {
+      return yield* InstanceState.use(state, (s) => s.directories)
+    })
+
+    const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
+      return yield* InstanceState.use(state, (s) => s.consoleState)
+    })
+
+    const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+      yield* InstanceState.useEffect(state, (s) =>
+        Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
+      )
+    })
+
+    const update = Effect.fn("Config.update")(function* (config: Info) {
+      const dir = yield* InstanceState.directory
+      const file = path.join(dir, "config.json")
+      const existing = yield* loadFile(file)
+      yield* fs
+        .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
+        .pipe(Effect.orDie)
+    })
+
+    const invalidate = Effect.fn("Config.invalidate")(function* () {
+      yield* invalidateGlobal
+    })
+
+    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+      const file = globalConfigFile()
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      const patch = writableGlobal(config)
+
+      let next: Info
+      let changed: boolean
+      if (!file.endsWith(".jsonc")) {
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+        const merged = mergeDeep(writable(existing), patch)
+        const serialized = JSON.stringify(merged, null, 2)
+        changed = serialized !== before
+        if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
+        next = merged
+      } else {
+        const updated = patchJsonc(before, patch)
+        next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file)
+        changed = updated !== before
+        if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+      }
+
+      if (changed) yield* invalidate()
+      return { info: next, changed }
+    })
+
+    return Service.of({
+      get,
+      getGlobal,
+      getConsoleState,
+      update,
+      updateGlobal,
+      invalidate,
+      directories,
+      waitForDependencies,
+    })
+  }),
+)
+
+export const defaultLayer = layer.pipe(
+  Layer.provide(EffectFlock.defaultLayer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Env.defaultLayer),
+  Layer.provide(Auth.defaultLayer),
+  Layer.provide(Account.defaultLayer),
+  Layer.provide(Npm.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
+)
+
+export * as Config from "./config"

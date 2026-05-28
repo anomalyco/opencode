@@ -1,7 +1,5 @@
-import { subscribe } from "diagnostics_channel"
-import { Billing } from "../src/billing.js"
-import { and, Database, eq } from "../src/drizzle/index.js"
-import { BillingTable, PaymentTable, SubscriptionTable } from "../src/schema/billing.sql.js"
+import { Database, eq } from "../src/drizzle/index.js"
+import { BillingTable } from "../src/schema/billing.sql.js"
 
 const workspaceID = process.argv[2]
 
