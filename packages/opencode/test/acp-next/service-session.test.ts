@@ -323,6 +323,15 @@ describe("ACP next service sessions", () => {
     expect(second.sessions).toEqual(first.sessions)
   })
 
+  it("includes live ACP sessions before they appear in server-backed session list", async () => {
+    const { service } = makeService()
+    const created = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const listed = await Effect.runPromise(service.listSessions({ cwd: "/workspace" }))
+
+    expect(listed.sessions[0]?.sessionId).toBe(created.sessionId)
+    expect(listed.sessions[0]?.cwd).toBe("/workspace")
+  })
+
   it("lists all sessions with next cursor when the first page is full", async () => {
     const { service } = makeService()
     const first = await Effect.runPromise(service.listSessions({}))
