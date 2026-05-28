@@ -91,7 +91,7 @@ const defaultSettings: Settings = {
     releaseNotes: true,
     followup: "steer",
     // thinking 을 보이도록 합니다 모델이 thinking 을 지원하는 경우여야 실제로 생각이 랜더링 됩니다
-    showReasoningSummaries: true,
+    showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
   },
