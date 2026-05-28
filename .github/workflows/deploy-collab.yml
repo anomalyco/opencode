@@ -92,8 +92,25 @@ jobs:
             --task-definition "${TASK_FAMILY}" \
             --query 'taskDefinition' > current.json
 
+          # `extraHosts` keeps `local.unleashlive.com` pointed at 127.0.0.1
+          # inside the container.  The frontend live-preview launcher
+          # (packages/opencode/src/collab/preview-launcher.ts) needs this so
+          # the unleashlive/frontend dev server sees its expected hostname
+          # — no PR required against the frontend repo.  We declare it
+          # here (rather than asking operators to edit the task def in the
+          # AWS Console) so every redeploy re-asserts the entry instead of
+          # relying on it surviving across out-of-band task-def edits.
+          #
+          # The map filter is "set or merge by hostname so we don't duplicate
+          # if an operator already added it manually": current entries are
+          # de-duped by hostname, ours wins on conflict.
           jq --arg img "${{ steps.img.outputs.sha_image }}" '
             .containerDefinitions[0].image = $img
+            | .containerDefinitions[0].extraHosts = (
+                ((.containerDefinitions[0].extraHosts // [])
+                  | map(select(.hostname != "local.unleashlive.com")))
+                + [{hostname: "local.unleashlive.com", ipAddress: "127.0.0.1"}]
+              )
             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                   .compatibilities, .registeredAt, .registeredBy)
           ' current.json > new.json

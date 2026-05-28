@@ -426,22 +426,44 @@ button work without modifying the `unleashlive/frontend` repo:
   (`packages/opencode/src/collab/preview-router.ts`)
 - TCP connect still goes to 127.0.0.1 — no extra DNS lookup hop
 
-If you forget the `extraHosts` field, the preview HTTP proxy still
-TCP-connects fine (it uses literal 127.0.0.1), but anything inside
-the dev server that does its own resolution of `local.unleashlive.com`
-will fail.  The proxy's 502 page calls this out explicitly.
+#### How the entry is maintained
 
-For Terraform users: add the equivalent to the ECS task definition's
-`container_definitions` block:
+The utils deployment doesn't keep its task definition in Terraform —
+the deploy workflow (`.github/workflows/deploy-collab.yml`) pulls the
+LIVE task def from AWS via `describe-task-definition`, patches the
+image SHA via `jq`, and re-registers it.
 
-```hcl
-extra_hosts = [
-  { hostname = "local.unleashlive.com", ip_address = "127.0.0.1" },
-]
-```
+To keep `extraHosts` from drifting out, the same `jq` step also
+**re-asserts the `local.unleashlive.com → 127.0.0.1` entry on every
+deploy**.  The patch is "set or merge by hostname" — if an operator
+ever adds the entry manually via the AWS Console, our `jq` filter
+preserves the existing entry on the next deploy rather than
+duplicating it.
 
-(Field name varies by terraform provider version — `extra_hosts` for
-`hashicorp/aws ≥ 5.x`, `extraHosts` in the raw task-definition JSON.)
+So:
+- **Operators don't need to do anything.**  The entry self-heals on
+  the next deploy.
+- The first deploy after this PR lands will inject the entry into
+  the next task-def revision — visible in the AWS Console under
+  Task Definition → Container Definitions → Networking → Extra Hosts.
+- Out-of-band edits via the Console are preserved (we de-dupe by
+  hostname, only the `local.unleashlive.com` entry is touched).
+
+If you forget the entry (e.g. an older workflow re-deploys without
+this patch), the preview HTTP proxy still TCP-connects fine (it uses
+literal 127.0.0.1), but anything inside the dev server that does its
+own resolution of `local.unleashlive.com` will fail.  The proxy's
+502 page calls this out explicitly.
+
+#### Why not Terraform
+
+There's no `unleashlive/devops/terraform/opencode-collab/` module —
+the entire ECS deployment for the utils account is maintained via
+`describe-task-definition + jq + register-task-definition` inside
+the deploy workflow.  Adding the `extraHosts` patch there keeps the
+deploy infrastructure consistent — one place to look for "what's in
+the task def".  Migrating to Terraform is a separate (larger) piece
+of work tracked in the post-MVP follow-ups.
 
 ---
 
