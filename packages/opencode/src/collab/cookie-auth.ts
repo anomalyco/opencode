@@ -186,14 +186,38 @@ function participantOfNativeSession(nativeSessionId: string, githubId: number): 
  *  base64Decode here mirrors packages/app/src/utils/base64.ts which is
  *  what the SPA uses to construct the URL — URL-safe base64 (`-`/`_` in
  *  place of `+`/`/`, no padding).
+ *
+ *  The `x-opencode-directory` header arrives URL-encoded — the SDK sets
+ *  it to `encodeURIComponent(directory)` in packages/sdk/js/src/v2/client.ts.
+ *  For GET/HEAD the SDK's rewrite interceptor moves it into a `?directory=`
+ *  query param (which the server decodes via URLSearchParams), but for
+ *  POST/DELETE/PATCH the encoded header reaches us as-is.  Decoding here
+ *  makes the gate behave consistently across methods; decodeURIComponent
+ *  on an already-raw path is a no-op (no percent sequences).
+ *
+ *  Query params and the base64 path segment are decoded by their own
+ *  parsers (`searchParams.get()` percent-decodes; `base64Decode` returns
+ *  bytes interpreted as UTF-8) so they don't need this normalisation.
  */
-function workspaceParamFrom(req: Request): string | null {
+export function workspaceParamFrom(req: Request): string | null {
   const dirHeader = req.headers.get("x-opencode-directory")
-  if (dirHeader) return dirHeader
+  if (dirHeader) return safeDecodeURIComponent(dirHeader)
   const url = new URL(req.url, "http://localhost")
   const queryDir = url.searchParams.get("directory") || url.searchParams.get("location[directory]")
   if (queryDir) return queryDir
   return directoryFromBase64Path(url.pathname)
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    // Malformed percent-encoding — fall back to the raw value so the
+    // caller still gets a chance at the prefix check.  Either it'll match
+    // (raw path that happened to contain a stray %) or it won't (in which
+    // case rule (b) denies, same as before).
+    return value
+  }
 }
 
 function directoryFromBase64Path(pathname: string): string | null {
