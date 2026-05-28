@@ -78,13 +78,19 @@ export const GrepTool = Tool.define(
           })
           if (result.items.length === 0) return empty
 
-          const rows = result.items.map((item) => ({
+          const allRows = result.items.map((item) => ({
             path: AppFileSystem.resolve(
               path.isAbsolute(item.path.text) ? item.path.text : path.join(cwd, item.path.text),
             ),
             line: item.line_number,
             text: item.lines.text,
           }))
+
+          // Filter out matches in files the user has denied read access to.
+          const rows = allRows.filter((row) => {
+            const relPath = path.relative(ins.worktree, row.path)
+            return ctx.evaluate({ permission: "read", pattern: relPath }).action !== "deny"
+          })
           const times = new Map(
             (yield* Effect.forEach(
               [...new Set(rows.map((row) => row.path))],
