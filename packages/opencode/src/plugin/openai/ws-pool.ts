@@ -179,6 +179,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     const now = Date.now()
     for (const [key, entry] of pool) {
       if (entry.busy) continue
+      if (entry.fallback) continue
       if (now - entry.lastUsedAt < idleTimeout) continue
       log.debug("websocket idle prune", { key })
       invalidate(entry)

@@ -20,8 +20,8 @@ Enabled by default on `local`, `dev`, and `beta`. On `latest` and `prod`, set `O
 
 ## Retries
 
-- Retry WebSocket stream/setup failures up to 5 times, then use HTTP for that session until idle-pruned.
-- If the server returns `websocket_connection_limit_reached` before output, reconnect up to 5 times, then follow the same HTTP fallback.
+- Retry WebSocket stream/setup failures up to 5 times, then use HTTP for that session until the transport is disposed.
+- `websocket_connection_limit_reached` consumes the same retry budget and HTTP fallback.
 - If a WebSocket fails after its first event, fail it as retryable rather than replaying partial output in transport.
 - Abort or cancel closes the socket.
 
