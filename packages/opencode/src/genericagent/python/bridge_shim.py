@@ -24,6 +24,7 @@ Python stdlib only (ThreadingHTTPServer + http.server). No pip deps.
 """
 
 import argparse
+import hashlib
 import importlib
 import json
 import os
@@ -228,6 +229,7 @@ def _snapshot_agent_log(agent) -> str | None:
 
 _SESSION_MESSAGES_RE = re.compile(r"^/sessions/([^/]+)/messages$")
 _SESSION_RESTORE_RE = re.compile(r"^/sessions/([^/]+)/restore$")
+_BRIDGE_CWD_RE = re.compile(r"^\[SYSTEM\]\s+Current working directory:\s+[^\n]+\n\n", re.DOTALL)
 
 
 def _find_session_path(session_id: str):
@@ -237,6 +239,51 @@ def _find_session_path(session_id: str):
         if os.path.splitext(os.path.basename(path))[0] == session_id:
             return path
     return None
+
+
+def _history_fingerprint(path: str) -> str:
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.sha1(fh.read()).hexdigest()
+    except Exception:
+        return ""
+
+
+def _dedupe_history_sessions(rows):
+    seen = set()
+    out = []
+    for row in rows:
+        fingerprint = _history_fingerprint(row[0])
+        if fingerprint:
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+        out.append(row)
+    return out
+
+
+def _strip_bridge_cwd_prefix(text: str) -> str:
+    return _BRIDGE_CWD_RE.sub("", text or "", count=1).strip()
+
+
+def _ensure_user_turns(messages, fallback_user: str):
+    if any(isinstance(message, dict) and message.get("role") == "user" for message in messages):
+        return messages
+    user = _strip_bridge_cwd_prefix(fallback_user)
+    if not user:
+        return messages
+    return [{"role": "user", "content": user}, *messages]
+
+
+def _extract_history_messages(continue_cmd, path: str):
+    messages = continue_cmd.extract_ui_messages(path)
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            pairs = continue_cmd._pairs(fh.read())
+    except Exception:
+        pairs = []
+    fallback_user = continue_cmd._first_user(pairs) if pairs else ""
+    return _ensure_user_turns(messages, fallback_user)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -314,7 +361,7 @@ class Handler(BaseHTTPRequestHandler):
                         "preview": preview_text,
                         "rounds": int(n_rounds),
                     }
-                    for path, mtime, preview_text, n_rounds in continue_cmd.list_sessions()
+                    for path, mtime, preview_text, n_rounds in _dedupe_history_sessions(continue_cmd.list_sessions())
                 ]
             except Exception as e:
                 self._write_json(500, {"ok": False, "error": str(e)})
@@ -331,7 +378,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path is None:
                     self._write_json(404, {"ok": False, "error": "session_not_found"})
                     return
-                messages = continue_cmd.extract_ui_messages(path)
+                messages = _extract_history_messages(continue_cmd, path)
             except Exception as e:
                 self._write_json(500, {"ok": False, "error": str(e)})
                 return
