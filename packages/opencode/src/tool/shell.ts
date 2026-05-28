@@ -301,7 +301,12 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
     cwd,
     env,
     stdin: "ignore",
-    detached: process.platform !== "win32",
+    // Do not use detached: true. On Linux it calls setsid() which puts the
+    // child in its own process group/session. Without an explicit SIGCHLD
+    // handler the children become zombies when they exit before the parent
+    // reaps them. Explicit cleanup is already handled via handle.kill() in
+    // abort/timeout paths, so signal-group isolation is unnecessary.
+    detached: false,
   })
 }
 const parser = lazy(async () => {
