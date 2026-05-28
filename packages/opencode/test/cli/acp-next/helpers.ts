@@ -1,0 +1,111 @@
+import { expect } from "bun:test"
+import type { InitializeResponse, NewSessionResponse, SessionConfigOption } from "@agentclientprotocol/sdk"
+import { Effect } from "effect"
+import type { CliFixture } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
+import {
+  createAcpClient,
+  expectOk,
+  flattenSelectOptions,
+  selectConfigOption,
+  type AcpClient,
+} from "../acp/acp-test-client"
+
+export const diagnosticFirstSessionThresholdMs = 15_000
+export const diagnosticFastPathThresholdMs = 15_000
+
+// TODO: tighten to the public verifier target of 500ms once acp-next startup is optimized.
+export const finalFirstSessionThresholdMs = 500
+// TODO: tighten warm session/config/skill fast paths to the public verifier target of 100ms.
+export const finalFastPathThresholdMs = 100
+
+export function createAcpNextClient(input: Pick<CliFixture, "opencode">, env?: Record<string, string>) {
+  return Effect.gen(function* () {
+    return createAcpClient(
+      yield* input.opencode.acp({
+        env: {
+          OPENCODE_ACP_NEXT: "1",
+          ...env,
+        },
+      }),
+    )
+  })
+}
+
+export function initialize(acp: AcpClient) {
+  return Effect.gen(function* () {
+    return expectOk(
+      yield* acp.request<InitializeResponse>("initialize", {
+        protocolVersion: 1,
+        clientCapabilities: { _meta: { "terminal-auth": true } },
+        clientInfo: { name: "opencode-local-acp-next", version: "0.1.0" },
+      }),
+    )
+  })
+}
+
+export function newSession(acp: AcpClient, cwd: string) {
+  return Effect.gen(function* () {
+    return expectOk(yield* acp.request<NewSessionResponse>("session/new", { cwd, mcpServers: [] }))
+  })
+}
+
+export function verifierConfig(llmUrl: string, skills?: string) {
+  const config = testProviderConfig(llmUrl)
+  return {
+    ...config,
+    model: "test/test-model",
+    ...(skills ? { skills: { paths: [skills] } } : {}),
+    provider: {
+      test: {
+        ...config.provider.test,
+        models: {
+          "test-model": {
+            ...config.provider.test.models["test-model"],
+            variants: {
+              low: {},
+              high: {},
+            },
+          },
+          "second-model": {
+            ...config.provider.test.models["test-model"],
+            id: "second-model",
+            name: "Second Test Model",
+            variants: {
+              medium: {},
+              max: {},
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
+export function expectErrorCode(error: unknown, code: number) {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    expect(error).toEqual({ code })
+    return
+  }
+  expect(error.code).toBe(code)
+}
+
+export function expectSelectOption(options: SessionConfigOption[] | null | undefined, id: string) {
+  const option = selectConfigOption(options, id)
+  expect(option).toBeDefined()
+  return option!
+}
+
+export function expectAlternateValue(option: ReturnType<typeof expectSelectOption>) {
+  const value = flattenSelectOptions(option).find((item) => item.value !== option.currentValue)?.value
+  expect(value).toBeDefined()
+  return value!
+}
+
+export const verifierSkill = `---
+name: verifier-skill
+description: Verifier compatibility skill.
+---
+
+# Verifier Skill
+`
