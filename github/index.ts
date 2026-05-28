@@ -219,8 +219,6 @@ try {
   }
   await updateComment(`${msg}${footer()}`)
   core.setFailed(msg)
-  // Also output the clean error message for the action to capture
-  //core.setOutput("prepare_error", e.message);
 } finally {
   server.close()
   await restoreGitConfig()
@@ -233,11 +231,17 @@ function createOpencode() {
   const port = 4096
   const url = `http://${host}:${port}`
   const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
-  const client = createOpencodeClient({ baseUrl: url })
 
   return {
-    server: { url, close: () => proc.kill() },
-    client,
+    server: {
+      url,
+      close: () => {
+        if (proc) {
+          proc.kill()
+        }
+      },
+    },
+    client: createOpencodeClient({ baseUrl: url }),
   }
 }
 
@@ -433,7 +437,6 @@ async function getUserPrompt() {
     throw new Error("Comments must mention `/opencode` or `/oc`")
   })()
 
-  // Handle images
   const imgData: {
     filename: string
     mime: string
@@ -443,25 +446,20 @@ async function getUserPrompt() {
     replacement: string
   }[] = []
 
-  // Search for files
-  // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
-  // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
-  // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
   const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
-  const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
-  const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
+  const tagMatches = prompt.matchAll(/<img .*?src=\"(https:\/\/github\.com\/user-attachments\/[^\"]+)\" \/>/gi)
+  const matches = [...mdMatches, ...tagMatches].sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
   console.log("Images", JSON.stringify(matches, null, 2))
 
   let offset = 0
   for (const m of matches) {
     const tag = m[0]
     const url = m[1]
-    const start = m.index
+    const start = m.index ?? 0
 
     if (!url) continue
     const filename = path.basename(url)
 
-    // Download image
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -473,7 +471,6 @@ async function getUserPrompt() {
       continue
     }
 
-    // Replace img tag with file path, ie. @image.png
     const replacement = `@${filename}`
     prompt = prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
     offset += replacement.length - tag.length
@@ -589,7 +586,6 @@ async function resolveAgent(): Promise<string | undefined> {
   const envAgent = useEnvAgent()
   if (!envAgent) return undefined
 
-  // Validate the agent exists and is a primary agent
   const agents = await client.agent.list<true>()
   const agent = agents.data?.find((a) => a.name === envAgent)
 
@@ -651,7 +647,6 @@ async function chat(text: string, files: PromptFiles = []) {
 }
 
 async function configureGit(appToken: string) {
-  // Do not change git config when running locally
   if (isMock()) return
 
   console.log("Configuring git...")
@@ -821,7 +816,7 @@ function footer(opts?: { image?: boolean }) {
     const titleAlt = encodeURIComponent(session.title.substring(0, 50))
     const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}" /></a>`
   })()
   const shareUrl = shareId ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
@@ -1049,4 +1044,8 @@ async function revokeAppToken() {
       "X-GitHub-Api-Version": "2022-11-28",
     },
   })
+}
+
+function isScheduleEvent(): boolean {
+  return false
 }
