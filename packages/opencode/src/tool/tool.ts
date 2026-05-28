@@ -41,6 +41,13 @@ export type Context<M extends Metadata = Metadata> = {
   messages: MessageV2.WithParts[]
   metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
   ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
+  /**
+   * Silently evaluate a permission rule without triggering the ask UI.
+   * NOTE: Checks static config rules only — does NOT include dynamic session-approved rules
+   * (rules approved at runtime via "always allow"). Use `ask()` when you need to enforce
+   * the full permission flow including dynamic approvals.
+   */
+  evaluate(input: { permission: string; pattern: string }): Permission.Rule
 }
 
 export interface ExecuteResult<M extends Metadata = Metadata> {
