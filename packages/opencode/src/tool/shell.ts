@@ -120,7 +120,15 @@ function parts(node: Node) {
 }
 
 function source(node: Node) {
-  return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
+  const target = node.parent?.type === "redirected_statement" ? node.parent : node
+  // Filter out variable_assignment children so env-var prefixes like
+  // "GOFLAGS=-mod=vendor" don't leak into the permission pattern (#14110)
+  const children = []
+  for (let i = 0; i < target.childCount; i++) {
+    const child = target.child(i)
+    if (child && child.type !== "variable_assignment") children.push(child.text)
+  }
+  return (children.length > 0 ? children.join(" ") : target.text).trim()
 }
 
 function commands(node: Node) {
