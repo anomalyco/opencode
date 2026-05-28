@@ -2362,3 +2362,26 @@ test("session/prompt: source assembles system array with env at tail for cache s
   expect(match![1]).toBe("instructions")
   expect(match![2]).toBe("env")
 })
+
+test("session/prompt: env block leads with \\n so the skills/env seam is a blank line", () => {
+  // The env block string returned by SystemPrompt.environment() must start
+  // with "\n" so that when request.ts joins the system array with "\n", the
+  // seam between </available_skills> and the env preamble becomes "\n\n"
+  // (a blank line). This makes the byte sequence at the boundary canonical
+  // and stable, enabling downstream prefix-cache hit rate to match what the
+  // LiteLLM opencode_reorder hook previously achieved server-side.
+  //
+  // We assert on the source of system.ts: the template-literal that opens
+  // the environment block must start with "\n" (a leading newline).
+  // Related: anomalyco/opencode#20110, anomalyco/opencode#5224.
+  const source = readFileSync(
+    path.resolve(__dirname, "../../src/session/system.ts"),
+    "utf8",
+  )
+  // The environment() function builds the env string via a .join("\n") on an
+  // array. The first element of that array must be `"\nYou are powered by..."
+  // (i.e. the literal starts with a newline escape or a backtick-newline).
+  // We match the template literal opening that starts the env block string.
+  const match = source.match(/`\\nYou are powered by the model/)
+  expect(match).not.toBeNull()
+})

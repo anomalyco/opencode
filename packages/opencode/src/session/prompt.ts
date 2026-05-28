@@ -1438,7 +1438,12 @@ export const layer = Layer.effect(
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            // Cache-friendly order: place stable instructions/skills first so byte 0 of
+            // the assembled system payload is invariant across sessions, days, and users.
+            // The env block (which contains a per-session datetime, per-project cwd, and
+            // per-agent model id) goes at the tail so it cannot defeat prefix-cache hits
+            // on the upstream model. See anomalyco/opencode#20110, anomalyco/opencode#5224.
+            const system = [...instructions, ...(skills ? [skills] : []), ...env]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
