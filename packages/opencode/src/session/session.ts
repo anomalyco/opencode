@@ -50,6 +50,27 @@ function createDefaultTitle(isChild = false) {
   return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
 }
 
+function readDiagnostic(id: SessionID) {
+  try {
+    return {
+      dbPath: Database.getPath(),
+      dataPath: Global.Path.data,
+      messageCount: Database.use((db) =>
+        db.select({ id: MessageTable.id }).from(MessageTable).where(eq(MessageTable.session_id, id)).all().length,
+      ),
+      childCount: Database.use((db) =>
+        db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.parent_id, id)).all().length,
+      ),
+    }
+  } catch (error) {
+    return {
+      dbPath: Database.getPath(),
+      dataPath: Global.Path.data,
+      diagnosticError: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 export function isDefaultTitle(title: string) {
   return new RegExp(
     `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
@@ -570,6 +591,14 @@ export const layer: Layer.Layer<
 
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
       const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+      log.info("session.get.diagnostic", {
+        sessionID: id,
+        found: Boolean(row),
+        projectID: row?.project_id,
+        parentID: row?.parent_id,
+        directory: row?.directory,
+        ...readDiagnostic(id),
+      })
       if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
       return fromRow(row)
     })

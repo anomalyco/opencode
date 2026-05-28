@@ -12,7 +12,7 @@ import { Installation } from "../installation"
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
-import { SessionTable } from "./session.sql"
+import { MessageTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -46,6 +46,31 @@ export namespace Session {
 
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
+  }
+
+  function readDiagnostic(id: SessionID) {
+    try {
+      return {
+        dbPath: Database.getPath(),
+        channelDbDisabled: Flag.OPENCODE_DISABLE_CHANNEL_DB,
+        dbOverride: Flag.OPENCODE_DB ?? "",
+        dataPath: Global.Path.data,
+        messageCount: Database.use((db) =>
+          db.select({ id: MessageTable.id }).from(MessageTable).where(eq(MessageTable.session_id, id)).all().length,
+        ),
+        childCount: Database.use((db) =>
+          db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.parent_id, id)).all().length,
+        ),
+      }
+    } catch (error) {
+      return {
+        dbPath: Database.getPath(),
+        channelDbDisabled: Flag.OPENCODE_DISABLE_CHANNEL_DB,
+        dbOverride: Flag.OPENCODE_DB ?? "",
+        dataPath: Global.Path.data,
+        diagnosticError: error instanceof Error ? error.message : String(error),
+      }
+    }
   }
 
   export function isDefaultTitle(title: string) {
@@ -360,6 +385,15 @@ export namespace Session {
 
   export const get = fn(SessionID.zod, async (id) => {
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+    const diagnostic = readDiagnostic(id)
+    log.info("session.get.diagnostic", {
+      sessionID: id,
+      found: Boolean(row),
+      projectID: row?.project_id,
+      parentID: row?.parent_id,
+      directory: row?.directory,
+      ...diagnostic,
+    })
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
   })
@@ -482,6 +516,12 @@ export namespace Session {
         result.push(msg)
       }
       result.reverse()
+      log.info("session.messages.diagnostic", {
+        sessionID: input.sessionID,
+        limit: input.limit,
+        returned: result.length,
+        ...readDiagnostic(input.sessionID),
+      })
       return result
     },
   )

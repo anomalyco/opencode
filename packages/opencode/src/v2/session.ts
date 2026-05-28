@@ -1,4 +1,4 @@
-import { SessionMessageTable, SessionTable } from "@/session/session.sql"
+import { MessageTable, SessionMessageTable, SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { WorkspaceID } from "@/control-plane/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
@@ -14,6 +14,9 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "v2.session" })
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
@@ -187,12 +190,48 @@ export const layer = Layer.effect(
       })
     }
 
+    function readDiagnostic(sessionID: SessionID) {
+      try {
+        return {
+          dbPath: Database.getPath(),
+          legacyMessageCount: Database.use((db) =>
+            db.select({ id: MessageTable.id }).from(MessageTable).where(eq(MessageTable.session_id, sessionID)).all()
+              .length,
+          ),
+          v2MessageCount: Database.use((db) =>
+            db
+              .select({ id: SessionMessageTable.id })
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.session_id, sessionID))
+              .all().length,
+          ),
+          childCount: Database.use((db) =>
+            db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.parent_id, sessionID)).all()
+              .length,
+          ),
+        }
+      } catch (error) {
+        return {
+          dbPath: Database.getPath(),
+          diagnosticError: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }
+
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (_input) {
         return {} as any
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())
+        log.info("v2.session.get.diagnostic", {
+          sessionID,
+          found: Boolean(row),
+          projectID: row?.project_id,
+          parentID: row?.parent_id,
+          directory: row?.directory,
+          ...readDiagnostic(sessionID),
+        })
         if (!row) return yield* new NotFoundError({ sessionID })
         return fromRow(row)
       }),
@@ -276,6 +315,14 @@ export const layer = Layer.effect(
             )
           const rows = input.limit === undefined ? query.all() : query.limit(input.limit).all()
           return direction === "previous" ? rows.toReversed() : rows
+        })
+        log.info("v2.session.messages.diagnostic", {
+          sessionID: input.sessionID,
+          limit: input.limit,
+          order,
+          cursor: Boolean(input.cursor),
+          returned: rows.length,
+          ...readDiagnostic(input.sessionID),
         })
         return yield* Effect.forEach(rows, (row) => decode(row))
       }),
