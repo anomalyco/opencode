@@ -1,4 +1,5 @@
 import os from "os"
+import fs from "fs/promises"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -466,7 +467,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    "google-vertex": Effect.fnUntraced(function* (provider: Info) {
+    "google-vertex": Effect.fn("Provider.google-vertex")(function* (provider: Info) {
       const env = yield* dep.env()
       // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex; keep the wider
       // Google Cloud project env names as fallbacks for existing ADC setups.
@@ -479,14 +480,87 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const location = String(
         provider.options?.location ??
-          env["GOOGLE_VERTEX_LOCATION"] ??
-          env["GOOGLE_CLOUD_LOCATION"] ??
-          env["VERTEX_LOCATION"] ??
-          "us-central1",
+        env["GOOGLE_VERTEX_LOCATION"] ??
+        env["GOOGLE_CLOUD_LOCATION"] ??
+        env["VERTEX_LOCATION"] ??
+        "us-central1",
+      )
+
+const getAuthToken = yield* Effect.tryPromise(async () => {
+        const { GoogleAuth } = await import("google-auth-library")
+        const auth = new GoogleAuth()
+
+        let adcFilePath: string | null = null
+        try {
+          const envCreds = process.env.GOOGLE_APPLICATION_CREDENTIALS
+          if (envCreds) {
+            adcFilePath = envCreds
+          } else {
+            const home = os.homedir()
+            const defaultPath = path.join(home, ".config", "gcloud", "application_default_credentials.json")
+            try {
+              await fs.access(defaultPath)
+              adcFilePath = defaultPath
+            } catch {
+              // Not using default user ADC
+            }
+          }
+        } catch {
+          // Ignore
+        }
+
+        const getCacheFilePath = (): string | null => {
+          if (!adcFilePath) return null
+          if (adcFilePath.endsWith(".json")) {
+            return adcFilePath.replace(/\.json$/, "_access_token.json")
+          }
+          return `${adcFilePath}_access_token.json`
+        }
+
+        const cachePath = getCacheFilePath()
+        if (cachePath) {
+          try {
+            const content = await fs.readFile(cachePath, "utf8")
+            const parsed = JSON.parse(content)
+            if (parsed.access_token && typeof parsed.expires_at === "number" && parsed.expires_at > Date.now()) {
+              return { token: parsed.access_token, expiresAt: parsed.expires_at }
+            }
+          } catch {
+            // Cache miss or invalid
+          }
+        }
+
+        const client = await auth.getApplicationDefault()
+        const r = await client.credential.getAccessToken()
+        const result = { token: r.token ?? "", expiresAt: r.res?.data.expiry_date ?? 0 }
+
+        if (cachePath && result.expiresAt > 0) {
+          try {
+            const content = JSON.stringify(
+              {
+                access_token: result.token,
+                expires_at: result.expiresAt,
+                token_type: "Bearer",
+              },
+              null,
+              2,
+            )
+            await fs.writeFile(cachePath, content, { mode: 0o600 })
+          } catch {
+            // Ignore cache write errors
+          }
+        }
+
+        return result
+      }).pipe(
+        Effect.mapError(() => new Error("auth failed")),
+        Effect.catch(() => Effect.succeed(null)),
+        Effect.cached,
       )
 
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
@@ -500,15 +574,25 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           project,
           location,
+          googleAuthOptions: {
+            authClient: {
+              getAccessToken: async () => {
+                const authResult = await Effect.runPromise(getAuthToken)
+                if (!authResult?.token) {
+                  throw new Error("Google Vertex AI auth failed: no valid access token")
+                }
+                return { token: authResult.token }
+              }
+            }
+          },
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const { GoogleAuth } = await import("google-auth-library")
-            const auth = new GoogleAuth()
-            const client = await auth.getApplicationDefault()
-            const token = await client.credential.getAccessToken()
+            const authResult = await Effect.runPromise(getAuthToken)
+            if (!authResult?.token) {
+              throw new Error("Google Vertex AI auth failed: no valid access token")
+            }
 
             const headers = new Headers(init?.headers)
-            headers.set("Authorization", `Bearer ${token.token}`)
-
+            headers.set("Authorization", `Bearer ${authResult.token}`)
             return fetch(input, { ...init, headers })
           },
         },
@@ -651,9 +735,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               log.info("gitlab model discovery skipped: no models found", {
                 project: result.project
                   ? {
-                      id: result.project.id,
-                      path: result.project.pathWithNamespace,
-                    }
+                    id: result.project.id,
+                    path: result.project.pathWithNamespace,
+                  }
                   : null,
               })
               return {}
@@ -795,7 +879,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -1043,7 +1127,7 @@ interface State {
   varsLoaders: Record<string, CustomVarsLoader>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") { }
 
 export const use = serviceUse(Service)
 
@@ -1145,11 +1229,11 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
         options: opts.provider?.body
           ? Object.fromEntries(
-              Object.entries(opts.provider.body).map(([k, v]) => [
-                k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-                v,
-              ]),
-            )
+            Object.entries(opts.provider.body).map(([k, v]) => [
+              k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+              v,
+            ]),
+          )
           : base.options,
         headers: opts.provider?.headers ?? base.headers,
       }
@@ -1742,9 +1826,9 @@ export const layer = Layer.effect(
           const sdk = await resolveSDK(model, s, envs)
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                ...provider.options,
-                ...model.options,
-              })
+              ...provider.options,
+              ...model.options,
+            })
             : sdk.languageModel(model.api.id)
           s.models.set(key, language)
           return language
