@@ -149,13 +149,42 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
     anthropic: () =>
-      Effect.succeed({
-        autoload: false,
-        options: {
-          headers: {
-            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-          },
-        },
+      Effect.gen(function* () {
+        const credsPath =
+          process.env["CLAUDE_CREDENTIALS_PATH"] ??
+          path.join(process.env["HOME"] ?? os.homedir() ?? "/home/opencode", ".local", "share", "opencode", "claude-credentials.json")
+
+        const accessToken = yield* Effect.promise(async () => {
+          try {
+            const file = Bun.file(credsPath)
+            const exists = await file.exists()
+            if (!exists) return undefined
+            const parsed: Record<string, unknown> = await file.json()
+            const inner: Record<string, unknown> = (parsed.claudeAiOauth ?? parsed) as Record<string, unknown>
+            const token =
+              typeof inner.accessToken === "string"
+                ? inner.accessToken
+                : typeof inner.access_token === "string"
+                  ? inner.access_token
+                  : undefined
+            return token && token.length >= 8 ? token : undefined
+          } catch {
+            return undefined
+          }
+        })
+
+        const headers: Record<string, string> = {
+          "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+        }
+
+        if (accessToken) {
+          headers["Authorization"] = `Bearer ${accessToken}`
+        }
+
+        return {
+          autoload: !!accessToken,
+          options: { headers },
+        }
       }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
