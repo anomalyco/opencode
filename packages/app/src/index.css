@@ -1,8 +1,16 @@
 @import "@opencode-ai/ui/styles/tailwind";
+@import "@opencode-ai/ui/v2/styles/tailwind.css";
 
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/assets/Inter.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
 }
@@ -42,9 +50,7 @@
     width: 100%;
     height: 100%;
     border-radius: 999px;
-    background: var(--session-progress-color);
     clip-path: inset(0 100% 0 0 round 999px);
-    animation: session-progress-whip var(--session-progress-ms, 1800ms) infinite;
     will-change: clip-path;
   }
 
