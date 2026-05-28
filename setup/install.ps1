@@ -1,0 +1,10 @@
+Write-Host "SecureCode は Windows ネイティブ環境では動作しません。"
+Write-Host "WSL (Windows Subsystem for Linux) 経由でご使用ください。"
+Write-Host ""
+Write-Host "WSL のインストール:"
+Write-Host "  https://learn.microsoft.com/windows/wsl/install"
+Write-Host ""
+Write-Host "WSL をインストール後、WSL のターミナルを開き以下を実行してください:"
+Write-Host "  curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash"
+Write-Host ""
+exit 1
