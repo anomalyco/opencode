@@ -72,13 +72,11 @@ function HomeDesign() {
   const [state, setState] = createStore({ search: "", project: undefined as string | undefined })
 
   const projects = createMemo(() => layout.projects.list())
-  const selectedProject = createMemo(
-    () => projects().find((project) => project.worktree === state.project) ?? projects()[0],
-  )
+  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.project))
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
-    if (!project) return []
+    if (!project) return [...projects().flatMap((project) => directories(project))]
     return directories(project)
   })
   const search = createMemo(() => state.search.trim())
@@ -93,8 +91,8 @@ function HomeDesign() {
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
-  const records = createMemo(() =>
-    [
+  const records = createMemo(() => {
+    return [
       ...new Map(
         projectDirectories()
           .flatMap((directory) => sortedRootSessions(sync.child(directory, { bootstrap: false })[0], Date.now()))
@@ -116,8 +114,8 @@ function HomeDesign() {
         if (!value) return true
         return `${record.session.title} ${record.projectName}`.toLowerCase().includes(value)
       })
-      .slice(0, HOME_SESSION_LIMIT),
-  )
+      .slice(0, HOME_SESSION_LIMIT)
+  })
   const groups = createMemo(() => groupSessions(records(), language))
 
   function selectProject(directory: string) {
@@ -224,7 +222,7 @@ function HomeDesign() {
         aria-label={language.t("sidebar.project.recentSessions")}
       >
         <Show
-          when={selectedProject()}
+          when={projectDirectories().length > 0}
           fallback={
             <HomeEmptyState
               icon="folder-add-left"
@@ -302,8 +300,8 @@ function HomeProjectColumn(props: {
   const layout = useLayout()
   const projects = createMemo(() => layout.projects.list())
   return (
-    <aside class="flex min-w-0 flex-col lg:pt-[52px]" aria-label={props.language.t("home.projects")}>
-      <div class="flex h-7 min-w-0 items-center justify-between pl-3">
+    <aside class="flex min-w-0 flex-col lg:pt-[52px] gap-4" aria-label={props.language.t("home.projects")}>
+      <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
         <div class={HOME_SECTION_LABEL}>{props.language.t("home.projects")}</div>
         <IconButtonV2
           data-action="home-add-project"
@@ -315,8 +313,8 @@ function HomeProjectColumn(props: {
           aria-label={props.language.t("home.project.add")}
         />
       </div>
-      <For
-        each={servers.list()}
+      <Show
+        when={servers.list().length > 1}
         fallback={
           <ProjectList
             projects={projects()}
@@ -332,61 +330,63 @@ function HomeProjectColumn(props: {
           />
         }
       >
-        {(server) => {
-          const key = ServerConnection.key(server)
-          const healthy = () => !!servers.health[key]?.healthy
-          const [open, setOpen] = createSignal(true)
+        <For each={servers.list()}>
+          {(server) => {
+            const key = ServerConnection.key(server)
+            const healthy = () => !!servers.health[key]?.healthy
+            const [open, setOpen] = createSignal(true)
 
-          return (
-            <div class="mt-4 max-h-[min(572px,calc(100vh_-_300px))] min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div class="relative h-7 group">
-                <button
-                  class="w-full h-full px-1.5 gap-2 flex flex-row items-center hover:not-disabled:bg-v2-overlay-simple-overlay-hover rounded-[4px]"
-                  disabled={!healthy()}
-                  onClick={() => setOpen((o) => !o)}
-                >
-                  <div class="size-4 flex items-center justify-center">
-                    <ServerHealthIndicator health={servers.health[key]} />
-                  </div>
-                  <div class="flex flex-row items-center gap-1">
-                    <span>{server.displayName ?? new URL(server.http.url).host}</span>
-                    <Show when={healthy()}>
-                      <IconV2
-                        name="outline-chevron-down"
-                        class="text-v2-icon-icon-muted data-[open=false]:-rotate-90"
-                        data-open={open()}
-                      />
-                    </Show>
-                  </div>
-                </button>
-                <IconButtonV2
-                  class="absolute right-1 inset-y-1 opacity-0 group-hover:opacity-100"
-                  name="out"
-                  variant="ghost-muted"
-                  size="small"
-                  icon={<IconV2 name="outline-dots" class="text-v2-icon-icon-muted" />}
-                />
+            return (
+              <div class="max-h-[min(572px,calc(100vh_-_300px))] min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div class="relative h-7 group">
+                  <button
+                    class="w-full h-full px-1.5 gap-2 flex flex-row items-center hover:not-disabled:bg-v2-overlay-simple-overlay-hover rounded-[4px]"
+                    disabled={!healthy()}
+                    onClick={() => setOpen((o) => !o)}
+                  >
+                    <div class="size-4 flex items-center justify-center">
+                      <ServerHealthIndicator health={servers.health[key]} />
+                    </div>
+                    <div class="flex flex-row items-center gap-1">
+                      <span>{server.displayName ?? new URL(server.http.url).host}</span>
+                      <Show when={healthy()}>
+                        <IconV2
+                          name="outline-chevron-down"
+                          class="text-v2-icon-icon-muted data-[open=false]:-rotate-90"
+                          data-open={open()}
+                        />
+                      </Show>
+                    </div>
+                  </button>
+                  <IconButtonV2
+                    class="absolute right-1 inset-y-1 opacity-0 group-hover:opacity-100"
+                    name="out"
+                    variant="ghost-muted"
+                    size="small"
+                    icon={<IconV2 name="outline-dots" class="text-v2-icon-icon-muted" />}
+                  />
+                </div>
+                <Show when={healthy() && open()}>
+                  <div class="h-px bg-v2-border-border-base mx-3 my-1" />
+                  <ProjectList
+                    projects={projects()}
+                    selectedProject={props.selectedProject}
+                    onSelectedProjectChange={props.selectProject}
+                    onChooseProject={props.chooseProject}
+                    openNewSession={props.openNewSession}
+                    editProject={props.editProject}
+                    closeProject={props.closeProject}
+                    clearNotifications={props.clearNotifications}
+                    unseenCount={props.unseenCount}
+                    language={props.language}
+                  />
+                </Show>
               </div>
-              <Show when={healthy() && open()}>
-                <div class="h-px bg-v2-border-border-base mx-3 my-1" />
-                <ProjectList
-                  projects={projects()}
-                  selectedProject={props.selectedProject}
-                  onSelectedProjectChange={props.selectProject}
-                  onChooseProject={props.chooseProject}
-                  openNewSession={props.openNewSession}
-                  editProject={props.editProject}
-                  closeProject={props.closeProject}
-                  clearNotifications={props.clearNotifications}
-                  unseenCount={props.unseenCount}
-                  language={props.language}
-                />
-              </Show>
-            </div>
-          )
-        }}
-      </For>
-      <div class="mt-4 flex min-w-0 flex-col gap-1">
+            )
+          }}
+        </For>
+      </Show>
+      <div class="flex min-w-0 flex-col gap-1">
         <button
           type="button"
           class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
@@ -420,12 +420,14 @@ function HomeProjectRow(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   const name = createMemo(() => displayName(props.project))
+  const [menuOpen, setMenuOpen] = createSignal(false)
+
   return (
-    <div class="group/project relative flex h-8 min-w-0 items-center rounded-[6px] hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover">
+    <div class="group/project relative flex h-8 min-w-0 items-center rounded-[6px]">
       <button
         type="button"
         data-component="home-project-row"
-        class={`${HOME_PROJECT_NAV_ROW} pr-16`}
+        class={`${HOME_PROJECT_NAV_ROW} pr-16 peer`}
         classList={{ "bg-v2-overlay-simple-overlay-hover": props.selected }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
@@ -434,7 +436,37 @@ function HomeProjectRow(props: {
         <HomeProjectAvatar project={props.project} />
         <span>{name()}</span>
       </button>
-      <div class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/project:opacity-100 group-focus-within/project:opacity-100">
+      <div
+        class="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/project:opacity-100 peer-focus-visible:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+        data-menu={menuOpen()}
+      >
+        <MenuV2 gutter={4} modal={false} placement="bottom-end" open={menuOpen()} onOpenChange={setMenuOpen}>
+          <MenuV2.Trigger
+            as={IconButtonV2}
+            data-action="home-project-menu"
+            variant="ghost-muted"
+            size="small"
+            icon={<IconV2 name="outline-dots" />}
+            aria-label={props.language.t("common.moreOptions")}
+          />
+          <MenuV2.Portal>
+            <MenuV2.Content>
+              <MenuV2.Item onSelect={() => props.openNewSession(props.project.worktree)}>
+                {props.language.t("command.session.new")}
+              </MenuV2.Item>
+              <MenuV2.Item onSelect={() => props.editProject(props.project)}>
+                {props.language.t("common.edit")}
+              </MenuV2.Item>
+              <MenuV2.Item disabled={props.unseenCount === 0} onSelect={() => props.clearNotifications(props.project)}>
+                {props.language.t("sidebar.project.clearNotifications")}
+              </MenuV2.Item>
+              <MenuV2.Separator />
+              <MenuV2.Item onSelect={() => props.closeProject(props.project.worktree)}>
+                {props.language.t("common.close")}
+              </MenuV2.Item>
+            </MenuV2.Content>
+          </MenuV2.Portal>
+        </MenuV2>
         <IconButtonV2
           data-action="home-project-new-session"
           variant="ghost-muted"
@@ -446,37 +478,6 @@ function HomeProjectRow(props: {
             props.openNewSession(props.project.worktree)
           }}
         />
-        <MenuV2 gutter={4} modal={false} placement="bottom-end">
-          <MenuV2.Trigger
-            as={IconButtonV2}
-            data-action="home-project-menu"
-            variant="ghost-muted"
-            size="small"
-            icon={<IconV2 name="menu" />}
-            aria-label={props.language.t("common.moreOptions")}
-          />
-          <MenuV2.Portal>
-            <MenuV2.Content>
-              <MenuV2.Item onSelect={() => props.openNewSession(props.project.worktree)}>
-                <Icon name="new-session" size="small" />
-                {props.language.t("command.session.new")}
-              </MenuV2.Item>
-              <MenuV2.Item onSelect={() => props.editProject(props.project)}>
-                <Icon name="edit" size="small" />
-                {props.language.t("common.edit")}
-              </MenuV2.Item>
-              <MenuV2.Item disabled={props.unseenCount === 0} onSelect={() => props.clearNotifications(props.project)}>
-                <Icon name="circle-check" size="small" />
-                {props.language.t("sidebar.project.clearNotifications")}
-              </MenuV2.Item>
-              <MenuV2.Separator />
-              <MenuV2.Item onSelect={() => props.closeProject(props.project.worktree)}>
-                <Icon name="close" size="small" />
-                {props.language.t("common.close")}
-              </MenuV2.Item>
-            </MenuV2.Content>
-          </MenuV2.Portal>
-        </MenuV2>
       </div>
     </div>
   )
@@ -565,7 +566,7 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
             variant="ghost"
             size="normal"
             icon="edit"
-            class="h-7 px-2 text-v2-text-text-muted [font-weight:530]"
+            class="h-7 px-2 text-v2-text-text-muted"
             onClick={onNewSession()}
           >
             {language.t("command.session.new")}
