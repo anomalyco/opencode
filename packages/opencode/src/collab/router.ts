@@ -150,7 +150,7 @@ function registerQueueExecutor(collabSessionId: string): void {
     const cs = Session.getCollabSession(collabSessionId)
     if (!cs) return
     const workspacePath = nativeSessionDirectory(collabSessionId, cs.repos)
-    await executePromptOnNativeSession(cs, suggestion.content, workspacePath)
+    await executePromptOnNativeSession(cs, suggestion.content, workspacePath, suggestion.model, suggestion.agent, suggestion.variant)
   })
 }
 
@@ -365,11 +365,18 @@ async function sendSeedPrompt(
  * Dispatches an approved prompt to the native opencode session.
  * The native session must already exist (pre-warmed at creation time);
  * if it doesn't, we create it inline as a fallback.
+ *
+ * model  — "providerID/modelID" string (e.g. "anthropic/claude-sonnet-4-5")
+ * agent  — agent name (e.g. "build")
+ * variant — model variant key (e.g. "extended")
  */
 async function executePromptOnNativeSession(
   collabSession: NonNullable<ReturnType<typeof Session.getCollabSession>>,
   content: string,
   workspacePath: string,
+  model?: string,
+  agent?: string,
+  variant?: string,
 ): Promise<void> {
   const nativeSessionId = await ensureNativeSession(collabSession.id, workspacePath)
   if (!nativeSessionId) {
@@ -377,13 +384,21 @@ async function executePromptOnNativeSession(
     return
   }
 
-  console.log("[collab] sending prompt to native session:", nativeSessionId)
+  // Parse "providerID/modelID" string into the object shape prompt_async expects.
+  const modelObj = model ? parseModelString(model) : undefined
+
+  console.log("[collab] sending prompt to native session:", nativeSessionId, { model, agent, variant })
   const promptRes = await nativeFetch(
     `/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parts: [{ type: "text", text: content }] }),
+      body: JSON.stringify({
+        parts: [{ type: "text", text: content }],
+        ...(modelObj && { model: modelObj }),
+        ...(agent && { agent }),
+        ...(variant && { variant }),
+      }),
       collabSessionId: collabSession.id,
     },
   )
@@ -393,6 +408,13 @@ async function executePromptOnNativeSession(
   } else {
     console.log("[collab] prompt dispatched to native session:", nativeSessionId)
   }
+}
+
+/** Parse "providerID/modelID" into { providerID, modelID } — returns undefined on bad input. */
+function parseModelString(model: string): { providerID: string; modelID: string } | undefined {
+  const slash = model.indexOf("/")
+  if (slash <= 0 || slash >= model.length - 1) return undefined
+  return { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }
 }
 
 // ── Config ──────────────────────────────────────────────────────────────────────
@@ -1358,16 +1380,19 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // Rate limit: 60 prompts / minute / user (ADR-0008).  Body cap 32 KB.
     const rl = checkRateLimit(`prompt:${sess.githubId}`, 60, 60 * 1000)
     if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
-    const body = (await req.json()) as { content: string }
+    const body = (await req.json()) as { content: string; model?: string; agent?: string; variant?: string }
     if (typeof body.content === "string" && body.content.length > PROMPT_BODY_MAX_BYTES) {
       return json({ error: `Prompt too long (max ${PROMPT_BODY_MAX_BYTES} bytes)` }, 413)
     }
+    const promptModel = typeof body.model === "string" ? body.model : undefined
+    const promptAgent = typeof body.agent === "string" ? body.agent : undefined
+    const promptVariant = typeof body.variant === "string" ? body.variant : undefined
     ensureQueueRegistered(sessionId)
 
     if (collabSession.queueMode === "fifo" && caller.role === "driver") {
       // Direct dispatch — bypass approval.  Executor handles the rest:
       // marks "submitted", broadcasts collab:prompt_submitted, dispatches.
-      const suggestion = Queue.enqueue(sessionId, body.content, sess.githubId, sess.githubLogin)
+      const suggestion = Queue.enqueue(sessionId, body.content, sess.githubId, sess.githubLogin, promptModel, promptAgent, promptVariant)
       // Mention broadcasts even though the suggestion itself won't appear
       // in the pending queue — Bob still gets a ping if @bob was mentioned.
       for (const event of mentionsToEvents({
@@ -1382,7 +1407,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     }
 
     // Pending — needs Driver approval (FIFO contributor) or pool resolve (Vote).
-    const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
+    const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin, promptModel, promptAgent, promptVariant)
     broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
     broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
     for (const event of mentionsToEvents({
@@ -1402,11 +1427,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // Rate limit: 60 suggestions / minute / user (ADR-0008).  Body cap 32 KB.
     const rl = checkRateLimit(`suggest:${sess.githubId}`, 60, 60 * 1000)
     if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
-    const body = (await req.json()) as { content: string }
+    const body = (await req.json()) as { content: string; model?: string; agent?: string; variant?: string }
     if (typeof body.content === "string" && body.content.length > PROMPT_BODY_MAX_BYTES) {
       return json({ error: `Suggestion too long (max ${PROMPT_BODY_MAX_BYTES} bytes)` }, 413)
     }
-    const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
+    const suggestModel = typeof body.model === "string" ? body.model : undefined
+    const suggestAgent = typeof body.agent === "string" ? body.agent : undefined
+    const suggestVariant = typeof body.variant === "string" ? body.variant : undefined
+    const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin, suggestModel, suggestAgent, suggestVariant)
     broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
     for (const event of mentionsToEvents({
       text: body.content,

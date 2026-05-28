@@ -1180,8 +1180,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!editor) return
 
     try {
+      const currentModel = local.model.current()
+      const currentAgent = local.agent.current()
+      const currentVariant = local.model.variant.current()
+      // "providerID/modelID" string that the collab server parses back into
+      // the { providerID, modelID } object for prompt_async.
+      const modelStr = currentModel ? `${currentModel.provider.id}/${currentModel.id}` : undefined
       window.parent.postMessage(
-        { type: "opencode:collab-prompt-submit", content: text },
+        {
+          type: "opencode:collab-prompt-submit",
+          content: text,
+          model: modelStr,
+          agent: currentAgent?.name,
+          variant: currentVariant,
+        },
         window.location.origin,
       )
     } catch {

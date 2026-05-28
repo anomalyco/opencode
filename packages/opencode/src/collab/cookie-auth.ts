@@ -248,6 +248,12 @@ function cookieAllowedWithoutScope(pathname: string): boolean {
     "/path",
     "/project",
     "/provider",
+    // The provider auth-methods endpoint is loaded by the connect-provider
+    // dialog before any workspace context is known (e.g. when the user opens
+    // the model-selection dropdown during collab).  Without this entry the
+    // cookie-auth scope check falls through to "deny" in collab mode and the
+    // dialog receives a 401 before the user can pick an auth method.
+    "/provider/auth",
   ])
   if (UNSCOPED_SPA_BOOTSTRAP.has(pathname)) return true
 

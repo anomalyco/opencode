@@ -40,9 +40,12 @@ export function enqueue(
   content: string,
   authorGithubId: number,
   authorGithubLogin: string,
+  model?: string,
+  agent?: string,
+  variant?: string,
 ): PromptSuggestion {
   const db = _db(collabSessionId)
-  const suggestion = _insert(db, collabSessionId, content, authorGithubId, authorGithubLogin, "approved")
+  const suggestion = _insert(db, collabSessionId, content, authorGithubId, authorGithubLogin, "approved", model, agent, variant)
   _scheduleNext(collabSessionId)
   return suggestion
 }
@@ -54,8 +57,11 @@ export function submitToPool(
   content: string,
   authorGithubId: number,
   authorGithubLogin: string,
+  model?: string,
+  agent?: string,
+  variant?: string,
 ): PromptSuggestion {
-  return _insert(_db(collabSessionId), collabSessionId, content, authorGithubId, authorGithubLogin, "pending")
+  return _insert(_db(collabSessionId), collabSessionId, content, authorGithubId, authorGithubLogin, "pending", model, agent, variant)
 }
 
 export function castVote(
@@ -122,10 +128,13 @@ function _insert(
   authorGithubId: number,
   authorGithubLogin: string,
   status: "pending" | "approved",
+  model?: string,
+  agent?: string,
+  variant?: string,
 ): PromptSuggestion {
   const id = collabId("sg")
   const now = Date.now()
-  db.insertSuggestion({ id, collabSessionId, content, authorGithubId, authorGithubLogin, status, createdAt: now })
+  db.insertSuggestion({ id, collabSessionId, content, authorGithubId, authorGithubLogin, status, createdAt: now, model, agent, variant })
   return {
     id,
     collabSessionId,
@@ -136,6 +145,9 @@ function _insert(
     voteScore: 0,
     votes: [],
     createdAt: new Date(now),
+    model,
+    agent,
+    variant,
   }
 }
 

@@ -68,6 +68,12 @@ export const CollabSuggestionTable = sqliteTable(
     status: text().$type<SuggestionStatus>().notNull().default("pending"),
     vote_score: integer().notNull().default(0),
     created_at: integer({ mode: "timestamp_ms" }).notNull(),
+    /** e.g. "anthropic/claude-sonnet-4-5" — null means use the session default */
+    model: text(),
+    /** e.g. "build", "plan" — null means use the session default */
+    agent: text(),
+    /** e.g. "extended" — null means use the model default */
+    variant: text(),
   },
   (t) => [index("collab_suggestion_session_idx").on(t.collab_session_id)],
 )

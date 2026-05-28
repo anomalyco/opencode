@@ -15,6 +15,9 @@ export interface CollabDB {
     authorGithubLogin: string
     status: "pending" | "approved"
     createdAt: number
+    model?: string
+    agent?: string
+    variant?: string
   }): void
 
   updateSuggestionStatus(id: string, status: "approved" | "rejected" | "submitted"): void

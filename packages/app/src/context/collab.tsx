@@ -34,8 +34,8 @@ interface CollabContextValue {
   postNote: (content: string) => Promise<void>
 
   // Actions
-  submitPrompt: (content: string) => Promise<void>
-  suggestPrompt: (content: string) => Promise<void>
+  submitPrompt: (content: string, model?: string, agent?: string, variant?: string) => Promise<void>
+  suggestPrompt: (content: string, model?: string, agent?: string, variant?: string) => Promise<void>
   approvesuggestion: (suggestionId: string) => Promise<void>
   rejectSuggestion: (suggestionId: string) => Promise<void>
   castVote: (suggestionId: string) => Promise<void>
@@ -496,11 +496,11 @@ export function CollabProvider(props: CollabProviderProps) {
       return me?.role ?? "viewer"
     },
 
-    async submitPrompt(content) {
-      await api("/prompt", "POST", { content })
+    async submitPrompt(content, model, agent, variant) {
+      await api("/prompt", "POST", { content, model, agent, variant })
     },
-    async suggestPrompt(content) {
-      await api("/suggest", "POST", { content })
+    async suggestPrompt(content, model, agent, variant) {
+      await api("/suggest", "POST", { content, model, agent, variant })
     },
     async approvesuggestion(suggestionId) {
       await api(`/approve/${suggestionId}`, "POST")

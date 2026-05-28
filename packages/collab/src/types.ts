@@ -81,6 +81,12 @@ export interface PromptSuggestion {
   /** Emoji reactions on this suggestion: { "🔥": ["alice","bob"], "👎": ["carol"] }. */
   reactions?: Record<string, string[]>
   createdAt: Date
+  /** Model the author had selected when submitting (e.g. "anthropic/claude-sonnet-4-5"). */
+  model?: string
+  /** Agent the author had selected (e.g. "build", "plan"). */
+  agent?: string
+  /** Model variant the author had selected (e.g. "extended"). */
+  variant?: string
 }
 
 /** Allowed reaction emoji set — keep this small so the UI bar stays compact. */
