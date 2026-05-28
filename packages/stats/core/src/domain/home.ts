@@ -6,7 +6,7 @@ import { ProviderStatRepo, type ProviderStatMetric } from "./provider"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
 export type TokenProduct = "Zen" | "Go" | "Enterprise"
-export type UsageRange = "1D" | "1W" | "1M" | "3M" | "YTD" | "ALL"
+export type UsageRange = "1D" | "1W" | "2W" | "1M" | "2M" | "3M" | "YTD" | "ALL"
 export type UsagePoint = { date: string; segments: { model: string; value: number }[] }
 export type MarketDay = { date: string; total: number; authors: { author: string; share: number; tokens: number }[] }
 export type LeaderboardEntry = { model: string; author: string; tokens: number; change: number; rank: number }
@@ -134,9 +134,9 @@ function buildUsagePoints(rows: StatMetricRow[], product: UsageProduct, range: U
     return {
       date: bucket.label,
       segments: [
-        ...segmentTokens.map((item) => ({ model: item.model, value: round(item.tokens / 1_000_000_000_000, 2) })),
-        { model: "Other", value: round(Math.max(totalTokens - knownTokens, 0) / 1_000_000_000_000, 2) },
-      ].filter((item) => item.value > 0),
+        ...segmentTokens.map((item) => ({ model: item.model, value: round(item.tokens / 1_000_000_000_000, 4) })),
+        { model: "Other", value: round(Math.max(totalTokens - knownTokens, 0) / 1_000_000_000_000, 4) },
+      ],
     }
   })
 }
@@ -309,13 +309,17 @@ function getWindow(range: UsageRange, earliest: number, latest: number): DateWin
       ? latest
       : range === "1W"
         ? latest - 6 * DAY_MS
-        : range === "1M"
-          ? latest - 29 * DAY_MS
-          : range === "3M"
-            ? latest - 89 * DAY_MS
-            : range === "YTD"
-              ? Date.UTC(new Date(latest).getUTCFullYear(), 0, 1)
-              : earliest,
+        : range === "2W"
+          ? latest - 13 * DAY_MS
+          : range === "1M"
+            ? latest - 27 * DAY_MS
+            : range === "2M"
+              ? latest - 55 * DAY_MS
+              : range === "3M"
+                ? latest - 89 * DAY_MS
+                : range === "YTD"
+                  ? Date.UTC(new Date(latest).getUTCFullYear(), 0, 1)
+                  : earliest,
   )
   const duration = end - start
   return { start, end, previousStart: start - duration, previousEnd: start }
@@ -323,12 +327,21 @@ function getWindow(range: UsageRange, earliest: number, latest: number): DateWin
 
 function createBuckets(window: DateWindow, range: UsageRange): Bucket[] {
   const span = Math.max(window.end - window.start, DAY_MS)
-  const count = Math.max(1, Math.min(7, Math.ceil(span / DAY_MS)))
+  const count =
+    range === "1D"
+      ? 1
+      : range === "2W"
+        ? 14
+        : range === "1M"
+          ? 4
+          : range === "2M"
+            ? 8
+            : Math.max(1, Math.min(7, Math.ceil(span / DAY_MS)))
   const size = span / count
   return Array.from({ length: count }, (_, index) => {
     const start = window.start + index * size
     const end = index === count - 1 ? window.end : window.start + (index + 1) * size
-    return { start, end, label: formatBucketLabel(start, range) }
+    return { start, end, label: formatBucketLabel(start, end, range) }
   })
 }
 
@@ -353,7 +366,9 @@ function createRangeRecord<T>(value: (range: UsageRange) => T): Record<UsageRang
   return {
     "1D": value("1D"),
     "1W": value("1W"),
+    "2W": value("2W"),
     "1M": value("1M"),
+    "2M": value("2M"),
     "3M": value("3M"),
     YTD: value("YTD"),
     ALL: value("ALL"),
@@ -428,13 +443,19 @@ function periodKeyTime(value: string) {
   return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
 }
 
-function formatBucketLabel(value: number, range: UsageRange) {
-  const date = new Date(value)
+function formatBucketLabel(start: number, end: number, range: UsageRange) {
+  const date = new Date(start)
   if (range === "YTD") return months[date.getUTCMonth()]
   if (range === "ALL")
     return date.getUTCFullYear() === new Date().getUTCFullYear()
       ? months[date.getUTCMonth()]
       : String(date.getUTCFullYear())
+  if (range === "1M" || range === "2M") return `${formatDay(start)} - ${formatDay(end - DAY_MS)}`
+  return formatDay(start)
+}
+
+function formatDay(value: number) {
+  const date = new Date(value)
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
 }
 
