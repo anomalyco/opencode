@@ -69,7 +69,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AC
 
 export function make(input: {
   sdk: OpencodeClient
-  connection?: Pick<AgentSideConnection, "sessionUpdate">
+  connection?: Pick<AgentSideConnection, "sessionUpdate"> &
+    Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
   directory?: Directory.Interface
   session?: ACPNextSession.Interface
   eventSubscription?: (subscription: ACPNextEvent.Subscription) => void
