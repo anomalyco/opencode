@@ -847,6 +847,8 @@ export function Message(props: MessageProps) {
             markdownViewport={props.markdownViewport}
             markdownHighlight={props.markdownHighlight}
             markdownMath={props.markdownMath}
+            markdownStage={props.markdownStage}
+            onMarkdownStage={props.onMarkdownStage}
           />
         )}
       </Match>
@@ -862,6 +864,8 @@ export function Message(props: MessageProps) {
             markdownEager={props.markdownEager}
             markdownHighlight={props.markdownHighlight}
             markdownMath={props.markdownMath}
+            markdownStage={props.markdownStage}
+            onMarkdownStage={props.onMarkdownStage}
           />
         )}
       </Match>
@@ -879,6 +883,8 @@ export function AssistantMessageDisplay(props: {
   markdownEager?: boolean
   markdownHighlight?: "full" | "defer"
   markdownMath?: "full" | "defer"
+  markdownStage?: MarkdownStage
+  onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -952,6 +958,8 @@ export function AssistantMessageDisplay(props: {
                   assistantCopyText={props.assistantCopyText}
                   markdownEager={props.markdownEager}
                   markdownMath={props.markdownMath}
+                  markdownStage={props.markdownStage}
+                  onMarkdownStage={props.onMarkdownStage}
                 />
               )}
             </Show>

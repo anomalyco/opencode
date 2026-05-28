@@ -73,6 +73,7 @@ const SPACER_SHIFT_WARN = 400
 const FOLLOW_SNAP_DISTANCE = 900
 const FOLLOW_MAX_STEP = 180
 const FOLLOW_EASE = 0.32
+const ANCHOR_WARN_COOLDOWN_MS = 3_000
 
 const heightCacheKey = (sessionId: string, msgId: string, stage: string, signature: string) =>
   `opencode.h2.${signature}.${sessionId}.${msgId}.${stage}`
@@ -773,6 +774,7 @@ export function MessageTimeline(props: {
   })
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
+  const anchorWarnAt = new Map<string, number>()
 
   const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
     if (isWorking()) return "showing"
@@ -787,25 +789,33 @@ export function MessageTimeline(props: {
     makeTimer(() => setTimeoutDone(true), 260, setTimeout)
   })
 
+  const warnAbnormalAnchor = (kind: "window" | "message", id: string, top: number, threshold: number) => {
+    const key = `${kind}:${id}`
+    const now = performance.now()
+    const prev = anchorWarnAt.get(key) ?? 0
+    if (now - prev < ANCHOR_WARN_COOLDOWN_MS) return
+    anchorWarnAt.set(key, now)
+    console.warn(
+      `[capture${kind === "window" ? "Window" : "Message"}Anchor] ABNORMAL anchor position: id=${id} top=${top.toFixed(2)} threshold=${threshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
+    )
+  }
+
   const captureWindowAnchor = () => {
     const root = viewport
     if (!root) return
     const box = root.getBoundingClientRect()
     const nodes = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-    const visible =
-      nodes.find((node) => {
-        const rect = node.getBoundingClientRect()
-        return rect.bottom > box.top && rect.top < box.bottom
-      }) ?? nodes[0]
+    const visible = nodes.find((node) => {
+      const rect = node.getBoundingClientRect()
+      return rect.bottom > box.top && rect.top < box.bottom
+    })
     if (!visible?.dataset.messageId) return
     const anchorTop = visible.getBoundingClientRect().top - box.top
 
     // Detect abnormal anchor position (likely DOM not ready after session switch)
     const abnormalThreshold = root.clientHeight * 10 // 10x viewport height
     if (Math.abs(anchorTop) > abnormalThreshold) {
-      console.warn(
-        `[captureWindowAnchor] ABNORMAL anchor position: id=${visible.dataset.messageId} top=${anchorTop.toFixed(2)} threshold=${abnormalThreshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
-      )
+      warnAbnormalAnchor("window", visible.dataset.messageId, anchorTop, abnormalThreshold)
       return undefined
     }
 
@@ -826,9 +836,7 @@ export function MessageTimeline(props: {
 
     const abnormalThreshold = root.clientHeight * 10
     if (Math.abs(anchorTop) > abnormalThreshold) {
-      console.warn(
-        `[captureMessageAnchor] ABNORMAL anchor position: id=${id} top=${anchorTop.toFixed(2)} threshold=${abnormalThreshold.toFixed(2)} - DOM may not be ready, skipping anchor`,
-      )
+      warnAbnormalAnchor("message", id, anchorTop, abnormalThreshold)
       return undefined
     }
 
