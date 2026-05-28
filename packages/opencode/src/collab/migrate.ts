@@ -45,6 +45,9 @@ const SQL = `
     content TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     vote_score INTEGER NOT NULL DEFAULT 0,
+    model TEXT,
+    agent TEXT,
+    variant TEXT,
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS collab_suggestion_session_idx ON collab_suggestion(collab_session_id);
@@ -119,6 +122,24 @@ export function runCollabMigrations() {
     }
     if (!cols.some((c) => c.name === "init_error")) {
       db.$client.exec("ALTER TABLE collab_session ADD COLUMN init_error TEXT")
+    }
+
+    // model / agent / variant on collab_suggestion — added by the model-pipeline
+    // pass (commit f2a8c9026).  Originally shipped as an opencode-native Drizzle
+    // migration at packages/opencode/migration/20260528033731_add_suggestion_model_agent_variant/
+    // but that runs at DB-open BEFORE runCollabMigrations() creates the
+    // collab_suggestion table — every fresh DB crashed with
+    // "no such table: collab_suggestion" on boot.  Belongs in the collab
+    // migrate pass, like every other collab-* schema change.
+    const sugCols = db.$client.prepare("PRAGMA table_info(collab_suggestion)").all() as Array<{ name: string }>
+    if (!sugCols.some((c) => c.name === "model")) {
+      db.$client.exec("ALTER TABLE collab_suggestion ADD COLUMN model TEXT")
+    }
+    if (!sugCols.some((c) => c.name === "agent")) {
+      db.$client.exec("ALTER TABLE collab_suggestion ADD COLUMN agent TEXT")
+    }
+    if (!sugCols.some((c) => c.name === "variant")) {
+      db.$client.exec("ALTER TABLE collab_suggestion ADD COLUMN variant TEXT")
     }
 
     // ADR-0004 — one-shot re-encryption of legacy plaintext access tokens.
