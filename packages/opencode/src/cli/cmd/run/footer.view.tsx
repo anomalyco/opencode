@@ -10,7 +10,7 @@
 // All state comes from the parent RunFooter through SolidJS signals.
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions } from "@opentui/solid"
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import "opentui-spinner/solid"
 import { createColors, createFrames } from "../tui/ui/spinner"
@@ -26,9 +26,14 @@ import { RunFooterSubagentBody } from "./footer.subagent"
 import { RunPromptBody, createPromptState, hintFlags } from "./footer.prompt"
 import { RunPermissionBody } from "./footer.permission"
 import { RunQuestionBody } from "./footer.question"
-import { printableBinding, promptBindings, promptHit, promptInfo } from "./prompt.shared"
+import {
+  OPENCODE_BASE_MODE,
+  formatKeyBindings,
+  useBindings,
+  useKeymapSelector,
+  type OpenTuiKeymap,
+} from "@/cli/cmd/tui/keymap"
 import type {
-  FooterKeybinds,
   FooterPromptRoute,
   FooterState,
   FooterSubagentState,
@@ -43,6 +48,7 @@ import type {
   RunPrompt,
   RunProvider,
   RunResource,
+  RunTuiConfig,
 } from "./types"
 import { RUN_THEME_FALLBACK, type RunTheme } from "./theme"
 
@@ -75,7 +81,7 @@ type RunFooterViewProps = {
   subagent?: () => FooterSubagentState
   theme?: RunTheme
   diffStyle?: RunDiffStyle
-  keybinds: FooterKeybinds
+  tuiConfig: RunTuiConfig
   history?: RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
@@ -149,9 +155,24 @@ export function RunFooterView(props: RunFooterViewProps) {
     const current = route()
     return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
   })
-  const command = createMemo(() => printableBinding(props.keybinds.commandList, props.keybinds.leader))
-  const interrupt = createMemo(() => printableBinding(props.keybinds.interrupt, props.keybinds.leader))
-  const commandKeys = createMemo(() => promptBindings(props.keybinds.commandList, props.keybinds.leader))
+  const command = useKeymapSelector((keymap: OpenTuiKeymap) =>
+    formatKeyBindings(
+      keymap.getCommandBindings({ visibility: "registered", commands: ["command.palette.show"] }).get("command.palette.show"),
+      props.tuiConfig,
+    ) ?? "",
+  )
+  const interrupt = useKeymapSelector((keymap: OpenTuiKeymap) =>
+    formatKeyBindings(
+      keymap.getCommandBindings({ visibility: "registered", commands: ["session.interrupt"] }).get("session.interrupt"),
+      props.tuiConfig,
+    ) ?? "",
+  )
+  const variantCycle = useKeymapSelector((keymap: OpenTuiKeymap) =>
+    formatKeyBindings(
+      keymap.getCommandBindings({ visibility: "registered", commands: ["variant.cycle"] }).get("variant.cycle"),
+      props.tuiConfig,
+    ) ?? "",
+  )
   const hints = createMemo(() => hintFlags(term().width))
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
@@ -257,7 +278,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     subagents: () => tabs().length,
     resources: props.resources,
     commands: props.commands,
-    keybinds: props.keybinds,
+    tuiConfig: props.tuiConfig,
     state: props.state,
     view: promptView,
     prompt,
@@ -285,30 +306,28 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onRequestExit?.(undefined)
   })
 
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    if (active().type !== "prompt") {
-      return
-    }
-
-    if (route().type !== "composer") {
-      return
-    }
-
-    if (composer.visible()) {
-      return
-    }
-
-    if (!promptHit(commandKeys(), promptInfo(event))) {
-      return
-    }
-
-    event.preventDefault()
-    openCommand()
-  })
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && !composer.visible(),
+    commands: [
+      {
+        name: "command.palette.show",
+        title: "Open command palette",
+        category: "Prompt",
+        run: openCommand,
+      },
+      {
+        name: "variant.cycle",
+        title: "Cycle model variant",
+        category: "Model",
+        run: props.onCycle,
+      },
+    ],
+    bindings: [
+      ...props.tuiConfig.keybinds.get("command.palette.show"),
+      ...props.tuiConfig.keybinds.get("variant.cycle"),
+    ],
+  }))
 
   createEffect(() => {
     const current = route()
@@ -407,7 +426,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                       <RunPromptBody
                         theme={theme}
                         placeholder={composer.placeholder}
-                        bindings={composer.bindings}
                         onSubmit={composer.onSubmit}
                         onKeyDown={composer.onKeyDown}
                         onContentChange={composer.onContentChange}
@@ -430,7 +448,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                         commands={props.commands}
                         subagents={tabs}
                         variants={props.variants}
-                        keybinds={props.keybinds}
+                        variantCycle={variantCycle()}
                         onClose={closePanel}
                         onModel={openModel}
                         onSubagent={openSubagentMenu}

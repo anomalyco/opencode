@@ -31,6 +31,7 @@ type CommandSlashEntry = {
   onSelect: () => void
 }
 type Command = ReturnType<OpenTuiKeymap["getCommands"]>[number]
+type FormatConfig = Pick<TuiConfig.Resolved, "keybinds">
 
 const modeStacks = new WeakMap<OpenTuiKeymap, OpencodeModeStack>()
 
@@ -160,13 +161,13 @@ const inputCommands = [
   "input.submit",
 ] as const
 
-function leaderDisplay(config: TuiConfig.Resolved) {
+function leaderDisplay(config: FormatConfig) {
   const key = config.keybinds.get(LEADER_TOKEN)?.[0]?.key
   if (!key) return TuiKeybind.LeaderDefault
   return typeof key === "string" ? key : stringifyKeyStroke(key)
 }
 
-function formatOptions(config: TuiConfig.Resolved) {
+function formatOptions(config: FormatConfig) {
   return {
     tokenDisplay: {
       [LEADER_TOKEN]: leaderDisplay(config),
@@ -182,13 +183,13 @@ function formatOptions(config: TuiConfig.Resolved) {
   } as const
 }
 
-export function formatKeySequence(parts: Parameters<typeof formatKeySequenceExtra>[0], config: TuiConfig.Resolved) {
+export function formatKeySequence(parts: Parameters<typeof formatKeySequenceExtra>[0], config: FormatConfig) {
   return formatKeySequenceExtra(parts, formatOptions(config))
 }
 
 export function formatKeyBindings(
   bindings: Parameters<typeof formatCommandBindingsExtra>[0],
-  config: TuiConfig.Resolved,
+  config: FormatConfig,
 ) {
   return formatCommandBindingsExtra(bindings, formatOptions(config))
 }
