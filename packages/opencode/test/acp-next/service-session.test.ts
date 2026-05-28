@@ -602,6 +602,46 @@ describe("ACP next service sessions", () => {
     expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/configured-model")
   })
 
+  it("does not scan last-used sessions when resolving the new session default", async () => {
+    const historyCalls: string[] = []
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+        get: () => Promise.resolve({ data: {} }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: (input: { model?: { id?: string } }) => Promise.resolve({ data: { id: input.model?.id } }),
+        list: () => {
+          historyCalls.push("list")
+          return Promise.resolve({ data: [{ id: "ses_recent" }] })
+        },
+        messages: () => {
+          historyCalls.push("messages")
+          return Promise.resolve({
+            data: [{ info: { role: "user", model: { providerID: "test", modelID: "second-model" } } }],
+          })
+        },
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(result.sessionId).toBe("test-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/test-model")
+    expect(historyCalls).toEqual([])
+  })
+
   it("switches model and returns updated model and effort options", async () => {
     const { service } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
@@ -667,24 +707,35 @@ describe("ACP next service sessions", () => {
     expect(results.map((error) => error.code)).toEqual([-32602, -32602, -32602, -32602])
   })
 
-  it("does not reload providers or commands when switching effort from a warm snapshot", async () => {
-    let providersCalls = 0
-    let commandCalls = 0
+  it("does not refetch providers modes or commands when switching effort from session snapshot", async () => {
+    const calls = {
+      providers: 0,
+      agents: 0,
+      commands: 0,
+      skills: 0,
+      mcpAdds: 0,
+    }
     const sdk = {
       config: {
         providers: () => {
-          providersCalls++
+          calls.providers++
           return Promise.resolve({ data: { providers: [provider], default: { test: modelID } } })
         },
         get: () => Promise.resolve({ data: {} }),
       },
       app: {
-        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
-        skills: () => Promise.resolve({ data: [] }),
+        agents: () => {
+          calls.agents++
+          return Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] })
+        },
+        skills: () => {
+          calls.skills++
+          return Promise.resolve({ data: [] })
+        },
       },
       command: {
         list: () => {
-          commandCalls++
+          calls.commands++
           return Promise.resolve({ data: [] })
         },
       },
@@ -693,14 +744,16 @@ describe("ACP next service sessions", () => {
         list: () => Promise.resolve({ data: [] }),
       },
       mcp: {
-        add: () => Promise.resolve({ data: {} }),
+        add: () => {
+          calls.mcpAdds++
+          return Promise.resolve({ data: {} })
+        },
       },
     } as unknown as OpencodeClient
     const service = ACPNextService.make({ sdk })
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
-    expect(providersCalls).toBe(1)
-    expect(commandCalls).toBe(1)
+    expect(calls).toEqual({ providers: 1, agents: 1, commands: 1, skills: 1, mcpAdds: 0 })
 
     await Effect.runPromise(
       service.setSessionConfigOption({
@@ -710,8 +763,135 @@ describe("ACP next service sessions", () => {
       }),
     )
 
-    expect(providersCalls).toBe(1)
-    expect(commandCalls).toBe(1)
+    expect(calls).toEqual({ providers: 1, agents: 1, commands: 1, skills: 1, mcpAdds: 0 })
+  })
+
+  it("switches model against the warm provider snapshot without refetching", async () => {
+    const calls = {
+      providers: 0,
+      agents: 0,
+      commands: 0,
+      skills: 0,
+    }
+    const sdk = {
+      config: {
+        providers: () => {
+          calls.providers++
+          return Promise.resolve({ data: { providers: [provider], default: { test: modelID } } })
+        },
+        get: () => Promise.resolve({ data: {} }),
+      },
+      app: {
+        agents: () => {
+          calls.agents++
+          return Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] })
+        },
+        skills: () => {
+          calls.skills++
+          return Promise.resolve({ data: [] })
+        },
+      },
+      command: {
+        list: () => {
+          calls.commands++
+          return Promise.resolve({ data: [] })
+        },
+      },
+      session: {
+        create: () => Promise.resolve({ data: { id: "ses_model_fast" } }),
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const updated = await Effect.runPromise(
+      service.setSessionConfigOption({
+        sessionId: session.sessionId,
+        configId: "model",
+        value: "test/second-model",
+      }),
+    )
+
+    expect(select(updated, "model")?.currentValue).toBe("test/second-model")
+    expect(calls).toEqual({ providers: 1, agents: 1, commands: 1, skills: 1 })
+  })
+
+  it("reuses the warm directory snapshot for a second new session in the same cwd", async () => {
+    const calls = {
+      providers: 0,
+      config: 0,
+      agents: 0,
+      commands: 0,
+      skills: 0,
+      sessionList: 0,
+      messages: 0,
+      creates: 0,
+    }
+    const sdk = {
+      config: {
+        providers: () => {
+          calls.providers++
+          return Promise.resolve({ data: { providers: [provider], default: { test: modelID } } })
+        },
+        get: () => {
+          calls.config++
+          return Promise.resolve({ data: {} })
+        },
+      },
+      app: {
+        agents: () => {
+          calls.agents++
+          return Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] })
+        },
+        skills: () => {
+          calls.skills++
+          return Promise.resolve({ data: [] })
+        },
+      },
+      command: {
+        list: () => {
+          calls.commands++
+          return Promise.resolve({ data: [] })
+        },
+      },
+      session: {
+        create: () => {
+          calls.creates++
+          return Promise.resolve({ data: { id: `ses_warm_${calls.creates}` } })
+        },
+        list: () => {
+          calls.sessionList++
+          return Promise.resolve({ data: [] })
+        },
+        messages: () => {
+          calls.messages++
+          return Promise.resolve({ data: [] })
+        },
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPNextService.make({ sdk })
+
+    const first = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const second = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(first.sessionId).toBe("ses_warm_1")
+    expect(second.sessionId).toBe("ses_warm_2")
+    expect(calls).toEqual({
+      providers: 1,
+      config: 1,
+      agents: 1,
+      commands: 1,
+      skills: 1,
+      sessionList: 0,
+      messages: 0,
+      creates: 2,
+    })
   })
 
   it("normal text prompt sends model variant mode and converted parts", async () => {
