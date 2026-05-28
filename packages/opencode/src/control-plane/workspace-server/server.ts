@@ -1,23 +1,15 @@
 import { Hono } from "hono"
 import { Instance } from "../../project/instance"
 import { InstanceBootstrap } from "../../project/bootstrap"
-import { SessionRoutes } from "../../server/routes/session"
+import { HttpApiApp } from "../../server/routes/instance/httpapi/server"
 import { WorkspaceServerRoutes } from "./routes"
 import { WorkspaceContext } from "../workspace-context"
 import { WorkspaceID } from "../schema"
 
 export namespace WorkspaceServer {
   export function App() {
-    const session = new Hono()
-      .use(async (c, next) => {
-        // Right now, we need handle all requests because we don't
-        // have syncing. In the future all GET requests will handled
-        // by the control plane
-        //
-        // if (c.req.method === "GET") return c.notFound()
-        await next()
-      })
-      .route("/", SessionRoutes())
+    const sessionHandler = HttpApiApp.webHandler().handler
+    const session = (request: Request) => sessionHandler(request, HttpApiApp.context)
 
     return new Hono()
       .use(async (c, next) => {
@@ -51,7 +43,8 @@ export namespace WorkspaceServer {
           },
         })
       })
-      .route("/session", session)
+      .all("/session", (c) => session(c.req.raw))
+      .all("/session/*", (c) => session(c.req.raw))
       .route("/", WorkspaceServerRoutes())
   }
 

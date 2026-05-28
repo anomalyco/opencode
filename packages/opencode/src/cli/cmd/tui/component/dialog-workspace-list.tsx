@@ -10,6 +10,7 @@ import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { setTimeout as sleep } from "node:timers/promises"
+import { useProject } from "../context/project"
 
 async function openWorkspace(input: {
   dialog: ReturnType<typeof useDialog>
@@ -17,6 +18,7 @@ async function openWorkspace(input: {
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   toast: ReturnType<typeof useToast>
+  directory: string | undefined
   workspaceID: string
   forceCreate?: boolean
 }) {
@@ -32,7 +34,7 @@ async function openWorkspace(input: {
   const client = createOpencodeClient({
     baseUrl: input.sdk.url,
     fetch: input.sdk.fetch,
-    directory: input.sync.data.path.directory || input.sdk.directory,
+    directory: input.directory || input.sdk.directory,
     experimental_workspaceID: input.workspaceID,
   })
   const listed = input.forceCreate ? undefined : await client.session.list({ roots: true, limit: 1 })
@@ -79,7 +81,7 @@ async function openWorkspace(input: {
 
 function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promise<void> }) {
   const dialog = useDialog()
-  const sync = useSync()
+  const project = useProject()
   const sdk = useSDK()
   const toast = useToast()
   const [creating, setCreating] = createSignal<string>()
@@ -126,7 +128,7 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
       })
       return
     }
-    await sync.workspace.sync()
+    await project.workspace.sync()
     await props.onSelect(workspace.id)
     setCreating(undefined)
   }
@@ -151,6 +153,7 @@ export function DialogWorkspaceList() {
   const sdk = useSDK()
   const toast = useToast()
   const keybind = useKeybind()
+  const project = useProject()
   const [toDelete, setToDelete] = createSignal<string>()
   const [counts, setCounts] = createSignal<Record<string, number | null | undefined>>({})
 
@@ -161,6 +164,7 @@ export function DialogWorkspaceList() {
       sdk,
       sync,
       toast,
+      directory: project.instance.directory(),
       workspaceID,
       forceCreate,
     })
@@ -190,7 +194,7 @@ export function DialogWorkspaceList() {
     const client = createOpencodeClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
-      directory: sync.data.path.directory || sdk.directory,
+      directory: project.instance.directory() || sdk.directory,
       experimental_workspaceID: workspaceID,
     })
     const listed = await client.session.list({ roots: true, limit: 1 }).catch(() => undefined)
@@ -214,7 +218,7 @@ export function DialogWorkspaceList() {
 
   let run = 0
   createEffect(() => {
-    const workspaces = sync.data.workspaceList
+    const workspaces = project.workspace.list()
     const next = ++run
     if (!workspaces.length) {
       setCounts({})
@@ -226,7 +230,7 @@ export function DialogWorkspaceList() {
         const client = createOpencodeClient({
           baseUrl: sdk.url,
           fetch: sdk.fetch,
-          directory: sync.data.path.directory || sdk.directory,
+          directory: project.instance.directory() || sdk.directory,
           experimental_workspaceID: workspace.id,
         })
         const result = await client.session.list({ roots: true }).catch(() => undefined)
@@ -246,7 +250,7 @@ export function DialogWorkspaceList() {
       description: "Use the local machine",
       footer: `${localCount()} session${localCount() === 1 ? "" : "s"}`,
     },
-    ...sync.data.workspaceList.map((workspace) => {
+    ...project.workspace.list().map((workspace) => {
       const count = counts()[workspace.id]
       return {
         title:
@@ -274,7 +278,7 @@ export function DialogWorkspaceList() {
 
   onMount(() => {
     dialog.setSize("large")
-    void sync.workspace.sync()
+    void project.workspace.sync()
   })
 
   return (
@@ -294,9 +298,9 @@ export function DialogWorkspaceList() {
         }
         void selectWorkspace(option.value)
       }}
-      keybind={[
+      actions={[
         {
-          keybind: keybind.all.session_delete?.[0],
+          command: "session_delete",
           title: "delete",
           onTrigger: async (option) => {
             if (option.value === "__create__" || option.value === "__local__") return
@@ -318,7 +322,7 @@ export function DialogWorkspaceList() {
                 type: "home",
               })
             }
-            await sync.workspace.sync()
+            await project.workspace.sync()
           },
         },
       ]}

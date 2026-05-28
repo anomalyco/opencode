@@ -105,9 +105,9 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
         })
         dialog.clear()
       }}
-      keybind={[
+      actions={[
         {
-          keybind: keybind.all.session_delete?.[0],
+          command: "session_delete",
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
@@ -139,7 +139,7 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
           },
         },
         {
-          keybind: keybind.all.session_rename?.[0],
+          command: "session_rename",
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
