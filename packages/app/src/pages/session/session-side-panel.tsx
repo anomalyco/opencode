@@ -56,6 +56,11 @@ export function SessionSidePanel(props: {
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const offset = createMemo(() => {
+    if (!fileOpen()) return "-4px"
+    if (reviewOpen()) return `calc(${treeWidth()} - 10px)`
+    return `calc(${treeWidth()} - 24px)`
+  })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -472,7 +477,11 @@ export function SessionSidePanel(props: {
                 icon={fileOpen() ? "chevron-right" : "chevron-left"}
                 variant="secondary"
                 size="small"
-                class="absolute right-1 top-1/2 z-20 !h-8 !w-5 -translate-y-1/2 -mr-1 rounded-r-none border-r-0 bg-background-stronger"
+                class="absolute top-1/2 z-20 !h-8 !w-5 -translate-y-1/2 cursor-pointer bg-background-stronger"
+                classList={{
+                  "rounded-r-none border-r-0": !fileOpen(),
+                }}
+                style={{ right: offset() }}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
