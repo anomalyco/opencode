@@ -36,6 +36,7 @@ import {
   type ModelRow,
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
+import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import {
@@ -51,7 +52,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { normalizeProviderList } from "@/context/global-sync/utils"
 import { ServerConnection, useServer } from "@/context/server"
-import { extraAgents, mainDomain } from "@/pages/layout/extra-agents"
+import { extraAgentById, extraAgents, isExtraAgentDirectory, mainDomain } from "@/pages/layout/extra-agents"
 import {
   basename,
   classifyPluginSource,
@@ -148,6 +149,7 @@ type ClawItem = {
   label: string
   note: string
   meta?: string
+  sourceUrl: string
   enabled: boolean
 }
 
@@ -864,6 +866,7 @@ function Editor(props: {
   text: string
   dirty: boolean
   busy: boolean
+  reloading?: boolean
   tree?: TreeNode[]
   treeRoot?: string
   treeBusy?: boolean
@@ -936,8 +939,17 @@ function Editor(props: {
                 {language.t("config.action.openFolder")}
               </Button>
             </Show>
-            <Button size="small" variant="ghost" icon="reset" onClick={props.onReload}>
-              {language.t("command.server.reloadBackend")}
+            <Button
+              size="small"
+              variant="ghost"
+              icon={props.reloading ? undefined : "reset"}
+              onClick={props.onReload}
+              disabled={props.reloading}
+            >
+              <Show when={props.reloading}>
+                <Spinner class="size-3" />
+              </Show>
+              {props.reloading ? language.t("config.reloadBackend.loading") : language.t("command.server.reloadBackend")}
             </Button>
             <Button
               size="small"
@@ -949,6 +961,11 @@ function Editor(props: {
               {language.t("common.save")}
             </Button>
           </div>
+          <Show when={props.reloading}>
+            <div class="mt-3 rounded-xl border border-border-weak-base bg-surface-secondary px-3 py-2 text-12-regular text-text-weak">
+              {language.t("config.reloadBackend.loading")}
+            </div>
+          </Show>
         </div>
       </div>
       <Show when={props.item} fallback={<div class="px-5 py-10 text-13-regular text-text-weak">{props.empty}</div>}>
@@ -1176,6 +1193,49 @@ function ClawFormActions(props: {
   )
 }
 
+function ClawHeader(props: {
+  item?: ClawItem
+  enabled: boolean
+  busy: boolean
+  saving: boolean
+  testing: boolean
+  onEnabled: (value: boolean) => void
+}) {
+  const language = useLanguage()
+
+  return (
+    <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <div class="text-15-medium text-text-strong">{props.item?.label}</div>
+          <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+            {props.enabled ? language.t("config.claws.badge.enabled") : language.t("config.claws.badge.disabled")}
+          </span>
+        </div>
+        <Show when={props.item?.sourceUrl}>
+          {(sourceUrl) => (
+            <div class="mt-2 break-all font-mono text-[12px] leading-5 text-text-weak">
+              <span>{language.t("config.claws.source.github")}: </span>
+              <Link href={sourceUrl()} class="text-text-base">
+                {sourceUrl()}
+              </Link>
+            </div>
+          )}
+        </Show>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <Toggle
+          checked={props.enabled}
+          disabled={props.busy || props.saving || props.testing}
+          onChange={props.onEnabled}
+        >
+          {language.t("config.claws.field.enabled")}
+        </Toggle>
+      </div>
+    </div>
+  )
+}
+
 function ClawEditor(props: {
   item?: ClawItem
   form: ReturnType<typeof clawCfg>
@@ -1198,28 +1258,14 @@ function ClawEditor(props: {
         when={props.item}
         fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.claws.empty")}</div>}
       >
-        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
-          <div>
-            <div class="flex items-center gap-2">
-              <div class="text-15-medium text-text-strong">{props.item?.label}</div>
-              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                {props.form.enabled
-                  ? language.t("config.claws.badge.enabled")
-                  : language.t("config.claws.badge.disabled")}
-              </span>
-            </div>
-            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Toggle
-              checked={props.form.enabled}
-              disabled={props.busy || props.form.saving || props.form.testing}
-              onChange={(value) => props.onChange("enabled", value)}
-            >
-              {language.t("config.claws.field.enabled")}
-            </Toggle>
-          </div>
-        </div>
+        <ClawHeader
+          item={props.item}
+          enabled={props.form.enabled}
+          busy={props.busy}
+          saving={props.form.saving}
+          testing={props.form.testing}
+          onEnabled={(value) => props.onChange("enabled", value)}
+        />
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
@@ -1333,28 +1379,14 @@ function GenericAgentEditor(props: {
         when={props.item}
         fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.claws.empty")}</div>}
       >
-        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
-          <div>
-            <div class="flex items-center gap-2">
-              <div class="text-15-medium text-text-strong">{props.item?.label}</div>
-              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                {props.form.enabled
-                  ? language.t("config.claws.badge.enabled")
-                  : language.t("config.claws.badge.disabled")}
-              </span>
-            </div>
-            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Toggle
-              checked={props.form.enabled}
-              disabled={props.busy || props.form.saving || props.form.testing}
-              onChange={(value) => props.onChange("enabled", value)}
-            >
-              {language.t("config.claws.field.enabled")}
-            </Toggle>
-          </div>
-        </div>
+        <ClawHeader
+          item={props.item}
+          enabled={props.form.enabled}
+          busy={props.busy}
+          saving={props.form.saving}
+          testing={props.form.testing}
+          onEnabled={(value) => props.onChange("enabled", value)}
+        />
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
@@ -1492,28 +1524,14 @@ function HermesEditor(props: {
         when={props.item}
         fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.claws.empty")}</div>}
       >
-        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
-          <div>
-            <div class="flex items-center gap-2">
-              <div class="text-15-medium text-text-strong">{props.item?.label}</div>
-              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                {props.form.enabled
-                  ? language.t("config.claws.badge.enabled")
-                  : language.t("config.claws.badge.disabled")}
-              </span>
-            </div>
-            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Toggle
-              checked={props.form.enabled}
-              disabled={props.busy || props.form.saving || props.form.testing}
-              onChange={(value) => props.onChange("enabled", value)}
-            >
-              {language.t("config.claws.field.enabled")}
-            </Toggle>
-          </div>
-        </div>
+        <ClawHeader
+          item={props.item}
+          enabled={props.form.enabled}
+          busy={props.busy}
+          saving={props.form.saving}
+          testing={props.form.testing}
+          onEnabled={(value) => props.onChange("enabled", value)}
+        />
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="flex w-full flex-col gap-6">
@@ -1645,6 +1663,7 @@ function CustomEditor(props: {
   item?: ProviderItem
   form: CustomState
   busy: boolean
+  reloading?: boolean
   onToggle: (item: ProviderItem, enabled: boolean) => void
   onField: (key: "providerID" | "npm" | "name" | "baseURL" | "apiKey", value: string) => void
   onModel: (index: number, key: "id" | "name", value: string) => void
@@ -1710,11 +1729,16 @@ function CustomEditor(props: {
               <Button
                 size="small"
                 variant="ghost"
-                icon="reset"
+                icon={props.reloading ? undefined : "reset"}
                 onClick={() => props.onReload?.()}
-                disabled={props.busy || props.form.saving || props.form.deleting}
+                disabled={props.busy || props.form.saving || props.form.deleting || props.reloading}
               >
-                {language.t("command.server.reloadBackend")}
+                <Show when={props.reloading}>
+                  <Spinner class="size-3" />
+                </Show>
+                {props.reloading
+                  ? language.t("config.reloadBackend.loading")
+                  : language.t("command.server.reloadBackend")}
               </Button>
             </Show>
             <SaveButton
@@ -1723,6 +1747,11 @@ function CustomEditor(props: {
               disabled={props.busy || props.form.saving || props.form.deleting}
             />
           </div>
+          <Show when={props.reloading}>
+            <div class="mt-3 w-full rounded-xl border border-border-weak-base bg-surface-secondary px-3 py-2 text-12-regular text-text-weak">
+              {language.t("config.reloadBackend.loading")}
+            </div>
+          </Show>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1931,6 +1960,7 @@ export default function ConfigPage() {
     skillSaving: false,
     treeClosed: {} as Record<string, boolean>,
     busy: false,
+    reloadingBackend: false,
     workspaceRev: 0,
     skillRev: 0,
     agentRev: 0,
@@ -2067,6 +2097,7 @@ export default function ConfigPage() {
     Object.values(globalSync.data.projectByDomain)
       .flat()
       .filter((item): item is Project => !!item)
+      .filter((item) => !isExtraAgentDirectory(item.worktree))
       .sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
 
@@ -2641,31 +2672,37 @@ export default function ConfigPage() {
     const list: ClawItem[] = []
     if (clawsEnabled()) {
       const cfg = openclaw.latest
+      const agent = extraAgentById("openclaw")
       list.push({
         id: "claw:openclaw",
-        label: "OpenClaw",
+        label: agent?.label ?? "OpenClaw",
         note: t("config.claws.note.openclaw"),
         meta: cfg?.url?.trim() || "ws://127.0.0.1:18789",
+        sourceUrl: agent?.sourceUrl ?? "",
         enabled: cfg?.enabled ?? false,
       })
     }
     if (hmPlatformEnabled()) {
       const cfg = hermes.latest
+      const agent = extraAgentById("hermes")
       list.push({
         id: "claw:hermes",
-        label: "Hermes",
+        label: agent?.label ?? "Hermes",
         note: t("config.claws.note.hermes"),
         meta: cfg?.hermesDir?.trim() || "/path/to/hermes-agent",
+        sourceUrl: agent?.sourceUrl ?? "",
         enabled: cfg?.enabled ?? false,
       })
     }
     if (gaPlatformEnabled()) {
       const cfg = genericagent.latest
+      const agent = extraAgentById("genericagent")
       list.push({
         id: "claw:genericagent",
-        label: "GenericAgent",
+        label: agent?.label ?? "GenericAgent",
         note: t("config.claws.note.genericagent"),
         meta: cfg?.genericAgentDir?.trim() || "/path/to/GenericAgent",
+        sourceUrl: agent?.sourceUrl ?? "",
         enabled: cfg?.enabled ?? false,
       })
     }
@@ -3109,6 +3146,8 @@ export default function ConfigPage() {
 
   async function reload() {
     if (!platform.reloadBackend) return
+    if (state.reloadingBackend) return
+    setState("reloadingBackend", true)
     await platform
       .reloadBackend()
       .then(async () => {
@@ -3126,6 +3165,7 @@ export default function ConfigPage() {
           description: err instanceof Error ? err.message : String(err),
         })
       })
+      .finally(() => setState("reloadingBackend", false))
   }
 
   function validateClaw(required = state.claw.enabled) {
@@ -4593,6 +4633,7 @@ export default function ConfigPage() {
                     item={selectedCustom()}
                     form={state.custom}
                     busy={state.providerBusy === selectedCustom()?.id}
+                    reloading={state.reloadingBackend}
                     onToggle={toggleProvider}
                     onField={setCustomField}
                     onModel={setCustomModel}
@@ -4690,6 +4731,7 @@ export default function ConfigPage() {
                     text={state.text}
                     dirty={dirty()}
                     busy={state.busy}
+                    reloading={state.reloadingBackend}
                     onInput={(value) => setState("text", value)}
                     onSave={() => void save()}
                     onReload={() => void reload()}
@@ -4719,6 +4761,7 @@ export default function ConfigPage() {
                           text={state.text}
                           dirty={dirty()}
                           busy={state.busy}
+                          reloading={state.reloadingBackend}
                           tree={currentTree()}
                           treeRoot={currentSkillRoot()}
                           treeBusy={tree.loading}
@@ -4762,6 +4805,7 @@ export default function ConfigPage() {
                     text={state.text}
                     dirty={dirty()}
                     busy={state.busy}
+                    reloading={state.reloadingBackend}
                     onInput={(value) => setState("text", value)}
                     onSave={() => void save()}
                     onReload={() => void reload()}
@@ -4786,6 +4830,7 @@ export default function ConfigPage() {
                   text={state.text}
                   dirty={dirty()}
                   busy={state.busy}
+                  reloading={state.reloadingBackend}
                   onInput={(value) => setState("text", value)}
                   onSave={() => void save()}
                   onReload={() => void reload()}

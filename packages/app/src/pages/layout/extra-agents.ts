@@ -34,6 +34,7 @@ export type ExtraAgentDescriptor = {
   directory: string
   configSection: string
   configPick: string
+  sourceUrl: string
   capabilities?: ExtraAgentCapabilities
 }
 
@@ -157,6 +158,7 @@ export const extraAgents: readonly ExtraAgentDescriptor[] = [
     directory: "/openclaw",
     configSection: "claws",
     configPick: "claw:openclaw",
+    sourceUrl: "https://github.com/openclaw/openclaw",
     capabilities: {
       slashCommands: OPENCLAW_SLASH,
       agentChoose: {
@@ -178,6 +180,7 @@ export const extraAgents: readonly ExtraAgentDescriptor[] = [
     directory: "/hermes",
     configSection: "claws",
     configPick: "claw:hermes",
+    sourceUrl: "https://github.com/NousResearch/hermes-agent",
     capabilities: {
       hideAgent: true,
       hideVariant: true,
@@ -195,6 +198,7 @@ export const extraAgents: readonly ExtraAgentDescriptor[] = [
     directory: "/genericagent",
     configSection: "claws",
     configPick: "claw:genericagent",
+    sourceUrl: "https://github.com/lsdefine/GenericAgent",
     capabilities: {
       hideAgent: true,
       hideVariant: true,
@@ -233,6 +237,8 @@ export const extraAgentSlug = (id: ExtraAgentId) => base64Encode(extraAgentDir(i
 export const extraAgentLabelKey = (id: ExtraAgentId) => extraAgents.find((agent) => agent.id === id)?.labelKey ?? ""
 
 export const extraAgentIcon = (id: ExtraAgentId) => extraAgents.find((agent) => agent.id === id)?.icon ?? ""
+
+export const extraAgentSourceUrl = (id: ExtraAgentId) => extraAgents.find((agent) => agent.id === id)?.sourceUrl ?? ""
 
 export const extraAgentConfig = (id: ExtraAgentId) => {
   const agent = extraAgents.find((item) => item.id === id)

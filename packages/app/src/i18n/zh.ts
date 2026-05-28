@@ -48,6 +48,7 @@ export const dict = {
   "command.server.switch": "切换服务器",
   "command.server.reloadBackend": "重载后端",
   "command.server.reloadBackend.description": "重启本地后端，并重新加载配置、技能和 hooks",
+  "config.reloadBackend.loading": "正在重载后端...",
 
   "command.settings.open": "打开设置",
 
@@ -1125,7 +1126,6 @@ export const dict = {
   "config.claws.header": "配置通过 gateway 适配器代理的 claw 服务。",
   "config.claws.empty": "从列表中选择一个 claw 服务来编辑它的设置。",
   "config.claws.note.openclaw": "桌面端 OpenClaw bridge 与 gateway 设置。",
-  "config.claws.detail": "显式保存更新，然后在使用适配器前测试一次 gateway 连接。",
   "config.claws.badge.enabled": "已启用",
   "config.claws.badge.disabled": "已禁用",
   "config.claws.field.enabled": "启用",
@@ -1155,6 +1155,7 @@ export const dict = {
   "config.claws.debug.logs": "相关调试信息 / 日志",
   "config.claws.logs.testing":
     "开始测试 OpenClaw 连接\n检测到 Gateway URL: {url}\n正在准备临时 adapter...\n正在执行健康检查...",
+  "config.claws.source.github": "GitHub",
   "config.claws.note.hermes": "Hermes Agent API bridge。",
   "config.claws.note.genericagent": "Python GenericAgent 运行时。",
   "config.claws.field.pythonExecutable": "Python 可执行文件",

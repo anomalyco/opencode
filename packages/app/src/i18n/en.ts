@@ -42,6 +42,7 @@ export const dict = {
   "command.server.switch": "Switch server",
   "command.server.reloadBackend": "Reload backend",
   "command.server.reloadBackend.description": "Restart the local backend and reload config, skills, and hooks",
+  "config.reloadBackend.loading": "Reloading backend...",
   "command.settings.open": "Open settings",
   "command.session.previous": "Previous session",
   "command.session.next": "Next session",
@@ -1165,7 +1166,6 @@ export const dict = {
   "config.claws.header": "Configure claw services that proxy through gateway adapters.",
   "config.claws.empty": "Choose a claw service from the list to edit its settings.",
   "config.claws.note.openclaw": "Desktop OpenClaw bridge and gateway settings.",
-  "config.claws.detail": "Save updates explicitly, then test the gateway connection before using the adapter.",
   "config.claws.badge.enabled": "enabled",
   "config.claws.badge.disabled": "disabled",
   "config.claws.field.enabled": "Enabled",
@@ -1195,6 +1195,7 @@ export const dict = {
   "config.claws.debug.logs": "Related logs",
   "config.claws.logs.testing":
     "Starting OpenClaw connection test\nGateway URL detected: {url}\nPreparing temporary adapter...\nHealth check in progress...",
+  "config.claws.source.github": "GitHub",
   "config.claws.note.hermes": "Hermes Agent API bridge.",
   "config.claws.note.genericagent": "Python GenericAgent runtime.",
   "config.claws.field.pythonExecutable": "Python executable",
