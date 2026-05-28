@@ -11,8 +11,8 @@ Sub-commands (parse from `$ARGUMENTS`):
   - Jira: `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`
   - Azure DevOps: `AZDO_ORG`, `AZDO_PROJECT`, `AZDO_PAT`
   - GitHub: the existing `mcp__github__list_issues` tool
-- `run <ISSUE-ID>` — delegate to `script/simplicio/flow.sh --sprint <ISSUE-ID> "<derived task>"`. The flow script calls `sendsprint run --issue <ID>` which: pulls the card, derives a task spec, runs `simplicio task` (Simplicio1 by default), commits to a branch, and opens a draft PR.
-- `watch` — start `sendsprint watch` in the background so new sprint cards get processed automatically.
+- `run <source> <sprint>` — delegate to `script/simplicio/flow.sh --sprint <source> <sprint>` which calls `sendsprint run <source> <sprint>`. `source` is `jira`, `azuredevops` or `github`; `sprint` is the Jira sprint id, ADO iteration path or GitHub milestone. The command: pulls the cards, derives a task spec per card, runs `simplicio task` (Simplicio1 by default), commits to a branch, and opens a draft PR.
+- `watch` — start `sendsprint watch` so new cards assigned to me get processed automatically.
 
 Always show the board first when args are empty; never run a card without explicit `run <ID>`.
 

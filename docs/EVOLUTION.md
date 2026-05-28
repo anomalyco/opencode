@@ -88,6 +88,44 @@ Branch: `claude/simplicio-setup-config-9PXIm`
 
 Resultado: PARCIAL — issues abertas e rastreáveis; trabalho a partir daqui sempre referencia a sub-issue correspondente via `Refs #N` ou `Closes #N`.
 
+### 2026-05-28 — Smoke real da toolchain + correções de CLI
+
+Branch: `claude/simplicio-setup-config-9PXIm`
+
+**Toolchain instalada e testada neste container:**
+- `npx -y @wesleysimplicio/llm-project-mapper@latest` → **v0.3.2** ✅
+- `pip install --user simplicio-cli simplicio-sprint simplicio-prompt` → instalado em `~/.local/bin/` ✅
+- `simplicio --help` → comandos disponíveis: `index | task | bench | smoke | init | detect` ✅
+- `sendsprint version` → **3.0.0** ✅
+
+**Bugs descobertos no PR original (corrigidos neste commit):**
+
+1. **Mapper não tem subcomando `map`** — o README upstream estava desatualizado. CLI real: `npx @wesleysimplicio/llm-project-mapper --yes` (binário invocado sem subcomando = o map em si).
+   - `script/simplicio/flow.sh` corrigido (chamada direta + `--no-update-check --cli skip --append-gitignore no --skip-meta`).
+   - `.opencode/command/map.md` atualizado.
+
+2. **`sendsprint run` recebe `<source> <sprint>` posicionais** — não `--issue <ID>` como eu havia documentado. Assinatura real: `sendsprint run jira|azuredevops|github <sprint-id> --repo <path>`.
+   - `script/simplicio/flow.sh --sprint` corrigido.
+   - `.opencode/command/sprint.md` atualizado.
+
+3. `flow.sh` agora exporta `PATH="$HOME/.local/bin:$PATH"` para encontrar `simplicio`/`sendsprint` instalados via pip user.
+
+**Mapper executado pela primeira vez no repo (artefatos commitados):**
+- `.specs/` — backlog, sprint board, product/architecture/workflow docs (também serve a R3).
+- `.agents/`, `.codex/`, `.skills/`, `.claude/` — dirs de instruções para múltiplos agents.
+- `CLAUDE.md`, `INIT.md` — arquivos de bootstrap para agents.
+- `docs/architecture-map.md`, `docs/domain-map.md`, `docs/local-setup.md`, `docs/troubleshooting.md`, `docs/evidence/`, `docs/features/`.
+
+**Removidos por conflito com a infra existente:**
+- `tests/` (raiz) — havia colisão com testes per-package.
+- `scripts/` (raiz) — duplicava o `script/` já existente (singular).
+- `playwright.config.ts` (raiz) — já existe `packages/app/playwright.config.ts`.
+- `bootstrap.sh`, `bootstrap.ps1`, `_BOOTSTRAP.md`, `INSTALL.md`, `README.pt-BR.md` — material de bootstrap para repos greenfield.
+
+**Validação:** `bash script/simplicio/flow.sh --map-only` rodou com `exit=0`.
+
+Resultado: PARCIAL — toolchain real validada, flow corrigido. Ainda pendente: smoke do `simplicio task` (precisa de Ollama rodando) e `sendsprint run` (precisa credenciais Jira/ADO ou milestone GH real).
+
 ### Pendências para próximos commits
 
 - [ ] R5 — rename OpenCode→SimplicioCode (em fases, ver `docs/RENAME_PLAN.md`):
