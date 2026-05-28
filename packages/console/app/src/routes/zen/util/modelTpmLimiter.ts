@@ -1,5 +1,5 @@
-import { and, Database, eq, inArray, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { ModelTpmRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
+import { and, Database, eq, inArray, sql } from "@simpliciocode/console-core/drizzle/index.js"
+import { ModelTpmRateLimitTable } from "@simpliciocode/console-core/schema/ip.sql.js"
 import { UsageInfo } from "./provider/provider"
 
 export function createModelTpmLimiter(providers: { id: string; model: string; tpmLimit?: number }[]) {

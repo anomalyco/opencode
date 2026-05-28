@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@simpliciocode/sdk/v2"
 import {
   createPermissionBodyState,
   permissionAlwaysLines,

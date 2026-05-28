@@ -1,4 +1,4 @@
-import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@simpliciocode/sdk/v2"
 import type { EventSource } from "../../src/cli/cmd/tui/context/sdk"
 
 export const worktree = "/tmp/opencode"

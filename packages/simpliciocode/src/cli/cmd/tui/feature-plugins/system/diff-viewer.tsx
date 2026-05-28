@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@simpliciocode/plugin/tui"
+import type { SnapshotFileDiff, VcsFileDiff } from "@simpliciocode/sdk/v2"
 import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { useBindings, useCommandShortcut } from "@tui/keymap"

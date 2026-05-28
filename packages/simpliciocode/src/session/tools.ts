@@ -16,7 +16,7 @@ import { MessageV2 } from "./message-v2"
 import * as Session from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 
 const log = Log.create({ service: "session.tools" })

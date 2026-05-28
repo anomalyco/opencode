@@ -3,7 +3,7 @@ import { logger } from "./logger"
 import { buildRateLimitKey, getRedis } from "./redis"
 import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
+import { Subscription } from "@simpliciocode/console-core/subscription.js"
 
 export function createRateLimiter(modelId: string, rateLimit: number | undefined, rawIp: string, request: Request) {
   const dict = i18n(localeFromRequest(request))

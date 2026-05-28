@@ -8,13 +8,13 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import { Git } from "@/git"
 import { lazy } from "@/util/lazy"
 import { Config } from "@/config/config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 
 declare const OPENCODE_LIBC: string | undefined
 

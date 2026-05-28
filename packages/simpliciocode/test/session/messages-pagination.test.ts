@@ -5,7 +5,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { NotFoundError } from "@/storage/storage"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })

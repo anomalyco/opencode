@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@simpliciocode/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import { ACPNextEvent } from "@/acp-next/event"
 import * as ACPNextService from "@/acp-next/service"

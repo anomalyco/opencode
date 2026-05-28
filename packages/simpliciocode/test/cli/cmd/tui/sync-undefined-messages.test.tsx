@@ -7,7 +7,7 @@
  * `messages.data!` while the SDK leaves `data` undefined on error.
  */
 import { describe, expect, test } from "bun:test"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@simpliciocode/core/global"
 import { tmpdir } from "../../../fixture/fixture"
 import { directory, json, mount } from "./sync-fixture"
 

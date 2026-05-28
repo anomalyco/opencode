@@ -1,14 +1,14 @@
 import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
-import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
+import { Global } from "@simpliciocode/core/global"
+import * as Log from "@simpliciocode/core/util/log"
 import { ProjectTable } from "../project/project.sql"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../session/session.sql"
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
 import { Filesystem } from "@/util/filesystem"
-import { Glob } from "@opencode-ai/core/util/glob"
+import { Glob } from "@simpliciocode/core/util/glob"
 
 const log = Log.create({ service: "json-migration" })
 

@@ -23,7 +23,7 @@ async function mountPrompt(input: {
   keybinds: Partial<TuiKeybind.Keybinds>
   onConfirm: (value: string) => void
 }) {
-  const { Global } = await import("@opencode-ai/core/global")
+  const { Global } = await import("@simpliciocode/core/global")
   const previous = {
     config: Global.Path.config,
     state: Global.Path.state,

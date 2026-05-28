@@ -3,14 +3,14 @@ import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
-import { lazy } from "@opencode-ai/core/util/lazy"
+import { lazy } from "@simpliciocode/core/util/lazy"
 import { Plugin } from "@/plugin"
 import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
-import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
+import { NonNegativeInt, PositiveInt } from "@simpliciocode/core/schema"
 
 const log = Log.create({ service: "pty" })
 

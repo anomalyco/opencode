@@ -6,7 +6,7 @@ import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 

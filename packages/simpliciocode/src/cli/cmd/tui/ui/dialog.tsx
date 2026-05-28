@@ -4,7 +4,7 @@ import { useTheme } from "@tui/context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import * as Selection from "@tui/util/selection"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 

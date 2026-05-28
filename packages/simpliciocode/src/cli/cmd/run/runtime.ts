@@ -12,8 +12,8 @@
 //   3. starts the stream transport (SDK event subscription), lazily for fresh
 //      local sessions,
 //   4. runs the prompt queue until the footer closes.
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { createOpencodeClient } from "@simpliciocode/sdk/v2"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import { createRunDemo } from "./demo"
 import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@simpliciocode/sdk",
   "version": "1.15.11",
   "type": "module",
   "license": "MIT",

@@ -1,11 +1,11 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@simpliciocode/core/flag/flag"
+import { Global } from "@simpliciocode/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,

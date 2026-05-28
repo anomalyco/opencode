@@ -14,7 +14,7 @@ $ grep -ril "opencode" --include="*.{ts,tsx,js,json,md,toml,yml,yaml,sh,nix}" | 
 URLs públicas conhecidas (não renomear sem decisão de domínio):
 
 - `opencode.ai` (config schema, docs, instalador)
-- `@opencode-ai/*` (pacotes npm publicados)
+- `@simpliciocode/*` (pacotes npm publicados)
 - `anomalyco/opencode` (URL no `package.json#repository`)
 
 ## Fases
@@ -50,7 +50,7 @@ Testes: build completo + `dev:desktop`, `dev:web`.
 
 ### Fase 4 — Imports e referências internas
 
-- `@opencode-ai/plugin`, `@opencode-ai/sdk`, `@opencode-ai/script` → `@simpliciocode/*`.
+- `@simpliciocode/plugin`, `@simpliciocode/sdk`, `@simpliciocode/script` → `@simpliciocode/*`.
 - Atualizar `patchedDependencies`, `overrides`, `catalog`.
 - Atualizar `sst.config.ts`, `flake.nix`, `infra/`, `nix/`, `script/`.
 

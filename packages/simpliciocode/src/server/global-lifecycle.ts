@@ -1,6 +1,6 @@
 import { GlobalBus } from "@/bus/global"
 import { InstanceStore } from "@/project/instance-store"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { Effect } from "effect"
 import { Event } from "./event"
 

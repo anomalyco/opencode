@@ -1,7 +1,7 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { GatewayPlugin } from "@opencode-ai/core/plugin/provider/gateway"
+import { PluginV2 } from "@simpliciocode/core/plugin"
+import { GatewayPlugin } from "@simpliciocode/core/plugin/provider/gateway"
 import { it, model } from "./provider-helper"
 
 const gatewayCalls: Record<string, unknown>[] = []

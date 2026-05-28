@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/stats-server",
+  "name": "@simpliciocode/stats-server",
   "version": "1.15.11",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-firehose": "3.933.0",
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/stats-core": "workspace:*",
+    "@simpliciocode/stats-core": "workspace:*",
     "effect": "catalog:",
     "sst": "catalog:"
   },

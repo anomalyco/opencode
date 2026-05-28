@@ -7,7 +7,7 @@ import type {
   ToolStateCompleted,
   ToolStatePending,
   ToolStateRunning,
-} from "@opencode-ai/sdk/v2"
+} from "@simpliciocode/sdk/v2"
 import { provideTestInstance, tmpdir } from "../fixture/fixture"
 
 const pollUntil = async <T>(

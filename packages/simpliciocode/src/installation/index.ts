@@ -1,17 +1,17 @@
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { serviceUse } from "@simpliciocode/core/effect/service-use"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@simpliciocode/core/process"
 import path from "path"
 import { BusEvent } from "@/bus/bus-event"
-import * as Log from "@opencode-ai/core/util/log"
-import { makeRuntime } from "@opencode-ai/core/effect/runtime"
+import * as Log from "@simpliciocode/core/util/log"
+import { makeRuntime } from "@simpliciocode/core/effect/runtime"
 import semver from "semver"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { NpmConfig } from "@opencode-ai/core/npm-config"
+import { InstallationChannel, InstallationVersion } from "@simpliciocode/core/installation/version"
+import { NpmConfig } from "@simpliciocode/core/npm-config"
 
 const log = Log.create({ service: "installation" })
 

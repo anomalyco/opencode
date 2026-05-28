@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID } from "@/session/schema"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { QuestionID } from "./schema"
 
 const log = Log.create({ service: "question" })

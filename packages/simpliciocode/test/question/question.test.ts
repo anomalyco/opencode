@@ -7,7 +7,7 @@ import { QuestionID } from "../../src/question/schema"
 import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
 
 const it = testEffect(

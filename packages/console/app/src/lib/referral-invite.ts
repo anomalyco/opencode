@@ -1,4 +1,4 @@
-import { Referral } from "@opencode-ai/console-core/referral.js"
+import { Referral } from "@simpliciocode/console-core/referral.js"
 
 const REFERRAL_COOKIE = "oc_referral"
 const REFERRAL_MAX_AGE = 60 * 60 * 24 * 30

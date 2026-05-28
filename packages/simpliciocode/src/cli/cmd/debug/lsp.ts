@@ -2,7 +2,7 @@ import { LSP } from "@/lsp/lsp"
 import { Effect } from "effect"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { EOL } from "os"
 
 export const LSPCommand = cmd({

@@ -1,7 +1,7 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Flock } from "@opencode-ai/core/util/flock"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
+import { Flock } from "@simpliciocode/core/util/flock"
 import { Git } from "@/git"
 import {
   repositoryCachePath,

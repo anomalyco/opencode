@@ -126,7 +126,7 @@ packages/llm/src/
     index.ts                barrel
   llm.ts                    request constructors and convenience helpers
   route/
-    index.ts                @opencode-ai/llm/route advanced barrel
+    index.ts                @simpliciocode/llm/route advanced barrel
     client.ts               Route.make + LLMClient.prepare/stream/generate
     executor.ts             RequestExecutor service + transport error mapping
     protocol.ts             Protocol type + Protocol.make
@@ -297,7 +297,7 @@ Pass `provider`, `protocol`, and optional `tags` to `recordedTests(...)` / `reco
 
 Filters apply in replay and record mode. Combine them with `RECORD=true` when refreshing only one provider or scenario.
 
-**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON routes omit the field and decode as text.
+**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@simpliciocode/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON routes omit the field and decode as text.
 
 **Matching strategy.** Replay walks the cassette in record order via an internal cursor: the Nth runtime request is served by the Nth recorded interaction, and each one is validated by comparing method, URL, allow-listed headers, and the canonical JSON body. This handles tool loops (each round's request differs as history grows) and retry/polling scenarios (successive byte-identical requests with different responses) uniformly. If a test reorders its requests, re-record the cassette. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 

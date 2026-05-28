@@ -1,8 +1,8 @@
 import { EOL } from "os"
 import { Effect, Option } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { Catalog } from "@simpliciocode/core/catalog"
+import { LocationServiceMap } from "@simpliciocode/core/location-layer"
+import { PluginBoot } from "@simpliciocode/core/plugin/boot"
 import { effectCmd } from "../../effect-cmd"
 
 export const V2Command = effectCmd({

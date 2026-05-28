@@ -4,7 +4,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { useTheme } from "@tui/context/theme"
-import type { ExperimentalConsoleListOrgsResponse } from "@opencode-ai/sdk/v2"
+import type { ExperimentalConsoleListOrgsResponse } from "@simpliciocode/sdk/v2"
 
 type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]
 

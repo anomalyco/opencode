@@ -1,6 +1,6 @@
 import path from "path"
 import { Effect, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { Git } from "@/git"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./repo_overview.txt"

@@ -1,4 +1,4 @@
-import { Redactor } from "@opencode-ai/http-recorder"
+import { Redactor } from "@simpliciocode/http-recorder"
 import * as Anthropic from "../../src/providers/anthropic"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import * as Google from "../../src/providers/google"

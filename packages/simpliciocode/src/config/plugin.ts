@@ -1,4 +1,4 @@
-import { Glob } from "@opencode-ai/core/util/glob"
+import { Glob } from "@simpliciocode/core/util/glob"
 import { Schema } from "effect"
 import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"

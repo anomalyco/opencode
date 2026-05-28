@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput } from "@simpliciocode/plugin"
 
 export async function AzureAuthPlugin(_input: PluginInput): Promise<Hooks> {
   const prompts = []

@@ -1,4 +1,4 @@
-import { Billing } from "@opencode-ai/console-core/billing.js"
+import { Billing } from "@simpliciocode/console-core/billing.js"
 import { query, action, useParams, createAsync, useAction } from "@solidjs/router"
 import { For, Match, Show, Switch } from "solid-js"
 import { withActor } from "~/context/auth.withActor"

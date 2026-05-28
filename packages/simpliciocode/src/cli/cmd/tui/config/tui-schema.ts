@@ -3,7 +3,7 @@ import { TuiKeybind } from "./keybind"
 import { Schema } from "effect"
 import { isRecord } from "@/util/record"
 import { Filesystem } from "@/util/filesystem"
-import { TuiAttentionSoundNames, type TuiAttentionSoundName } from "@opencode-ai/plugin/tui"
+import { TuiAttentionSoundNames, type TuiAttentionSoundName } from "@simpliciocode/plugin/tui"
 
 export type TuiAttentionSoundPaths = Partial<Record<TuiAttentionSoundName, string>>
 

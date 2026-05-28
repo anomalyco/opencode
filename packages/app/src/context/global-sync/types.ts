@@ -14,8 +14,8 @@ import type {
   SnapshotFileDiff,
   Todo,
   VcsInfo,
-} from "@opencode-ai/sdk/v2/client"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+} from "@simpliciocode/sdk/v2/client"
+import { NormalizedProviderListResponse } from "@simpliciocode/ui/context"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 

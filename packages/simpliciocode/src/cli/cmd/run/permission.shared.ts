@@ -13,7 +13,7 @@
 //
 // permissionInfo() extracts display info (icon, title, lines, diff) from
 // the request, delegating to tool.ts for tool-specific formatting.
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@simpliciocode/sdk/v2"
 import type { PermissionReply } from "./types"
 import { toolPath, toolPermissionInfo } from "./tool"
 

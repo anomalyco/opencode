@@ -8,21 +8,21 @@ import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
 import { KeymapLeaderTimeoutDefault, resolveAttentionSoundPaths, TuiInfo } from "./tui-schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import { isRecord } from "@/util/record"
-import { Global } from "@opencode-ai/core/global"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Global } from "@simpliciocode/core/global"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
 import { TuiKeybind } from "./keybind"
-import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { makeRuntime } from "@opencode-ai/core/effect/runtime"
+import { InstallationLocal, InstallationVersion } from "@simpliciocode/core/installation/version"
+import { makeRuntime } from "@simpliciocode/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { ConfigVariable } from "@/config/variable"
-import { Npm } from "@opencode-ai/core/npm"
-import type { DeepMutable } from "@opencode-ai/core/schema"
-import type { TuiAttentionSoundName } from "@opencode-ai/plugin/tui"
+import { Npm } from "@simpliciocode/core/npm"
+import type { DeepMutable } from "@simpliciocode/core/schema"
+import type { TuiAttentionSoundName } from "@simpliciocode/plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 
 const log = Log.create({ service: "tui.config" })
@@ -275,7 +275,7 @@ export const layer = Layer.effect(
           .install(dir, {
             add: [
               {
-                name: "@opencode-ai/plugin",
+                name: "@simpliciocode/plugin",
                 version: InstallationLocal ? undefined : InstallationVersion,
               },
             ],

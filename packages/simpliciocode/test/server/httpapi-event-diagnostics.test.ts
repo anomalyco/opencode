@@ -26,7 +26,7 @@
 //        subscription is established. Order-of-setup variable.
 import { afterEach, describe, expect } from "bun:test"
 import { Deferred, Effect, Layer, Schema } from "effect"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { Bus } from "../../src/bus"
 import { Event as ServerEvent } from "../../src/server/event"
 import { Server } from "../../src/server/server"

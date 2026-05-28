@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2 } from "@simpliciocode/core/event"
 
 export type Definition<Type extends string = string, Properties extends Schema.Top = Schema.Top> = {
   type: Type

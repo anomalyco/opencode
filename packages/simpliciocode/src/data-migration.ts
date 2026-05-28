@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { Database } from "./storage/db"
 import { DataMigrationTable } from "./data-migration.sql"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { MessageTable, SessionTable } from "./session/session.sql"
 import type { SessionID } from "./session/schema"

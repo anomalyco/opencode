@@ -16,7 +16,7 @@
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionRequest } from "@simpliciocode/sdk/v2"
 import {
   createQuestionBodyState,
   questionConfirm,

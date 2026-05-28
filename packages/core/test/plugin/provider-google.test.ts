@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { GooglePlugin } from "@opencode-ai/core/plugin/provider/google"
+import { AISDK } from "@simpliciocode/core/aisdk"
+import { ModelV2 } from "@simpliciocode/core/model"
+import { PluginV2 } from "@simpliciocode/core/plugin"
+import { GooglePlugin } from "@simpliciocode/core/plugin/provider/google"
 import { testEffect } from "../lib/effect"
 import { it, model } from "./provider-helper"
 

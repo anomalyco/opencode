@@ -1,5 +1,5 @@
-import { NamedError } from "@opencode-ai/core/util/error"
-import * as Log from "@opencode-ai/core/util/log"
+import { NamedError } from "@simpliciocode/core/util/error"
+import * as Log from "@simpliciocode/core/util/log"
 import { Cause, Effect } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRespondable, HttpServerResponse } from "effect/unstable/http"
 

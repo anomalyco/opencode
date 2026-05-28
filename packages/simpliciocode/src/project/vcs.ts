@@ -5,7 +5,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 
 const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647

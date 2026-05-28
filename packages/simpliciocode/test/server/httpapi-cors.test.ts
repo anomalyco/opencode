@@ -1,5 +1,5 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Config, ConfigProvider, Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"

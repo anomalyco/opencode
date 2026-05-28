@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@simpliciocode/console-resource"
 import { and, Database, eq, isNull } from "../src/drizzle/index.js"
 import { Identifier } from "../src/identifier.js"
 import { AccountTable } from "../src/schema/account.sql.js"

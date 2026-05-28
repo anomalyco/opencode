@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import { WordmarkV2 } from "@opencode-ai/ui/v2/components/wordmark-v2.jsx"
+import { WordmarkV2 } from "@simpliciocode/ui/v2/components/wordmark-v2.jsx"
 
 export function NewSessionDesignView(props: { children: JSX.Element }) {
   return (

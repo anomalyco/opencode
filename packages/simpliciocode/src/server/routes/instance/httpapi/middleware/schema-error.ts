@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { InvalidRequestError } from "../errors"
 
 const log = Log.create({ service: "server" })

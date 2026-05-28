@@ -1,9 +1,9 @@
 import path from "path"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { describe, expect, test } from "bun:test"
 import { Effect, FileSystem, Layer } from "effect"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@simpliciocode/core/global"
 import {
   createVariantRuntime,
   cycleVariant,

@@ -1,7 +1,7 @@
-import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@simpliciocode/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Show } from "solid-js"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@simpliciocode/core/global"
 
 const id = "internal:sidebar-footer"
 

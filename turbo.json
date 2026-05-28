@@ -22,20 +22,20 @@
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/app#test": {
+    "@simpliciocode/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/app#test:ci": {
+    "@simpliciocode/app#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/ui#test": {
+    "@simpliciocode/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/ui#test:ci": {
+    "@simpliciocode/ui#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
       "passThroughEnv": ["*"]

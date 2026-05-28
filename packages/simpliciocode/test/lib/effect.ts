@@ -3,7 +3,7 @@ import { Cause, Duration, Effect, Exit, Layer } from "effect"
 import * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import * as TestConsole from "effect/testing/TestConsole"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { memoMap } from "@simpliciocode/core/effect/memo-map"
 import type { Config } from "@/config/config"
 import { TestInstance, withTmpdirInstance } from "../fixture/fixture"
 

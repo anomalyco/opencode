@@ -1,5 +1,5 @@
 import { afterEach, expect } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
 import { InstanceRef } from "../../src/effect/instance-ref"

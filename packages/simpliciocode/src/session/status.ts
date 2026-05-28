@@ -2,7 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@simpliciocode/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 
 export const Info = Schema.Union([

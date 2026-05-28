@@ -2,7 +2,7 @@ export * as ConfigParse from "./parse"
 
 import { type ParseError as JsoncParseError, parse as parseJsoncImpl, printParseErrorCode } from "jsonc-parser"
 import { Cause, Exit, Schema as EffectSchema, SchemaIssue } from "effect"
-import type { DeepMutable } from "@opencode-ai/core/schema"
+import type { DeepMutable } from "@simpliciocode/core/schema"
 import { InvalidError, JsonError } from "./error"
 
 export function jsonc(text: string, filepath: string): unknown {

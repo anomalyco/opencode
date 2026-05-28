@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@simpliciocode/core/installation/version"
 import { getScrollAcceleration } from "../util/scroll"
 
 export function ErrorComponent(props: {

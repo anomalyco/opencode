@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import { Server } from "../../src/server/server"
 import { SessionID } from "../../src/session/schema"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"

@@ -17,7 +17,7 @@ import {
   type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { OpencodeClient } from "@simpliciocode/sdk/v2"
 import * as ACPNextError from "./error"
 import * as ACPNextService from "./service"
 

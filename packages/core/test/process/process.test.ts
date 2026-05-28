@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { Effect, Exit, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@simpliciocode/core/process"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(AppProcess.defaultLayer)

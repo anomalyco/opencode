@@ -18,8 +18,8 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import { test, type TestOptions } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
+import { AppProcess } from "@simpliciocode/core/process"
 import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"

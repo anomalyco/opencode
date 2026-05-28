@@ -4,7 +4,7 @@ import { realpathSync } from "fs"
 import { dirname, isAbsolute, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
-import { Glob } from "@opencode-ai/core/util/glob"
+import { Glob } from "@simpliciocode/core/util/glob"
 import { fileURLToPath } from "url"
 
 // Fast sync version for metadata checks

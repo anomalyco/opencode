@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
 import { testEffect } from "../lib/effect"
 

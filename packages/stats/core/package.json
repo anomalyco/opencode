@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/stats-core",
+  "name": "@simpliciocode/stats-core",
   "version": "1.15.11",
   "private": true,
   "type": "module",

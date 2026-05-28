@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { Script } from "@opencode-ai/script"
+import { Script } from "@simpliciocode/script"
 
 await import("./prebuild")
 

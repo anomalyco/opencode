@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionRequest } from "@simpliciocode/sdk/v2"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,

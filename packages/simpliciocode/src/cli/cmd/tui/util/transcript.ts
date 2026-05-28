@@ -1,4 +1,4 @@
-import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, Provider, UserMessage } from "@simpliciocode/sdk/v2"
 import { Locale } from "@/util/locale"
 import * as Model from "./model"
 

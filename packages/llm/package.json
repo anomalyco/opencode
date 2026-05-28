@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.15.11",
-  "name": "@opencode-ai/llm",
+  "name": "@simpliciocode/llm",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -37,7 +37,7 @@
   "devDependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/http-recorder": "workspace:*",
+    "@simpliciocode/http-recorder": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

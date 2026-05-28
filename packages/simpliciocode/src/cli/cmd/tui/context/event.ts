@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event } from "@simpliciocode/sdk/v2"
 import { useProject } from "./project"
 import { useSDK } from "./sdk"
 

@@ -1,4 +1,4 @@
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"

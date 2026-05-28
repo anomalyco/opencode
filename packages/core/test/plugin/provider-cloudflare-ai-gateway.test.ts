@@ -1,7 +1,7 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { CloudflareAIGatewayPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-ai-gateway"
+import { PluginV2 } from "@simpliciocode/core/plugin"
+import { CloudflareAIGatewayPlugin } from "@simpliciocode/core/plugin/provider/cloudflare-ai-gateway"
 import { it, model, withEnv } from "./provider-helper"
 
 const aiGatewayCalls: Record<string, unknown>[] = []

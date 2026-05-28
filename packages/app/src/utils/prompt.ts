@@ -1,4 +1,4 @@
-import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@simpliciocode/sdk/v2"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 
 type Inline =

@@ -4,15 +4,15 @@ import type {
   Plugin as PluginInstance,
   PluginModule,
   WorkspaceAdapter as PluginWorkspaceAdapter,
-} from "@opencode-ai/plugin"
+} from "@simpliciocode/plugin"
 import { Config } from "@/config/config"
 import { Bus } from "../bus"
-import * as Log from "@opencode-ai/core/util/log"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import * as Log from "@simpliciocode/core/util/log"
+import { createOpencodeClient } from "@simpliciocode/sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
 import { Session } from "@/session/session"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@simpliciocode/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
@@ -29,7 +29,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { InstallationChannel } from "@simpliciocode/core/installation/version"
 
 const log = Log.create({ service: "plugin" })
 

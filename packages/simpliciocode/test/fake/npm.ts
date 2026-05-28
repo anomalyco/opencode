@@ -1,4 +1,4 @@
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@simpliciocode/core/npm"
 import { Effect, Layer } from "effect"
 
 export const noop = Layer.mock(Npm.Service)({

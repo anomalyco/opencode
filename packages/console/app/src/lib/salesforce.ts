@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@simpliciocode/console-resource"
 
 async function login() {
   const url = Resource.SALESFORCE_INSTANCE_URL.value.replace(/\/$/, "")

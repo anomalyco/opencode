@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { $ } from "bun"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"

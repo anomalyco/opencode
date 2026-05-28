@@ -1,4 +1,4 @@
-import { Cassette, makeWebSocketExecutor, type RecordReplayMode } from "@opencode-ai/http-recorder"
+import { Cassette, makeWebSocketExecutor, type RecordReplayMode } from "@simpliciocode/http-recorder"
 import { Effect, Layer } from "effect"
 import { WebSocketExecutor } from "../src/route"
 import type { Service as WebSocketExecutorService } from "../src/route/transport/websocket"

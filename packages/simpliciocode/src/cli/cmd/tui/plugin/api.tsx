@@ -1,4 +1,4 @@
-import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@opencode-ai/plugin/tui"
+import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@simpliciocode/plugin/tui"
 import type { useEvent } from "@tui/context/event"
 import type { useRoute } from "@tui/context/route"
 import type { useSDK } from "@tui/context/sdk"
@@ -15,7 +15,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@simpliciocode/core/installation/version"
 import * as Keymap from "../keymap"
 import { createCommandShim } from "./command-shim"
 

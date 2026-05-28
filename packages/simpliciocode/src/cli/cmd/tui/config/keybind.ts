@@ -3,7 +3,7 @@ export * as TuiKeybind from "./keybind"
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
 import type { BindingCommandMap, BindingConfig, BindingDefaults } from "@opentui/keymap/extras"
-import type { DeepMutable } from "@opencode-ai/core/schema"
+import type { DeepMutable } from "@simpliciocode/core/schema"
 import { Schema } from "effect"
 
 const KeyStroke = Schema.Struct({

@@ -15,7 +15,7 @@
 // Demo mode also handles permission and question replies locally, completing
 // or failing the synthetic tool parts as appropriate.
 import path from "path"
-import type { Event, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, ToolPart } from "@simpliciocode/sdk/v2"
 import { createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import type { FooterApi, PermissionReply, QuestionReject, QuestionReply, RunPrompt, StreamCommit } from "./types"

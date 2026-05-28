@@ -3,13 +3,13 @@ import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { Plugin } from "@/plugin"
 import { Question } from "@/question"
 import { Todo } from "@/session/todo"
@@ -356,7 +356,7 @@ describe("tool.registry", () => {
         yield* Effect.promise(() =>
           Bun.write(
             path.join(plugin, "package.json"),
-            JSON.stringify({ name: "@opencode-ai/plugin", type: "module", exports: { ".": "./dist/index.js" } }),
+            JSON.stringify({ name: "@simpliciocode/plugin", type: "module", exports: { ".": "./dist/index.js" } }),
           ),
         )
         yield* Effect.promise(() =>
@@ -376,7 +376,7 @@ describe("tool.registry", () => {
           Bun.write(
             path.join(customTools, "addition.ts"),
             [
-              'import { tool } from "@opencode-ai/plugin"',
+              'import { tool } from "@simpliciocode/plugin"',
               "export default tool({",
               "  description: 'Use this tool to add two numbers and return their sum.',",
               "  args: {",
@@ -493,7 +493,7 @@ describe("tool.registry", () => {
           JSON.stringify({
             name: "custom-tools",
             dependencies: {
-              "@opencode-ai/plugin": "^0.0.0",
+              "@simpliciocode/plugin": "^0.0.0",
               cowsay: "^1.6.0",
             },
           }),
@@ -508,7 +508,7 @@ describe("tool.registry", () => {
             packages: {
               "": {
                 dependencies: {
-                  "@opencode-ai/plugin": "^0.0.0",
+                  "@simpliciocode/plugin": "^0.0.0",
                   cowsay: "^1.6.0",
                 },
               },

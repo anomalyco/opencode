@@ -1,7 +1,7 @@
 import path from "path"
 import { fileURLToPath } from "url"
 import { Schema } from "effect"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@simpliciocode/core/global"
 
 type BaseReference = {
   host: string

@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/app",
+  "name": "@simpliciocode/app",
   "version": "1.15.11",
   "description": "",
   "type": "module",
@@ -42,9 +42,9 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@simpliciocode/core": "workspace:*",
+    "@simpliciocode/sdk": "workspace:*",
+    "@simpliciocode/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",

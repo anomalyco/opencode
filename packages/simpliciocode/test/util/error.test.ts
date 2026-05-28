@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@simpliciocode/core/util/error"
 import { errorData, errorFormat, errorMessage } from "../../src/util/error"
 import { MessageError } from "../../src/session/message-error"
 

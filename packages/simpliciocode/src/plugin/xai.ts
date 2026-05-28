@@ -1,8 +1,8 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import * as Log from "@opencode-ai/core/util/log"
+import type { Hooks, PluginInput } from "@simpliciocode/plugin"
+import * as Log from "@simpliciocode/core/util/log"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { createServer } from "http"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@simpliciocode/core/installation/version"
 
 const log = Log.create({ service: "plugin.xai" })
 

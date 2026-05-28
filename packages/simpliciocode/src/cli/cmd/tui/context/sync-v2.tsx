@@ -5,7 +5,7 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
-} from "@opencode-ai/sdk/v2"
+} from "@simpliciocode/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"

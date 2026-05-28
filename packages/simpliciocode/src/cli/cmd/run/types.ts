@@ -13,7 +13,7 @@
 //         → OpenTUI split-footer renderer writes to terminal
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
-import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@simpliciocode/sdk/v2"
 
 export type RunFilePart = {
   type: "file"

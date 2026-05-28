@@ -2,7 +2,7 @@ import { json, action, useParams, createAsync, useSubmission } from "@solidjs/ro
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
-import { Billing } from "@opencode-ai/console-core/billing.js"
+import { Billing } from "@simpliciocode/console-core/billing.js"
 import styles from "./monthly-limit-section.module.css"
 import { queryBillingInfo } from "../../common"
 import { useI18n } from "~/context/i18n"

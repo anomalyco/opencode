@@ -1,5 +1,5 @@
 import { Effect, ScopedCache, Scope } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
+import * as EffectLogger from "@simpliciocode/core/effect/logger"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"

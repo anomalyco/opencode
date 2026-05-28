@@ -16,7 +16,7 @@ import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import * as Bom from "@/util/bom"
 
 function normalizeLineEndings(text: string): string {

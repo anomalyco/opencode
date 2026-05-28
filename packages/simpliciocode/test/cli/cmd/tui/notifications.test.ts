@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "@/cli/cmd/tui/feature-plugins/system/notifications"
-import type { Event, PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2"
-import type { TuiAttentionNotifyInput } from "@opencode-ai/plugin/tui"
+import type { Event, PermissionRequest, QuestionRequest, Session } from "@simpliciocode/sdk/v2"
+import type { TuiAttentionNotifyInput } from "@simpliciocode/plugin/tui"
 import { createTuiPluginApi } from "../../../fixture/tui-plugin"
 
 async function setup() {

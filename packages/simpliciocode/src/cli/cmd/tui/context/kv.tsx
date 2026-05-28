@@ -1,6 +1,6 @@
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@simpliciocode/core/global"
 import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@opencode-ai/core/util/flock"
+import { Flock } from "@simpliciocode/core/util/flock"
 import { rename, rm } from "fs/promises"
 import { createSignal, type Setter } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"

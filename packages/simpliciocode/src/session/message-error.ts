@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@simpliciocode/core/util/error"
 
 export const OutputLengthError = NamedError.create("MessageOutputLengthError", {})
 

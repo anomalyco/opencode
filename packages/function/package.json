@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/function",
+  "name": "@simpliciocode/function",
   "version": "1.15.11",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,

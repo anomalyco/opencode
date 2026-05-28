@@ -5,7 +5,7 @@ import type {
   RequestPermissionResponse,
   SessionUpdate,
 } from "@agentclientprotocol/sdk"
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Event, OpencodeClient } from "@simpliciocode/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import { ACPNextEvent } from "@/acp-next/event"
 import { ACPNextSession } from "@/acp-next/session"

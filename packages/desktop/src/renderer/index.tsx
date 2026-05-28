@@ -13,7 +13,7 @@ import {
   PlatformProvider,
   ServerConnection,
   useCommand,
-} from "@opencode-ai/app"
+} from "@simpliciocode/app"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
@@ -23,7 +23,7 @@ import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { useTheme } from "@simpliciocode/ui/theme"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {

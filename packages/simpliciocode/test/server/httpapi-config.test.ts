@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import { Server } from "../../src/server/server"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { Effect, Fiber } from "effect"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"

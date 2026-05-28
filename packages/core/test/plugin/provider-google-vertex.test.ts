@@ -1,9 +1,9 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { GoogleVertexPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@simpliciocode/core/catalog"
+import { PluginV2 } from "@simpliciocode/core/plugin"
+import { GoogleVertexPlugin } from "@simpliciocode/core/plugin/provider/google-vertex"
+import { ProviderV2 } from "@simpliciocode/core/provider"
 import { fakeSelectorSdk, it, model, withEnv } from "./provider-helper"
 
 const vertexOptions: Record<string, any>[] = []

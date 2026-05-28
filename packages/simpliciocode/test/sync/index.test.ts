@@ -1,7 +1,7 @@
 import { describe, expect, beforeEach, afterAll } from "bun:test"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { Deferred, Effect, Layer, Schema } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { SyncEvent } from "../../src/sync"

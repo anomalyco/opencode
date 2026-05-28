@@ -7,8 +7,8 @@ import { asSchema, type ModelMessage, type Tool } from "ai"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
 import { FetchHttpClient } from "effect/unstable/http"
-import { tool as nativeTool, ToolFailure, type JsonSchema, type LLMEvent } from "@opencode-ai/llm"
-import type { LLMClientShape } from "@opencode-ai/llm/route"
+import { tool as nativeTool, ToolFailure, type JsonSchema, type LLMEvent } from "@simpliciocode/llm"
+import type { LLMClientShape } from "@simpliciocode/llm/route"
 import { LLMNative } from "./native-request"
 
 export type RuntimeStatus =
@@ -68,7 +68,7 @@ export function stream(input: StreamInput): StreamResult {
   const current = statusWithFetch(input, fetch)
   if (current.type === "unsupported") return current
 
-  // Integration point with @opencode-ai/llm: native-request lowers session data
+  // Integration point with @simpliciocode/llm: native-request lowers session data
   // into an LLMRequest, then LLMClient handles route selection and transport.
   //
   // ProviderTransform.providerOptions builds AI-SDK-shaped options for the
@@ -127,7 +127,7 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
     Object.entries(tools).map(([name, item]) => [
       name,
       // Tool execution remains opencode-owned. The native runtime only adapts
-      // the @opencode-ai/llm tool call back into the AI SDK Tool.execute shape.
+      // the @simpliciocode/llm tool call back into the AI SDK Tool.execute shape.
       nativeTool({
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),

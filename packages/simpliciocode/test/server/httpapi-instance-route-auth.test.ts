@@ -8,7 +8,7 @@ import { ServerAuth } from "../../src/server/auth"
 import { PtyID } from "../../src/pty/schema"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 
 void Log.init({ print: false })
 

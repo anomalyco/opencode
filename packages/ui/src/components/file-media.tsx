@@ -1,4 +1,4 @@
-import type { FileContent } from "@opencode-ai/sdk/v2"
+import type { FileContent } from "@simpliciocode/sdk/v2"
 import { createEffect, createMemo, createResource, Match, on, Show, Switch, type JSX } from "solid-js"
 import { useI18n } from "../context/i18n"
 import {

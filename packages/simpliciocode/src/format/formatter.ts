@@ -1,4 +1,4 @@
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@simpliciocode/core/npm"
 import type { InstanceContext } from "../project/instance-context"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"

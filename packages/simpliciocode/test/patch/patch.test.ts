@@ -4,7 +4,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { tmpdir } from "os"
 import { Patch } from "../../src/patch"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(AppFileSystem.defaultLayer)

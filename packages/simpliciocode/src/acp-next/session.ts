@@ -1,5 +1,5 @@
 import type { McpServer } from "@agentclientprotocol/sdk"
-import type { Message, Part } from "@opencode-ai/sdk/v2"
+import type { Message, Part } from "@simpliciocode/sdk/v2"
 import { Context, Effect, Layer, Ref } from "effect"
 import type { ModelID, ProviderID } from "../provider/schema"
 import * as ACPNextError from "./error"

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
+import * as Log from "@simpliciocode/core/util/log"
 import * as Bom from "../util/bom"
 
 const log = Log.create({ service: "patch" })

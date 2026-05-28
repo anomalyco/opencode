@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"

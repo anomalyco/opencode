@@ -110,8 +110,8 @@ const { Bus } = await import("../../src/bus")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
-const { AppFileSystem } = await import("@opencode-ai/core/filesystem")
-const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
+const { AppFileSystem } = await import("@simpliciocode/core/filesystem")
+const { CrossSpawnSpawner } = await import("@simpliciocode/core/cross-spawn-spawner")
 const mcpTest = testEffect(
   MCP.layer.pipe(
     Layer.provide(McpAuth.defaultLayer),

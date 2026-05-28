@@ -6,11 +6,11 @@ import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionID } from "../../src/session/schema"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { $ } from "bun"
 import { tmpdirScoped } from "../fixture/fixture"
 import { Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })

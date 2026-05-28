@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 
-import { withStatics } from "@opencode-ai/core/schema"
+import { withStatics } from "@simpliciocode/core/schema"
 
 const projectIdSchema = Schema.String.pipe(Schema.brand("ProjectID"))
 

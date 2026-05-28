@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@simpliciocode/ui/context"
 import { type Accessor, batch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionRequest } from "@simpliciocode/sdk/v2"
 import {
   createQuestionBodyState,
   questionConfirm,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import type { Message } from "@opencode-ai/sdk/v2/client"
+import type { SnapshotFileDiff } from "@simpliciocode/sdk/v2"
+import type { Message } from "@simpliciocode/sdk/v2/client"
 import { diffs, message } from "./diffs"
 
 const item = {

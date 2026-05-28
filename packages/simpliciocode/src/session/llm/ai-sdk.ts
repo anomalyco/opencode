@@ -1,4 +1,4 @@
-import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
+import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@simpliciocode/llm"
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"

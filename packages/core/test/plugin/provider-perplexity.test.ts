@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PerplexityPlugin } from "@opencode-ai/core/plugin/provider/perplexity"
+import { ModelV2 } from "@simpliciocode/core/model"
+import { PluginV2 } from "@simpliciocode/core/plugin"
+import { PerplexityPlugin } from "@simpliciocode/core/plugin/provider/perplexity"
 import { fakeSelectorSdk, it, model } from "./provider-helper"
 
 describe("PerplexityPlugin", () => {

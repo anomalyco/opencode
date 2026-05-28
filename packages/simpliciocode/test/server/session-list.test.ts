@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { mkdir } from "fs/promises"
 import path from "path"

@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { Newtype } from "@opencode-ai/core/schema"
+import { Newtype } from "@simpliciocode/core/schema"
 
 export class PermissionID extends Newtype<PermissionID>()(
   "PermissionID",

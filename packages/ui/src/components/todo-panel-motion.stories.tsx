@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { Todo } from "@opencode-ai/sdk/v2"
+import type { Todo } from "@simpliciocode/sdk/v2"
 import { useServerSync } from "@/context/global-sync"
 import { SessionComposerRegion, createSessionComposerState } from "@/pages/session/composer"
 

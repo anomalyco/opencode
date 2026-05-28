@@ -24,7 +24,7 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@simpliciocode/sdk/v2"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"

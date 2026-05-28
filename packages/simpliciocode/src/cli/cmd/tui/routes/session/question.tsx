@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-j
 import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionRequest } from "@simpliciocode/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTuiConfig } from "../../context/tui-config"

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.15.11",
-  "name": "@opencode-ai/http-recorder",
+  "name": "@simpliciocode/http-recorder",
   "type": "module",
   "license": "MIT",
   "private": true,

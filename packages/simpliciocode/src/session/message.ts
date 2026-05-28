@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@simpliciocode/core/schema"
 import { MessageError } from "./message-error"
 import { AuthError, OutputLengthError } from "./message-error"
 export { AuthError, OutputLengthError } from "./message-error"

@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { createAlibaba } from "@ai-sdk/alibaba"
 import { Effect } from "effect"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AlibabaPlugin } from "@opencode-ai/core/plugin/provider/alibaba"
+import { ModelV2 } from "@simpliciocode/core/model"
+import { PluginV2 } from "@simpliciocode/core/plugin"
+import { AlibabaPlugin } from "@simpliciocode/core/plugin/provider/alibaba"
 import { it, model } from "./provider-helper"
 
 describe("AlibabaPlugin", () => {

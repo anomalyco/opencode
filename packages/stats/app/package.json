@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/stats-app",
+  "name": "@simpliciocode/stats-app",
   "version": "1.15.11",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
     "start": "vite start"
   },
   "dependencies": {
-    "@opencode-ai/stats-core": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@simpliciocode/stats-core": "workspace:*",
+    "@simpliciocode/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",

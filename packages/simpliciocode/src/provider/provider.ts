@@ -3,27 +3,27 @@ import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import * as Log from "@opencode-ai/core/util/log"
-import { Npm } from "@opencode-ai/core/npm"
-import { Hash } from "@opencode-ai/core/util/hash"
+import * as Log from "@simpliciocode/core/util/log"
+import { Npm } from "@simpliciocode/core/npm"
+import { Hash } from "@simpliciocode/core/util/hash"
 import { Plugin } from "../plugin"
-import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { serviceUse } from "@simpliciocode/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
-import * as ModelsDev from "@opencode-ai/core/models-dev"
+import * as ModelsDev from "@simpliciocode/core/models-dev"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@simpliciocode/core/installation/version"
 import { iife } from "@/util/iife"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@simpliciocode/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { isRecord } from "@/util/record"
-import { optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { optionalOmitUndefined } from "@simpliciocode/core/schema"
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
@@ -130,7 +130,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/alibaba": () => import("@ai-sdk/alibaba").then((m) => m.createAlibaba),
   "gitlab-ai-provider": () => import("gitlab-ai-provider").then((m) => m.createGitLab),
   "@ai-sdk/github-copilot": () =>
-    import("@opencode-ai/core/github-copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
+    import("@simpliciocode/core/github-copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 

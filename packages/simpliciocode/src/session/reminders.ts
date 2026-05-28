@@ -1,7 +1,7 @@
 import path from "path"
 import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"

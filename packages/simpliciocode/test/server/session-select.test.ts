@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Session } from "@/session/session"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { Server } from "../../src/server/server"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { Config } from "@/config/config"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { testEffect } from "../lib/effect"

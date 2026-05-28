@@ -1,8 +1,8 @@
 import path from "path"
-import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { Global } from "@opencode-ai/core/global"
+import { serviceUse } from "@simpliciocode/core/effect/service-use"
+import { Global } from "@simpliciocode/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@simpliciocode/core/filesystem"
 
 export const Tokens = Schema.Struct({
   accessToken: Schema.mutableKey(Schema.String),

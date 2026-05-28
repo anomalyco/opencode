@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import type { Tool } from "@/tool/tool"
 import { assertExternalDirectoryEffect } from "../../src/tool/external-directory"
 import { Filesystem } from "@/util/filesystem"

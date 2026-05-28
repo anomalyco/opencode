@@ -1,5 +1,5 @@
 import WebSocket from "ws"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import { ProviderError } from "@/provider/error"
 import { isRecord } from "@/util/record"
 import { OpenAIWebSocket } from "./ws"

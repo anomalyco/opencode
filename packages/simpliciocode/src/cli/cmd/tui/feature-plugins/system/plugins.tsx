@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@simpliciocode/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"

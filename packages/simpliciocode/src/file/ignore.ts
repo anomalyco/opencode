@@ -1,4 +1,4 @@
-import { Glob } from "@opencode-ai/core/util/glob"
+import { Glob } from "@simpliciocode/core/util/glob"
 
 const FOLDERS = new Set([
   "node_modules",

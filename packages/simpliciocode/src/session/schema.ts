@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { Session as CoreSession } from "@opencode-ai/core/session"
-import { withStatics } from "@opencode-ai/core/schema"
+import { Session as CoreSession } from "@simpliciocode/core/session"
+import { withStatics } from "@simpliciocode/core/schema"
 
 export const SessionID = CoreSession.ID
 export type SessionID = Schema.Schema.Type<typeof SessionID>

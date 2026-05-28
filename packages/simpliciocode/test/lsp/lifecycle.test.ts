@@ -3,7 +3,7 @@ import path from "path"
 import { Effect, Layer } from "effect"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 

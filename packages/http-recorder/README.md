@@ -1,4 +1,4 @@
-# @opencode-ai/http-recorder
+# @simpliciocode/http-recorder
 
 Record and replay HTTP and WebSocket traffic for Effect's `HttpClient`. Tests
 exercise real request shapes against deterministic, version-controlled
@@ -6,11 +6,11 @@ cassettes — no manual mocks, no flakes from upstream drift.
 
 ## Install
 
-Internal package; depended on as `@opencode-ai/http-recorder` from another
+Internal package; depended on as `@simpliciocode/http-recorder` from another
 workspace package.
 
 ```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@simpliciocode/http-recorder"
 ```
 
 ## Quickstart
@@ -23,7 +23,7 @@ missing cassettes fail loudly in CI rather than silently re-recording.
 ```ts
 import { Effect } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@simpliciocode/http-recorder"
 
 const program = Effect.gen(function* () {
   const http = yield* HttpClient.HttpClient
@@ -89,7 +89,7 @@ Cassettes get checked in, so the recorder is aggressive about not letting
 secrets escape. Redaction is configured by composing a `Redactor`:
 
 ```ts
-import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
+import { HttpRecorder, Redactor } from "@simpliciocode/http-recorder"
 
 HttpRecorder.cassetteLayer("anthropic/messages", {
   redactor: Redactor.defaults({
@@ -140,7 +140,7 @@ streams. It uses the shared `Cassette.Service`, so HTTP and WS interactions
 can live in the same cassette.
 
 ```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@simpliciocode/http-recorder"
 import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
@@ -161,7 +161,7 @@ returns the recorded interactions for a name; the file format is hidden
 behind the seam. Useful for CI checks:
 
 ```ts
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@simpliciocode/http-recorder"
 import { Effect } from "effect"
 
 const audit = Effect.gen(function* () {

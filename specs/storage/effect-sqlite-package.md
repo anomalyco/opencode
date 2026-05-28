@@ -18,7 +18,7 @@ Add a package similar in style to `packages/http-recorder`:
 
 Package name:
 
-- `@opencode-ai/effect-drizzle-sqlite`
+- `@simpliciocode/effect-drizzle-sqlite`
 
 Initial exports:
 
@@ -100,7 +100,7 @@ Do not remove this behavior while moving opencode to Effect SQLite. `SyncEvent.r
 
 ## Migration Strategy
 
-1. Add `@opencode-ai/effect-drizzle-sqlite` with a minimal in-memory/file SQLite test schema.
+1. Add `@simpliciocode/effect-drizzle-sqlite` with a minimal in-memory/file SQLite test schema.
 2. Port the Drizzle Effect SQLite adapter from the SQLite branch into the package, preserving upstream names and API shape.
 3. Test adapter-level guarantees:
    - query builders are yieldable Effect values,
@@ -108,7 +108,7 @@ Do not remove this behavior while moving opencode to Effect SQLite. `SyncEvent.r
    - failed transaction rolls back,
    - migrations run once and in order,
    - close finalizer closes the underlying SQLite database.
-4. Add `@opencode-ai/effect-drizzle-sqlite` as a dependency of `packages/opencode`.
+4. Add `@simpliciocode/effect-drizzle-sqlite` as a dependency of `packages/opencode`.
 5. Port `packages/opencode/src/storage/db.ts` to be a thin compatibility wrapper over the adapter plus opencode-specific transaction/post-commit context.
 6. Keep existing call sites working first:
    - `Database.Client()`

@@ -1,4 +1,4 @@
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip } from "@simpliciocode/ui/tooltip"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   children,

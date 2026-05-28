@@ -10,7 +10,7 @@ import type {
   SessionConfigSelectOption,
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { OpencodeClient } from "@simpliciocode/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import * as ACPNextService from "@/acp-next/service"
 import * as ACPNextError from "@/acp-next/error"

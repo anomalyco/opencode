@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "@simpliciocode/sdk/v2"
 
 type DirectoryState = {
   expanded: boolean

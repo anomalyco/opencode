@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event } from "@simpliciocode/sdk/v2"
 import { createSessionData, flushInterrupted, reduceSessionData } from "@/cli/cmd/run/session-data"
 import type { StreamCommit } from "@/cli/cmd/run/types"
 

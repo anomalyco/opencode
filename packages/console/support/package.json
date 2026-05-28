@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-support",
+  "name": "@simpliciocode/console-support",
   "version": "1.15.11",
   "type": "module",
   "license": "MIT",
@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.15.2",
-    "@opencode-ai/console-core": "workspace:*",
+    "@simpliciocode/console-core": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",

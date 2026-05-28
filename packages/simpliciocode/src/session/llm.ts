@@ -1,12 +1,12 @@
 import { Provider } from "@/provider/provider"
-import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import * as Log from "@opencode-ai/core/util/log"
+import { serviceUse } from "@simpliciocode/core/effect/service-use"
+import * as Log from "@simpliciocode/core/util/log"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
-import type { LLMEvent } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
-import type { LLMClientService } from "@opencode-ai/llm/route"
+import type { LLMEvent } from "@simpliciocode/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@simpliciocode/llm/route"
+import type { LLMClientService } from "@simpliciocode/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -215,7 +215,7 @@ const live: Layer.Layer<
           })
         : undefined
 
-      // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
+      // Runtime seam: native is an opt-in adapter over @simpliciocode/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
         const native = LLMNativeRuntime.stream({

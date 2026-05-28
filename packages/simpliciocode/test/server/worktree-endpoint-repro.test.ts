@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Queue } from "effect"
 import { HttpRouter } from "effect/unstable/http"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@simpliciocode/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Worktree } from "@/worktree"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"

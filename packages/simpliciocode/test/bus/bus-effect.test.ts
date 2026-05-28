@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Latch, Layer, Schema, Stream } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@simpliciocode/core/cross-spawn-spawner"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { PositiveInt } from "@opencode-ai/core/schema"
+import { PositiveInt } from "@simpliciocode/core/schema"
 import { ModelStatus } from "@/provider/model-status"
 
 export const Model = Schema.Struct({

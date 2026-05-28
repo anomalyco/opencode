@@ -1,4 +1,4 @@
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@simpliciocode/core/util/error"
 import { errorFormat } from "@/util/error"
 import { isRecord } from "@/util/record"
 

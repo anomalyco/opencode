@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/desktop",
+  "name": "@simpliciocode/desktop",
   "private": true,
   "version": "1.15.11",
   "type": "module",
@@ -37,8 +37,8 @@
   "devDependencies": {
     "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
-    "@opencode-ai/app": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@simpliciocode/app": "workspace:*",
+    "@simpliciocode/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",
     "@solid-primitives/i18n": "2.2.1",

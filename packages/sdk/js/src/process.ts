@@ -1,7 +1,7 @@
 import { type ChildProcess, spawnSync } from "node:child_process"
 
 // Duplicated from `packages/simpliciocode/src/util/process.ts` because the SDK cannot
-// import `opencode` without creating a cycle (`opencode` depends on `@opencode-ai/sdk`).
+// import `opencode` without creating a cycle (`opencode` depends on `@simpliciocode/sdk`).
 export function stop(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
   if (process.platform === "win32" && proc.pid) {

@@ -3,10 +3,10 @@ import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJ
 import { unique } from "remeda"
 import { Option, Schema } from "effect"
 import { DiffStyle, ScrollAcceleration, ScrollSpeed } from "./tui-schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@simpliciocode/core/flag/flag"
+import { Global } from "@simpliciocode/core/global"
 import { Filesystem } from "@/util/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@simpliciocode/core/util/log"
 import * as ConfigPaths from "@/config/paths"
 
 const log = Log.create({ service: "tui.migrate" })

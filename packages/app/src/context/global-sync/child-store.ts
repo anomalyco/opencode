@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { VcsInfo } from "@simpliciocode/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -17,7 +17,7 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQueries } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@simpliciocode/ui/context"
 
 export function createChildStoreManager(input: {
   owner: Owner
