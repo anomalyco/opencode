@@ -2136,6 +2136,8 @@ ToolRegistry.register({
 
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const hasOutput = createMemo(() => typeof props.output === "string" && props.output.trim().length > 0)
+    const outputPreview = createMemo(() => props.output?.trim().split("\n").find((line) => line.trim())?.trim())
     const type = createMemo(() => {
       const raw = props.input.subagent_type
       if (typeof raw !== "string" || !raw) return undefined
@@ -2148,6 +2150,73 @@ ToolRegistry.register({
       return childSessionId()
     })
     const href = createMemo(() => sessionLink(childSessionId(), loc.pathname, data.sessionHref))
+    const childMessages = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return []
+      return data.store.message?.[sessionId] ?? []
+    })
+    const childParts = createMemo(() => childMessages().flatMap((message) => data.store.part?.[message.id] ?? []))
+    const childStatus = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return undefined
+      return data.store.session_status?.[sessionId]
+    })
+    const childStats = createMemo(() => {
+      const parts = childParts()
+      const toolParts = parts.filter((part): part is ToolPart => part.type === "tool")
+      const outputParts = parts.filter(
+        (part) =>
+          (part.type === "text" || part.type === "reasoning") &&
+          typeof part.text === "string" &&
+          part.text.trim().length > 0,
+      )
+      const runningTools = toolParts.filter((part) => part.state.status === "pending" || part.state.status === "running")
+      const errorTools = toolParts.filter((part) => part.state.status === "error")
+      return {
+        messages: childMessages().length,
+        tools: toolParts.length,
+        outputs: outputParts.length,
+        runningTools: runningTools.length,
+        errorTools: errorTools.length,
+      }
+    })
+    const statusLabel = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) {
+        if (pending()) return "starting"
+        if (props.status === "error") return "error"
+        if (hasOutput()) return "no session"
+        return "no session"
+      }
+      const stats = childStats()
+      if (stats.errorTools > 0) return `${stats.errorTools} error${stats.errorTools === 1 ? "" : "s"}`
+      if (childStatus()?.type === "retry") return "retrying"
+      if (childStatus()?.type === "busy") {
+        if (stats.outputs > 0) return "streaming"
+        if (stats.tools > 0) return "using tools"
+        return "running"
+      }
+      if (stats.outputs > 0) return "output received"
+      if (stats.tools > 0) return "tools complete"
+      if (stats.messages > 0) return "started"
+      return "created"
+    })
+    const statItems = createMemo(() => {
+      const stats = childStats()
+      const items: string[] = [statusLabel()]
+      if (stats.messages > 0) items.push(`${stats.messages} msg`)
+      if (stats.tools > 0) items.push(`${stats.tools} tool`)
+      if (stats.runningTools > 0) items.push(`${stats.runningTools} running`)
+      if (stats.outputs > 0) items.push("output")
+      return items
+    })
+    const missingSessionDetail = createMemo(() => {
+      if (childSessionId()) return undefined
+      if (pending()) return undefined
+      if (props.status === "error") return undefined
+      if (!hasOutput()) return undefined
+      return outputPreview() ?? "Task finished without creating a subagent session."
+    })
 
     const handleLinkClick = (e: MouseEvent) => {
       // Always preventDefault: a same-origin <a> default navigation reloads
@@ -2187,6 +2256,13 @@ ToolRegistry.register({
               </Match>
             </Switch>
           </Show>
+          <For each={statItems()}>
+            {(item, index) => (
+              <span data-slot="subagent-task-stat" data-primary={index() === 0 ? "true" : undefined}>
+                {item}
+              </span>
+            )}
+          </For>
         </div>
         <Show when={!pending() && href()}>
           <div data-component="tool-action">
@@ -2196,7 +2272,20 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool {...props} hideDetails icon="task" trigger={trigger()} />
+    return (
+      <BasicTool {...props} hideDetails={!hasOutput()} icon="task" trigger={trigger()}>
+        <Show when={hasOutput()}>
+          <div data-component="tool-output" data-kind="subagent-task" data-scrollable>
+            <Show when={missingSessionDetail()}>
+              {(detail) => <div data-slot="subagent-task-warning">{detail()}</div>}
+            </Show>
+            <pre>
+              <code>{props.output}</code>
+            </pre>
+          </div>
+        </Show>
+      </BasicTool>
+    )
   },
 })
 

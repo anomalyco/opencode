@@ -617,6 +617,46 @@
   }
 }
 
+[data-slot="subagent-task-stat"] {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: var(--background-element);
+  color: var(--text-weak);
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+
+[data-slot="subagent-task-stat"][data-primary="true"] {
+  color: var(--text-base);
+}
+
+[data-component="tool-output"][data-kind="subagent-task"] {
+  gap: 10px;
+  width: 100%;
+}
+
+[data-slot="subagent-task-warning"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-left: 2px solid var(--border-warning-base);
+  padding: 6px 8px;
+  background: var(--surface-warning-weak);
+  color: var(--text-warning-base);
+  white-space: normal;
+  word-break: break-word;
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
 [data-component="bash-output"] {
   width: 100%;
   border: 1px solid var(--border-weak-base);
