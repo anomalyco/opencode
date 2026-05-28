@@ -29,12 +29,94 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
 }
 
 const config = {
-  USE_PROFILES: { html: true, mathMl: true },
+  USE_PROFILES: { html: true, svg: true, mathMl: true },
   SANITIZE_NAMED_PROPS: true,
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
-  ADD_TAGS: ["svg", "path"],
-  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
+  ADD_TAGS: [
+    "svg",
+    "path",
+    "circle",
+    "ellipse",
+    "rect",
+    "polygon",
+    "polyline",
+    "line",
+    "text",
+    "tspan",
+    "g",
+    "defs",
+    "clippath",
+    "marker",
+    "foreignobject",
+    "use",
+    "image",
+    "pattern",
+    "lineargradient",
+    "radialgradient",
+    "stop",
+    "title",
+    "desc",
+    "span",
+  ],
+  ADD_ATTR: [
+    "d",
+    "viewBox",
+    "preserveAspectRatio",
+    "xmlns",
+    "target",
+    "x",
+    "y",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "cx",
+    "cy",
+    "r",
+    "rx",
+    "ry",
+    "width",
+    "height",
+    "fill",
+    "stroke",
+    "stroke-width",
+    "stroke-dasharray",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "transform",
+    "font-size",
+    "font-family",
+    "font-weight",
+    "font-style",
+    "text-anchor",
+    "text-decoration",
+    "dominant-baseline",
+    "alignment-baseline",
+    "id",
+    "class",
+    "points",
+    "offset",
+    "stop-color",
+    "stop-opacity",
+    "marker-end",
+    "marker-start",
+    "marker-mid",
+    "marker-width",
+    "marker-height",
+    "refX",
+    "refY",
+    "orient",
+    "clip-path",
+    "overflow",
+    "xmlns:xlink",
+    "xlink:href",
+    "href",
+    "aria-roledescription",
+    "role",
+    "aria-label",
+    "data-mermaid-src",
+  ],
 }
 
 const iconPaths = {
@@ -58,6 +140,16 @@ function escape(text: string) {
 
 function fallback(markdown: string) {
   return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
+}
+
+function extractMermaid(src: string): { src: string; blocks: string[] } {
+  const blocks: string[] = []
+  const out = src.replace(/(^|\n)```mermaid\s*\n([\s\S]*?)```/g, (_, prefix, code) => {
+    const i = blocks.length
+    blocks.push(code.trim())
+    return `${prefix}<div data-mermaid-src="${i}"></div>`
+  })
+  return { src: out, blocks }
 }
 
 type CopyLabels = {
@@ -183,6 +275,52 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   markCodeLinks(root)
 }
 
+async function renderMermaidOnDom(container: HTMLElement, blocks: string[]) {
+  if (!blocks.length) return
+  const nodes = container.querySelectorAll("[data-mermaid-src]")
+  if (!nodes.length) return
+
+  const isDark = document.documentElement.dataset.colorScheme !== "light"
+  const mermaidTheme = isDark ? "dark" : "default"
+  const mermaid = await import("mermaid")
+  mermaid.default.initialize({ startOnLoad: false, securityLevel: "strict", theme: mermaidTheme })
+
+  const cache = new Map<string, string>()
+  let counter = 0
+
+  for (const node of nodes) {
+    const idx = Number(node.getAttribute("data-mermaid-src"))
+    const code = blocks[idx]
+    if (!code) continue
+
+    if (cache.has(code)) {
+      node.replaceWith(createMermaidDiv(cache.get(code)!))
+      continue
+    }
+
+    const id = `mermaid-${++counter}-${Date.now()}`
+    try {
+      await mermaid.default.parse(code)
+      const { svg } = await mermaid.default.render(id, code)
+      cache.set(code, svg)
+      node.replaceWith(createMermaidDiv(svg))
+    } catch (error) {
+      const el = document.getElementById(`d${id}`)
+      if (el) el.style.display = "none"
+      const pre = document.createElement("pre")
+      pre.innerHTML = `<code>${escape(String(error))}</code>`
+      node.replaceWith(pre)
+    }
+  }
+}
+
+function createMermaidDiv(svg: string): HTMLDivElement {
+  const div = document.createElement("div")
+  div.setAttribute("data-component", "mermaid")
+  div.innerHTML = svg
+  return div
+}
+
 function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   const timeouts = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
@@ -251,6 +389,12 @@ export function Markdown(
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
+
+  const mermaidBlocks = () => {
+    const { blocks } = extractMermaid(local.text)
+    return blocks
+  }
+
   const [html] = createResource(
     () => ({
       text: local.text,
@@ -261,9 +405,10 @@ export function Markdown(
       if (isServer) return fallback(src.text)
       if (!src.text) return ""
 
+      const { src: cleaned, blocks } = extractMermaid(src.text)
       const base = src.key ?? checksum(src.text)
       return Promise.all(
-        stream(src.text, src.streaming).map(async (block, index) => {
+        stream(cleaned, src.streaming).map(async (block, index) => {
           const hash = checksum(block.raw)
           const key = base ? `${base}:${index}:${block.mode}` : hash
 
@@ -324,6 +469,8 @@ export function Markdown(
         return true
       },
     })
+
+    renderMermaidOnDom(container, mermaidBlocks())
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({

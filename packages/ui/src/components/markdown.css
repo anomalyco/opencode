@@ -264,3 +264,19 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+[data-component="markdown"] [data-component="mermaid"] {
+  margin: 16px 0;
+  overflow-x: auto;
+  padding: 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-weak-base);
+  background: var(--surface-inset-strong);
+  display: flex;
+  justify-content: center;
+}
+
+[data-component="markdown"] [data-component="mermaid"] svg {
+  max-width: 100%;
+  height: auto;
+}

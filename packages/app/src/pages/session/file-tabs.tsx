@@ -196,6 +196,8 @@ export function FileTabContent(props: { tab: string }) {
   const path = createMemo(() => file.pathFromTab(props.tab))
   const isMarkdown = createMemo(() => /\.(md|markdown|mdx)$/i.test(path() ?? ""))
   const [markdownMode, setMarkdownMode] = createSignal<"source" | "preview">("source")
+  let scrollViewport: HTMLDivElement | undefined
+  let pendingScrollY: number | null = null
   const state = createMemo(() => {
     const p = path()
     if (!p) return
@@ -399,18 +401,6 @@ export function FileTabContent(props: { tab: string }) {
 
   const renderFile = (source: string) => (
     <div class="relative overflow-hidden pb-40">
-      <Show when={isMarkdown()}>
-        <div class="absolute top-2 right-4 z-10">
-          <IconButton
-            icon={markdownMode() === "preview" ? "code" : "eye"}
-            variant="ghost"
-            size="small"
-            class="rounded-md! bg-background-base/80 backdrop-blur-sm"
-            onClick={() => setMarkdownMode((m: "source" | "preview") => (m === "source" ? "preview" : "source"))}
-            aria-label={markdownMode() === "preview" ? "Show source" : "Show preview"}
-          />
-        </div>
-      </Show>
       <Show when={isMarkdown() && markdownMode() === "preview"} fallback={
         <Dynamic
           component={fileComponent}
@@ -425,7 +415,15 @@ export function FileTabContent(props: { tab: string }) {
           selectedLines={activeSelection()}
           commentedLines={commentedLines()}
           onRendered={() => {
-            scrollSync.queueRestore()
+            if (pendingScrollY != null) {
+              const y = pendingScrollY
+              pendingScrollY = null
+              requestAnimationFrame(() => {
+                if (scrollViewport) scrollViewport.scrollTop = y
+              })
+            } else {
+              scrollSync.queueRestore()
+            }
           }}
           annotations={commentsUi.annotations()}
           renderAnnotation={commentsUi.renderAnnotation}
@@ -443,7 +441,17 @@ export function FileTabContent(props: { tab: string }) {
             mode: "auto",
             path: path(),
             current: state()?.content,
-            onLoad: scrollSync.queueRestore,
+            onLoad: () => {
+              if (pendingScrollY != null) {
+                const y = pendingScrollY
+                pendingScrollY = null
+                requestAnimationFrame(() => {
+                  if (scrollViewport) scrollViewport.scrollTop = y
+                })
+              } else {
+                scrollSync.queueRestore()
+              }
+            },
             onError: (args: { kind: "image" | "audio" | "svg" }) => {
               if (args.kind !== "svg") return
               showToast({
@@ -458,12 +466,25 @@ export function FileTabContent(props: { tab: string }) {
           <Markdown text={source} />
         </div>
       </Show>
-    </div>
+      </div>
   )
+
+  const toggleMarkdownMode = (mode: "source" | "preview") => {
+    if (mode === markdownMode()) return
+    pendingScrollY = scrollViewport?.scrollTop ?? null
+    setMarkdownMode(mode)
+    if (mode === "preview" && pendingScrollY != null) {
+      const y = pendingScrollY
+      pendingScrollY = null
+      requestAnimationFrame(() => {
+        if (scrollViewport) scrollViewport.scrollTop = y
+      })
+    }
+  }
 
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
+      <ScrollView class="h-full" viewportRef={(el) => { scrollViewport = el; scrollSync.setViewport(el) }} onScroll={scrollSync.handleScroll as any}>
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
@@ -472,6 +493,32 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
+      <Show when={isMarkdown() && state()?.loaded}>
+        <div class="absolute top-2 right-4 z-10 flex gap-0.5 rounded-md bg-background-base/80 backdrop-blur-sm border border-border-weak-base p-0.5 text-xs">
+          <button
+            type="button"
+            classList={{
+              "px-2 py-0.5 rounded-sm transition-colors": true,
+              "bg-background-stronger text-text-strong font-medium": markdownMode() === "source",
+              "text-text-weak hover:text-text-base": markdownMode() !== "source",
+            }}
+            onClick={() => toggleMarkdownMode("source")}
+          >
+            Code
+          </button>
+          <button
+            type="button"
+            classList={{
+              "px-2 py-0.5 rounded-sm transition-colors": true,
+              "bg-background-stronger text-text-strong font-medium": markdownMode() === "preview",
+              "text-text-weak hover:text-text-base": markdownMode() !== "preview",
+            }}
+            onClick={() => toggleMarkdownMode("preview")}
+          >
+            Preview
+          </button>
+        </div>
+      </Show>
     </Tabs.Content>
   )
 }
