@@ -14,6 +14,14 @@ export interface CreateWebSocketFetchOptions {
   idleTimeout?: number
   maxConnectionAge?: number
   connectionLimitRetries?: number
+  onRetry?: (input: WebSocketTransportRetry) => void
+}
+
+export interface WebSocketTransportRetry {
+  sessionID: string
+  attempt: number
+  message: string
+  next: number
 }
 
 interface PoolEntry {
@@ -86,8 +94,19 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
 
     entry.busy = true
     entry.lastUsedAt = Date.now()
+    let transportRetryAttempts = 0
+    function notifyRetry(message: string) {
+      transportRetryAttempts++
+      try {
+        options?.onRetry?.({ sessionID, attempt: transportRetryAttempts, message, next: Date.now() })
+      } catch (error) {
+        log.warn("websocket retry notice failed", { key, error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+
     try {
       let connectionLimitAttempts = 0
+      let hasCommitted = false
       entry.socket = await socket(
         entry,
         options?.url ?? url,
@@ -96,18 +115,21 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         maxConnectionAge,
         init?.signal,
       )
-      let resolveFirstEvent: (started: boolean) => void = () => {}
-      let rejectFirstEvent: (error: Error) => void = () => {}
-      const firstEvent = new Promise<boolean>((resolve, reject) => {
-        resolveFirstEvent = resolve
-        rejectFirstEvent = reject
+      let resolveCommitted: (started: boolean) => void = () => {}
+      let rejectCommitted: (error: Error) => void = () => {}
+      const committed = new Promise<boolean>((resolve, reject) => {
+        resolveCommitted = resolve
+        rejectCommitted = reject
       })
       const response = OpenAIWebSocket.streamResponsesWebSocket({
         socket: entry.socket,
         body,
         idleTimeout,
         signal: init?.signal ?? undefined,
-        onFirstEvent: () => resolveFirstEvent(true),
+        onCommitted: () => {
+          hasCommitted = true
+          resolveCommitted(true)
+        },
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
@@ -121,14 +143,15 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           entry.busy = false
           entry.fallback = true
           invalidate(entry)
-          resolveFirstEvent(false)
+          if (!hasCommitted) notifyRetry(retryMessage(error))
+          resolveCommitted(false)
         },
         onAbort: (error) => {
           log.debug("websocket aborted", { key })
           entry.busy = false
           entry.lastUsedAt = Date.now()
           invalidate(entry)
-          rejectFirstEvent(error)
+          rejectCommitted(error)
         },
         onRetryableTerminal: async (event) => {
           const error = connectionLimitError(event)
@@ -137,6 +160,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
 
           connectionLimitAttempts++
           log.warn("websocket connection limit reached", { key, attempt: connectionLimitAttempts })
+          notifyRetry("WebSocket connection limit reached; retrying request")
           invalidate(entry)
           entry.socket = await socket(
             entry,
@@ -150,8 +174,8 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           return entry.socket
         },
       })
-      if (await firstEvent) return response
-      log.debug("http fallback", { key, reason: "websocket_failed_before_first_event" })
+      if (await committed) return response
+      log.debug("http fallback", { key, reason: "websocket_failed_before_committed_output" })
       return httpFetch(input, httpInit)
     } catch (error) {
       entry.busy = false
@@ -167,6 +191,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         error: error instanceof Error ? error.message : String(error),
         fallback: "http",
       })
+      notifyRetry(retryMessage(error))
       invalidate(entry)
       return httpFetch(input, httpInit)
     }
@@ -196,6 +221,14 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
 function connectionLimitError(event: Record<string, unknown>) {
   if (event.type !== "error" || !isRecord(event.error) || event.error.code !== CONNECTION_LIMIT_REACHED_CODE) return
   return new Error(typeof event.error.message === "string" ? event.error.message : CONNECTION_LIMIT_REACHED_CODE)
+}
+
+function retryMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const lower = message.toLowerCase()
+  if (lower.includes("timeout") || lower.includes("timed out")) return "WebSocket timed out; retrying request"
+  if (lower.includes("closed")) return "WebSocket disconnected; retrying request"
+  return "WebSocket failed; retrying request"
 }
 
 async function socket(

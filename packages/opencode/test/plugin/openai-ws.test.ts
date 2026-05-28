@@ -253,12 +253,15 @@ describe("plugin.openai.ws-pool", () => {
       })
     })
     const httpRequests: Headers[] = []
+    const retries: { sessionID: string; attempt: number; message: string }[] = []
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
       url: server.url,
       httpFetch: mockFetch(async (_input, init) => {
         httpRequests.push(new Headers(init?.headers))
         return new Response("http")
       }),
+      onRetry: (retry) =>
+        retries.push({ sessionID: retry.sessionID, attempt: retry.attempt, message: retry.message }),
     })
 
     const response = await fetch("https://api.openai.com/v1/responses", streamRequest())
@@ -270,6 +273,9 @@ describe("plugin.openai.ws-pool", () => {
     expect(connections).toBe(2)
     expect(messages).toBe(2)
     expect(httpRequests).toHaveLength(0)
+    expect(retries).toEqual([
+      { sessionID: "session-1", attempt: 1, message: "WebSocket connection limit reached; retrying request" },
+    ])
     fetch.close()
   })
 
@@ -318,6 +324,7 @@ describe("plugin.openai.ws-pool", () => {
       socket.once("message", () => {})
     })
     const httpRequests: Headers[] = []
+    const retries: { sessionID: string; attempt: number; message: string }[] = []
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
       url: server.url,
       idleTimeout: 20,
@@ -325,6 +332,8 @@ describe("plugin.openai.ws-pool", () => {
         httpRequests.push(new Headers(init?.headers))
         return new Response("http")
       }),
+      onRetry: (retry) =>
+        retries.push({ sessionID: retry.sessionID, attempt: retry.attempt, message: retry.message }),
     })
 
     const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
@@ -334,6 +343,7 @@ describe("plugin.openai.ws-pool", () => {
     expect(await second.text()).toBe("http")
     expect(connections).toBe(1)
     expect(httpRequests).toHaveLength(2)
+    expect(retries).toEqual([{ sessionID: "session-1", attempt: 1, message: "WebSocket timed out; retrying request" }])
     fetch.close()
   })
 
@@ -344,6 +354,7 @@ describe("plugin.openai.ws-pool", () => {
       })
     })
     const httpRequests: Headers[] = []
+    const retries: { sessionID: string; attempt: number; message: string }[] = []
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
       url: server.url,
       idleTimeout: 20,
@@ -351,6 +362,8 @@ describe("plugin.openai.ws-pool", () => {
         httpRequests.push(new Headers(init?.headers))
         return new Response("http")
       }),
+      onRetry: (retry) =>
+        retries.push({ sessionID: retry.sessionID, attempt: retry.attempt, message: retry.message }),
     })
 
     const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
@@ -359,6 +372,7 @@ describe("plugin.openai.ws-pool", () => {
 
     expect(await second.text()).toBe("http")
     expect(httpRequests).toHaveLength(1)
+    expect(retries).toEqual([])
     fetch.close()
   })
 
@@ -464,6 +478,88 @@ describe("plugin.openai.ws-pool", () => {
     expect(await second.text()).toBe("http")
     expect(connections).toBe(1)
     expect(httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
+  test("replays over HTTP after replay-safe metadata then an unexpected close", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_meta" } }), () => {
+          socket.terminate()
+        })
+      })
+    })
+    const httpRequests: Headers[] = []
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      httpFetch: mockFetch(async (_input, init) => {
+        httpRequests.push(new Headers(init?.headers))
+        return new Response("http")
+      }),
+    })
+
+    const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
+    expect(await first.text()).toBe("http")
+    const second = await fetch("https://api.openai.com/v1/responses", streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(connections).toBe(1)
+    expect(httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
+  test("replays over HTTP after response preamble then an unexpected close", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {
+        socket.send(JSON.stringify({ type: "response.created", response: { id: "resp_preamble" } }), () => {
+          socket.send(
+            JSON.stringify({
+              type: "response.output_item.added",
+              output_index: 0,
+              item: { type: "message", id: "item_preamble", status: "in_progress", role: "assistant", content: [] },
+            }),
+            () => {
+              socket.send(
+                JSON.stringify({
+                  type: "response.content_part.added",
+                  item_id: "item_preamble",
+                  output_index: 0,
+                  content_index: 0,
+                  part: { type: "output_text", text: "", annotations: [] },
+                }),
+                () => socket.terminate(),
+              )
+            },
+          )
+        })
+      })
+    })
+    const httpRequests: Headers[] = []
+    const retries: { sessionID: string; attempt: number; message: string }[] = []
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      httpFetch: mockFetch(async (_input, init) => {
+        httpRequests.push(new Headers(init?.headers))
+        return new Response("http")
+      }),
+      onRetry: (retry) =>
+        retries.push({ sessionID: retry.sessionID, attempt: retry.attempt, message: retry.message }),
+    })
+
+    const first = await fetch("https://api.openai.com/v1/responses", streamRequest())
+    expect(await first.text()).toBe("http")
+    const second = await fetch("https://api.openai.com/v1/responses", streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(connections).toBe(1)
+    expect(httpRequests).toHaveLength(2)
+    expect(retries).toEqual([
+      { sessionID: "session-1", attempt: 1, message: "WebSocket disconnected; retrying request" },
+    ])
     fetch.close()
   })
 

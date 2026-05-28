@@ -93,6 +93,7 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+const RETRY_NOTICE_MIN_VISIBLE_MS = 1000
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -148,6 +149,29 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const [visibleRetry, setVisibleRetry] = createSignal<ReturnType<typeof status>>()
+  let retryNoticeTimer: NodeJS.Timeout | undefined
+  createEffect(() => {
+    const current = status()
+    if (current.type !== "retry") return
+    setVisibleRetry(current)
+    if (retryNoticeTimer) clearTimeout(retryNoticeTimer)
+    retryNoticeTimer = setTimeout(() => {
+      retryNoticeTimer = undefined
+      setVisibleRetry(undefined)
+    }, RETRY_NOTICE_MIN_VISIBLE_MS)
+    retryNoticeTimer.unref()
+  })
+  onCleanup(() => {
+    if (retryNoticeTimer) clearTimeout(retryNoticeTimer)
+  })
+  const displayStatus = createMemo(() => {
+    const current = status()
+    if (current.type === "retry") return current
+    const retry = visibleRetry()
+    if (retry?.type === "retry") return retry
+    return current
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -1631,12 +1655,12 @@ export function Prompt(props: PromptProps) {
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
           <Switch>
-            <Match when={status().type !== "idle"}>
+            <Match when={displayStatus().type !== "idle"}>
               <box
                 flexDirection="row"
                 gap={1}
                 flexGrow={1}
-                justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+                justifyContent={displayStatus().type === "retry" ? "space-between" : "flex-start"}
               >
                 <box flexShrink={0} flexDirection="row" gap={1}>
                   <box marginLeft={1}>
@@ -1647,7 +1671,7 @@ export function Prompt(props: PromptProps) {
                   <box flexDirection="row" gap={1} flexShrink={0}>
                     {(() => {
                       const retry = createMemo(() => {
-                        const s = status()
+                        const s = displayStatus()
                         if (s.type !== "retry") return
                         return s
                       })
@@ -1748,7 +1772,7 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={true}>{props.hint ?? <text />}</Match>
           </Switch>
-          <Show when={status().type !== "retry"}>
+          <Show when={displayStatus().type !== "retry"}>
             <box gap={2} flexDirection="row">
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (

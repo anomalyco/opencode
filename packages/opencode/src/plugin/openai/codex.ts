@@ -106,10 +106,13 @@ interface TokenResponse {
   expires_in?: number
 }
 
-interface CodexAuthPluginOptions {
+type CreateWebSocketFetchOptions = NonNullable<Parameters<typeof OpenAIWebSocketPool.createWebSocketFetch>[0]>
+
+export interface CodexAuthPluginOptions {
   issuer?: string
   codexApiEndpoint?: string
   experimentalWebSockets?: boolean
+  onWebSocketRetry?: CreateWebSocketFetchOptions["onRetry"]
 }
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
@@ -407,7 +410,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       async loader(getAuth) {
         const auth = await getAuth()
         const websocketFetch = options.experimentalWebSockets
-          ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
+          ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch, onRetry: options.onWebSocketRetry })
           : undefined
         if (websocketFetch) {
           websocketFetches.push(websocketFetch)

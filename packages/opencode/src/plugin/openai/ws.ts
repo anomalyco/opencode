@@ -17,7 +17,7 @@ export interface StreamResponsesWebSocketOptions {
   body: Record<string, unknown>
   idleTimeout?: number
   signal?: AbortSignal
-  onFirstEvent?: () => void
+  onCommitted?: () => void
   onComplete?: (event: Record<string, unknown>) => void
   onTerminal?: (event: Record<string, unknown>) => void
   onRetryableTerminal?: (event: Record<string, unknown>) => Promise<WebSocket | undefined>
@@ -125,7 +125,7 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
   let cleanupSocket = () => {}
   let completed = false
-  let emitted = false
+  let committed = false
   let idleTimer: ReturnType<typeof setTimeout> | undefined
 
   function cleanup() {
@@ -163,6 +163,13 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
     }
   }
 
+  function commit(event: Record<string, unknown> | undefined) {
+    if (committed) return
+    if (isReplaySafeEvent(event)) return
+    committed = true
+    options.onCommitted?.()
+  }
+
   async function onMessage(data: WebSocket.RawData, isBinary: boolean) {
     if (completed) return
     if (isBinary) {
@@ -180,7 +187,7 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
       }
     })()
 
-    if (event?.type === "error" && !emitted && options.onRetryableTerminal) {
+    if (event?.type === "error" && !committed && options.onRetryableTerminal) {
       cleanupSocket()
       if (idleTimer) clearTimeout(idleTimer)
       idleTimer = undefined
@@ -200,7 +207,7 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
       }
     }
 
-    if (!emitted) options.onFirstEvent?.()
+    commit(event)
     controller?.enqueue(
       encoder.encode(
         `${text
@@ -209,7 +216,6 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
           .join("\n")}\n\n`,
       ),
     )
-    emitted = true
     resetIdleTimeout("idle timeout waiting for websocket")
 
     if (!event) return
@@ -317,6 +323,19 @@ function closeError(message: string, code: number, reason: Buffer) {
   if (code === 1009) details.push("message too big")
   if (reason.length > 0) details.push(reason.toString())
   return new Error(`${message} (${details.join(": ")})`)
+}
+
+function isReplaySafeEvent(event: Record<string, unknown> | undefined) {
+  // Lifecycle and structural preamble events are safe to replay. Content deltas
+  // and completed output/tool items commit the stream to avoid duplicates.
+  return (
+    event?.type === "response.created" ||
+    event?.type === "response.in_progress" ||
+    event?.type === "response.queued" ||
+    event?.type === "response.output_item.added" ||
+    event?.type === "response.content_part.added" ||
+    event?.type === "response.reasoning_summary_part.added"
+  )
 }
 
 export * as OpenAIWebSocket from "./ws"

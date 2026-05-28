@@ -10,8 +10,10 @@ import { Bus } from "../bus"
 import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
-import { CodexAuthPlugin } from "./openai/codex"
+import { CodexAuthPlugin, type CodexAuthPluginOptions } from "./openai/codex"
 import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
+import { SessionStatus } from "@/session/status"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
@@ -63,12 +65,13 @@ export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel
 }
 
 // Built-in plugins that are directly imported (not installed from npm)
-function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
+function internalPlugins(flags: RuntimeFlags.Info, options?: Pick<CodexAuthPluginOptions, "onWebSocketRetry">): PluginInstance[] {
   return [
     // Temporary rollout: pre-release builds use WebSockets by default; releases require explicit opt-in.
     (input) =>
       CodexAuthPlugin(input, {
         experimentalWebSockets: experimentalWebSocketsEnabled({ enabled: flags.experimentalWebSockets }),
+        onWebSocketRetry: options?.onWebSocketRetry,
       }),
     CopilotAuthPlugin,
     GitlabAuthPlugin,
@@ -162,7 +165,30 @@ export const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
+        const builtinPlugins = flags.disableDefaultPlugins
+          ? []
+          : internalPlugins(flags, {
+              onWebSocketRetry(retry) {
+                bridge.fork(
+                  Effect.sync(() => SessionID.make(retry.sessionID)).pipe(
+                    Effect.flatMap((sessionID) =>
+                      bus.publish(SessionStatus.Event.Status, {
+                        sessionID,
+                        status: {
+                          type: "retry",
+                          attempt: retry.attempt,
+                          message: retry.message,
+                          next: retry.next,
+                        },
+                      }),
+                    ),
+                    Effect.ignore,
+                  ),
+                )
+              },
+            })
+
+        for (const plugin of builtinPlugins) {
           log.info("loading internal plugin", { name: plugin.name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
