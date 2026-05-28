@@ -202,11 +202,20 @@ export function registerOpencodeKeymap(
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offAliasExpander = registerKeyAliases(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
-  const offLeader = addons.registerTimedLeader(keymap, {
-    trigger: config.keybinds.get(LEADER_TOKEN),
-    name: LEADER_TOKEN,
-    timeoutMs: config.leader_timeout,
-  })
+  // The leader is optional. When the user sets `keybinds.leader` to "none" / false / [] in
+  // tui.json, `config.keybinds.get(LEADER_TOKEN)` is empty and `registerTimedLeader` would
+  // throw `Invalid leader trigger: expected exactly one binding`, killing the TUI on a blank
+  // screen (#26628). Skip the registration in that case — leader-prefixed bindings simply
+  // become unreachable, which is the documented "truly deactivated" semantics.
+  const leaderTrigger = config.keybinds.get(LEADER_TOKEN)
+  const hasLeader = leaderTrigger != null && (!Array.isArray(leaderTrigger) || leaderTrigger.length > 0)
+  const offLeader = hasLeader
+    ? addons.registerTimedLeader(keymap, {
+        trigger: leaderTrigger,
+        name: LEADER_TOKEN,
+        timeoutMs: config.leader_timeout,
+      })
+    : () => {}
   const offEscape = addons.registerEscapeClearsPendingSequence(keymap)
   const offBackspace = addons.registerBackspacePopsPendingSequence(keymap)
   const offInputBindings = addons.registerManagedTextareaLayer(keymap, renderer, {
