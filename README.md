@@ -1,13 +1,22 @@
+<!--
+  SimplicioCode — fork rebrand of OpenCode.
+  Migration is staged in docs/RENAME_PLAN.md; visible strings are updated first,
+  package/dir names later to keep diffs reviewable. Source of truth for the
+  rebrand, the mandatory toolchain (simplicio-mapper / simplicio-dev-cli /
+  simplicio-sprint), and the local AI Simplicio1 (Qwen 2.5 Coder 3B) is
+  docs/EVOLUTION.md.
+-->
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="SimplicioCode logo">
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center"><strong>SimplicioCode</strong> — the open source AI coding agent. <em>(rebrand in progress from OpenCode; see <code>docs/EVOLUTION.md</code>)</em></p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>

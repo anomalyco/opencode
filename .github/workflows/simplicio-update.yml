@@ -1,0 +1,55 @@
+name: simplicio-update
+
+# Daily updates for the Simplicio toolchain.
+# REQUIREMENT (R6): check / install latest versions at 10:00 and 17:30 BRT.
+# BRT = UTC-3, so:
+#   10:00 BRT = 13:00 UTC
+#   17:30 BRT = 20:30 UTC
+
+on:
+  schedule:
+    - cron: "0 13 * * *"   # 10:00 BRT
+    - cron: "30 20 * * *"  # 17:30 BRT
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run update script
+        run: bash script/simplicio/update.sh
+        env:
+          PYTHON: python3
+
+      - name: Show latest versions
+        run: |
+          set -e
+          echo "::group::Versions"
+          npx -y @wesleysimplicio/llm-project-mapper@latest --version || true
+          python3 -m pip show simplicio-cli     | grep -i ^version || true
+          python3 -m pip show simplicio-sprint  | grep -i ^version || true
+          python3 -m pip show simplicio-prompt  | grep -i ^version || true
+          echo "::endgroup::"
+
+      - name: Commit update log (if changed)
+        run: |
+          if [ -n "$(git status --porcelain .simplicio/update.log)" ]; then
+            git config user.name  "simplicio-bot"
+            git config user.email "bot@simplicio.local"
+            git add .simplicio/update.log
+            git commit -m "chore(simplicio): daily update log $(date -u +%FT%TZ)"
+            git push
+          fi

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wesleysimplicio/simplicio-mapper/main/schema/config.schema.json",
+  "project": {
+    "name": "simpliciocode",
+    "displayName": "SimplicioCode",
+    "description": "AI-powered development tool (fork of OpenCode, rebranded as SimplicioCode)",
+    "repo": "wesleysimplicio/simplicio-code"
+  },
+  "tools": {
+    "mapper": {
+      "package": "@wesleysimplicio/llm-project-mapper",
+      "channel": "latest",
+      "command": "npx -y @wesleysimplicio/llm-project-mapper@latest",
+      "autoRunOnSessionStart": true
+    },
+    "devCli": {
+      "package": "simplicio-cli",
+      "channel": "latest",
+      "command": "simplicio",
+      "defaultModel": "ollama/qwen2.5-coder:3b"
+    },
+    "sprint": {
+      "package": "simplicio-sprint",
+      "channel": "latest",
+      "command": "sendsprint",
+      "trackers": ["jira", "azure", "github"]
+    },
+    "prompt": {
+      "package": "simplicio-prompt",
+      "channel": "latest"
+    }
+  },
+  "localAi": {
+    "name": "Simplicio1",
+    "model": "qwen2.5-coder:3b",
+    "provider": "ollama",
+    "baseUrl": "http://localhost:11434/v1",
+    "free": true,
+    "tokenLimit": null,
+    "default": true
+  },
+  "flow": {
+    "cliPipeline": ["map", "task", "sprint"],
+    "mandatoryBeforeProgramming": ["map"]
+  },
+  "schedule": {
+    "updateCron": [
+      { "label": "morning",   "brt": "10:00", "utc": "13:00", "cron": "0 13 * * *" },
+      { "label": "afternoon", "brt": "17:30", "utc": "20:30", "cron": "30 20 * * *" }
+    ]
+  }
+}
