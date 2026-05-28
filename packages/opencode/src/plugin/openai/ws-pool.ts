@@ -1,5 +1,6 @@
 import WebSocket from "ws"
 import * as Log from "@opencode-ai/core/util/log"
+import { ProviderError } from "@/provider/error"
 import { isRecord } from "@/util/record"
 import { OpenAIWebSocket } from "./ws"
 
@@ -13,7 +14,7 @@ export interface CreateWebSocketFetchOptions {
   connectTimeout?: number
   idleTimeout?: number
   maxConnectionAge?: number
-  connectionLimitRetries?: number
+  streamRetries?: number
 }
 
 interface PoolEntry {
@@ -22,6 +23,7 @@ interface PoolEntry {
   lastUsedAt: number
   busy: boolean
   fallback: boolean
+  streamFailures: number
 }
 
 const DEFAULT_CONNECT_TIMEOUT = 15_000
@@ -35,7 +37,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   const connectTimeout = options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT
   const idleTimeout = options?.idleTimeout ?? DEFAULT_IDLE_TIMEOUT
   const maxConnectionAge = options?.maxConnectionAge ?? DEFAULT_MAX_CONNECTION_AGE
-  const connectionLimitRetries = options?.connectionLimitRetries ?? 5
+  const streamRetries = options?.streamRetries ?? 5
   const pruneTimer = setInterval(() => prune(), Math.min(idleTimeout, 60_000))
   if (typeof pruneTimer === "object" && "unref" in pruneTimer && typeof pruneTimer.unref === "function") {
     pruneTimer.unref()
@@ -72,7 +74,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     }
     const key = `${sessionID}:conversation`
 
-    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false }
+    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false, streamFailures: 0 }
     pool.set(key, entry)
 
     if (entry.fallback) {
@@ -87,7 +89,6 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     entry.busy = true
     entry.lastUsedAt = Date.now()
     try {
-      let connectionLimitAttempts = 0
       entry.socket = await socket(
         entry,
         options?.url ?? url,
@@ -111,15 +112,16 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onTerminal: (event) => {
           entry.busy = false
           entry.lastUsedAt = Date.now()
+          entry.streamFailures = 0
           if (event.type !== "response.completed" && event.type !== "response.done") {
             log.warn("websocket terminal failure", { key, type: event.type })
             invalidate(entry)
           }
         },
         onConnectionInvalid: (error) => {
-          log.warn("websocket invalidated", { key, error: error instanceof Error ? error.message : String(error) })
+          log.warn("websocket invalidated", { key, error: error.message })
           entry.busy = false
-          entry.fallback = true
+          if (!entry.fallback) recordStreamFailure(entry)
           invalidate(entry)
           resolveFirstEvent(false)
         },
@@ -127,49 +129,50 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           log.debug("websocket aborted", { key })
           entry.busy = false
           entry.lastUsedAt = Date.now()
+          entry.streamFailures = 0
           invalidate(entry)
           rejectFirstEvent(error)
         },
         onRetryableTerminal: async (event) => {
           const error = connectionLimitError(event)
           if (!error) return undefined
-          if (connectionLimitAttempts >= connectionLimitRetries) throw error
-
-          connectionLimitAttempts++
-          log.warn("websocket connection limit reached", { key, attempt: connectionLimitAttempts })
-          invalidate(entry)
-          entry.socket = await socket(
-            entry,
-            options?.url ?? url,
-            OpenAIWebSocket.normalizeHeaders(httpInit?.headers),
-            connectTimeout,
-            maxConnectionAge,
-            init?.signal,
-          )
-          entry.lastUsedAt = Date.now()
-          return entry.socket
+          log.warn("websocket connection limit reached", { key })
+          throw error
         },
       })
       if (await firstEvent) return response
-      log.debug("http fallback", { key, reason: "websocket_failed_before_first_event" })
+      if (!entry.fallback) return response
+      log.debug("http fallback", { key, reason: "websocket_retries_exhausted" })
       return httpFetch(input, httpInit)
     } catch (error) {
       entry.busy = false
       entry.lastUsedAt = Date.now()
       if (OpenAIWebSocket.isAbortError(error)) {
+        entry.streamFailures = 0
         invalidate(entry)
         throw error
       }
 
-      entry.fallback = true
+      recordStreamFailure(entry)
       log.warn("websocket setup failed", {
         key,
         error: error instanceof Error ? error.message : String(error),
-        fallback: "http",
+        fallback: entry.fallback ? "http" : undefined,
       })
       invalidate(entry)
-      return httpFetch(input, httpInit)
+      if (entry.fallback) return httpFetch(input, httpInit)
+      return failedResponse(
+        new ProviderError.ResponseStreamError(error instanceof Error ? error.message : String(error), {
+          cause: error,
+        }),
+      )
     }
+  }
+
+  function recordStreamFailure(entry: PoolEntry) {
+    entry.streamFailures++
+    // Codex counts retries after the initial failed WebSocket attempt.
+    if (entry.streamFailures > streamRetries) entry.fallback = true
   }
 
   function prune() {
@@ -196,6 +199,20 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
 function connectionLimitError(event: Record<string, unknown>) {
   if (event.type !== "error" || !isRecord(event.error) || event.error.code !== CONNECTION_LIMIT_REACHED_CODE) return
   return new Error(typeof event.error.message === "string" ? event.error.message : CONNECTION_LIMIT_REACHED_CODE)
+}
+
+function failedResponse(error: ProviderError.ResponseStreamError) {
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.error(error)
+      },
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    },
+  )
 }
 
 async function socket(
