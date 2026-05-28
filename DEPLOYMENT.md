@@ -235,12 +235,6 @@ Fargate, 2 vCPU / 4 GB.  Replace `<…>` placeholders with the ARNs and IDs you 
     },
     "readonlyRootFilesystem": false,
     "user": "10001:10001",
-    "extraHosts": [
-      {
-        "hostname": "local.unleashlive.com",
-        "ipAddress": "127.0.0.1"
-      }
-    ],
     "healthCheck": {
       "command": ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""],
       "interval": 15, "timeout": 5, "retries": 5, "startPeriod": 30
@@ -412,58 +406,50 @@ Common gotchas you'll see in the logs if anything's misconfigured:
 
 ### Frontend live-preview loopback alias
 
-The `extraHosts` entry in the task definition above maps
-`local.unleashlive.com → 127.0.0.1` inside the container's
-`/etc/hosts`.  This is what makes the **"Launch Unleash live frontend"**
-button work without modifying the `unleashlive/frontend` repo:
+The frontend live-preview proxy at `/preview/<port>/*` rewrites the
+`Host` header to `local.unleashlive.com:<port>` so the frontend's CORS
+/ hostname checks pass exactly as they would on a developer's Mac with
+`127.0.0.1 local.unleashlive.com` in `/etc/hosts`
+(`packages/opencode/src/collab/preview-router.ts`).
 
-- The frontend dev server still sees `Host: local.unleashlive.com:8080`
-  on every request — its CORS / hostname checks pass exactly as they
-  would on a developer's Mac with `127.0.0.1 local.unleashlive.com`
-  in `/etc/hosts`
-- The preview proxy at `/preview/8080/*` rewrites the Host header to
-  `local.unleashlive.com:8080` before forwarding to the dev server
-  (`packages/opencode/src/collab/preview-router.ts`)
-- TCP connect still goes to 127.0.0.1 — no extra DNS lookup hop
+#### Why we don't add `extraHosts` to the task definition
 
-#### How the entry is maintained
+We used to inject an `extraHosts` entry into the container definition
+(`local.unleashlive.com → 127.0.0.1`) via the deploy workflow's `jq`
+patch.  **AWS rejects that** when the task uses `networkMode=awsvpc`:
 
-The utils deployment doesn't keep its task definition in Terraform —
-the deploy workflow (`.github/workflows/deploy-collab.yml`) pulls the
-LIVE task def from AWS via `describe-task-definition`, patches the
-image SHA via `jq`, and re-registers it.
+```
+ClientException: Extra hosts are not supported on container when
+networkMode=awsvpc.
+```
 
-To keep `extraHosts` from drifting out, the same `jq` step also
-**re-asserts the `local.unleashlive.com → 127.0.0.1` entry on every
-deploy**.  The patch is "set or merge by hostname" — if an operator
-ever adds the entry manually via the AWS Console, our `jq` filter
-preserves the existing entry on the next deploy rather than
-duplicating it.
+This task uses `awsvpc` (mandatory for Fargate + the ALB target group
+shape we have), so `extraHosts` is a non-starter.  The deploy workflow
+no longer touches the field; if you see one in the live task definition
+from an older revision, it's an artifact of a previous register attempt
+and can be safely removed via the AWS Console.
 
-So:
-- **Operators don't need to do anything.**  The entry self-heals on
-  the next deploy.
-- The first deploy after this PR lands will inject the entry into
-  the next task-def revision — visible in the AWS Console under
-  Task Definition → Container Definitions → Networking → Extra Hosts.
-- Out-of-band edits via the Console are preserved (we de-dupe by
-  hostname, only the `local.unleashlive.com` entry is touched).
+#### Current state without the alias
 
-If you forget the entry (e.g. an older workflow re-deploys without
-this patch), the preview HTTP proxy still TCP-connects fine (it uses
-literal 127.0.0.1), but anything inside the dev server that does its
-own resolution of `local.unleashlive.com` will fail.  The proxy's
-502 page calls this out explicitly.
+- **WebSocket preview** (`attachPreviewUpgrade` in
+  `preview-router.ts`) already TCP-connects to literal `127.0.0.1`
+  and only rewrites the Host header — works without /etc/hosts.
+- **HTTP preview** (`handlePreviewHttp`) calls
+  `fetch("http://local.unleashlive.com:<port>/…")`.  Without
+  `/etc/hosts` resolution that fetch fails with `ENOTFOUND`, so the
+  HTTP path of the preview won't reach the dev server until the
+  fetch URL is changed to `127.0.0.1` (keeping the Host-header
+  rewrite).  Tracked with the frontend live-preview work.
 
-#### Why not Terraform
+The awsvpc-compatible options for the underlying alias, if we
+eventually need real `/etc/hosts` resolution (e.g. the dev server
+itself does a DNS lookup for `local.unleashlive.com`):
 
-There's no `unleashlive/devops/terraform/opencode-collab/` module —
-the entire ECS deployment for the utils account is maintained via
-`describe-task-definition + jq + register-task-definition` inside
-the deploy workflow.  Adding the `extraHosts` patch there keeps the
-deploy infrastructure consistent — one place to look for "what's in
-the task def".  Migrating to Terraform is a separate (larger) piece
-of work tracked in the post-MVP follow-ups.
+1. Code change in `preview-router.ts` to connect via 127.0.0.1
+   instead of the hostname (preferred — no infra change required).
+2. Write `/etc/hosts` from the entrypoint as root before dropping to
+   `USER opencode` (requires a Dockerfile change to either chown
+   `/etc/hosts` or split the entrypoint into a root-init phase).
 
 ---
 
