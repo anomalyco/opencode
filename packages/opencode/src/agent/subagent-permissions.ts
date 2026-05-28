@@ -9,8 +9,9 @@ import type { Agent } from "./agent"
  *    restriction lives on the agent ruleset, not on the session, so a
  *    subagent that only inherited the parent SESSION's permission would
  *    silently bypass it. (#26514)
- * 2. The parent **session's** deny rules and external_directory rules —
- *    same forwarding the original code already did.
+ * 2. The parent **session's** full permission ruleset — includes both deny
+ *    and allow rules, so that previously-granted MCP tool permissions
+ *    and other allowances are inherited by the subagent. (#16491)
  * 3. Default `todowrite` and `task` denies if the subagent's own ruleset
  *    doesn't already permit them.
  */
@@ -25,9 +26,7 @@ export function deriveSubagentSessionPermission(input: {
     input.parentAgent?.permission.filter((rule) => rule.action === "deny" && rule.permission === "edit") ?? []
   return [
     ...parentAgentDenies,
-    ...input.parentSessionPermission.filter(
-      (rule) => rule.permission === "external_directory" || rule.action === "deny",
-    ),
+    ...input.parentSessionPermission,
     ...(canTodo ? [] : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
     ...(canTask ? [] : [{ permission: "task" as const, pattern: "*" as const, action: "deny" as const }]),
   ]
