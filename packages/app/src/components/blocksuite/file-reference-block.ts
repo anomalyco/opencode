@@ -1,5 +1,5 @@
 import { BlockComponent, BlockViewExtension, FlavourExtension } from "@blocksuite/block-std"
-import { DeleteIcon, getAttachmentFileIcons, HoverController } from "@blocksuite/blocks"
+import { DeleteIcon, DragHandleConfigExtension, getAttachmentFileIcons, HoverController } from "@blocksuite/blocks"
 import { defineBlockSchema, type BlockSchemaType, type SchemaToModel } from "@blocksuite/store"
 import { css, html } from "lit"
 import { literal } from "lit/static-html.js"
@@ -225,9 +225,14 @@ if (!customElements.get("opencode-file-reference")) {
   customElements.define("opencode-file-reference", FileReferenceBlockComponent)
 }
 
+const drag = DragHandleConfigExtension({
+  flavour: "opencode:file-reference",
+})
+
 export const FileReferenceBlockSpec = [
   FlavourExtension("opencode:file-reference"),
   BlockViewExtension("opencode:file-reference", literal`opencode-file-reference`),
+  drag,
 ]
 
 export function withFileReferenceSchema(schemas: BlockSchemaType[]) {
