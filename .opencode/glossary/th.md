@@ -2,8 +2,8 @@
 
 ## Sources
 
-- PR #10809: https://github.com/anomalyco/opencode/pull/10809
-- PR #11496: https://github.com/anomalyco/opencode/pull/11496
+- PR #10809: https://github.com/wesleysimplicio/simplicio-code/pull/10809
+- PR #11496: https://github.com/wesleysimplicio/simplicio-code/pull/11496
 
 ## Do Not Translate (Locale Additions)
 

@@ -7,7 +7,7 @@ export const config = {
 
   // GitHub
   github: {
-    repoUrl: "https://github.com/anomalyco/opencode",
+    repoUrl: "https://github.com/wesleysimplicio/simplicio-code",
     starsFormatted: {
       compact: "160K",
       full: "160,000",

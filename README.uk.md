@@ -22,7 +22,7 @@
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/wesleysimplicio/simplicio-code/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/wesleysimplicio/simplicio-code/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@ brew install opencode              # macOS і Linux (офіційна форму
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # Будь-яка ОС
-nix run nixpkgs#opencode           # або github:anomalyco/opencode для найновішої dev-гілки
+nix run nixpkgs#opencode           # або github:wesleysimplicio/simplicio-code для найновішої dev-гілки
 ```
 
 > [!TIP]
@@ -77,7 +77,7 @@ nix run nixpkgs#opencode           # або github:anomalyco/opencode для н�
 
 ### Десктопний застосунок (BETA)
 
-OpenCode також доступний як десктопний застосунок. Завантажуйте напряму зі [сторінки релізів](https://github.com/anomalyco/opencode/releases) або [opencode.ai/download](https://opencode.ai/download).
+OpenCode також доступний як десктопний застосунок. Завантажуйте напряму зі [сторінки релізів](https://github.com/wesleysimplicio/simplicio-code/releases) або [opencode.ai/download](https://opencode.ai/download).
 
 | Платформа             | Завантаження                       |
 | --------------------- | ---------------------------------- |

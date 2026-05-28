@@ -15,7 +15,7 @@ URLs públicas conhecidas (não renomear sem decisão de domínio):
 
 - `opencode.ai` (config schema, docs, instalador)
 - `@simpliciocode/*` (pacotes npm publicados)
-- `anomalyco/opencode` (URL no `package.json#repository`)
+- `wesleysimplicio/simplicio-code` (URL no `package.json#repository`)
 
 ## Fases
 

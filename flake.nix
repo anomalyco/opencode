@@ -39,7 +39,7 @@
             };
           in
           rec {
-            opencode = final.callPackage ./nix/opencode.nix {
+            opencode = final.callPackage ./nix/simpliciocode.nix {
               inherit node_modules;
             };
             opencode-desktop = final.callPackage ./nix/desktop.nix {
@@ -57,7 +57,7 @@
         in
         rec {
           default = opencode;
-          opencode = pkgs.callPackage ./nix/opencode.nix {
+          opencode = pkgs.callPackage ./nix/simpliciocode.nix {
             inherit node_modules;
           };
           opencode-desktop = pkgs.callPackage ./nix/desktop.nix {

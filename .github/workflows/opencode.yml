@@ -26,7 +26,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # latest
+        uses: wesleysimplicio/simplicio-code/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_PERMISSION: '{"bash": "deny"}'

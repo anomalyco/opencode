@@ -22,7 +22,7 @@
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/wesleysimplicio/simplicio-code/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/wesleysimplicio/simplicio-code/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@ brew install opencode              # macOS 및 Linux (공식 brew formula, 업�
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # 어떤 OS든
-nix run nixpkgs#opencode           # 또는 github:anomalyco/opencode 로 최신 dev 브랜치
+nix run nixpkgs#opencode           # 또는 github:wesleysimplicio/simplicio-code 로 최신 dev 브랜치
 ```
 
 > [!TIP]
@@ -77,7 +77,7 @@ nix run nixpkgs#opencode           # 또는 github:anomalyco/opencode 로 최신
 
 ### 데스크톱 앱 (BETA)
 
-OpenCode 는 데스크톱 앱으로도 제공됩니다. [releases page](https://github.com/anomalyco/opencode/releases) 에서 직접 다운로드하거나 [opencode.ai/download](https://opencode.ai/download) 를 이용하세요.
+OpenCode 는 데스크톱 앱으로도 제공됩니다. [releases page](https://github.com/wesleysimplicio/simplicio-code/releases) 에서 직접 다운로드하거나 [opencode.ai/download](https://opencode.ai/download) 를 이용하세요.
 
 | 플랫폼                | 다운로드                           |
 | --------------------- | ---------------------------------- |

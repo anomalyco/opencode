@@ -2,7 +2,7 @@
 
 ## Sources
 
-- PR #13942: https://github.com/anomalyco/opencode/pull/13942
+- PR #13942: https://github.com/wesleysimplicio/simplicio-code/pull/13942
 
 ## Do Not Translate (Locale Additions)
 

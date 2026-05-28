@@ -2,7 +2,7 @@
 import * as path from "path"
 import * as ts from "typescript"
 
-const BASE_DIR = "/home/thdxr/dev/projects/anomalyco/opencode/packages/simpliciocode"
+const BASE_DIR = "/home/thdxr/dev/projects/wesleysimplicio/simplicio-code/packages/simpliciocode"
 
 // Get entry file from command line arg or use default
 const ENTRY_FILE = process.argv[2] || "src/cli/cmd/tui/plugin/index.ts"
