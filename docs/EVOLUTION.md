@@ -15,7 +15,8 @@
 | R6 | [#8](https://github.com/wesleysimplicio/Simplicio-code/issues/8) | Cron diário às **10:00** e **17:30** para verificar atualizações das ferramentas Simplicio | EM ANDAMENTO |
 | R7 | [#9](https://github.com/wesleysimplicio/Simplicio-code/issues/9) | Modo CLI sempre executa o mesmo fluxo (mapper → dev-cli → sprint quando aplicável) | EM ANDAMENTO |
 | R8 | [#10](https://github.com/wesleysimplicio/Simplicio-code/issues/10) | Simplicio1 = família com auto-seleção (Qwen 1.5B/3B/7B/14B + DeepSeek V4 Pro via HF, budget US$5) | EM ANDAMENTO |
-| R9 | [#11](https://github.com/wesleysimplicio/Simplicio-code/issues/11) | Plano Pro US$20/mês — sem cobrança por token + Auto-Sprints exclusivo | TODO |
+| R9 | [#11](https://github.com/wesleysimplicio/Simplicio-code/issues/11) | (Substituída por R10) Plano único US$20 com Auto-Sprints | SUPERSEDED |
+| R10 | [#12](https://github.com/wesleysimplicio/Simplicio-code/issues/12) | SimplicioCode SaaS fechado — Free / Plus($20) / Pro($50) + Stripe + segurança JWT | EM ANDAMENTO |
 
 Issue mestre: [#2](https://github.com/wesleysimplicio/Simplicio-code/issues/2).
 
@@ -223,6 +224,35 @@ Branch: `claude/simplicio-setup-config-9PXIm`. Commit: `<próximo>`.
 - `bun test` em billing + provider → **19/19 PASS** em 1.4s.
 
 Resultado: R9 saiu de scaffold para implementação real (~50% — falta apenas wirar `requirePro("autoSprintWatcher")` no `sendsprint watch` e o endpoint `/billing/checkout`).
+
+### 2026-05-28 — R10 (3 tiers + segurança JWT) substitui R9
+
+Branch: `claude/simplicio-setup-config-9PXIm`.
+
+**Decisão do usuário:**
+- SimplicioCode = **projeto fechado**, concorrente do Cursor.
+- 3 tiers:
+  - **Free** US$0 — só app, Simplicio1 local (Qwen).
+  - **Plus** US$20/mo — tokens infinitos + Simplicio1 (local + Pro remoto).
+  - **Pro** US$50/mo — tudo do Plus + Auto-Sprints (`sendsprint watch`).
+- **Segurança**: cada usuário deve ter subscription Stripe ativa, verificada via JWT assinado pelo backend.
+
+**Materializado:**
+- `packages/simpliciocode/src/billing/gate.ts` reescrito:
+  - `Plan = "free" | "plus" | "pro"`.
+  - `capabilities()` com 4 features (`remoteModels`, `unlimitedTokens`, `autoSprintWatcher`, `manualSprintRun`).
+  - `requireFeature(plan, feature)` indica menor plan exigido na mensagem de erro.
+  - `verifyJwt(token, secret)` com HMAC SHA-256 via WebCrypto; rejeita exp/sig/plan inválidos.
+  - `resolvePlan({ jwt, jwtSecret, enforce })` honra JWT verificado; `SIMPLICIO_PLAN` env só funciona fora de produção (`NODE_ENV=production + SIMPLICIO_ENFORCE=1` bloqueia o bypass).
+- `packages/simpliciocode/test/billing/gate.test.ts` reescrito com **15 testes** (capabilities por tier, requireFeature, verifyJwt com HMAC real, expiry, plan invalido, override env).
+- `.simplicio/config.json#subscription` ganha blocos `free/plus/pro` + `security.jwt*Env` + `billing.priceIdPlusEnv`.
+- `script/simplicio/plan.ts` mostra Plan + capabilities + upgrade path; aceita `--jwt $TOKEN --secret $SECRET`.
+- `bun run simplicio:plan` adicionado ao package.json.
+
+**Validação:**
+- `bun test test/billing/gate.test.ts test/provider/simplicio1.test.ts` → **24/24 PASS** em 1.4s.
+
+Resultado: R10 ~60% — falta o backend de auth (login/OTP/JWT signing) e a integração no `sendsprint watch`.
 
 ### Pendências para próximos commits
 

@@ -13,7 +13,14 @@ B='\033[1m'; G='\033[1;32m'; Y='\033[1;33m'; C='\033[1;36m'; R='\033[1;31m'; X='
 
 print_header() {
   printf '\n%b═══ SimplicioCode • Sprints Board ═══%b\n' "$C" "$X"
-  printf 'source: %s   |   spec: docs/EVOLUTION.md → R3\n\n' "${1:-all configured}"
+  printf 'source: %s   |   spec: docs/EVOLUTION.md → R3\n' "${1:-all configured}"
+  # Show the active Simplicio1 tier + plan when bun is available.
+  if command -v bun >/dev/null 2>&1 && [[ -f "$REPO_ROOT/script/simplicio/which-tier.ts" ]]; then
+    local tier_line
+    tier_line=$(bun "$REPO_ROOT/script/simplicio/which-tier.ts" 2>/dev/null | grep "Active tier" | tr -s " ")
+    [[ -n "$tier_line" ]] && printf '%s\n' "$tier_line"
+  fi
+  printf 'plan: %s\n\n' "${SIMPLICIO_PLAN:-free}"
 }
 
 print_columns() {

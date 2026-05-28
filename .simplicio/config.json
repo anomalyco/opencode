@@ -98,24 +98,42 @@
   "subscription": {
     "billing": {
       "provider": "stripe",
-      "priceIdEnv": "STRIPE_PRICE_ID_PRO",
       "secretKeyEnv": "STRIPE_SECRET_KEY",
       "webhookSecretEnv": "STRIPE_WEBHOOK_SECRET",
-      "checkoutSuccessUrl": "https://opencode.ai/pro/success",
-      "checkoutCancelUrl": "https://opencode.ai/pro/cancel",
+      "priceIdPlusEnv": "STRIPE_PRICE_ID_PLUS",
+      "priceIdProEnv": "STRIPE_PRICE_ID_PRO",
+      "checkoutSuccessUrl": "https://opencode.ai/pricing/success",
+      "checkoutCancelUrl": "https://opencode.ai/pricing/cancel",
       "customerPortalUrl": "https://billing.stripe.com/p/login/test_simplicio"
     },
+    "security": {
+      "jwtSecretEnv": "SIMPLICIO_JWT_SECRET",
+      "jwtTtlSeconds": 900,
+      "cachePath": "~/.config/simplicio/auth.json",
+      "enforceInProductionEnv": "SIMPLICIO_ENFORCE"
+    },
     "free": {
-      "models": ["simplicio1-auto"],
+      "priceUsdMonth": 0,
+      "models": ["simplicio1-local"],
       "sprintMode": "manual",
-      "watcher": false
+      "watcher": false,
+      "remoteModels": false
+    },
+    "plus": {
+      "priceUsdMonth": 20,
+      "models": ["simplicio1-local", "simplicio1-pro"],
+      "tokensIncluded": "unlimited",
+      "sprintMode": "manual",
+      "watcher": false,
+      "remoteModels": true
     },
     "pro": {
-      "priceUsdMonth": 20,
+      "priceUsdMonth": 50,
+      "models": ["simplicio1-local", "simplicio1-pro"],
       "tokensIncluded": "unlimited",
       "sprintMode": "automatic",
       "watcher": true,
-      "remoteModels": ["claude-opus", "gpt-5", "gemini-2.5-pro"]
+      "remoteModels": true
     }
   },
   "flow": {

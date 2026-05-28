@@ -24,7 +24,8 @@
     "simplicio:update": "bash script/simplicio/update.sh",
     "simplicio:task": "bash script/simplicio/flow.sh",
     "sprints": "bash script/simplicio/sprints.sh",
-    "simplicio:which-tier": "bun script/simplicio/which-tier.ts"
+    "simplicio:which-tier": "bun script/simplicio/which-tier.ts",
+    "simplicio:plan": "bun script/simplicio/plan.ts"
   },
   "workspaces": {
     "packages": [
