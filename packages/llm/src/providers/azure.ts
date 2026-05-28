@@ -97,11 +97,29 @@ export const configure = (input: Config) => {
 
   return {
     id,
-    model: (modelID: string | ModelID) => (input.useCompletionUrls === true ? chat(modelID) : responses(modelID)),
+    // Azure AI Foundry hosts two distinct families: OpenAI-native deployments
+    // (gpt-*, o-series) which speak the Responses API, and partner deployments
+    // (DeepSeek, Kimi, Llama, etc.) which only speak Chat Completions. Routing
+    // a partner deployment through Responses works at the network layer but
+    // Azure silently drops `max_output_tokens` during the Responses→Chat
+    // translation, capping the underlying call at the chat default (4096
+    // tokens) regardless of the user's `limit.output`. Auto-detect by model id
+    // so the common case Just Works; `useCompletionUrls` remains an explicit
+    // override for either direction.
+    model: (modelID: string | ModelID) => {
+      if (input.useCompletionUrls === true) return chat(modelID)
+      if (input.useCompletionUrls === false) return responses(modelID)
+      return isOpenAIResponsesNative(String(modelID)) ? responses(modelID) : chat(modelID)
+    },
     responses,
     chat,
     configure,
   }
+}
+
+const isOpenAIResponsesNative = (modelID: string) => {
+  const id = modelID.toLowerCase()
+  return id.startsWith("gpt-") || id.startsWith("o1") || id.startsWith("o3") || id.startsWith("o4")
 }
 
 export const provider = {
