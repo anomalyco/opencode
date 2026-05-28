@@ -62,3 +62,22 @@ export function questionReply(
     }),
   ])
 }
+
+export function questionRequestNotFound(error: unknown, requestID: string) {
+  const cause = error instanceof Error ? error.cause : undefined
+  const body =
+    cause && typeof cause === "object" && "body" in cause
+      ? (cause as { body?: unknown }).body
+      : error && typeof error === "object"
+        ? error
+        : undefined
+
+  if (body && typeof body === "object") {
+    const tag = "_tag" in body ? (body as { _tag?: unknown })._tag : undefined
+    const id = "requestID" in body ? (body as { requestID?: unknown }).requestID : undefined
+    if (tag === "QuestionNotFoundError" && id === requestID) return true
+  }
+
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  return message === `Question request not found: ${requestID}`
+}

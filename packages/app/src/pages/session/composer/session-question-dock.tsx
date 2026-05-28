@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
@@ -10,6 +10,7 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import { usePlatform } from "@/context/platform"
 import type { ImageAttachmentPart } from "@/context/prompt"
 import { ACCEPTED_IMAGE_TYPES } from "@/constants/file-picker"
@@ -19,6 +20,7 @@ import {
   questionAnswered,
   questionAttachments,
   questionReply,
+  questionRequestNotFound,
   type QuestionImage as Image,
 } from "./session-question-dock-helpers"
 
@@ -33,6 +35,7 @@ export const questionCache = new Map<
 
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
+  const sync = useSync()
   const language = useLanguage()
   const dialog = useDialog()
   const platform = usePlatform()
@@ -205,7 +208,46 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     })
   })
 
+  const refreshQuestions = async () => {
+    const result = await sdk.client.question.list()
+    const list = (result.data ?? []).filter((item) => item.sessionID === props.request.sessionID)
+    sync.set("question", props.request.sessionID, reconcile(list, { key: "id" }))
+    console.debug(
+      `[question-dock] refreshed pending questions session=${props.request.sessionID} count=${list.length} stale=${props.request.id}`,
+    )
+  }
+
+  const removeStaleQuestion = () => {
+    replied = true
+    questionCache.delete(props.request.id)
+    sync.set(
+      "question",
+      props.request.sessionID,
+      produce((draft = []) => {
+        const index = draft.findIndex((item) => item.id === props.request.id)
+        if (index !== -1) draft.splice(index, 1)
+        return draft
+      }),
+    )
+  }
+
   const fail = (err: unknown) => {
+    if (questionRequestNotFound(err, props.request.id)) {
+      console.warn(
+        `[question-dock] stale request missing on server request=${props.request.id} session=${props.request.sessionID}`,
+      )
+      removeStaleQuestion()
+      void refreshQuestions().catch((refreshErr: unknown) => {
+        const message = refreshErr instanceof Error ? refreshErr.message : String(refreshErr)
+        console.warn(`[question-dock] refresh after stale request failed request=${props.request.id} error=${message}`)
+      })
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: `Question request is no longer pending: ${props.request.id}`,
+      })
+      return
+    }
+
     const message = err instanceof Error ? err.message : String(err)
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
@@ -238,14 +280,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   createEffect(() => setStore("sending", sending()))
 
-  const reply = async (answers: QuestionAnswer[]) => {
+  const reply = (answers: QuestionAnswer[]) => {
     if (sending()) return
-    await replyMutation.mutateAsync(answers)
+    replyMutation.mutate(answers)
   }
 
-  const reject = async () => {
+  const reject = () => {
     if (sending()) return
-    await rejectMutation.mutateAsync()
+    rejectMutation.mutate()
   }
 
   const submit = () => void reply(questionReply(questions(), store.answers, store.images))

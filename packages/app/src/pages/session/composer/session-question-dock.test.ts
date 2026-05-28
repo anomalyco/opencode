@@ -3,12 +3,14 @@ import { beforeAll, describe, expect, test } from "bun:test"
 let questionAnswered: typeof import("./session-question-dock-helpers").questionAnswered
 let questionAttachments: typeof import("./session-question-dock-helpers").questionAttachments
 let questionReply: typeof import("./session-question-dock-helpers").questionReply
+let questionRequestNotFound: typeof import("./session-question-dock-helpers").questionRequestNotFound
 
 beforeAll(async () => {
   const mod = await import("./session-question-dock-helpers")
   questionAnswered = mod.questionAnswered
   questionAttachments = mod.questionAttachments
   questionReply = mod.questionReply
+  questionRequestNotFound = mod.questionRequestNotFound
 })
 
 describe("session question dock helpers", () => {
@@ -100,5 +102,21 @@ describe("session question dock helpers", () => {
         ],
       ),
     ).toEqual([[{ type: "image", mime: "image/png", url: "data:image/png;base64,BBBB", filename: "proof.png" }]])
+  })
+
+  test("recognizes stale question request errors as already handled", () => {
+    const error = new Error("Question request not found: que_1", {
+      cause: {
+        body: {
+          _tag: "QuestionNotFoundError",
+          requestID: "que_1",
+          message: "Question request not found: que_1",
+        },
+        status: 404,
+      },
+    })
+
+    expect(questionRequestNotFound(error, "que_1")).toBe(true)
+    expect(questionRequestNotFound(error, "que_2")).toBe(false)
   })
 })
