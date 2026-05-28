@@ -133,7 +133,15 @@ detect_target() {
   case "$raw_os" in
     Darwin*) os="darwin" ;;
     Linux*)  os="linux"  ;;
-    MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+    MINGW*|MSYS*|CYGWIN*)
+      err "SecureCode は Windows ネイティブ環境では動作しません。"
+      err "WSL (Windows Subsystem for Linux) 経由でご使用ください。"
+      err ""
+      err "WSL のインストール: https://learn.microsoft.com/windows/wsl/install"
+      err ""
+      err "WSL をインストール後、WSL のターミナルを開き以下を実行してください:"
+      err "  gh release download -R acompany-develop/securecode-release --pattern install -O - | bash"
+      exit 1 ;;
     *) err "Unsupported OS: $raw_os"; exit 1 ;;
   esac
 
@@ -153,7 +161,7 @@ detect_target() {
 
   combo="$os-$arch"
   case "$combo" in
-    linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64|windows-arm64) ;;
+    linux-x64|linux-arm64|darwin-x64|darwin-arm64) ;;
     *) err "Unsupported OS/Arch combo: $combo"; exit 1 ;;
   esac
 

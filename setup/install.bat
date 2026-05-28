@@ -1,26 +1,12 @@
 @echo off
-setlocal EnableDelayedExpansion
-
-set "script=%~dp0install.ps1"
-
-echo SecureCode installer is starting...
-
-where pwsh >nul 2>nul
-if %errorlevel% equ 0 (
-  pwsh -NoProfile -ExecutionPolicy Bypass -File "%script%"
-  set "exit_code=!errorlevel!"
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%script%"
-  set "exit_code=!errorlevel!"
-)
-
-if not "%exit_code%"=="0" (
-  echo.
-  echo Installer failed with exit code %exit_code%.
-  timeout /t 2 /nobreak >nul
-  exit /b %exit_code%
-)
-
+echo SecureCode は Windows ネイティブ環境では動作しません。
+echo WSL (Windows Subsystem for Linux) 経由でご使用ください。
 echo.
-echo Installer completed successfully.
-timeout /t 2 /nobreak >nul
+echo WSL のインストール:
+echo   https://learn.microsoft.com/windows/wsl/install
+echo.
+echo WSL をインストール後、WSL のターミナルを開き以下を実行してください:
+echo   gh release download -R acompany-develop/securecode-release --pattern install -O - ^| bash
+echo.
+pause
+exit /b 1
