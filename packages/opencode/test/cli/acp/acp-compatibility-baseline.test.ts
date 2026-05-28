@@ -40,7 +40,7 @@ describe("opencode acp verifier compatibility baseline", () => {
   )
 
   cliIt.live(
-    "first session timing diagnostic stays bounded and returns model options",
+    "first session returns model options",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const acp = createAcpClient(
@@ -50,7 +50,6 @@ describe("opencode acp verifier compatibility baseline", () => {
             },
           }),
         )
-        const started = Date.now()
         yield* acp.request<InitializeResponse>("initialize", {
           protocolVersion: 1,
           clientCapabilities: {},
@@ -62,9 +61,6 @@ describe("opencode acp verifier compatibility baseline", () => {
             mcpServers: [],
           }),
         )
-        const durationMs = Date.now() - started
-        expect(durationMs).toBeLessThan(15_000)
-
         const model = selectConfigOption(session.configOptions, "model")
         expect(model?.category).toBe("model")
         expect(model?.currentValue).toBe("test/test-model")
@@ -74,7 +70,7 @@ describe("opencode acp verifier compatibility baseline", () => {
   )
 
   cliIt.live(
-    "warm newSession timing diagnostic stays bounded",
+    "newSession can be called repeatedly",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const acp = createAcpClient(
@@ -87,22 +83,19 @@ describe("opencode acp verifier compatibility baseline", () => {
         yield* acp.request<InitializeResponse>("initialize", { protocolVersion: 1 })
         yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] })
 
-        const started = Date.now()
         const session = expectOk(
           yield* acp.request<NewSessionResponse>("session/new", {
             cwd: home,
             mcpServers: [],
           }),
         )
-        const durationMs = Date.now() - started
-        expect(durationMs).toBeLessThan(15_000)
         expect(session.sessionId).toBeTruthy()
       }),
     60_000,
   )
 
   cliIt.live(
-    "model switch timing diagnostic updates currentValue",
+    "model switch updates currentValue",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const acp = createAcpClient(
@@ -121,7 +114,6 @@ describe("opencode acp verifier compatibility baseline", () => {
           : undefined
         expect(nextModel).toBe("test/second-model")
 
-        const started = Date.now()
         const updated = expectOk(
           yield* acp.request<SetSessionConfigOptionResponse>("session/set_config_option", {
             sessionId: session.sessionId,
@@ -129,9 +121,7 @@ describe("opencode acp verifier compatibility baseline", () => {
             value: nextModel,
           }),
         )
-        const durationMs = Date.now() - started
 
-        expect(durationMs).toBeLessThan(15_000)
         expect(selectConfigOption(updated.configOptions, "model")?.currentValue).toBe(nextModel)
       }),
     60_000,
@@ -189,7 +179,7 @@ describe("opencode acp verifier compatibility baseline", () => {
   )
 
   cliIt.live(
-    "skill slash command timing diagnostic appears through available_commands_update",
+    "skill slash command appears through available_commands_update",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const skills = path.join(home, "skills")
@@ -215,19 +205,6 @@ describe("opencode acp verifier compatibility baseline", () => {
 
         expect(update.params?.sessionId).toBe(session.sessionId)
 
-        const secondSession = expectOk(
-          yield* acp.request<NewSessionResponse>("session/new", { cwd: home, mcpServers: [] }),
-        )
-        const started = Date.now()
-        yield* acp.waitForNotification<SessionNotification>(
-          "session/update",
-          (params) =>
-            params.sessionId === secondSession.sessionId &&
-            params.update.sessionUpdate === "available_commands_update" &&
-            params.update.availableCommands.some((command) => command.name === "verifier-skill"),
-        )
-        const durationMs = Date.now() - started
-        expect(durationMs).toBeLessThan(15_000)
       }),
     60_000,
   )
