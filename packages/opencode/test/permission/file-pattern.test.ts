@@ -55,3 +55,25 @@ describe("grep result filtering", () => {
     expect(filtered[0].path).toBe("/project/src/app.ts")
   })
 })
+
+describe("issue #29674 full scenario", () => {
+  test("user config deny rule blocks .env at root for read", () => {
+    // Simulates: user writes { "read": { "**/.env*": "deny" } } in opencode.jsonc
+    const ruleset = Permission.fromConfig({ read: { "**/.env*": "deny" } })
+    expect(Permission.evaluate("read", ".env", ruleset).action).toBe("deny")
+    expect(Permission.evaluate("read", ".env.local", ruleset).action).toBe("deny")
+    expect(Permission.evaluate("read", "src/main.ts", ruleset).action).toBe("ask")
+  })
+
+  test("user config deny rule blocks .env in subfolder for read", () => {
+    const ruleset = Permission.fromConfig({ read: { "**/.env*": "deny" } })
+    expect(Permission.evaluate("read", "config/.env", ruleset).action).toBe("deny")
+  })
+
+  test("default agent rules deny .env via *.env pattern", () => {
+    // Simulates agent.ts defaults: "*.env": "ask", "*.env.*": "ask"
+    const ruleset = Permission.fromConfig({ read: { "*.env": "ask", "*.env.*": "ask" } })
+    expect(Permission.evaluate("read", ".env", ruleset).action).toBe("ask")
+    expect(Permission.evaluate("read", ".env.local", ruleset).action).toBe("ask")
+  })
+})
