@@ -1,6 +1,25 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {},
+  // SimplicioCode: register Simplicio1 (Qwen 2.5 Coder 3B served by local Ollama)
+  // as the free, unlimited-tokens local provider. See docs/EVOLUTION.md (R4).
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Simplicio (Local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+      },
+      "models": {
+        "qwen2.5-coder:3b": {
+          "name": "Simplicio1 (Qwen 2.5 Coder 3B • Free • Unlimited)",
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
   "permission": {},
   "mcp": {},
   "tools": {

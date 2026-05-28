@@ -12,6 +12,9 @@ on:
     - cron: "30 20 * * *"  # 17:30 BRT
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   update:
     runs-on: ubuntu-latest

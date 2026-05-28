@@ -2,6 +2,16 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## SimplicioCode toolchain (mandatory)
+
+This repository is being rebranded from OpenCode to **SimplicioCode**. Tracking lives in [`docs/EVOLUTION.md`](docs/EVOLUTION.md). Three rules every agent must follow when working here:
+
+1. **Map first.** Before any programming task, run `bash script/simplicio/flow.sh --map-only` (or `/map` in TUI). It calls `simplicio-mapper` and refreshes `.specs/`, `docs/architecture-map.md`, etc.
+2. **Program through simplicio-cli.** Non-trivial code edits should go through `bash script/simplicio/flow.sh "<task>"` (or `/simplicio <task>`). The default provider is **Simplicio1** = `ollama/qwen2.5-coder:3b` — local, free, no token limit.
+3. **Sprints from a tracker.** When a card exists in Jira / Azure DevOps / GitHub Issues, drive it with `bash script/simplicio/flow.sh --sprint <jira|azuredevops|github> <sprint-id>` (or `/sprint run <source> <sprint>`).
+
+Install/refresh the toolchain with `bash script/simplicio/install-tools.sh`. The cron workflow `.github/workflows/simplicio-update.yml` keeps it on `latest` daily at 10:00 and 17:30 BRT.
+
 ## Commits and PR Titles
 
 Use conventional commit-style messages and PR titles: `type(scope): summary`.
