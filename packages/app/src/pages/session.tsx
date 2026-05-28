@@ -75,7 +75,6 @@ const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
-const USE_NEW_SESSION_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -198,6 +197,7 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -265,7 +265,7 @@ export default function Page() {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
   const isV2NewSessionPage = () =>
-    shouldUseV2NewSessionPage({ channel: import.meta.env.VITE_OPENCODE_CHANNEL, sessionID: params.id })
+    shouldUseV2NewSessionPage({ newLayoutDesigns: newSessionDesign(), sessionID: params.id })
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened() && !isV2NewSessionPage())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -1663,7 +1663,6 @@ export default function Page() {
         inputRef = el
       }}
       newSessionWorktree={newSessionWorktree()}
-      onNewSessionWorktreeChange={(value) => setStore("newSessionWorktree", value)}
       onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
       onSubmit={() => {
         comments.clear()
@@ -1799,16 +1798,14 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <Show when={USE_NEW_SESSION_DESIGN} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
-                  <NewSessionDesignView worktree={newSessionWorktree()}>
-                    {composerRegion("inline")}
-                  </NewSessionDesignView>
+                <Show when={newSessionDesign()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
+                  <NewSessionDesignView>{composerRegion("inline")}</NewSessionDesignView>
                 </Show>
               </Match>
             </Switch>
           </div>
 
-          <Show when={params.id || !USE_NEW_SESSION_DESIGN}>{composerRegion("dock")}</Show>
+          <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>

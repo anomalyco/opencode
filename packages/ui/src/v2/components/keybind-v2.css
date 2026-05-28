@@ -6,7 +6,7 @@
 
 [data-component="keybind-v2"] {
   box-sizing: border-box;
-  font-family: var(--font-family-sans), var(--sans), system-ui, sans-serif;
+  font-family: var(--v2-font-family-sans), var(--sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   flex-direction: row;
@@ -53,7 +53,7 @@
   padding: 0px;
   flex: 1 1 auto;
   align-self: stretch;
-  font-family: "Inter", var(--font-family-sans), var(--sans), system-ui, sans-serif;
+  font-family: "Inter", var(--v2-font-family-sans), var(--sans), system-ui, sans-serif;
   font-style: normal;
   font-weight: 530;
   font-size: 11px;
