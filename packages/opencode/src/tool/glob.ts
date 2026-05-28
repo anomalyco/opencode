@@ -71,16 +71,23 @@ export const GlobTool = Tool.define(
             Effect.map((chunk) => [...chunk]),
           )
 
-          if (files.length > limit) {
+          // Filter out files the user has denied read access to.
+          // Uses the relative path from worktree so rules like "**/.env*" and "*.env" both apply.
+          const allowed = files.filter(({ path: filePath }) => {
+            const relPath = path.relative(ins.worktree, filePath)
+            return ctx.evaluate({ permission: "read", pattern: relPath }).action !== "deny"
+          })
+
+          if (allowed.length > limit) {
             truncated = true
-            files.length = limit
+            allowed.length = limit
           }
-          files.sort((a, b) => b.mtime - a.mtime)
+          allowed.sort((a, b) => b.mtime - a.mtime)
 
           const output = []
-          if (files.length === 0) output.push("No files found")
-          if (files.length > 0) {
-            output.push(...files.map((file) => file.path))
+          if (allowed.length === 0) output.push("No files found")
+          if (allowed.length > 0) {
+            output.push(...allowed.map((file) => file.path))
             if (truncated) {
               output.push("")
               output.push(
@@ -92,7 +99,7 @@ export const GlobTool = Tool.define(
           return {
             title: path.relative(ins.worktree, search),
             metadata: {
-              count: files.length,
+              count: allowed.length,
               truncated,
             },
             output: output.join("\n"),
