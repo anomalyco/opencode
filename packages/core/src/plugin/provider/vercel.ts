@@ -1,15 +1,19 @@
 import { Effect } from "effect"
 import { PluginV2 } from "../../plugin"
-import { ProviderV2 } from "../../provider"
 
 export const VercelPlugin = PluginV2.define({
   id: PluginV2.ID.make("vercel"),
   effect: Effect.gen(function* () {
     return {
-      "provider.update": Effect.fn(function* (evt) {
-        if (evt.provider.id !== ProviderV2.ID.make("vercel")) return
-        evt.provider.options.headers["http-referer"] = "https://opencode.ai/"
-        evt.provider.options.headers["x-title"] = "opencode"
+      "catalog.transform": Effect.fn(function* (evt) {
+        for (const item of evt.data) {
+          if (item.provider.endpoint.type !== "aisdk") continue
+          if (item.provider.endpoint.package !== "@ai-sdk/vercel") continue
+          evt.provider.update(item.provider.id, (provider) => {
+            provider.options.headers["http-referer"] = "https://opencode.ai/"
+            provider.options.headers["x-title"] = "opencode"
+          })
+        }
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/vercel") return

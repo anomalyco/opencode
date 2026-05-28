@@ -16,7 +16,6 @@ import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -352,7 +351,7 @@ export const layer: Layer.Layer<
         return yield* new ListFailedError({ message: result.stderr || result.text || "Failed to read git worktrees" })
       }
 
-      const primary = yield* canonical(ctx.worktree)
+      const primary = yield* canonical(ctx.project.worktree)
       const primaryName = pathSvc.basename(primary).toLowerCase()
       return yield* Effect.forEach(parseWorktreeList(result.text), (entry) =>
         Effect.gen(function* () {
