@@ -532,7 +532,7 @@ it.instance("keybinds accept OpenTUI binding specs", () =>
   ),
 )
 
-it.instance("coerces keybinds.leader = \"none\" to the default to avoid TUI crash (#26628)", () =>
+it.instance("preserves keybinds.leader = \"none\" so the leader can be truly deactivated (#26628)", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
@@ -541,15 +541,17 @@ it.instance("coerces keybinds.leader = \"none\" to the default to avoid TUI cras
         $schema: "https://opencode.ai/tui.json",
         keybinds: { leader: "none" },
       })
-      // Before the fix, this throws "Invalid leader trigger" from createBindingLookup.
-      // After the fix, leader silently falls back to TuiKeybind.LeaderDefault ("ctrl+x").
+      // The schema accepts "none" / false for any keybind so users can disable individual
+      // commands. The config loader must accept it and produce a usable BindingLookup;
+      // the TUI keymap layer is responsible for skipping registerTimedLeader so the
+      // missing leader trigger does not crash on bootstrap (see keymap.tsx).
       const config = yield* getTuiConfig(test.directory)
       expect(config.keybinds).toBeDefined()
     }),
   ),
 )
 
-it.instance("coerces keybinds.leader = false to the default to avoid TUI crash (#26628)", () =>
+it.instance("preserves keybinds.leader = false so the leader can be truly deactivated (#26628)", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
@@ -573,7 +575,7 @@ it.instance("respects keybinds.leader override when a real binding is provided",
         $schema: "https://opencode.ai/tui.json",
         keybinds: { leader: "alt+space" },
       })
-      // The fix must only coerce on the "disabled" sentinels - any real binding must pass through.
+      // Real bindings must pass through unchanged.
       const config = yield* getTuiConfig(test.directory)
       expect(config.keybinds).toBeDefined()
     }),
