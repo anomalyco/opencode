@@ -1,6 +1,10 @@
 import "./index.css"
-import { Meta, Title } from "@solidjs/meta"
+import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
+import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
+import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
+import ibmPlexMonoBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2?url"
 import {
   type CountryEntry,
   getStatsHomeData,
@@ -13,16 +17,39 @@ import {
 } from "@opencode-ai/stats-core/domain/home"
 import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
-import { scaleBand, scaleLinear } from "d3-scale"
-import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
-import logoDark from "../asset/logo-ornate-dark.svg"
-import logoLight from "../asset/logo-ornate-light.svg"
 
-const products = ["All Users", "Zen", "Go", "Enterprise"] as const
-const tokenProducts = ["Zen", "Go", "Enterprise"] as const
-const ranges = ["1D", "1W", "1M", "3M", "YTD", "ALL"] as const
-const usageColors = ["#ff5d64", "#ff8a00", "#8bef00", "#12c8b3", "#18c7dc", "#6c7dff", "#9d73f7"]
+const products = ["All Users", "Zen", "Go"] as const
+const tokenProducts = ["Zen", "Go"] as const
+const ranges = ["1D", "1W", "2W", "1M", "2M"] as const
+const rangeLabels: Record<UsageRange, string> = {
+  "1D": "1 Day",
+  "1W": "1 Week",
+  "2W": "2 Weeks",
+  "1M": "1 Month",
+  "2M": "2 Months",
+}
+const headerLinks = [
+  { href: "#top-models", label: "Top Models" },
+  { href: "#leaderboard", label: "Leaderboard" },
+  { href: "#market-share", label: "Market Share" },
+  { href: "#token-cost", label: "Token Cost" },
+  { href: "#session-cost", label: "Session Cost" },
+] as const
+const usageColors = [
+  "#ed6aff",
+  "#a684ff",
+  "#7c86ff",
+  "#51a2ff",
+  "#00d3f2",
+  "#00d5be",
+  "#00bc7d",
+  "#9ae600",
+  "#ffb900",
+  "#ff8904",
+  "#ff6467",
+]
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
 const countryPositions = [
   { x: 112, y: 96 },
@@ -59,14 +86,18 @@ export default function StatsHome() {
     <main data-page="stats">
       <Title>OpenCode Stats</Title>
       <Meta name="description" content="OpenCode usage, market share, token cost, and session cost stats." />
+      <Link rel="preload" href={ibmPlexMonoRegularLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+      <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+      <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+      <Link rel="preload" href={ibmPlexMonoBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+      <Header />
       <div data-component="container">
-        <Header />
         <div data-component="content">
           <Show when={data()} fallback={<StatsLoading />}>
             {(stats) => (
               <>
                 <Hero updatedAt={stats().updatedAt} />
-                <UsageSection data={stats().usage} />
+                <TopModelsSection data={stats().usage} />
                 <LeaderboardSection data={stats().leaderboard} />
                 <MarketShareSection data={stats().market} />
                 <TokenCostSection data={stats().tokenCost} />
@@ -85,21 +116,30 @@ export default function StatsHome() {
 }
 
 function Hero(props: { updatedAt: string | null }) {
+  const [timeZone, setTimeZone] = createSignal("UTC")
+  onMount(() => setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"))
+
   return (
     <section data-section="hero">
-      <div>
-        <h1>OpenCode Stats</h1>
-        <p data-slot="meta">
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
-            <rect x="3" y="3" width="10" height="10" fill="currentColor" />
-            <rect x="7" y="6.5" width="2" height="4.5" fill="var(--stats-layer-2)" />
-            <rect x="7" y="5" width="2" height="1" fill="var(--stats-layer-2)" />
-          </svg>
-          <span>OpenCode data</span> <b>·</b>{" "}
-          <em>{props.updatedAt ? `Updated ${formatUpdatedAt(props.updatedAt)}` : "No rows yet"}</em>
+      <p data-slot="hero-meta">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M13 13H3V3H13V13ZM6.46777 6.81641V7.81641H7.5791V11.3721H8.5791V6.81641H6.46777ZM7.30078 4.62891V5.62891H8.85645V4.62891H7.30078Z"
+            fill="currentColor"
+          />
+        </svg>
+        <span>{props.updatedAt ? `Updated ${formatUpdatedAt(props.updatedAt, timeZone())}` : "No rows yet"}</span>
+      </p>
+      <div data-slot="hero-canvas">
+        <div data-slot="hero-pattern" aria-hidden="true" />
+        <h1>Model Stats</h1>
+        <p data-slot="hero-copy">
+          See which models are winning real usage, how the mix <br data-slot="hero-copy-break" />
+          shifts over time, and where momentum is moving each week.
         </p>
       </div>
-      <p>See how model usage, provider share, cost, and geography move across OpenCode traffic.</p>
     </section>
   )
 }
@@ -115,9 +155,15 @@ function StatsLoading() {
   )
 }
 
-function ChartSection(props: { title: string; description?: string; controls?: JSX.Element; children: JSX.Element }) {
+function ChartSection(props: {
+  id?: string
+  title: string
+  description?: string
+  controls?: JSX.Element
+  children: JSX.Element
+}) {
   return (
-    <section data-section="chart">
+    <section id={props.id} data-section="chart">
       <div data-slot="section-header">
         <div>
           <h2>{props.title}</h2>
@@ -139,7 +185,7 @@ function EmptyState(props: { title: string; description: string }) {
   )
 }
 
-function formatUpdatedAt(value: string) {
+function formatUpdatedAt(value: string, timeZone: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "just now"
   return new Intl.DateTimeFormat("en", {
@@ -147,28 +193,163 @@ function formatUpdatedAt(value: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "UTC",
+    timeZone,
     timeZoneName: "short",
   }).format(date)
 }
 
-function UsageSection(props: { data: StatsHomeData["usage"] }) {
+function TopModelsSection(props: { data: StatsHomeData["usage"] }) {
   const [product, setProduct] = createSignal<UsageProduct>("All Users")
   const [range, setRange] = createSignal<UsageRange>("1W")
+  const [sheet, setSheet] = createSignal<"product" | "range">()
   const data = createMemo(() => props.data[product()][range()])
 
+  createEffect(() => {
+    if (!sheet()) return
+    if (typeof document === "undefined") return
+    const htmlOverflow = document.documentElement.style.overflow
+    const bodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSheet(undefined)
+    }
+    document.addEventListener("keydown", onKeyDown)
+    onCleanup(() => {
+      document.documentElement.style.overflow = htmlOverflow
+      document.body.style.overflow = bodyOverflow
+      document.removeEventListener("keydown", onKeyDown)
+    })
+  })
+
   return (
-    <ChartSection title="Usage">
+    <section id="top-models" data-section="top-models">
+      <h2 data-slot="top-models-title">
+        <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
+      </h2>
+      <div data-slot="top-models-mobile-controls">
+        <MobileFilterButton
+          label="Product filter"
+          value={product()}
+          expanded={sheet() === "product"}
+          onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
+        />
+        <MobileFilterButton
+          label="Date range"
+          value={range()}
+          expanded={sheet() === "range"}
+          onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
+        />
+      </div>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title="No usage data" description="No model_stat rows matched this product and range." />}
       >
-        <UsageChart data={data()} />
+        <TopModelsChart data={data()} range={range()} />
       </Show>
       <div data-slot="chart-footer">
         <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
       </div>
-    </ChartSection>
+      <Show when={sheet()}>
+        {(kind) => (
+          <MobileFilterSheet
+            kind={kind()}
+            product={product()}
+            range={range()}
+            onProductSelect={(value) => {
+              setProduct(value)
+              setSheet(undefined)
+            }}
+            onRangeSelect={(value) => {
+              setRange(value)
+              setSheet(undefined)
+            }}
+            onClose={() => setSheet(undefined)}
+          />
+        )}
+      </Show>
+    </section>
+  )
+}
+
+function MobileFilterButton(props: { label: string; value: string; expanded: boolean; onClick: () => void }) {
+  return (
+    <button
+      data-slot="mobile-filter-button"
+      type="button"
+      aria-label={props.label}
+      aria-expanded={props.expanded ? "true" : "false"}
+      onClick={props.onClick}
+    >
+      <span>{props.value}</span>
+      <ChevronDown />
+    </button>
+  )
+}
+
+function MobileFilterSheet(props: {
+  kind: "product" | "range"
+  product: UsageProduct
+  range: UsageRange
+  onProductSelect: (product: UsageProduct) => void
+  onRangeSelect: (range: UsageRange) => void
+  onClose: () => void
+}) {
+  return (
+    <div data-component="mobile-filter-sheet" role="presentation" onClick={props.onClose}>
+      <div
+        data-slot="filter-sheet-panel"
+        role="radiogroup"
+        aria-label={props.kind === "product" ? "Product filter" : "Date range"}
+      >
+        <Show
+          when={props.kind === "product"}
+          fallback={
+            <For each={ranges}>
+              {(item) => (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={props.range === item}
+                  data-active={props.range === item ? "true" : undefined}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    props.onRangeSelect(item)
+                  }}
+                >
+                  {rangeLabels[item]}
+                </button>
+              )}
+            </For>
+          }
+        >
+          <For each={products}>
+            {(item) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={props.product === item}
+                data-active={props.product === item ? "true" : undefined}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  props.onProductSelect(item)
+                }}
+              >
+                {item}
+              </button>
+            )}
+          </For>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
+function ChevronDown() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path d="M5 7L8 10L11 7" stroke="currentColor" />
+    </svg>
   )
 }
 
@@ -224,158 +405,168 @@ function FilterPills<T extends string>(props: {
   )
 }
 
-function UsageChart(props: { data: UsagePoint[] }) {
+function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
   const [activeIndex, setActiveIndex] = createSignal<number>()
   const [activeSegment, setActiveSegment] = createSignal<number>()
-  const height = 434
-  const width = 920
-  const headerOffset = 46
-  const segmentGap = 2
-  const maxTotal = createMemo(() => Math.max(1, Math.max(...props.data.map((item) => usageTotal(item))) * 1.02))
+  const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
-  const y = createMemo(() => scaleLinear([0, maxTotal()], [height, 0]))
-  const x = createMemo(() =>
-    scaleBand(
-      props.data.map((_, index) => String(index)),
-      [0, width],
-    ).paddingInner(0.08),
-  )
-  const activeBar = createMemo(() => {
-    const index = activeIndex()
-    const point = activePoint()
-    if (index === undefined) return
-    if (!point) return
-    return {
-      point,
-      x: x()(String(index)) ?? 0,
-      width: x().bandwidth(),
-    }
-  })
 
   return (
-    <div data-component="usage-chart">
-      <svg viewBox={`0 0 ${width} ${height + headerOffset}`} role="img" aria-label="Stacked usage chart">
-        <defs>
-          <pattern id="stats-usage-dot-grid" width="6" height="6" patternUnits="userSpaceOnUse">
-            <rect x="1" y="1" width="2" height="2" fill="var(--stats-dot)" />
-          </pattern>
-        </defs>
+    <div
+      data-component="top-models-chart"
+      data-range={props.range}
+      role="img"
+      aria-label="Stacked top model usage chart"
+    >
+      <div data-slot="top-models-axis" aria-hidden="true">
         <For each={props.data}>
-          {(day, dayIndex) => {
-            const barX = x()(String(dayIndex())) ?? 0
-            const barWidth = x().bandwidth()
-            const stackTop = y()(usageTotal(day))
-            return (
-              <g
-                role="button"
-                tabIndex={0}
-                aria-label={`${day.date} ${formatTokens(usageTotal(day))}`}
-                data-active={activeIndex() === dayIndex() ? "true" : undefined}
-                onPointerEnter={() => {
-                  setActiveIndex(dayIndex())
-                  setActiveSegment(undefined)
-                }}
-                onPointerLeave={(event) => {
-                  if (event.pointerType === "touch") return
-                  setActiveIndex(undefined)
-                  setActiveSegment(undefined)
-                }}
-                onClick={() => setActiveIndex(dayIndex())}
-                onFocus={() => {
-                  setActiveIndex(dayIndex())
-                  setActiveSegment(undefined)
-                }}
-                onBlur={() => {
-                  setActiveIndex(undefined)
-                  setActiveSegment(undefined)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return
-                  event.preventDefault()
-                  setActiveIndex(dayIndex())
-                }}
-              >
-                <rect
-                  x={barX}
-                  y="0"
-                  width={barWidth}
-                  height={height + headerOffset}
-                  fill="transparent"
-                  pointer-events="all"
-                />
-                <text x={barX} y="17" class="chart-total">
-                  {formatTokens(usageTotal(day))}
-                </text>
-                <text x={barX} y="34" class="chart-date">
-                  {day.date}
-                </text>
-                <rect x={barX} y={headerOffset} width={barWidth} height={stackTop} fill="url(#stats-usage-dot-grid)" />
-                <For each={day.segments}>
-                  {(segment, index) => {
-                    const previous = day.segments.slice(0, index()).reduce((sum, item) => sum + item.value, 0)
-                    const segmentHeight = y()(previous) - y()(previous + segment.value)
-                    const segmentInset = index() === day.segments.length - 1 ? 0 : segmentGap
-                    return (
-                      <rect
-                        x={barX}
-                        y={headerOffset + y()(previous + segment.value) + segmentInset}
-                        width={barWidth}
-                        height={Math.max(segmentHeight - segmentInset, 0)}
-                        data-segment-active={
-                          activeIndex() === dayIndex() && activeSegment() === index() ? "true" : undefined
-                        }
-                        opacity={getUsageSegmentOpacity(activeIndex() === dayIndex(), activeSegment(), index())}
-                        fill={activeIndex() === dayIndex() ? usageColors[index()] : "var(--stats-bar-idle)"}
-                        onPointerEnter={(event) => {
-                          event.stopPropagation()
-                          setActiveIndex(dayIndex())
-                          setActiveSegment(index())
-                        }}
-                      />
-                    )
-                  }}
-                </For>
-              </g>
-            )
-          }}
+          {(day, index) => (
+            <div
+              data-active={activeIndex() === index() ? "true" : undefined}
+              data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
+            >
+              <span data-slot="axis-label">
+                <span data-slot="axis-total">{formatTokens(usageTotal(day))}</span>
+                <span data-slot="axis-date">
+                  <span data-slot="axis-date-full">{day.date}</span>
+                  <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
+                </span>
+              </span>
+            </div>
+          )}
         </For>
-      </svg>
-      <Show when={activeBar()}>
-        {(bar) => (
-          <div
-            data-component="chart-tooltip"
-            data-placement={bar().x > width * 0.62 ? "left" : "right"}
-            style={getUsageTooltipStyle(bar().x, bar().width, width)}
-          >
-            <strong>{bar().point.date}</strong>
-            <span>{formatTokens(usageTotal(bar().point))} total</span>
-            <div data-slot="tooltip-divider" />
-            <For each={bar().point.segments}>
-              {(segment, index) => (
-                <p data-active={activeSegment() === index() ? "true" : undefined}>
-                  <span data-slot="tooltip-label">
-                    <i style={{ background: usageColors[index()] }} /> {segment.model}
-                  </span>
-                  <b>{formatTokens(segment.value)}</b>
-                </p>
-              )}
-            </For>
-          </div>
-        )}
-      </Show>
+      </div>
+      <div data-slot="top-models-bars">
+        <For each={props.data}>
+          {(day, dayIndex) => (
+            <div
+              data-slot="top-models-bar"
+              role="button"
+              tabIndex={0}
+              aria-label={`${day.date} ${formatTokens(usageTotal(day))}`}
+              data-active={activeIndex() === dayIndex() ? "true" : undefined}
+              data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
+              style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
+              onPointerEnter={() => {
+                setActiveIndex(dayIndex())
+                setActiveSegment(undefined)
+              }}
+              onPointerLeave={(event) => {
+                if (event.pointerType === "touch") return
+                setActiveIndex(undefined)
+                setActiveSegment(undefined)
+              }}
+              onClick={() => setActiveIndex(dayIndex())}
+              onFocus={() => {
+                setActiveIndex(dayIndex())
+                setActiveSegment(undefined)
+              }}
+              onBlur={() => {
+                setActiveIndex(undefined)
+                setActiveSegment(undefined)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                setActiveIndex(dayIndex())
+                setActiveSegment(undefined)
+              }}
+            >
+              <div data-slot="top-models-stack" style={{ "grid-template-rows": getTopModelsSegmentRows(day) }}>
+                <For each={visibleTopModelsSegments(day)}>
+                  {(item) => (
+                    <i
+                      data-series={item.index}
+                      data-active={activeSegment() === item.index ? "true" : undefined}
+                      style={{
+                        background: getTopModelsSegmentColor(
+                          item.index,
+                          activeIndex() !== undefined && activeIndex() !== dayIndex(),
+                          activeSegment(),
+                        ),
+                      }}
+                      onPointerEnter={(event) => {
+                        event.stopPropagation()
+                        setActiveIndex(dayIndex())
+                        setActiveSegment(item.index)
+                      }}
+                    />
+                  )}
+                </For>
+              </div>
+              <Show when={activeIndex() === dayIndex() && activePoint()}>
+                {(point) => (
+                  <div
+                    data-component="chart-tooltip"
+                    data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
+                  >
+                    <strong>{point().date}</strong>
+                    <span>{formatTokens(usageTotal(point()))} total</span>
+                    <div data-slot="tooltip-divider" />
+                    <For each={visibleTopModelsSegments(point())}>
+                      {(item) => (
+                        <p
+                          data-active={activeSegment() === item.index ? "true" : undefined}
+                          data-muted={
+                            activeSegment() !== undefined && activeSegment() !== item.index ? "true" : undefined
+                          }
+                        >
+                          <span data-slot="tooltip-label">
+                            <i style={{ background: usageColors[item.index] }} /> {item.segment.model}
+                          </span>
+                          <b>{formatTokens(item.segment.value)}</b>
+                        </p>
+                      )}
+                    </For>
+                  </div>
+                )}
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
     </div>
   )
 }
 
-function getUsageTooltipStyle(barX: number, barWidth: number, width: number) {
-  if (barX > width * 0.62) return { left: "auto", right: `${((width - barX + 12) / width) * 100}%` }
-  return { left: `${((barX + barWidth + 12) / width) * 100}%`, right: "auto" }
+function getTopModelsBarHeight(total: number, max: number) {
+  if (total <= 0) return 0
+  return Math.max(2, Math.min(100, (total / max) * 100))
 }
 
-function getUsageSegmentOpacity(isActiveBar: boolean, activeSegment: number | undefined, index: number) {
-  if (!isActiveBar) return 1
-  if (activeSegment === undefined) return 1
-  return activeSegment === index ? 1 : 0.38
+function getTopModelsMaxTotal(data: UsagePoint[]) {
+  const max = Math.max(0, ...data.map((item) => usageTotal(item)))
+  if (max === 0) return 1
+  if (data.length === 1) return max * 1.75
+  return max
+}
+
+function getTopModelsSegmentRows(point: UsagePoint) {
+  const total = usageTotal(point)
+  if (total <= 0) return ""
+  return visibleTopModelsSegments(point)
+    .map((item) => `${(item.segment.value / total) * 100}%`)
+    .join(" ")
+}
+
+function visibleTopModelsSegments(point: UsagePoint) {
+  return point.segments.map((segment, index) => ({ segment, index })).filter((item) => item.segment.value > 0)
+}
+
+function getTopModelsSegmentColor(index: number, muted: boolean, activeSegment: number | undefined) {
+  if (activeSegment !== undefined)
+    return activeSegment === index ? (usageColors[index] ?? "var(--stats-text)") : "var(--stats-layer-2)"
+  if (muted) return "var(--stats-layer-2)"
+  return usageColors[index] ?? "var(--stats-text)"
+}
+
+function isTopModelsMobileAxisHidden(index: number, count: number) {
+  return count > 7 && index % 2 === 1
+}
+
+function formatTopModelsMobileDate(label: string, range: UsageRange) {
+  if (range === "1M" || range === "2M") return label.split(" - ")[0] ?? label
+  return label
 }
 
 function usageTotal(point: UsagePoint) {
@@ -394,6 +585,7 @@ function LeaderboardSection(props: { data: StatsHomeData["leaderboard"] }) {
 
   return (
     <ChartSection
+      id="leaderboard"
       title="Leaderboard"
       description="Shown are the sum of prompt and completion tokens per model, including reasoning tokens."
     >
@@ -476,7 +668,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
   const activeDay = createMemo(() => data()[selectedIndex()])
 
   return (
-    <ChartSection title="Market Share" description="Compare token share by model author.">
+    <ChartSection id="market-share" title="Market Share" description="Compare token share by model author.">
       <Show
         when={activeDay()}
         fallback={<EmptyState title="No market data" description="No model_stat rows matched this range." />}
@@ -572,7 +764,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(data().length - 1, 0)))
 
   return (
-    <ChartSection title="Token Cost" description="Price per 1M tokens.">
+    <ChartSection id="token-cost" title="Token Cost" description="Price per 1M tokens.">
       <Show
         when={data().length > 0}
         fallback={
@@ -661,7 +853,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(data().length - 1, 0)))
 
   return (
-    <ChartSection title="Session Cost" description="Average cost per session.">
+    <ChartSection id="session-cost" title="Session Cost" description="Average cost per session.">
       <Show
         when={data().length > 0}
         fallback={
@@ -886,47 +1078,137 @@ function Newsletter() {
 }
 
 function Header() {
+  const [menuOpen, setMenuOpen] = createSignal(false)
+  const [menuViewport, setMenuViewport] = createSignal(false)
+
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const media = window.matchMedia("(max-width: 74.999rem)")
+    const update = () => setMenuViewport(media.matches)
+    update()
+    media.addEventListener("change", update)
+    onCleanup(() => media.removeEventListener("change", update))
+  })
+
+  createEffect(() => {
+    if (!menuOpen()) return
+    if (!menuViewport()) return
+    if (typeof document === "undefined") return
+    const page = document.querySelector<HTMLElement>('[data-page="stats"]')
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    const htmlOverflow = document.documentElement.style.overflow
+    const pagePaddingRight = page?.style.paddingRight
+    const bodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = "hidden"
+    if (scrollbarWidth > 0 && page) page.style.paddingRight = `${scrollbarWidth}px`
+    document.body.style.overflow = "hidden"
+    onCleanup(() => {
+      document.documentElement.style.overflow = htmlOverflow
+      if (page && pagePaddingRight !== undefined) page.style.paddingRight = pagePaddingRight
+      document.body.style.overflow = bodyOverflow
+    })
+  })
+
   return (
-    <section data-component="top">
-      <a data-slot="brand" href="https://opencode.ai/" aria-label="OpenCode home">
-        <img data-slot="logo light" src={logoLight} alt="OpenCode" width="234" height="42" />
-        <img data-slot="logo dark" src={logoDark} alt="OpenCode" width="234" height="42" />
-      </a>
-      <nav data-component="nav-desktop" aria-label="Main navigation">
-        <ul>
-          <li>
-            <a href="https://github.com/sst/opencode" target="_blank" rel="noreferrer">
-              GitHub
+    <header data-component="top" data-menu-open={menuOpen() ? "true" : undefined}>
+      <div data-slot="header-bar">
+        <a data-slot="brand" href="/" aria-label="OpenCode home">
+          <StatsWordmark />
+        </a>
+        <nav data-component="section-nav" aria-label="Stats sections">
+          <ul>
+            <For each={headerLinks}>
+              {(link) => (
+                <li>
+                  <a href={link.href}>{link.label}</a>
+                </li>
+              )}
+            </For>
+          </ul>
+        </nav>
+        <div data-slot="header-actions">
+          <a
+            data-slot="header-button"
+            data-variant="neutral"
+            href="https://github.com/sst/opencode"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <strong>GitHub</strong>
+            <span>[150K]</span>
+          </a>
+          <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
+            <strong>Try OpenCode</strong>
+          </a>
+          <button
+            data-slot="menu-button"
+            type="button"
+            aria-controls="stats-mobile-nav"
+            aria-expanded={menuOpen() ? "true" : "false"}
+            aria-label={menuOpen() ? "Close navigation" : "Open navigation"}
+            onClick={() => setMenuOpen((value) => !value)}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <Show when={menuOpen()} fallback={<path d="M2 4.72H14M2 8.5H14M2 12.28H14" stroke="currentColor" />}>
+                <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
+              </Show>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <nav id="stats-mobile-nav" data-slot="mobile-menu" aria-label="Stats sections" hidden={!menuOpen()}>
+        <a
+          data-slot="mobile-menu-item"
+          data-variant="github"
+          href="https://github.com/sst/opencode"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <strong>GitHub</strong>
+          <span>[150K]</span>
+        </a>
+        <For each={headerLinks}>
+          {(link) => (
+            <a data-slot="mobile-menu-item" href={link.href} onClick={() => setMenuOpen(false)}>
+              {link.label}
             </a>
-          </li>
-          <li>
-            <a href="https://opencode.ai/docs">Docs</a>
-          </li>
-          <li>
-            <a href="https://opencode.ai/zen">Zen</a>
-          </li>
-          <li>
-            <a href="https://opencode.ai/go">Go</a>
-          </li>
-          <li>
-            <a href="https://opencode.ai/enterprise">Enterprise</a>
-          </li>
-          <li>
-            <a href="https://opencode.ai/download" data-slot="cta-button">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path
-                  d="M12.1875 9.75L9.00001 12.9375L5.8125 9.75M9.00001 2.0625L9 12.375M14.4375 15.9375H3.5625"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="square"
-                />
-              </svg>
-              Download
-            </a>
-          </li>
-        </ul>
+          )}
+        </For>
       </nav>
-    </section>
+    </header>
+  )
+}
+
+function StatsWordmark() {
+  return (
+    <span data-slot="stats-wordmark" aria-hidden="true">
+      <svg data-slot="brand-mark" width="19" height="24" viewBox="0 0 19 24" fill="none">
+        <path opacity="0.2" d="M14.25 19.2H4.75V9.6H14.25V19.2Z" fill="currentColor" />
+        <path d="M14.25 4.8H4.75V19.2H14.25V4.8ZM19 24H0V0H19V24Z" fill="currentColor" />
+      </svg>
+      <svg data-slot="brand-label" width="51" height="14" viewBox="0 0 50.8509 14" fill="none">
+        <path
+          d="M46.2359 14C45.2276 14 44.3356 13.819 43.56 13.4571C42.7973 13.0822 42.138 12.5328 41.5822 11.8089L43.1722 10.277C43.56 10.807 44.0124 11.2142 44.5295 11.4986C45.0466 11.7701 45.6283 11.9058 46.2747 11.9058C47.7225 11.9058 48.4464 11.2465 48.4464 9.92798C48.4464 9.38504 48.3172 8.97138 48.0586 8.68698C47.8001 8.40259 47.3735 8.19575 46.7788 8.06648L45.596 7.8338C44.3679 7.57525 43.463 7.13573 42.8813 6.51524C42.2996 5.89474 42.0088 5.02862 42.0088 3.9169C42.0088 2.62419 42.3901 1.6482 43.1528 0.98892C43.9284 0.32964 45.0272 0 46.4492 0C47.4187 0 48.2461 0.161588 48.9312 0.484764C49.6293 0.795014 50.2239 1.28624 50.7151 1.95845L49.1251 3.45152C48.789 2.99908 48.4076 2.66297 47.9811 2.44321C47.5545 2.21053 47.0309 2.09418 46.4104 2.09418C45.7253 2.09418 45.2211 2.22992 44.898 2.50139C44.5748 2.77285 44.4132 3.21237 44.4132 3.81995C44.4132 4.3241 44.536 4.71191 44.7816 4.98338C45.0401 5.25485 45.4538 5.45522 46.0226 5.58449L47.2054 5.83656C47.8647 5.97876 48.4206 6.15328 48.873 6.36011C49.3384 6.56694 49.7133 6.82548 49.9977 7.13573C50.295 7.44598 50.5083 7.8144 50.6376 8.241C50.7798 8.65466 50.8509 9.14589 50.8509 9.71468C50.8509 11.1108 50.4501 12.1773 49.6486 12.9141C48.8601 13.638 47.7225 14 46.2359 14Z"
+          fill="currentColor"
+        />
+        <path
+          d="M36.9543 2.34643V13.7675H34.5305V2.34643H31.1371V0.232856H40.367V2.34643H36.9543Z"
+          fill="currentColor"
+        />
+        <path
+          d="M28.6196 13.7675L27.6695 10.2384H23.3066L22.3565 13.7675H20.0296L23.9853 0.232856H27.049L31.0047 13.7675H28.6196ZM26.0407 4.57635L25.6141 2.42399H25.3426L24.916 4.57635L23.8883 8.27995H27.0878L26.0407 4.57635Z"
+          fill="currentColor"
+        />
+        <path
+          d="M16.4849 2.34643V13.7675H14.0611V2.34643H10.6678V0.232856H19.8977V2.34643H16.4849Z"
+          fill="currentColor"
+        />
+        <path
+          d="M4.65374 14C3.64543 14 2.75346 13.819 1.97784 13.4571C1.21514 13.0822 0.555863 12.5328 0 11.8089L1.59003 10.277C1.97784 10.807 2.43029 11.2142 2.94737 11.4986C3.46445 11.7701 4.04617 11.9058 4.69252 11.9058C6.14035 11.9058 6.86427 11.2465 6.86427 9.92798C6.86427 9.38504 6.735 8.97138 6.47646 8.68698C6.21791 8.40259 5.79132 8.19575 5.19668 8.06648L4.01385 7.8338C2.78578 7.57525 1.88089 7.13573 1.29917 6.51524C0.717452 5.89474 0.426593 5.02862 0.426593 3.9169C0.426593 2.62419 0.807941 1.6482 1.57064 0.98892C2.34626 0.32964 3.44506 0 4.86704 0C5.83657 0 6.6639 0.161588 7.34903 0.484764C8.04709 0.795014 8.64174 1.28624 9.13297 1.95845L7.54294 3.45152C7.20683 2.99908 6.82549 2.66297 6.39889 2.44321C5.9723 2.21053 5.44875 2.09418 4.82826 2.09418C4.14312 2.09418 3.63897 2.22992 3.31579 2.50139C2.99261 2.77285 2.83103 3.21237 2.83103 3.81995C2.83103 4.3241 2.95383 4.71191 3.19945 4.98338C3.45799 5.25485 3.87165 5.45522 4.44044 5.58449L5.62327 5.83656C6.28255 5.97876 6.83841 6.15328 7.29086 6.36011C7.75623 6.56694 8.13112 6.82548 8.41551 7.13573C8.71284 7.44598 8.92613 7.8144 9.0554 8.241C9.1976 8.65466 9.2687 9.14589 9.2687 9.71468C9.2687 11.1108 8.86796 12.1773 8.06648 12.9141C7.27793 13.638 6.14035 14 4.65374 14Z"
+          fill="currentColor"
+        />
+      </svg>
+    </span>
   )
 }
 

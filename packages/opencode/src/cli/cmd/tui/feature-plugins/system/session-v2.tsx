@@ -442,16 +442,25 @@ function ReasoningHeader(props: { toggleable: boolean; open: boolean; done: bool
       : theme.warning
 
   return (
-    <text fg={fg()} wrapMode="none">
-      <Show when={props.toggleable}>
-        <span>{props.open ? "- " : "+ "}</span>
-      </Show>
-      <span>{props.done ? "Thought" : "Thinking"}</span>
-      <Show when={props.title}>
-        <span>: </span>
-        <span>{props.title}</span>
-      </Show>
-    </text>
+    <Switch>
+      <Match when={!props.done}>
+        <box flexDirection="row">
+          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
+        </box>
+      </Match>
+      <Match when={true}>
+        <text fg={fg()} wrapMode="none">
+          <Show when={props.toggleable}>
+            <span>{props.open ? "- " : "+ "}</span>
+          </Show>
+          <span>Thought</span>
+          <Show when={props.title}>
+            <span>: </span>
+            <span>{props.title}</span>
+          </Show>
+        </text>
+      </Match>
+    </Switch>
   )
 }
 

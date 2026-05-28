@@ -3,6 +3,7 @@
 
 import WebSocket from "ws"
 import { ProviderError } from "@/provider/error"
+import { errorMessage } from "@/util/error"
 
 export const PROTOCOL_HEADER = "responses_websockets=2026-02-06"
 
@@ -94,10 +95,10 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
       resolve(socket)
     }
 
-    function onError(error: Error) {
+    function onError(error: unknown) {
       socket.on("error", () => {})
       cleanup()
-      reject(error)
+      reject(error instanceof Error ? error : new Error(errorMessage(error), { cause: error }))
     }
 
     function onClose(code: number, reason: Buffer) {

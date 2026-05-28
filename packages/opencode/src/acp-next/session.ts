@@ -60,6 +60,7 @@ export type PartMetadataLookupInput = {
 export type Interface = {
   readonly create: (input: StoreInput) => Effect.Effect<Info>
   readonly load: (input: StoreInput) => Effect.Effect<Info>
+  readonly list: (cwd?: string) => Effect.Effect<readonly Info[]>
   readonly get: (sessionId: string) => Effect.Effect<Info, ACPNextError.SessionNotFoundError>
   readonly tryGet: (sessionId: string) => Effect.Effect<Info | undefined>
   readonly remove: (sessionId: string) => Effect.Effect<Info | undefined>
@@ -168,6 +169,12 @@ export const layer = Layer.effect(
     return Service.of({
       create: store,
       load: store,
+      list: Effect.fn("ACPNext.Session.list")(function* (cwd?: string) {
+        return [...(yield* Ref.get(sessions)).values()]
+          .filter((session) => !cwd || session.cwd === cwd)
+          .map(snapshot)
+          .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      }),
       get,
       tryGet,
       remove,
