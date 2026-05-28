@@ -33,6 +33,7 @@ import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
+import { SPINNER_FRAMES } from "./component/spinner"
 import { SyncProvider, useSync } from "./context/sync"
 import { SyncProviderV2 } from "./context/sync-v2"
 import { LocalProvider, useLocal } from "./context/local"
@@ -433,6 +434,22 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
+  const [spinnerFrame, setSpinnerFrame] = createSignal(0)
+
+  // Spinner animation for terminal title when session is busy
+  createEffect(() => {
+    if (route.data.type !== "session") {
+      setSpinnerFrame(0)
+      return
+    }
+    const isBusy = sync.session.status(route.data.sessionID) !== "idle"
+    if (!isBusy) {
+      setSpinnerFrame(0)
+      return
+    }
+    const interval = setInterval(() => setSpinnerFrame((prev) => (prev + 1) % SPINNER_FRAMES.length), 200)
+    onCleanup(() => clearInterval(interval))
+  })
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -445,13 +462,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
-      if (!session || isDefaultTitle(session.title)) {
+      if (!session) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
 
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      const status = sync.session.status(route.data.sessionID)
+      const statusPrefix = status === "idle" ? "▣" : SPINNER_FRAMES[spinnerFrame()]
+      if (isDefaultTitle(session.title)) {
+        renderer.setTerminalTitle(`${statusPrefix} OpenCode`)
+      } else {
+        const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+        renderer.setTerminalTitle(`${statusPrefix} OC | ${title}`)
+      }
       return
     }
 
