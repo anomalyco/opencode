@@ -7,7 +7,7 @@ import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { SyncEvent } from "../../src/sync"
 import { Database, eq } from "@/storage/db"
 import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
-import { MessageID } from "../../src/session/schema"
+import { MessageID, SessionID } from "../../src/session/schema"
 import { initProjectors } from "../../src/server/projectors"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -29,7 +29,9 @@ describe("session next projectors", () => {
     const definitions = EventV2.registry
       .values()
       .flatMap((definition) =>
-        definition.type.startsWith("session.next.") && definition.version !== undefined && definition.aggregate !== undefined
+        definition.type.startsWith("session.next.") &&
+        definition.version !== undefined &&
+        definition.aggregate !== undefined
           ? [SyncEvent.versionedType(definition.type, definition.version)]
           : [],
       )
@@ -260,6 +262,58 @@ describe("SyncEvent", () => {
             }),
             /Unknown event type/,
           )
+        }),
+      ),
+    )
+
+    it.live(
+      "does not advance sequence when serialized next event data cannot decode",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          SyncEvent.reset()
+          initProjectors()
+          const id = SessionID.descending("ses_invalid_timestamp")
+
+          const exit = yield* Effect.exit(
+            SyncEvent.use.replay({
+              id: "evt_bad_next",
+              type: "session.next.agent.switched.1",
+              seq: 0,
+              aggregateID: id,
+              data: { sessionID: id, timestamp: "not-a-timestamp", agent: "build" },
+            }),
+          )
+
+          expect(exit._tag).toBe("Failure")
+          expect(Database.use((db) => db.select().from(EventSequenceTable).all())).toEqual([])
+          expect(Database.use((db) => db.select().from(EventTable).all())).toEqual([])
+        }),
+      ),
+    )
+
+    it.live(
+      "does not project or advance a replay event with mismatched aggregate data",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          SyncEvent.reset()
+          initProjectors()
+          const envelope = SessionID.descending("ses_replay_envelope")
+          const data = SessionID.descending("ses_replay_data")
+
+          const exit = yield* Effect.exit(
+            SyncEvent.use.replay({
+              id: "evt_mismatched_aggregate",
+              type: "session.next.agent.switched.1",
+              seq: 0,
+              aggregateID: envelope,
+              data: { sessionID: data, timestamp: "2026-05-26T21:48:56.202Z", agent: "build" },
+            }),
+          )
+
+          expect(exit._tag).toBe("Failure")
+          expect(String(exit._tag === "Failure" ? exit.cause : "")).toContain("Aggregate mismatch")
+          expect(Database.use((db) => db.select().from(EventSequenceTable).all())).toEqual([])
+          expect(Database.use((db) => db.select().from(EventTable).all())).toEqual([])
         }),
       ),
     )

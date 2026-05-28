@@ -15,7 +15,7 @@ import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
-import { SessionTable } from "@/session/session.sql"
+import { SessionMessageTable, SessionTable } from "@/session/session.sql"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { resetDatabase } from "../fixture/db"
@@ -1461,7 +1461,7 @@ describe("workspace sync state", () => {
     })
   })
 
-  it.live("sync history replays serialized next events before subsequent legacy events", () => {
+  it.live("sync history projects serialized tool progress before subsequent legacy events", () => {
     let historySessionID: SessionID | undefined
     let historyNextSeq = 0
     return Effect.gen(function* () {
@@ -1474,33 +1474,60 @@ describe("workspace sync state", () => {
             return HttpServerResponse.fromWeb(
               Response.json([
                 {
-                  id: `evt_${unique("history-next-agent")}`,
+                  id: `evt_${unique("history-next-step")}`,
                   aggregate_id: historySessionID!,
                   seq: historyNextSeq,
-                  type: "session.next.agent.switched.1",
+                  type: "session.next.step.started.1",
                   data: {
                     sessionID: historySessionID!,
                     timestamp: "2026-05-26T21:48:56.202Z",
                     agent: "build",
+                    model: { id: "model", providerID: "provider", variant: "default" },
                   },
                 },
                 {
-                  id: `evt_${unique("history-after-next")}`,
+                  id: `evt_${unique("history-tool-input")}`,
                   aggregate_id: historySessionID!,
                   seq: historyNextSeq + 1,
-                  type: "session.next.tool.progress.1",
+                  type: "session.next.tool.input.started.1",
                   data: {
                     sessionID: historySessionID!,
                     timestamp: "2026-05-26T21:48:57.202Z",
                     callID: "call_history",
-                    structured: {},
-                    content: [],
+                    name: "bash",
+                  },
+                },
+                {
+                  id: `evt_${unique("history-tool-called")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq + 2,
+                  type: "session.next.tool.called.1",
+                  data: {
+                    sessionID: historySessionID!,
+                    timestamp: "2026-05-26T21:48:58.202Z",
+                    callID: "call_history",
+                    tool: "bash",
+                    input: { command: "pwd" },
+                    provider: { executed: true },
+                  },
+                },
+                {
+                  id: `evt_${unique("history-tool-progress")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq + 3,
+                  type: "session.next.tool.progress.1",
+                  data: {
+                    sessionID: historySessionID!,
+                    timestamp: "2026-05-26T21:48:59.202Z",
+                    callID: "call_history",
+                    structured: { phase: "running" },
+                    content: [{ type: "text", text: "halfway" }],
                   },
                 },
                 {
                   id: `evt_${unique("history-after-next")}`,
                   aggregate_id: historySessionID!,
-                  seq: historyNextSeq + 2,
+                  seq: historyNextSeq + 4,
                   type: sessionUpdatedType(),
                   data: { sessionID: historySessionID!, info: { title: "after next history" } },
                 },
@@ -1530,10 +1557,25 @@ describe("workspace sync state", () => {
 
             yield* eventuallyEffect(
               Effect.gen(function* () {
-                expect(sessionSequence(session.id)).toBe(historyNextSeq + 2)
+                expect(sessionSequence(session.id)).toBe(historyNextSeq + 4)
                 expect(yield* sessionSvc.get(session.id).pipe(Effect.orDie)).toMatchObject({
-                  agent: "build",
                   title: "after next history",
+                })
+                expect(
+                  Database.use((db) =>
+                    db.select().from(SessionMessageTable).where(eq(SessionMessageTable.session_id, session.id)).get(),
+                  )?.data,
+                ).toMatchObject({
+                  content: [
+                    {
+                      type: "tool",
+                      state: {
+                        status: "running",
+                        structured: { phase: "running" },
+                        content: [{ type: "text", text: "halfway" }],
+                      },
+                    },
+                  ],
                 })
               }),
             )

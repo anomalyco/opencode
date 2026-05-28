@@ -112,6 +112,12 @@ export const layer = Layer.effect(Service)(
             data: EffectSchema.decodeUnknownSync(EffectSchema.toCodecJson(EffectSchema.toType(v2.data)))(event.data),
           }
         : event
+      const aggregateID = replayAggregate(replayed.data, def.aggregate)
+      if (aggregateID !== replayed.aggregateID) {
+        throw new Error(
+          `Aggregate mismatch for event "${event.type}": envelope ${replayed.aggregateID}, data ${String(aggregateID)}`,
+        )
+      }
       process(def, replayed, {
         bus,
         bridge,
@@ -209,6 +215,11 @@ export const layer = Layer.effect(Service)(
 export const defaultLayer = layer.pipe(Layer.provide([ProjectBus.defaultLayer, RuntimeFlags.defaultLayer]))
 
 export const use = serviceUse(Service)
+
+function replayAggregate(data: unknown, field: string): unknown {
+  if (typeof data !== "object" || data === null) return undefined
+  return Reflect.get(data, field)
+}
 
 export const registry = new Map<string, Definition>()
 let projectors: Map<string, ProjectorFunc> | undefined
