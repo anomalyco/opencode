@@ -1,5 +1,3 @@
-/// <reference path="./resource.d.ts" />
-
 import { Client } from "@planetscale/database"
 import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { migrate as drizzleMigrate } from "drizzle-orm/planetscale-serverless/migrator"
