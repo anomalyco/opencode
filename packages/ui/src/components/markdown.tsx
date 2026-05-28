@@ -113,7 +113,7 @@ export type FileLink = {
 
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
 const filePattern =
-  /(^|[\s([{"'])((?:\.{1,2}[\\/]|~[\\/]|\/|[A-Za-z]:[\\/])?(?:[\w.@-]+[\\/])+[\w.@-]+(?:\:\d+(?:-\d+)?(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?)/g
+  /(^|[\s([{"'])((?:@(?=[^\r\n`<>"']*[\\/])(?:(?!\s@)[^\r\n`<>"'])*?\.[^\s\\/`<>"')\]},.;!?]+(?:\:\d+(?:-\d+)?(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?(?=$|[\s)\]},.;!?]))|(?:(?:\.{1,2}[\\/]|~[\\/]|\/|[A-Za-z]:[\\/])?(?:[\w.@-]+[\\/])+[\w.@-]+(?:\:\d+(?:-\d+)?(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?))/g
 
 function codeUrl(text: string) {
   const href = text.trim().replace(/[),.;!?]+$/, "")
@@ -133,14 +133,17 @@ function stripFileSuffix(text: string) {
 export function fileLink(text: string) {
   const raw = stripFileSuffix(text.trim())
   if (!raw) return
-  if (raw.includes("://")) return
-  if (!/[\\/]/.test(raw)) return
-  if (/\s/.test(raw)) return
+  const mention = raw.startsWith("@")
+  const value = mention ? raw.slice(1).trim() : raw
+  if (!value) return
+  if (value.includes("://")) return
+  if (!/[\\/]/.test(value)) return
+  if (!mention && /\s/.test(value)) return
 
-  const hash = raw.match(/#L(\d+)(?:C(\d+))?$/i)
+  const hash = value.match(/#L(\d+)(?:C(\d+))?$/i)
   const hashLine = hash?.[1] ? Number(hash[1]) : undefined
   const hashCol = hash?.[2] ? Number(hash[2]) : undefined
-  const base = hash ? raw.slice(0, -hash[0].length) : raw
+  const base = hash ? value.slice(0, -hash[0].length) : value
   const win = /^[A-Za-z]:[\\/]/.test(base)
   const line = base.match(/:(\d+)(?:-(\d+))?(?::(\d+))?$/)
   const path = line && (!win || base.indexOf(":") !== 1) ? base.slice(0, -line[0].length) : base
@@ -166,6 +169,35 @@ export function fileLink(text: string) {
   return link
 }
 
+export type FileLinkMatch = {
+  raw: string
+  start: number
+  end: number
+  link: FileLink
+}
+
+export function findFileLinks(text: string) {
+  const links: FileLinkMatch[] = []
+  filePattern.lastIndex = 0
+  let hit: RegExpExecArray | null
+
+  while ((hit = filePattern.exec(text))) {
+    const lead = hit[1] ?? ""
+    const raw = hit[2] ?? ""
+    const link = fileLink(raw)
+    if (!link) continue
+    const start = hit.index + lead.length
+    links.push({
+      raw,
+      start,
+      end: start + raw.length,
+      link,
+    })
+  }
+
+  return links
+}
+
 function fileHref(link: FileLink) {
   const line = link.line ? `:${link.line}${link.col ? `:${link.col}` : ""}` : ""
   return `opencode-file:${encodeURIComponent(`${link.path}${line}`)}`
@@ -187,8 +219,7 @@ function markFileLinks(root: HTMLDivElement) {
       const parent = node.parentElement
       if (!parent) return NodeFilter.FILTER_REJECT
       if (parent.closest("a, pre, code")) return NodeFilter.FILTER_REJECT
-      if (!filePattern.test(node.textContent ?? "")) return NodeFilter.FILTER_REJECT
-      filePattern.lastIndex = 0
+      if (findFileLinks(node.textContent ?? "").length === 0) return NodeFilter.FILTER_REJECT
       return NodeFilter.FILTER_ACCEPT
     },
   })
@@ -202,16 +233,9 @@ function markFileLinks(root: HTMLDivElement) {
     const text = node.data
     const frag = document.createDocumentFragment()
     let from = 0
-    filePattern.lastIndex = 0
-    let hit: RegExpExecArray | null
+    const links = findFileLinks(text)
 
-    while ((hit = filePattern.exec(text))) {
-      const lead = hit[1] ?? ""
-      const raw = hit[2] ?? ""
-      const link = fileLink(raw)
-      if (!link) continue
-      const start = hit.index + lead.length
-      const end = start + raw.length
+    for (const { raw, start, end, link } of links) {
       if (start > from) frag.append(text.slice(from, start))
       const a = document.createElement("a")
       applyFileLink(a, link)

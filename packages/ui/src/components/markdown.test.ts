@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Marked } from "marked"
-import { fileLink } from "./markdown"
+import { fileLink, findFileLinks } from "./markdown"
 import { protectMathExpressions, renderMathExpressions } from "../context/marked"
 
 describe("markdown fileLink", () => {
@@ -34,6 +34,33 @@ describe("markdown fileLink", () => {
       line: 20,
       col: 3,
     })
+  })
+
+  test("parses @ file mentions with spaces and non-ascii path segments", () => {
+    expect(fileLink("@广义相对论讲义/Schwarzchild Balck Hole/assets/rain-null-geodesics.html")).toEqual({
+      path: "广义相对论讲义/Schwarzchild Balck Hole/assets/rain-null-geodesics.html",
+      line: undefined,
+      col: undefined,
+    })
+  })
+
+  test("finds full @ file mention instead of suffix after a path space", () => {
+    const text = "参考 @广义相对论讲义/Schwarzchild Balck Hole/assets/rain-null-geodesics.html 生成"
+    const raw = "@广义相对论讲义/Schwarzchild Balck Hole/assets/rain-null-geodesics.html"
+    const start = text.indexOf(raw)
+
+    expect(findFileLinks(text)).toEqual([
+      {
+        raw,
+        start,
+        end: start + raw.length,
+        link: {
+          path: "广义相对论讲义/Schwarzchild Balck Hole/assets/rain-null-geodesics.html",
+          line: undefined,
+          col: undefined,
+        },
+      },
+    ])
   })
 
   test("ignores urls", () => {

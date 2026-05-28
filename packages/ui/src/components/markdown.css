@@ -57,9 +57,17 @@
     font-weight: inherit;
   }
 
+  a[data-file-link] {
+    color: #9b6cff;
+  }
+
   a:hover {
     text-decoration: underline;
     text-underline-offset: 2px;
+  }
+
+  a[data-file-link]:hover {
+    color: #b28cff;
   }
 
   /* Lists */
