@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/stats-app",
-  "version": "1.15.11",
+  "version": "1.15.12",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -12,6 +12,7 @@
     "start": "vite start"
   },
   "dependencies": {
+    "@ibm/plex": "6.4.1",
     "@opencode-ai/stats-core": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
