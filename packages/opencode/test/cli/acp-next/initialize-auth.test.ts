@@ -35,9 +35,9 @@ describe("opencode acp-next initialize/auth subprocess", () => {
 
         expect(initialized.authMethods?.[0]?.id).toBe("opencode-login")
         expect(initialized.authMethods?.[0]?._meta?.["terminal-auth"]).toBeDefined()
-        expect(yield* acp.request<AuthenticateResponse>("authenticate", { methodId: "opencode-login" })).toMatchObject(
-          { result: {} },
-        )
+        expect(yield* acp.request<AuthenticateResponse>("authenticate", { methodId: "opencode-login" })).toMatchObject({
+          result: {},
+        })
 
         const rejected = yield* acp.request<AuthenticateResponse>("authenticate", { methodId: "missing-auth-method" })
         expectErrorCode(rejected.error, -32602)
