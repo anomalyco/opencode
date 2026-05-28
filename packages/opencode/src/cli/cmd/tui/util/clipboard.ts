@@ -102,7 +102,7 @@ export async function read(): Promise<Content | undefined> {
     }
   }
 
-  if (os === "linux") {
+  if (os === "linux" || os === "freebsd") {
     const wayland = await Process.run(["wl-paste", "-t", "image/png"], { nothrow: true })
     if (wayland.stdout.byteLength > 0) {
       return { data: Buffer.from(wayland.stdout).toString("base64"), mime: "image/png" }
@@ -134,7 +134,7 @@ const getCopyMethod = lazy(async () => {
     }
   }
 
-  if (os === "linux") {
+  if (os === "linux" || os === "freebsd") {
     if (process.env["WAYLAND_DISPLAY"] && which("wl-copy")) {
       console.log("clipboard: using wl-copy")
       return (text: string) => writeWithStdin(["wl-copy"], text)

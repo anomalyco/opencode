@@ -31,11 +31,8 @@ function hostPlatform() {
     return "windows" as const
   }
 
-  if (process.platform === "linux") {
-    return "linux" as const
-  }
-
-  return "unknown" as const
+  // FreeBSD and other Unix-like systems use the same keybindings as Linux
+  return "linux" as const
 }
 
 function createCommandEvent() {
