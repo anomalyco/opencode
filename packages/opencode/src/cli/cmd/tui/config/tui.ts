@@ -96,6 +96,23 @@ function dropUnknownKeybinds(input: Record<string, unknown>, configFilepath: str
   }
 }
 
+const KNOWN_TUI_KEYS = new Set(Object.keys(TuiInfo.fields))
+
+function dropUnknownTopLevelKeys(input: Record<string, unknown>, configFilepath: string) {
+  const invalid = Object.keys(input).filter((key) => !KNOWN_TUI_KEYS.has(key))
+  if (!invalid.length) return input
+
+  // Without this filter, an unknown top-level key fails strict schema validation,
+  // catchCause swallows the failure, and the entire tui config is silently dropped
+  // (defaults are loaded with no signal). Strip and warn so valid settings survive.
+  log.warn("ignored unknown tui config keys", {
+    path: configFilepath,
+    keys: invalid,
+    hint: "Remove these entries or rename them to keys from the tui.json schema.",
+  })
+  return Object.fromEntries(Object.entries(input).filter(([key]) => KNOWN_TUI_KEYS.has(key)))
+}
+
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
   const afs = yield* AppFileSystem.Service
   let appliedOrder = 0
@@ -119,7 +136,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const normalized = dropUnknownKeybinds(normalize(data), configFilepath)
+      const normalized = dropUnknownTopLevelKeys(dropUnknownKeybinds(normalize(data), configFilepath), configFilepath)
       const parsed = ConfigParse.schema(Info, normalized, configFilepath)
       const validated = parsed.attention?.sounds
         ? {
