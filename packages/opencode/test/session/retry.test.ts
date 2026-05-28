@@ -172,6 +172,17 @@ describe("session.retry.retryable", () => {
     })
   })
 
+  test("retries websocket stream transport errors", () => {
+    const request = MessageV2.fromError(
+      new ProviderError.ResponseStreamError("WebSocket closed before response.completed (code 1006: Connection ended)"),
+      { providerID },
+    )
+    expect(MessageV2.APIError.isInstance(request)).toBe(true)
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message: "WebSocket closed before response.completed (code 1006: Connection ended)",
+    })
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
