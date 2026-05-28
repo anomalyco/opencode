@@ -344,31 +344,67 @@ export const layer = Layer.effect(
 
       const ag = yield* agents.get("title")
       if (!ag) return
-      const mdl = ag.model
+      const primaryModel = ag.model
         ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
         : ((yield* provider.getSmallModel(input.providerID)) ??
           (yield* provider.getModel(input.providerID, input.modelID)))
-      const msgs = onlySubtasks
-        ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
-        : yield* MessageV2.toModelMessagesEffect(context, mdl)
-      const text = yield* llm
-        .stream({
-          agent: ag,
-          user: firstInfo,
-          system: [],
-          small: true,
-          tools: {},
-          model: mdl,
-          sessionID: input.session.id,
-          retries: 2,
-          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+
+      const generateTitle = (mdl: Provider.Model) =>
+        Effect.gen(function* () {
+          const msgs = onlySubtasks
+            ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
+            : yield* MessageV2.toModelMessagesEffect(context, mdl)
+          return yield* llm
+            .stream({
+              agent: ag,
+              user: firstInfo,
+              system: [],
+              small: true,
+              tools: {},
+              model: mdl,
+              sessionID: input.session.id,
+              retries: 2,
+              messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+            })
+            .pipe(
+              Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
+              Stream.map((e) => e.text),
+              Stream.mkString,
+            )
         })
-        .pipe(
-          Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
-          Stream.map((e) => e.text),
-          Stream.mkString,
-          Effect.orDie,
-        )
+
+      const text = yield* generateTitle(primaryModel).pipe(
+        Effect.catch((err: unknown) =>
+          Effect.gen(function* () {
+            yield* elog.warn("title generation failed, trying fallback models", {
+              model: primaryModel.id,
+              error: err instanceof Error ? err.message : String(err),
+            })
+            const providers = yield* provider.list()
+            for (const p of Object.values(providers)) {
+              const fallback = yield* provider.getSmallModel(p.id).pipe(
+                Effect.catch(() => Effect.succeed(undefined)),
+              )
+              if (!fallback || fallback.id === primaryModel.id) continue
+              const result = yield* generateTitle(fallback).pipe(
+                Effect.map(Option.some),
+                Effect.catch((fallbackErr: unknown) =>
+                  Effect.gen(function* () {
+                    yield* elog.warn("title fallback failed", {
+                      model: fallback.id,
+                      error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+                    })
+                    return Option.none<string>()
+                  }),
+                ),
+              )
+              if (Option.isSome(result)) return result.value
+            }
+            return yield* Effect.fail(err)
+          }),
+        ),
+        Effect.orDie,
+      )
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
         .split("\n")
@@ -1685,7 +1721,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               modelID: lastUser.model.modelID,
               providerID: lastUser.model.providerID,
               history: msgs,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
+            }).pipe(
+              Effect.catchCause((cause) => elog.warn("title generation failed", { error: Cause.squash(cause) })),
+              Effect.forkIn(scope),
+            )
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
