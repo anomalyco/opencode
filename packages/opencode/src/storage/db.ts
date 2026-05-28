@@ -106,6 +106,7 @@ export const Client = Object.assign(
     db.run("PRAGMA busy_timeout = 5000")
     db.run("PRAGMA cache_size = -64000")
     db.run("PRAGMA foreign_keys = ON")
+    db.run("PRAGMA mmap_size = 0")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     // Apply schema migrations
