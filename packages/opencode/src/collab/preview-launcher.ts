@@ -96,12 +96,29 @@ interface ActiveState extends PreviewStateSnapshot {
   config: PreviewConfig
   // Mutable accumulators (not snapshot-able directly)
   _log: Array<{ stream: "stdout" | "stderr"; line: string; ts: number }>
+  /** True iff stopPreview was called for THIS state (vs the process exiting
+   *  on its own).  Lets the exit handler decide between firing
+   *  collab:preview_stopped (clean exit we triggered) vs collab:preview_failed
+   *  (unexpected death) vs collab:preview_stopped (clean exit we did NOT
+   *  trigger — e.g. a dev server with a `--build` flag that finishes
+   *  building and exits naturally). */
+  _stopRequested: boolean
 }
 
 // ── Module state (singleton — "first-launch wins") ─────────────────────────
 
 let active: ActiveState | null = null
 let sweepTimer: ReturnType<typeof setInterval> | null = null
+/**
+ * Pending restart timer.  restartPreview defers the inner launchPreview by
+ * 100 ms so the OS port releases cleanly between stop and re-bind.  If
+ * something stops the preview (session delete, container shutdown, another
+ * stopPreview) during that 100 ms window, we must cancel this timer or the
+ * deferred launch fires against a workspace that may no longer exist —
+ * surfacing as a confusing "Preview failed: Workspace for X not cloned yet"
+ * for a session the user already deleted.
+ */
+let pendingRestart: ReturnType<typeof setTimeout> | null = null
 
 /**
  * SSE broadcaster injected from router.ts.  Avoids a circular import; the
@@ -132,13 +149,35 @@ export function previewConfigForRepo(
       console.warn(`[collab.preview] ${path} missing required command/port — using defaults`)
       return FRONTEND_DEFAULTS
     }
+    // Validate port range.  Outside 1024-65535 is either privileged (will
+    // fail to bind as uid 10001) or an outright invalid TCP port.  Reject
+    // and fall back to defaults so a typo in the config doesn't ship a
+    // confusing EACCES / EINVAL error to the SPA.
+    if (!Number.isInteger(raw.port) || raw.port < 1024 || raw.port > 65535) {
+      console.warn(
+        `[collab.preview] ${path} port=${raw.port} outside 1024-65535 — using defaults`,
+      )
+      return FRONTEND_DEFAULTS
+    }
+    // Validate readyPattern compiles.  An invalid regex would throw at
+    // first stdout line in wireChildStreams; better to surface it now
+    // and fall back to the built-in heuristic.
+    let readyPattern: string | undefined = undefined
+    if (typeof raw.readyPattern === "string") {
+      try {
+        new RegExp(raw.readyPattern)
+        readyPattern = raw.readyPattern
+      } catch (e) {
+        console.warn(`[collab.preview] ${path} readyPattern is not a valid regex; ignoring:`, e)
+      }
+    }
     return {
       command: raw.command,
       port: raw.port,
       label: typeof raw.label === "string" ? raw.label : FRONTEND_DEFAULTS.label,
       installCommand:
         typeof raw.installCommand === "string" ? raw.installCommand : FRONTEND_DEFAULTS.installCommand,
-      readyPattern: typeof raw.readyPattern === "string" ? raw.readyPattern : undefined,
+      readyPattern,
     }
   } catch (err) {
     console.warn(`[collab.preview] ${path} parse failed; using defaults:`, err)
@@ -271,6 +310,7 @@ export function launchPreview(
     errorMessage: undefined,
     child,
     config,
+    _stopRequested: false,
   }
   active = state
 
@@ -309,7 +349,20 @@ export function stopIfOwnedBySession(collabSessionId: string): void {
  * a 5s grace window.
  */
 export function stopPreview(reason: string = "explicit"): void {
+  // Always cancel a pending restart, even when no preview is currently
+  // active.  A user could click Stop during the 100 ms restart window,
+  // or session-delete could fire just before the deferred launch.  The
+  // ghost relaunch would otherwise either 404 (workspace gone) or
+  // succeed but for a session that no longer exists.
+  if (pendingRestart) {
+    clearTimeout(pendingRestart)
+    pendingRestart = null
+  }
   if (!active) return
+  // Mark the state so the child's exit handler can distinguish a stop we
+  // initiated (silent) from a clean self-exit (broadcasts stopped) from a
+  // crash (broadcasts failed).
+  active._stopRequested = true
   const { child, collabSessionId } = active
   const sessionId = collabSessionId
 
@@ -378,7 +431,10 @@ export function restartPreview(): LaunchResult {
 
   // Relaunch after the port is fully released.  100 ms is generous for
   // Node http listeners; the previous 50 ms was tight on slow runners.
-  setTimeout(() => {
+  // Track the timer in module state so stopPreview can cancel it if a
+  // later stop / delete arrives before the relaunch fires.
+  pendingRestart = setTimeout(() => {
+    pendingRestart = null
     const result = launchPreview(collabSessionId, repoFullName)
     if (!result.ok) {
       console.error(`[collab.preview] restart relaunch failed: ${result.error}`)
@@ -409,6 +465,14 @@ let lastKnownHead: string | null = null
 
 export async function maybeRestartOnBranchChange(): Promise<void> {
   if (!active) return
+  // Only auto-restart when the preview is actually running.  Restarting
+  // an in-progress install would throw away ~minutes of work for no
+  // visible benefit (the install hasn't even bound the port yet, so
+  // no user-visible mass-file-change problem exists).  Status flips to
+  // "failed" → next launch is the user's call; we shouldn't second-
+  // guess that either.
+  if (active.status !== "running") return
+
   const { collabSessionId, repoFullName } = active
   try {
     const { readRepoBranch } = await import("./workspace")
@@ -449,10 +513,20 @@ function wireChildStreams(state: ActiveState): void {
 
       // Status transition: "installing" → "running" on the readyPattern OR
       // on a built-in heuristic (the line mentions "Local:" / "ready" / "listening").
+      // RegExp construction is validated at config-load (previewConfigForRepo
+      // rejects an invalid pattern with WARN), but a defensive try/catch
+      // here keeps stdout processing safe against any pattern-shape we
+      // didn't anticipate.
       if (state.status === "installing") {
-        const ready =
-          (state.config.readyPattern && new RegExp(state.config.readyPattern).test(line)) ||
-          /\b(local|ready|listening|started server on)\b/i.test(line)
+        let ready = false
+        try {
+          ready =
+            (state.config.readyPattern !== undefined &&
+              new RegExp(state.config.readyPattern).test(line)) ||
+            /\b(local|ready|listening|started server on)\b/i.test(line)
+        } catch (e) {
+          console.warn("[collab.preview] readyPattern match threw:", e)
+        }
         if (ready) {
           ;(state as { status: PreviewStatus }).status = "running"
           broadcast(state.collabSessionId, {
@@ -475,12 +549,33 @@ function wireChildStreams(state: ActiveState): void {
 
   state.child.once("exit", (code, signal) => {
     if (active !== state) return // already replaced
-    if (code === 0 || signal === "SIGTERM" || signal === "SIGKILL") {
-      // Clean stop or explicit kill — nothing to do; stopPreview already fired the SSE.
+    const wasStopped = state._stopRequested
+
+    if (wasStopped) {
+      // stopPreview() drove this exit.  It already broadcast
+      // collab:preview_stopped + nulled `active`; nothing further to do.
+      return
+    }
+
+    if (code === 0 && signal === null) {
+      // Clean self-exit that WE didn't initiate.  Happens when the user's
+      // start command exits cleanly (e.g. a `--build` flag that finishes
+      // building and exits, or `pnpm run` resolved to a script that just
+      // prints help).  Broadcast stopped so the SPA flips back to the
+      // Launch button instead of staying stuck in installing/running.
+      console.log(`[collab.preview] process exited cleanly on its own for session ${state.collabSessionId}`)
+      broadcast(state.collabSessionId, {
+        type: "collab:preview_stopped",
+        collabSessionId: state.collabSessionId,
+      })
       active = null
+      lastKnownHead = null
       stopSweepLoop()
       return
     }
+
+    // Unexpected death — non-zero code OR signal we didn't send.  Surface
+    // as a failure so the user can read the tail of the log and Retry.
     const msg = `Preview process exited with code ${code} ${signal ? `(signal ${signal})` : ""}`
     console.error(`[collab.preview] ${msg}`)
     ;(state as { status: PreviewStatus }).status = "failed"
@@ -491,6 +586,7 @@ function wireChildStreams(state: ActiveState): void {
       error: msg,
     })
     active = null
+    lastKnownHead = null
     stopSweepLoop()
   })
 }
