@@ -42,7 +42,7 @@ describe("opencode acp-next verifier timing diagnostics", () => {
   )
 
   cliIt.live(
-    "warm new session timing diagnostic stays below generous threshold",
+    "warm new session stays below verifier threshold",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
@@ -57,15 +57,13 @@ describe("opencode acp-next verifier timing diagnostics", () => {
         const durationMs = Math.round(performance.now() - started)
 
         expect(session.sessionId).toBeTruthy()
-        // TODO: replace this diagnostic assertion with finalFastPathThresholdMs.
-        expect(durationMs).toBeLessThan(diagnosticFastPathThresholdMs)
-        expect(finalFastPathThresholdMs).toBe(100)
+        expect(durationMs).toBeLessThan(finalFastPathThresholdMs)
       }),
     60_000,
   )
 
   cliIt.live(
-    "model switch timing diagnostic updates currentValue below generous threshold",
+    "model switch updates currentValue below verifier threshold",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
@@ -89,14 +87,13 @@ describe("opencode acp-next verifier timing diagnostics", () => {
         const durationMs = Math.round(performance.now() - started)
 
         expect(expectSelectOption(updated.configOptions, "model").currentValue).toBe(nextModel)
-        // TODO: replace this diagnostic assertion with finalFastPathThresholdMs.
-        expect(durationMs).toBeLessThan(diagnosticFastPathThresholdMs)
+        expect(durationMs).toBeLessThan(finalFastPathThresholdMs)
       }),
     60_000,
   )
 
   cliIt.live(
-    "effort switch timing diagnostic updates currentValue below generous threshold",
+    "effort switch updates currentValue below verifier threshold",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
@@ -118,8 +115,7 @@ describe("opencode acp-next verifier timing diagnostics", () => {
         const durationMs = Math.round(performance.now() - started)
 
         expect(expectSelectOption(updated.configOptions, "effort").currentValue).toBe(nextEffort)
-        // TODO: replace this diagnostic assertion with finalFastPathThresholdMs.
-        expect(durationMs).toBeLessThan(diagnosticFastPathThresholdMs)
+        expect(durationMs).toBeLessThan(finalFastPathThresholdMs)
       }),
     60_000,
   )
