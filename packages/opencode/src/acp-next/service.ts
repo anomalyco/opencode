@@ -40,6 +40,7 @@ import { Directory } from "./directory"
 import { ACPNextEvent } from "./event"
 import { ACPNextSession } from "./session"
 import { UsageService } from "./usage"
+import { ACPNextProfile } from "./profile"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
@@ -88,6 +89,7 @@ export function make(input: {
   if (events) input.eventSubscription?.(events)
 
   const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
+    const started = performance.now()
     const authMethod: AuthMethod = {
       description: "Run `opencode auth login` in the terminal",
       name: "Login with opencode",
@@ -104,7 +106,7 @@ export function make(input: {
       }
     }
 
-    return {
+    const response = {
       protocolVersion: 1,
       agentCapabilities: {
         loadSession: true,
@@ -129,6 +131,8 @@ export function make(input: {
         version: InstallationVersion,
       },
     }
+    ACPNextProfile.duration("acp.initialize", started)
+    return response
   })
 
   const authenticate = Effect.fn("ACPNext.authenticate")(function* (params: AuthenticateRequest) {
@@ -139,15 +143,20 @@ export function make(input: {
   })
 
   const directorySnapshot = Effect.fn("ACPNext.directorySnapshot")(function* (cwd: string) {
-    return yield* directoryService.get(cwd)
+    const started = performance.now()
+    const snapshot = yield* directoryService.get(cwd)
+    ACPNextProfile.duration("acp.directory.snapshot", started)
+    return snapshot
   })
 
   const newSession = Effect.fn("ACPNext.newSession")(function* (params: NewSessionRequest) {
+    const started = performance.now()
     const snapshot = yield* directorySnapshot(params.cwd)
     const selected = selectDefaultModel(snapshot)
     const variant = selectVariant(snapshot, selected)
     const modeId = snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined
-    const created = yield* request(
+    const created = yield* profiledRequest(
+      "acp.newSession.session.create",
       () =>
         input.sdk.session.create(
           {
@@ -175,7 +184,7 @@ export function make(input: {
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
-    return {
+    const response = {
       sessionId: state.id,
       configOptions: configOptions(snapshot, {
         model: state.model ?? selected,
@@ -183,6 +192,8 @@ export function make(input: {
         modeId: state.modeId,
       }),
     }
+    ACPNextProfile.duration("acp.newSession", started)
+    return response
   })
 
   const loadSession = Effect.fn("ACPNext.loadSession")(function* (params: LoadSessionRequest) {
@@ -684,66 +695,79 @@ function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
   })
 }
 
-async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
-  const [providersResponse, agentsResponse, commandsResponse, skillsResponse] = await Promise.all([
-    sdk.config.providers({ directory }, { throwOnError: true }),
-    sdk.app.agents({ directory }, { throwOnError: true }),
-    sdk.command.list({ directory }, { throwOnError: true }),
-    sdk.app.skills({ directory }, { throwOnError: true }),
-  ])
-  const providersData = providersResponse.data!
-  const agents = agentsResponse.data!
-  const commandsData = commandsResponse.data!
-  const skills = skillsResponse.data!
-  const providers = Object.fromEntries(providersData.providers.map((provider) => [provider.id, provider])) as Record<
-    ProviderID,
-    Provider.Info
-  >
-  const defaultModel = await defaultModelFromSdk(sdk, directory, providers)
-  const modes = agents
-    .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
-    .map((agent) => ({
-      id: agent.name,
-      name: agent.name,
-      ...(agent.description ? { description: agent.description } : {}),
-    }))
-  const commands = [
-    ...commandsData,
-    ...skills
-      .filter((skill) => !commandsData.some((command) => command.name === skill.name))
-      .map((skill) => ({
-        name: skill.name,
-        description: skill.description,
-        source: "skill" as const,
-        template: skill.content,
-        hints: [],
-      })),
-  ] as Command.Info[]
+function profiledRequest<T>(name: string, fn: () => Promise<T | SdkResponse<T>>, service?: string) {
+  return request(() => ACPNextProfile.measure(name, fn), service)
+}
 
-  return Directory.build({
-    directory,
-    providers,
-    modes,
-    defaultModeID: agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)?.name ?? "build",
-    commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
-    ...(defaultModel ? { defaultModel } : {}),
+async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
+  return ACPNextProfile.measure("acp.directory.load", async () => {
+    const [providersResponse, agentsResponse, commandsResponse, skillsResponse, configResponse] = await Promise.all([
+      ACPNextProfile.measure("acp.directory.provider.list", () =>
+        sdk.config.providers({ directory }, { throwOnError: true }),
+      ),
+      ACPNextProfile.measure("acp.directory.mode.defaultAgent.load", () =>
+        sdk.app.agents({ directory }, { throwOnError: true }),
+      ),
+      ACPNextProfile.measure("acp.directory.command.list", () =>
+        sdk.command.list({ directory }, { throwOnError: true }),
+      ),
+      ACPNextProfile.measure("acp.directory.skill.list", () => sdk.app.skills({ directory }, { throwOnError: true })),
+      ACPNextProfile.measure("acp.directory.defaultModel.config", () =>
+        sdk.config.get({ directory }, { throwOnError: true }).catch(() => undefined),
+      ),
+    ])
+    const providersData = providersResponse.data!
+    const agents = agentsResponse.data!
+    const commandsData = commandsResponse.data!
+    const skills = skillsResponse.data!
+    const providers = Object.fromEntries(providersData.providers.map((provider) => [provider.id, provider])) as Record<
+      ProviderID,
+      Provider.Info
+    >
+    const defaultModelStarted = performance.now()
+    const defaultModel = defaultModelFromConfig(configResponse?.data?.model, providers)
+    ACPNextProfile.duration("acp.directory.defaultModel.resolve", defaultModelStarted, { configured: !!defaultModel })
+    const modes = agents
+      .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
+      .map((agent) => ({
+        id: agent.name,
+        name: agent.name,
+        ...(agent.description ? { description: agent.description } : {}),
+      }))
+    const commands = [
+      ...commandsData,
+      ...skills
+        .filter((skill) => !commandsData.some((command) => command.name === skill.name))
+        .map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          source: "skill" as const,
+          template: skill.content,
+          hints: [],
+        })),
+    ] as Command.Info[]
+
+    return Directory.build({
+      directory,
+      providers,
+      modes,
+      defaultModeID: agents.find((agent) => agent.mode === "primary" && agent.hidden !== true)?.name ?? "build",
+      commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
+      ...(defaultModel ? { defaultModel } : {}),
+    })
   })
 }
 
-async function defaultModelFromSdk(
-  sdk: OpencodeClient,
-  directory: string,
+function defaultModelFromConfig(
+  configuredModel: string | undefined,
   providers: Record<ProviderID, Provider.Info>,
-): Promise<Directory.DefaultModel | undefined> {
-  const configured = await sdk.config
-    .get({ directory }, { throwOnError: true })
-    .then((response) => (response.data?.model ? Provider.parseModel(response.data.model) : undefined))
-    .catch(() => undefined)
+): Directory.DefaultModel | undefined {
+  const configured = configuredModel ? Provider.parseModel(configuredModel) : undefined
   if (configured && providers[configured.providerID]?.models[configured.modelID]) return configured
 
-  const lastUsed = await lastUsedModel(sdk, directory, providers)
-  if (lastUsed) return lastUsed
-
+  // First-session ACP startup must not scan historical sessions just to infer
+  // a default. Configured model, opencode provider, then sorted best model keep
+  // the protocol response deterministic without extra session/message reads.
   const opencodeProvider = providers[ProviderID.make("opencode")]
   const opencodeModel = opencodeProvider ? Provider.sort(Object.values(opencodeProvider.models))[0] : undefined
   if (opencodeProvider && opencodeModel) return { providerID: opencodeProvider.id, modelID: opencodeModel.id }
@@ -751,30 +775,6 @@ async function defaultModelFromSdk(
   const best = Provider.sort(Object.values(providers).flatMap((provider) => Object.values(provider.models)))[0]
   if (best) return { providerID: best.providerID, modelID: best.id }
   if (configured) return configured
-}
-
-async function lastUsedModel(
-  sdk: OpencodeClient,
-  directory: string,
-  providers: Record<ProviderID, Provider.Info>,
-): Promise<Directory.DefaultModel | undefined> {
-  const session = await sdk.session
-    .list({ directory, roots: true, limit: 1 }, { throwOnError: true })
-    .then((response) => response.data?.[0])
-    .catch(() => undefined)
-  if (!session) return
-
-  const lastUser = await sdk.session
-    .messages({ directory, sessionID: session.id, limit: 20 }, { throwOnError: true })
-    .then((response) => response.data?.findLast((message) => message.info.role === "user")?.info)
-    .catch(() => undefined)
-  if (lastUser?.role !== "user") return
-  if (!providers[ProviderID.make(lastUser.model.providerID)]?.models[ModelID.make(lastUser.model.modelID)]) return
-
-  return {
-    providerID: ProviderID.make(lastUser.model.providerID),
-    modelID: ModelID.make(lastUser.model.modelID),
-  }
 }
 
 function selectDefaultModel(snapshot: Directory.Snapshot) {
@@ -891,6 +891,7 @@ function registerMcpServers(
   sessionId: string,
   servers: readonly McpServer[],
 ) {
+  const started = performance.now()
   const current = registered.get(sessionId) ?? new Set<string>()
   registered.set(sessionId, current)
   const pending = new Set<string>()
@@ -922,7 +923,16 @@ function registerMcpServers(
         ),
       ),
     { concurrency: "unbounded" },
-  ).pipe(Effect.asVoid)
+  ).pipe(
+    Effect.tap(() =>
+      Effect.sync(() =>
+        ACPNextProfile.duration("acp.mcp.register", started, {
+          count: pending.size,
+        }),
+      ),
+    ),
+    Effect.asVoid,
+  )
 }
 
 function mcpRegistrationKey(name: string, config: ReturnType<typeof mcpConfig>) {

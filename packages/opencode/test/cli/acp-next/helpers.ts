@@ -11,7 +11,7 @@ import {
   type AcpClient,
 } from "../acp/acp-test-client"
 
-export const diagnosticFirstSessionThresholdMs = 15_000
+export const diagnosticFirstSessionThresholdMs = 5_000
 export const diagnosticFastPathThresholdMs = 15_000
 
 // TODO: tighten to the public verifier target of 500ms once acp-next startup is optimized.
