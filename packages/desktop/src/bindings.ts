@@ -189,6 +189,8 @@ export type TrellisTask = {
 		createdAt: string | null,
 		completedAt: string | null,
 		path: string,
+		worktreeRoot: string,
+		worktreeName: string,
 		current: boolean,
 	};
 
@@ -221,4 +223,3 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
-

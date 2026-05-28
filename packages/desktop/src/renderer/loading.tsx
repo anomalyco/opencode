@@ -7,6 +7,7 @@ import { Progress } from "@opencode-ai/ui/progress"
 import "./styles.css"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import type { InitStep, SqliteMigrationProgress } from "../preload/types"
+import { api } from "./api"
 
 const root = document.getElementById("root")!
 const lines = ["Just a moment...", "Migrating your database", "This may take a couple of minutes"]
@@ -24,7 +25,7 @@ render(() => {
     return Math.max(25, Math.min(100, percent()))
   })
 
-  window.api.awaitInitialization((next) => setStep(next as InitStep)).catch(() => undefined)
+  api.awaitInitialization((next) => setStep(next as InitStep)).catch(() => undefined)
 
   onMount(() => {
     setLine(0)
@@ -32,7 +33,7 @@ render(() => {
 
     const timers = delays.map((ms, i) => setTimeout(() => setLine(i + 1), ms))
 
-    const listener = window.api.onSqliteMigrationProgress((progress: SqliteMigrationProgress) => {
+    const listener = api.onSqliteMigrationProgress((progress: SqliteMigrationProgress) => {
       if (progress.type === "InProgress") setPercent(Math.max(0, Math.min(100, progress.value)))
       if (progress.type === "Done") {
         setPercent(100)
@@ -49,7 +50,7 @@ render(() => {
   createEffect(() => {
     if (phase() !== "done") return
 
-    const timer = setTimeout(() => window.api.loadingWindowComplete(), 1000)
+    const timer = setTimeout(() => api.loadingWindowComplete(), 1000)
     onCleanup(() => clearTimeout(timer))
   })
 

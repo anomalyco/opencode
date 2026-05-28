@@ -104,6 +104,8 @@ type DesktopTrellisTask = {
   createdAt?: string
   completedAt?: string
   path: string
+  worktreeRoot: string
+  worktreeName: string
   current: boolean
 }
 type DesktopTrellisTaskList = {
@@ -445,6 +447,8 @@ const createPlatform = (): DesktopPlatform => {
           createdAt: task.createdAt ?? undefined,
           completedAt: task.completedAt ?? undefined,
           path: task.path,
+          worktreeRoot: task.worktreeRoot,
+          worktreeName: task.worktreeName,
           current: task.current,
         })),
       }

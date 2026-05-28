@@ -21,6 +21,7 @@ import { createEffect, createResource, createSignal, onCleanup, onMount, Show } 
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { findInPage } from "../find-in-page"
+import { desktopApi } from "./api"
 import { initI18n, t } from "./i18n"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
@@ -68,8 +69,8 @@ const emitDeepLinks = (urls: string[]) => {
 }
 
 const listenForDeepLinks = () => {
-  void window.api.consumeInitialDeepLinks().then((urls) => emitDeepLinks(urls))
-  return window.api.onDeepLink((urls) => emitDeepLinks(urls))
+  void desktopApi.consumeInitialDeepLinks().then((urls) => emitDeepLinks(urls))
+  return desktopApi.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
 const createPlatform = (refreshExtraAgents?: () => void): Platform => {
@@ -83,7 +84,7 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
 
   const isWslEnabled = async () => {
     if (os !== "windows") return false
-    return window.api
+    return desktopApi
       .getWslConfig()
       .then((config) => config.enabled)
       .catch(() => false)
@@ -91,15 +92,15 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
 
   const wslHome = async () => {
     if (!(await isWslEnabled())) return undefined
-    return window.api.wslPath("~", "windows").catch(() => undefined)
+    return desktopApi.wslPath("~", "windows").catch(() => undefined)
   }
 
   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
     if (!result || !(await isWslEnabled())) return result
     if (Array.isArray(result)) {
-      return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
+      return Promise.all(result.map((path) => desktopApi.wslPath(path, "linux").catch(() => path))) as any
     }
-    return window.api.wslPath(result, "linux").catch(() => result) as any
+    return desktopApi.wslPath(result, "linux").catch(() => result) as any
   }
 
   const runDesktopMenuAction: Platform["runDesktopMenuAction"] = (action) => {
@@ -115,7 +116,7 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
         return
     }
 
-    return window.api.runDesktopMenuAction(action)
+    return desktopApi.runDesktopMenuAction(action)
   }
 
   const storage = (() => {
@@ -123,12 +124,12 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
 
     const createStorage = (name: string) => {
       const api: AsyncStorage = {
-        getItem: (key: string) => window.api.storeGet(name, key),
-        setItem: (key: string, value: string) => window.api.storeSet(name, key, value),
-        removeItem: (key: string) => window.api.storeDelete(name, key),
-        clear: () => window.api.storeClear(name),
-        key: async (index: number) => (await window.api.storeKeys(name))[index],
-        getLength: () => window.api.storeLength(name),
+        getItem: (key: string) => desktopApi.storeGet(name, key),
+        setItem: (key: string, value: string) => desktopApi.storeSet(name, key, value),
+        removeItem: (key: string) => desktopApi.storeDelete(name, key),
+        clear: () => desktopApi.storeClear(name),
+        key: async (index: number) => (await desktopApi.storeKeys(name))[index],
+        getLength: () => desktopApi.storeLength(name),
         get length() {
           return api.getLength()
         },
@@ -152,7 +153,7 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
 
     async openDirectoryPickerDialog(opts) {
       const defaultPath = await wslHome()
-      const result = await window.api.openDirectoryPicker({
+      const result = await desktopApi.openDirectoryPicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFolder"),
         defaultPath,
@@ -161,7 +162,7 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
     },
 
     async openFilePickerDialog(opts) {
-      const result = await window.api.openFilePicker({
+      const result = await desktopApi.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
         accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
@@ -171,7 +172,7 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
     },
 
     async saveFilePickerDialog(opts) {
-      const result = await window.api.saveFilePicker({
+      const result = await desktopApi.saveFilePicker({
         title: opts?.title ?? t("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
       })
@@ -179,39 +180,39 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
     },
 
     openLink(url: string) {
-      window.api.openLink(url)
+      desktopApi.openLink(url)
     },
     async openPath(path: string, app?: string) {
       if (os === "windows") {
-        const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
+        const resolvedApp = app ? await desktopApi.resolveAppPath(app).catch(() => null) : null
         const resolvedPath = await (async () => {
           if (await isWslEnabled()) {
-            const converted = await window.api.wslPath(path, "windows").catch(() => null)
+            const converted = await desktopApi.wslPath(path, "windows").catch(() => null)
             if (converted) return converted
           }
           return path
         })()
-        return window.api.openPath(resolvedPath, resolvedApp ?? undefined)
+        return desktopApi.openPath(resolvedPath, resolvedApp ?? undefined)
       }
-      return window.api.openPath(path, app)
+      return desktopApi.openPath(path, app)
     },
 
-    openInFinder: (path: string) => window.api.openInFinder(path),
+    openInFinder: (path: string) => desktopApi.openInFinder(path),
 
-    openInVscode: (path: string) => window.api.openInEditor("vscode", path),
+    openInVscode: (path: string) => desktopApi.openInEditor("vscode", path),
 
-    openInEditor: (editor: string, path: string) => window.api.openInEditor(editor, path),
+    openInEditor: (editor: string, path: string) => desktopApi.openInEditor(editor, path),
 
-    getCustomEditorPath: () => window.api.getCustomEditorPath(),
+    getCustomEditorPath: () => desktopApi.getCustomEditorPath(),
 
-    setCustomEditorPath: (path) => window.api.setCustomEditorPath(path),
+    setCustomEditorPath: (path) => desktopApi.setCustomEditorPath(path),
 
-    getDefaultEditor: () => window.api.getDefaultEditor(),
+    getDefaultEditor: () => desktopApi.getDefaultEditor(),
 
-    setDefaultEditor: (editor) => window.api.setDefaultEditor(editor),
+    setDefaultEditor: (editor) => desktopApi.setDefaultEditor(editor),
 
     reloadBackend: async () => {
-      await window.api.reloadBackend()
+      await desktopApi.reloadBackend()
     },
 
     back() {
@@ -225,28 +226,28 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
     storage,
 
     checkUpdate: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
+      const config = await desktopApi.getWindowConfig().catch(() => ({ updaterEnabled: false }))
       if (!config.updaterEnabled) return { updateAvailable: false }
-      return window.api.checkUpdate()
+      return desktopApi.checkUpdate()
     },
 
     updateAndRestart: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
+      const config = await desktopApi.getWindowConfig().catch(() => ({ updaterEnabled: false }))
       if (!config.updaterEnabled) return
-      await window.api.installUpdate()
+      await desktopApi.installUpdate()
     },
 
-    exportDebugLogs: () => window.api.exportDebugLogs(),
+    exportDebugLogs: () => desktopApi.exportDebugLogs(),
 
-    recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
+    recordFatalRendererError: (error) => desktopApi.recordFatalRendererError(error),
 
     restart: async () => {
-      await window.api.killSidecar().catch(() => undefined)
-      window.api.relaunch()
+      await desktopApi.killSidecar().catch(() => undefined)
+      desktopApi.relaunch()
     },
 
     notify: async (title, description, href) => {
-      const focused = await window.api.getWindowFocused().catch(() => document.hasFocus())
+      const focused = await desktopApi.getWindowFocused().catch(() => document.hasFocus())
       if (focused) return
 
       const notification = new Notification(title, {
@@ -254,8 +255,8 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
         icon: "https://opencode.ai/favicon-96x96-v3.png",
       })
       notification.onclick = () => {
-        void window.api.showWindow()
-        void window.api.setWindowFocus()
+        void desktopApi.showWindow()
+        void desktopApi.setWindowFocus()
         handleNotificationClick(href)
         notification.close()
       }
@@ -269,100 +270,100 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
     getWslEnabled: () => isWslEnabled(),
 
     setWslEnabled: async (enabled) => {
-      await window.api.setWslConfig({ enabled })
+      await desktopApi.setWslConfig({ enabled })
     },
 
     getDefaultServer: async () => {
-      const url = await window.api.getDefaultServerUrl().catch(() => null)
+      const url = await desktopApi.getDefaultServerUrl().catch(() => null)
       if (!url) return null
       return ServerConnection.Key.make(url)
     },
 
     setDefaultServer: async (url: string | null) => {
-      await window.api.setDefaultServerUrl(url)
+      await desktopApi.setDefaultServerUrl(url)
     },
 
     getDisplayBackend: async () => {
-      return window.api.getDisplayBackend().catch(() => null)
+      return desktopApi.getDisplayBackend().catch(() => null)
     },
 
     setDisplayBackend: async (backend) => {
-      await window.api.setDisplayBackend(backend)
+      await desktopApi.setDisplayBackend(backend)
     },
 
-    parseMarkdown: (markdown: string) => window.api.parseMarkdownCommand(markdown),
+    parseMarkdown: (markdown: string) => desktopApi.parseMarkdownCommand(markdown),
 
     webviewZoom,
 
-    getPinchZoomEnabled: () => window.api.getPinchZoomEnabled(),
+    getPinchZoomEnabled: () => desktopApi.getPinchZoomEnabled(),
 
     setPinchZoomEnabled,
 
     runDesktopMenuAction,
 
     checkAppExists: async (appName: string) => {
-      return window.api.checkAppExists(appName)
+      return desktopApi.checkAppExists(appName)
     },
 
-    filterDirectories: (paths: string[]) => window.api.filterDirectories(paths),
+    filterDirectories: (paths: string[]) => desktopApi.filterDirectories(paths),
 
     async find(query, dir) {
       return findInPage(query, dir)
     },
 
-    listConfigFiles: (directory?: string | null) => window.api.listConfigFiles(directory),
+    listConfigFiles: (directory?: string | null) => desktopApi.listConfigFiles(directory),
 
-    readConfigFile: (path: string) => window.api.readConfigFile(path),
+    readConfigFile: (path: string) => desktopApi.readConfigFile(path),
 
-    writeConfigFile: (path: string, content: string) => window.api.writeConfigFile(path, content),
+    writeConfigFile: (path: string, content: string) => desktopApi.writeConfigFile(path, content),
 
-    createConfigFile: (path: string, content: string) => window.api.createConfigFile(path, content),
+    createConfigFile: (path: string, content: string) => desktopApi.createConfigFile(path, content),
 
-    getConfigWorkspace: () => window.api.getConfigWorkspace(),
+    getConfigWorkspace: () => desktopApi.getConfigWorkspace(),
 
-    listConfigDirectory: (path: string) => window.api.listConfigDirectory(path),
+    listConfigDirectory: (path: string) => desktopApi.listConfigDirectory(path),
 
-    listLocalDirectory: (path: string) => window.api.listLocalDirectory(path),
+    listLocalDirectory: (path: string) => desktopApi.listLocalDirectory(path),
 
-    listTrellisTasks: (directory: string) => window.api.listTrellisTasks(directory),
+    listTrellisTasks: (directory: string) => desktopApi.listTrellisTasks(directory),
 
-    getOpenclawConfig: () => window.api.getOpenclawConfig(),
+    getOpenclawConfig: () => desktopApi.getOpenclawConfig(),
 
     setOpenclawConfig: async (config) => {
-      await window.api.setOpenclawConfig(config)
+      await desktopApi.setOpenclawConfig(config)
       refreshExtraAgents?.()
     },
 
-    testOpenclawConfig: (config) => window.api.testOpenclawConfig(config),
+    testOpenclawConfig: (config) => desktopApi.testOpenclawConfig(config),
 
-    detectOpenclawConfig: () => window.api.detectOpenclawConfig(),
+    detectOpenclawConfig: () => desktopApi.detectOpenclawConfig(),
 
-    abortOpenclawTest: () => window.api.abortOpenclawTest(),
+    abortOpenclawTest: () => desktopApi.abortOpenclawTest(),
 
-    getGenericagentConfig: () => window.api.getGenericagentConfig(),
+    getGenericagentConfig: () => desktopApi.getGenericagentConfig(),
 
     setGenericagentConfig: async (config) => {
-      await window.api.setGenericagentConfig(config)
+      await desktopApi.setGenericagentConfig(config)
       refreshExtraAgents?.()
     },
 
-    testGenericagentConfig: (config) => window.api.testGenericagentConfig(config),
+    testGenericagentConfig: (config) => desktopApi.testGenericagentConfig(config),
 
-    abortGenericagentTest: () => window.api.abortGenericagentTest(),
+    abortGenericagentTest: () => desktopApi.abortGenericagentTest(),
 
-    getHermesConfig: () => window.api.getHermesConfig(),
+    getHermesConfig: () => desktopApi.getHermesConfig(),
 
     setHermesConfig: async (config) => {
-      await window.api.setHermesConfig(config)
+      await desktopApi.setHermesConfig(config)
       refreshExtraAgents?.()
     },
 
-    testHermesConfig: (config) => window.api.testHermesConfig(config),
+    testHermesConfig: (config) => desktopApi.testHermesConfig(config),
 
-    abortHermesTest: () => window.api.abortHermesTest(),
+    abortHermesTest: () => desktopApi.abortHermesTest(),
 
     async readClipboardImage() {
-      const image = await window.api.readClipboardImage().catch(() => null)
+      const image = await desktopApi.readClipboardImage().catch(() => null)
       if (!image) return null
       const blob = new Blob([image.buffer], { type: "image/png" })
       return new File([blob], `pasted-image-${Date.now()}.png`, {
@@ -373,7 +374,7 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
 }
 
 let menuTrigger = null as null | ((id: string) => void)
-window.api.onMenuCommand((id) => {
+desktopApi.onMenuCommand((id) => {
   menuTrigger?.(id)
 })
 listenForDeepLinks()
@@ -381,7 +382,7 @@ listenForDeepLinks()
 render(() => {
   const [extraAgentVersion, setExtraAgentVersion] = createSignal(0)
   const platform = createPlatform(() => setExtraAgentVersion((value) => value + 1))
-  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
+  const [windowConfig] = createResource(() => desktopApi.getWindowConfig().catch(() => ({ updaterEnabled: false })))
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -394,11 +395,11 @@ render(() => {
     return next satisfies Locale
   }
 
-  const [windowCount] = createResource(() => window.api.getWindowCount())
+  const [windowCount] = createResource(() => desktopApi.getWindowCount())
 
   // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
-  const [extraAgents] = createResource(extraAgentVersion, () => window.api.listExtraAgentServers().catch(() => []))
+  const [sidecar] = createResource(() => desktopApi.awaitInitialization(() => undefined))
+  const [extraAgents] = createResource(extraAgentVersion, () => desktopApi.listExtraAgentServers().catch(() => []))
   // Runtime extra-agent refreshes should update server state without remounting the app shell.
   const extraAgentsInitialLoading = () => extraAgents.loading && extraAgents.latest === undefined
 
@@ -458,7 +459,7 @@ render(() => {
       theme.mode()
       const bg = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
       if (bg) {
-        void window.api.setBackgroundColor(bg)
+        void desktopApi.setBackgroundColor(bg)
       }
     })
 

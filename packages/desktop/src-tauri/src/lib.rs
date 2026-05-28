@@ -88,6 +88,8 @@ struct TrellisTask {
     created_at: Option<String>,
     completed_at: Option<String>,
     path: String,
+    worktree_root: String,
+    worktree_name: String,
     current: bool,
 }
 
@@ -573,6 +575,12 @@ fn normalize_current_task(root: &PathBuf, raw: &str) -> Option<String> {
 #[specta::specta]
 fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
     let root = PathBuf::from(directory);
+    let root_text = root.to_string_lossy().to_string();
+    let worktree_name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("workspace")
+        .to_string();
     let trellis = root.join(".trellis");
     let tasks = trellis.join("tasks");
     let current = fs::read_to_string(trellis.join(".current-task"))
@@ -581,7 +589,7 @@ fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
 
     let Ok(entries) = fs::read_dir(&tasks) else {
         return Ok(TrellisTaskList {
-            root: root.to_string_lossy().to_string(),
+            root: root_text,
             current,
             skipped: 0,
             tasks: Vec::new(),
@@ -640,6 +648,8 @@ fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
             created_at: trellis_text(&data, "createdAt"),
             completed_at: trellis_text(&data, "completedAt"),
             path: path.to_string_lossy().to_string(),
+            worktree_root: root_text.clone(),
+            worktree_name: worktree_name.clone(),
             current: active,
         });
     }
@@ -653,7 +663,7 @@ fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
     });
 
     Ok(TrellisTaskList {
-        root: root.to_string_lossy().to_string(),
+        root: root_text,
         current,
         skipped,
         tasks: list,
