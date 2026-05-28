@@ -58,6 +58,24 @@ export interface CollabSession {
   initStatus?: WorkspaceInitStatus
   /** Short human-readable error message — set when initStatus === "failed". */
   initError?: string | null
+  /**
+   * Computed server-side: which (if any) of this session's repos can run a
+   * live preview, and what the launcher would do for it.  The SPA uses this
+   * to render the "Launch Unleash live frontend" button conditionally.  Null
+   * when no linked repo has either a `.opencode-preview.json` file or
+   * matches the "frontend" zero-config default.
+   */
+  availablePreview?: AvailablePreview | null
+}
+
+/** Per-repo preview manifest surfaced to the SPA via CollabSession.availablePreview. */
+export interface AvailablePreview {
+  repoFullName: string
+  command: string
+  installCommand?: string
+  port: number
+  label: string
+  readyPattern?: string
 }
 
 export interface Participant {

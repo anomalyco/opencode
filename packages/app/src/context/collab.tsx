@@ -62,6 +62,32 @@ interface CollabContextValue {
    * the clone + branch checkout.  See POST /collab/session/:id/reinit.
    */
   reinitWorkspace: () => Promise<void>
+
+  // ── Preview launcher (frontend live preview) ─────────────────────────────
+  /** Snapshot of the running frontend preview, if any.  Driven by SSE
+   *  events `collab:preview_started/_log/_stopped/_failed` plus a one-off
+   *  GET /collab/session/:id/preview/state on mount. */
+  previewState: () => PreviewStateSnapshot | null
+  /** Driver-only: spawn pnpm install + start in the workspace.
+   *  Returns the state snapshot on 202, throws on 4xx/5xx. */
+  launchPreview: () => Promise<void>
+  /** Driver-only: SIGTERM the running dev server. */
+  stopPreview: () => Promise<void>
+  /** Driver-only: stop + relaunch with the same config. */
+  restartPreview: () => Promise<void>
+}
+
+/** Mirrors PreviewStateSnapshot in collab/preview-launcher.ts. */
+export interface PreviewStateSnapshot {
+  collabSessionId: string
+  repoFullName: string
+  port: number
+  label: string
+  status: "installing" | "running" | "stopped" | "failed"
+  startedAt: number
+  lastTraffic: number
+  recentLog: ReadonlyArray<{ stream: "stdout" | "stderr"; line: string; ts: number }>
+  errorMessage?: string
 }
 
 const CollabContext = createContext<CollabContextValue>()
@@ -92,6 +118,12 @@ export function CollabProvider(props: CollabProviderProps) {
   const [previewPorts, setPreviewPorts] = createSignal<number[]>([])
   const [unreadMentions, setUnreadMentions] = createSignal<number>(0)
   const [notes, setNotes] = createSignal<CollabNote[]>([])
+  // Frontend live-preview state — null when no preview is running.  Server
+  // broadcasts a "started" event on SSE (re)connect when one IS running, so
+  // the SPA picks up the state on full page reloads too.  Backed up by a
+  // one-off GET /collab/session/:id/preview/state on mount in case the
+  // SSE replay is missed.
+  const [previewState, setPreviewState] = createSignal<PreviewStateSnapshot | null>(null)
 
   function markTyping(githubLogin: string, typing: boolean) {
     setTypingUsers((prev) => {
@@ -177,6 +209,23 @@ export function CollabProvider(props: CollabProviderProps) {
       if (data.notes) setNotes(data.notes.map(deserializeNote))
     } catch {
       // ignore — notes feed is non-critical
+    }
+  })
+
+  // Hydrate the preview state on first load.  The SSE replay on connect
+  // emits collab:preview_started too (see router.ts handleSse), but doing
+  // a one-off GET here means the launcher banner is correct from the very
+  // first frame instead of flickering null → state when SSE catches up.
+  onMount(async () => {
+    try {
+      const res = await fetch(`/collab/session/${props.collabSessionId}/preview/state`)
+      if (!res.ok) return
+      const data = (await res.json()) as PreviewStateSnapshot | null
+      if (data && typeof data === "object" && "port" in data) {
+        setPreviewState(data)
+      }
+    } catch {
+      // ignore — banner just stays in launch-ready state until first SSE event
     }
   })
 
@@ -417,6 +466,43 @@ export function CollabProvider(props: CollabProviderProps) {
         fetchSession()
         break
 
+      // ── Preview launcher events ────────────────────────────────────────
+      case "collab:preview_started":
+        // Carries the full state snapshot (status may be "installing" OR
+        // "running" depending on whether the dev server has bound its port
+        // yet — the launcher transitions via readyPattern / heuristic log
+        // match).  Just write the snapshot through.
+        setPreviewState(event.state)
+        break
+
+      case "collab:preview_stopped":
+        setPreviewState(null)
+        break
+
+      case "collab:preview_failed":
+        setPreviewState((prev) =>
+          prev
+            ? { ...prev, status: "failed", errorMessage: event.error }
+            : prev,
+        )
+        break
+
+      case "collab:preview_log":
+        // Append a line and trim to the same cap the server retains (200).
+        // We do the cap clientside too so a long-running preview can't grow
+        // the SPA's heap unbounded.
+        setPreviewState((prev) => {
+          if (!prev) return prev
+          const next = prev.recentLog.concat({
+            stream: event.stream,
+            line: event.line,
+            ts: Date.now(),
+          })
+          const trimmed = next.length > 200 ? next.slice(next.length - 200) : next
+          return { ...prev, recentLog: trimmed }
+        })
+        break
+
       case "collab:mention":
         // Only react if it's me being mentioned (every browser receives the
         // broadcast — we filter client-side so the SSE stream stays simple).
@@ -563,6 +649,31 @@ export function CollabProvider(props: CollabProviderProps) {
         prev ? { ...prev, initStatus: "pending", initError: null } : prev,
       )
       await api("/reinit", "POST")
+    },
+
+    previewState,
+
+    async launchPreview() {
+      const data = await api("/preview/launch", "POST")
+      // Server returns the snapshot on 202; mirror it locally so the UI
+      // flips immediately (the SSE event will arrive milliseconds later
+      // and overwrite this with the same data — harmless).
+      if (data && typeof data === "object" && "port" in data) {
+        setPreviewState(data as PreviewStateSnapshot)
+      }
+    },
+
+    async stopPreview() {
+      await api("/preview/stop", "POST")
+      // Clear optimistically; collab:preview_stopped will confirm.
+      setPreviewState(null)
+    },
+
+    async restartPreview() {
+      const data = await api("/preview/restart", "POST")
+      if (data && typeof data === "object" && "port" in data) {
+        setPreviewState(data as PreviewStateSnapshot)
+      }
     },
   }
 

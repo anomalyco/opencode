@@ -25,6 +25,7 @@ import { useParams } from "@solidjs/router"
 import { CollabProvider, useCollab } from "@/context/collab"
 import { InviteDialog } from "@/components/collab/InviteDialog"
 import { TeamNoteComposer } from "@/components/collab/TeamNoteComposer"
+import { PreviewLauncher } from "@/components/collab/PreviewLauncher"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import type { CollabRole, Participant, PromptSuggestion } from "@opencode-ai/collab"
 
@@ -727,6 +728,13 @@ function CollabSessionInner(props: { me: Me }) {
             </div>
           </Show>
         </div>
+
+        {/* Frontend live-preview launcher — renders only when the session
+            has a preview-capable repo (.opencode-preview.json present OR a
+            repo named "frontend").  See packages/opencode/src/collab/preview-launcher.ts
+            and ~/.claude/plans/frontend-live-preview.md.  Self-hides
+            otherwise; visible to all participants but only Drivers can click. */}
+        <PreviewLauncher />
 
         {/* Open PR — Drivers only, only when at least one repo is linked. */}
         <Show when={myRole() === "driver" && (collab.session()?.repos?.length ?? 0) > 0}>
