@@ -533,7 +533,10 @@ function CollabSessionInner(props: { me: Me }) {
           return
         }
         setSubmitError(null)
-        collab.submitPrompt(content).catch((err) => {
+        const model = typeof data.model === "string" ? data.model : undefined
+        const agent = typeof data.agent === "string" ? data.agent : undefined
+        const variant = typeof data.variant === "string" ? data.variant : undefined
+        collab.submitPrompt(content, model, agent, variant).catch((err) => {
           setSubmitError(err instanceof Error ? err.message : String(err))
         })
         return

@@ -24,6 +24,9 @@ function rowToSuggestion(
     votes,
     reactions: Object.keys(reactions).length > 0 ? reactions : undefined,
     createdAt: new Date(row.created_at),
+    model: row.model ?? undefined,
+    agent: row.agent ?? undefined,
+    variant: row.variant ?? undefined,
   }
 }
 
@@ -56,6 +59,9 @@ export const collabDb: CollabDB = {
           status: params.status,
           vote_score: 0,
           created_at: params.createdAt,
+          model: params.model ?? null,
+          agent: params.agent ?? null,
+          variant: params.variant ?? null,
         })
         .run()
     })
