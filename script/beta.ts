@@ -86,7 +86,7 @@ async function build() {
   console.log("  Running final build smoke check...")
 
   try {
-    await $`./script/build.ts --single`.cwd("packages/opencode")
+    await $`./script/build.ts --single`.cwd("packages/simpliciocode")
     return true
   } catch (err) {
     console.log(`Build failed: ${err}`)
@@ -200,7 +200,7 @@ async function smoke(prs: PR[], applied: number[]) {
     "The beta merge batch is complete, but the deterministic final smoke check failed.",
     `Merged PRs on HEAD:\n${done}`,
     "Run `bun typecheck` at the repo root.",
-    "Run `./script/build.ts --single` in `packages/opencode`.",
+    "Run `./script/build.ts --single` in `packages/simpliciocode`.",
     "Fix any merge-caused issues until both commands pass.",
     "Do not create a commit.",
   ].join("\n")

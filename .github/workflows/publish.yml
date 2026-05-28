@@ -89,7 +89,7 @@ jobs:
       - name: Build
         id: build
         run: |
-          ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+          ./packages/simpliciocode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
@@ -100,13 +100,13 @@ jobs:
         with:
           name: opencode-cli
           path: |
-            packages/opencode/dist/opencode-darwin*
-            packages/opencode/dist/opencode-linux*
+            packages/simpliciocode/dist/opencode-darwin*
+            packages/simpliciocode/dist/opencode-linux*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-cli-windows
-          path: packages/opencode/dist/opencode-windows*
+          path: packages/simpliciocode/dist/opencode-windows*
     outputs:
       version: ${{ needs.version.outputs.version }}
 
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: opencode-cli-windows
-          path: packages/opencode/dist
+          path: packages/simpliciocode/dist
 
       - name: Setup git committer
         id: committer
@@ -182,7 +182,7 @@ jobs:
           }
 
       - name: Repack Windows CLI archives
-        working-directory: packages/opencode/dist
+        working-directory: packages/simpliciocode/dist
         shell: pwsh
         run: |
           Compress-Archive -Path "opencode-windows-arm64\bin\*" -DestinationPath "opencode-windows-arm64.zip" -Force
@@ -206,9 +206,9 @@ jobs:
         with:
           name: opencode-cli-signed-windows
           path: |
-            packages/opencode/dist/opencode-windows-arm64
-            packages/opencode/dist/opencode-windows-x64
-            packages/opencode/dist/opencode-windows-x64-baseline
+            packages/simpliciocode/dist/opencode-windows-arm64
+            packages/simpliciocode/dist/opencode-windows-x64
+            packages/simpliciocode/dist/opencode-windows-x64-baseline
 
   build-electron:
     needs:
@@ -434,17 +434,17 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: opencode-cli
-          path: packages/opencode/dist
+          path: packages/simpliciocode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: opencode-cli-windows
-          path: packages/opencode/dist
+          path: packages/simpliciocode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: opencode-cli-signed-windows
-          path: packages/opencode/dist
+          path: packages/simpliciocode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release

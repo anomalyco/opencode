@@ -419,7 +419,60 @@
         "@typescript/native-preview": "catalog:",
       },
     },
-    "packages/opencode": {
+    "packages/plugin": {
+      "name": "@opencode-ai/plugin",
+      "version": "1.15.11",
+      "dependencies": {
+        "@opencode-ai/sdk": "workspace:*",
+        "effect": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@opentui/core": "catalog:",
+        "@opentui/keymap": "catalog:",
+        "@opentui/solid": "catalog:",
+        "@tsconfig/node22": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "@opentui/core": ">=0.2.16",
+        "@opentui/keymap": ">=0.2.16",
+        "@opentui/solid": ">=0.2.16",
+      },
+      "optionalPeers": [
+        "@opentui/core",
+        "@opentui/keymap",
+        "@opentui/solid",
+      ],
+    },
+    "packages/script": {
+      "name": "@opencode-ai/script",
+      "dependencies": {
+        "semver": "^7.6.3",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/semver": "^7.5.8",
+      },
+    },
+    "packages/sdk/js": {
+      "name": "@opencode-ai/sdk",
+      "version": "1.15.11",
+      "dependencies": {
+        "cross-spawn": "catalog:",
+      },
+      "devDependencies": {
+        "@hey-api/openapi-ts": "0.90.10",
+        "@tsconfig/node22": "catalog:",
+        "@types/cross-spawn": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/simpliciocode": {
       "name": "simpliciocode",
       "version": "1.15.11",
       "bin": {
@@ -558,59 +611,6 @@
         "typescript": "catalog:",
         "vscode-languageserver-types": "3.17.5",
         "why-is-node-running": "3.2.2",
-      },
-    },
-    "packages/plugin": {
-      "name": "@opencode-ai/plugin",
-      "version": "1.15.11",
-      "dependencies": {
-        "@opencode-ai/sdk": "workspace:*",
-        "effect": "catalog:",
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "@opentui/core": "catalog:",
-        "@opentui/keymap": "catalog:",
-        "@opentui/solid": "catalog:",
-        "@tsconfig/node22": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:",
-      },
-      "peerDependencies": {
-        "@opentui/core": ">=0.2.16",
-        "@opentui/keymap": ">=0.2.16",
-        "@opentui/solid": ">=0.2.16",
-      },
-      "optionalPeers": [
-        "@opentui/core",
-        "@opentui/keymap",
-        "@opentui/solid",
-      ],
-    },
-    "packages/script": {
-      "name": "@opencode-ai/script",
-      "dependencies": {
-        "semver": "^7.6.3",
-      },
-      "devDependencies": {
-        "@types/bun": "catalog:",
-        "@types/semver": "^7.5.8",
-      },
-    },
-    "packages/sdk/js": {
-      "name": "@opencode-ai/sdk",
-      "version": "1.15.11",
-      "dependencies": {
-        "cross-spawn": "catalog:",
-      },
-      "devDependencies": {
-        "@hey-api/openapi-ts": "0.90.10",
-        "@tsconfig/node22": "catalog:",
-        "@types/cross-spawn": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:",
       },
     },
     "packages/slack": {
@@ -4651,7 +4651,7 @@
 
     "simple-update-notifier": ["simple-update-notifier@2.0.0", "", { "dependencies": { "semver": "^7.5.3" } }, "sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w=="],
 
-    "simpliciocode": ["simpliciocode@workspace:packages/opencode"],
+    "simpliciocode": ["simpliciocode@workspace:packages/simpliciocode"],
 
     "sisteransi": ["sisteransi@1.0.5", "", {}, "sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg=="],
 

@@ -678,7 +678,7 @@ function emitTask(state: State): void {
     state: {
       status: "running",
       input: {
-        filePath: "packages/opencode/src/cli/cmd/run/stream.ts",
+        filePath: "packages/simpliciocode/src/cli/cmd/run/stream.ts",
         offset: 1,
         limit: 200,
       },

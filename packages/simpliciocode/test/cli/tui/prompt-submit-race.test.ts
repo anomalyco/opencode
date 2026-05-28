@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 // Regression test for the prompt submit race in
-// packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx (`submit`).
+// packages/simpliciocode/src/cli/cmd/tui/component/prompt/index.tsx (`submit`).
 //
 // Before the fix, two concurrent `submit()` calls (e.g. a double-pressed
 // Enter, or the input's native onSubmit racing another dispatch) each
