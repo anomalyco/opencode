@@ -40,7 +40,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const it = testEffect(toolLayer())
 const scout = testEffect(toolLayer({ experimentalScout: true }))
 
-const ctx = {
+const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_test"),
   messageID: MessageID.make("msg_test"),
   callID: "",
@@ -49,6 +49,7 @@ const ctx = {
   messages: [],
   metadata: () => Effect.void,
   ask: () => Effect.void,
+  evaluate: ({ permission, pattern }) => ({ permission, pattern, action: "ask" as const }),
 }
 
 const asks = () => {
