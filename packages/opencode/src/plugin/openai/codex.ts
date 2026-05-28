@@ -506,7 +506,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               ...init,
               headers,
             }
-            if (websocketFetch && parsed.pathname.includes("/v1/responses")) return websocketFetch(url, requestInit)
+            if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)
             return fetch(url, OpenAIWebSocketPool.withoutInternalHeaders(requestInit))
           },
         }
