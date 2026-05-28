@@ -237,6 +237,23 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     const inputUndo = TuiKeybind.defaultValue("input_undo")
     keybinds.input_undo ??= unique(["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]).join(",")
   }
+  // The schema accepts "none" / false for any keybind to allow disabling individual
+  // commands, but the leader is special: other keybinds reference it via "<leader>..."
+  // and createBindingLookup requires exactly one trigger. Coerce a disabled leader
+  // back to the default and surface a warning so the TUI starts instead of crashing
+  // with "Invalid leader trigger" on a blank screen (#26628).
+  if (
+    keybinds.leader === "none" ||
+    keybinds.leader === false ||
+    (Array.isArray(keybinds.leader) && keybinds.leader.length === 0)
+  ) {
+    log.warn("leader keybind cannot be disabled, falling back to default", {
+      requested: keybinds.leader,
+      fallback: TuiKeybind.LeaderDefault,
+    })
+    keybinds.leader = TuiKeybind.LeaderDefault
+  }
+
   const parsedKeybinds = TuiKeybind.parse(keybinds)
   const result: Resolved = {
     ...acc.result,
