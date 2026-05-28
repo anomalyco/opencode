@@ -580,6 +580,44 @@ it.instance("respects keybinds.leader override when a real binding is provided",
   ),
 )
 
+it.instance("drops unknown top-level keys instead of silently dropping the whole tui config (#26628)", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        $schema: "https://opencode.ai/tui.json",
+        // "username_toggle" is a legacy/unknown top-level key. Before the fix this
+        // would cause schema validation to fail, catchCause to return {}, and the
+        // valid theme + keybinds settings to be silently replaced with defaults.
+        username_toggle: "none",
+        theme: "opencode-dark",
+        keybinds: { leader: "alt+space" },
+      })
+      const config = yield* getTuiConfig(test.directory)
+      // The valid settings must survive even when an unknown key is present.
+      expect(config.theme).toBe("opencode-dark")
+      expect(config.keybinds).toBeDefined()
+    }),
+  ),
+)
+
+it.instance("loads cleanly when tui.json contains only known top-level keys", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        $schema: "https://opencode.ai/tui.json",
+        theme: "opencode-light",
+      })
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.theme).toBe("opencode-light")
+    }),
+  ),
+)
+
+
 winIt("defaults Ctrl+Z to input undo on Windows", () =>
   withCleanState(
     Effect.gen(function* () {
