@@ -94,7 +94,10 @@ function createParser(leader: string) {
   })
 
   const offDefault = registerDefaultKeys(keymap)
-  const offLeader = registerLeader(keymap, { trigger: leader })
+  // When the leader is unset (truly deactivated, see #26628), skip registerLeader so it does
+  // not throw `Invalid leader trigger`. parseBindings/formatBindings still work — the only
+  // bindings that would have referenced `<leader>` simply parse as the literal token.
+  const offLeader = leader ? registerLeader(keymap, { trigger: leader }) : () => {}
 
   return {
     keymap,
