@@ -37,10 +37,14 @@ export class V2LocationMiddleware extends HttpApiMiddleware.Service<
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 
+import { canonicalizeWindowsPath } from "@/server/proxy-util"
+
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   return {
-    directory: query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    directory: canonicalizeWindowsPath(
+      query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    ),
     workspaceID: query.get("location[workspace]") || request.headers["x-opencode-workspace"],
   }
 }
