@@ -608,3 +608,81 @@ function stopSweepLoop(): void {
   clearInterval(sweepTimer)
   sweepTimer = null
 }
+
+/**
+ * Re-spawn the previously-running preview on container boot.
+ *
+ * Reads `collab_session.preview_intent` (set by POST /preview/launch, cleared
+ * by POST /preview/stop and by Session.deleteCollabSession's soft-delete)
+ * and picks the row with the most-recent `preview_intent_at` — the
+ * "first-launch-wins" contract from `launchPreview` means at most ONE
+ * preview can be active per container, so we never need to spawn multiple.
+ *
+ * Called fire-and-forget from `serve.ts` right after `runCollabMigrations()`.
+ * Failures here log but do NOT block boot — a stuck preview must not gate
+ * the rest of the collab API coming online.
+ *
+ * Note: this runs on EVERY container start, including the FIRST start of a
+ * fresh deploy where no `.opencode-preview.json` or workspace exists yet.
+ * The `launchPreview` call's `existsSync(cwd)` guard returns 404 in that
+ * case — we log and move on.  We deliberately do NOT clear the intent on
+ * such a failure: the workspace clone may still be in flight (e.g.
+ * `initSessionWorkspace` hasn't finished yet on a session created
+ * milliseconds before shutdown), and a Driver pressing Launch again will
+ * succeed once the clone lands.
+ */
+export async function resumePreviewsOnBoot(): Promise<void> {
+  let session: typeof import("./session")
+  try {
+    session = await import("./session")
+  } catch (err) {
+    console.warn("[collab.preview] resumePreviewsOnBoot: session module import failed; skipping:", err)
+    return
+  }
+
+  let intents: Array<{ collabSessionId: string; repoFullName: string; at: number }>
+  try {
+    intents = session.listPreviewIntents()
+  } catch (err) {
+    console.warn("[collab.preview] resumePreviewsOnBoot: listPreviewIntents threw; skipping:", err)
+    return
+  }
+  if (intents.length === 0) return
+
+  // First-launch-wins constraint (one preview per container) means we pick
+  // the most-recently active intent and ignore the rest.  If multiple
+  // intents survived to disk, the rest will sit clear in the DB until a
+  // Driver explicitly Launches one — we never auto-stomp a more-recent
+  // wish in favour of a stale one.
+  const pick = intents[0]
+  console.log(
+    `[collab.preview] resumePreviewsOnBoot: ${intents.length} intent(s) on disk; picking session=${pick.collabSessionId} repo=${pick.repoFullName} (most-recent)`,
+  )
+
+  let result: LaunchResult
+  try {
+    result = launchPreview(pick.collabSessionId, pick.repoFullName)
+  } catch (err) {
+    console.error(
+      `[collab.preview] resumePreviewsOnBoot: launchPreview threw for session=${pick.collabSessionId}:`,
+      err,
+    )
+    return
+  }
+
+  if (!result.ok) {
+    // 404 (workspace not cloned yet) is the common, expected case for sessions
+    // mid-init at shutdown — keep the intent so the next boot tries again.
+    // Other errors (500 spawn-failed, 409 race with a manual launch) we just
+    // log: the Driver can press Launch manually to retry, and we don't want
+    // a buggy preview to block boot recovery for other sessions on the box.
+    console.warn(
+      `[collab.preview] resumePreviewsOnBoot: launchPreview returned status=${result.status} error="${result.error}" for session=${pick.collabSessionId}; leaving intent in place`,
+    )
+    return
+  }
+
+  console.log(
+    `[collab.preview] resumePreviewsOnBoot: successfully re-spawned preview for session=${pick.collabSessionId} on port ${result.state.port}`,
+  )
+}

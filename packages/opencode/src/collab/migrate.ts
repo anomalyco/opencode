@@ -17,6 +17,8 @@ const SQL = `
     branch TEXT,
     init_status TEXT NOT NULL DEFAULT 'pending',
     init_error TEXT,
+    preview_intent TEXT,
+    preview_intent_at INTEGER,
     created_at INTEGER NOT NULL,
     deleted_at INTEGER
   );
@@ -140,6 +142,41 @@ export function runCollabMigrations() {
     }
     if (!sugCols.some((c) => c.name === "variant")) {
       db.$client.exec("ALTER TABLE collab_suggestion ADD COLUMN variant TEXT")
+    }
+
+    // preview_intent / preview_intent_at on collab_session — the Driver's
+    // preview-launch wish persisted across container restart.  The launch
+    // routes (router.ts) set these when the Driver clicks Launch and clear
+    // them on Stop.  At boot, resumePreviewsOnBoot() reads the rows and
+    // re-spawns the single most-recent launcher (ADR-0001 / preview-launcher
+    // contract = at most ONE active preview process per container).
+    // See plan: ~/.claude/plans/i-want-to-fork-crispy-sketch.md fix #3.
+    if (!cols.some((c) => c.name === "preview_intent")) {
+      db.$client.exec("ALTER TABLE collab_session ADD COLUMN preview_intent TEXT")
+    }
+    if (!cols.some((c) => c.name === "preview_intent_at")) {
+      db.$client.exec("ALTER TABLE collab_session ADD COLUMN preview_intent_at INTEGER")
+    }
+
+    // Boot sweep: revert mid-flight LLM dispatches back to `approved` so the
+    // newly-booted task's queue executor picks them up and re-runs them.  A
+    // row sits in `in_flight` ONLY while the previous container had an open
+    // `prompt_async` call mid-stream; once it returned successfully the
+    // executor flips to `submitted`.  An ECS task replacement (or any other
+    // process death) mid-dispatch is therefore directly observable here as a
+    // surviving `in_flight` row.  Without this sweep, the Driver sees their
+    // prompt acknowledged in the queue but no LLM response — silent loss.
+    //
+    // Idempotent (no-op if no rows match) and safe to re-run.  No backfill
+    // needed because legacy rows never had `in_flight` as a state.
+    const recovered = db.$client
+      .prepare(`UPDATE collab_suggestion SET status = 'approved' WHERE status = 'in_flight'`)
+      .run()
+    // bun:sqlite RunResult exposes a `changes` number — log only when non-zero
+    // to keep the boot log clean during normal startups.
+    const changes = (recovered as { changes?: number }).changes ?? 0
+    if (changes > 0) {
+      console.log(`[collab.migrate] boot sweep: ${changes} in_flight prompt(s) → approved (will re-dispatch)`)
     }
 
     // ADR-0004 — one-shot re-encryption of legacy plaintext access tokens.

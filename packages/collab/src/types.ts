@@ -13,8 +13,23 @@ export type VisibilityMode = "submitted" | "typing"
 
 export type QueueMode = "fifo" | "vote"
 
-/** "submitted" means the prompt has been dispatched to the LLM; it is no longer in the approved queue. */
-export type SuggestionStatus = "pending" | "approved" | "rejected" | "submitted"
+/**
+ * Lifecycle of a prompt suggestion.
+ *
+ *   "pending"   — vote-mode pool; awaiting Driver approval or pool resolution
+ *   "approved"  — picked from the pool / submitted in FIFO; in the executor queue
+ *   "in_flight" — executor is currently awaiting `prompt_async` on the LLM.  Live
+ *                 in this state ONLY while the request is in flight.  Set BEFORE
+ *                 the dispatch and flipped to "submitted" AFTER it returns
+ *                 successfully — so an ECS task replacement mid-stream leaves the
+ *                 row as "in_flight" on disk.  `runCollabMigrations()` boot-sweep
+ *                 flips any surviving `in_flight` rows back to `"approved"` so the
+ *                 new task's queue re-dispatches them automatically.
+ *   "submitted" — prompt has been dispatched and the LLM stream completed; no
+ *                 longer in the approved queue
+ *   "rejected"  — Driver rejected the suggestion, or lost the vote-mode resolve
+ */
+export type SuggestionStatus = "pending" | "approved" | "in_flight" | "rejected" | "submitted"
 
 /**
  * Server-side workspace lifecycle state.

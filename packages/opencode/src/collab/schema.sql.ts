@@ -20,6 +20,20 @@ export const CollabSessionTable = sqliteTable("collab_session", {
   init_status: text().notNull().default("pending"),
   /** Short human-readable error message when init_status === "failed". */
   init_error: text(),
+  /**
+   * Repo full-name (`<org>/<repo>`) whose preview the Driver has running.
+   * Null when no preview has been launched or when it was explicitly stopped.
+   * Set on POST /preview/launch, cleared on POST /preview/stop.  At boot,
+   * `resumePreviewsOnBoot()` picks the row with the most-recent
+   * `preview_intent_at` and re-spawns the launcher for it — preserves the
+   * preview across an ECS task replacement without a Driver click.
+   */
+  preview_intent: text(),
+  /** Epoch-ms timestamp of the most-recent Launch.  Used as a tie-breaker so
+   *  if two sessions had previews running simultaneously at the moment of
+   *  shutdown (rare — single-launcher constraint usually prevents this), the
+   *  more recently active one wins re-spawn priority on boot. */
+  preview_intent_at: integer({ mode: "timestamp_ms" }),
   created_at: integer({ mode: "timestamp_ms" }).notNull(),
   deleted_at: integer({ mode: "timestamp_ms" }),
 })

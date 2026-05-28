@@ -134,9 +134,24 @@ import type { CollabEvent } from "@opencode-ai/collab"
  * Register the queue executor for a collab session.
  *
  * The executor is called by _scheduleNext whenever a suggestion reaches
- * "approved" status.  It immediately marks the suggestion as "submitted"
- * (removing it from the approved queue so the loop doesn't repeat) and
- * then dispatches the prompt to the native opencode session.
+ * "approved" status.  Two-phase status flip:
+ *
+ *   1. BEFORE prompt_async — mark "in_flight".  Removes the suggestion from
+ *      getApprovedQueue (so _scheduleNext won't re-pick it) AND leaves a
+ *      breadcrumb on disk: "this prompt was being dispatched when the
+ *      container died."
+ *   2. AFTER prompt_async returns successfully — mark "submitted".  Final
+ *      terminal state for the row.
+ *
+ * If an ECS task replacement (or any other process death) interrupts the
+ * dispatch mid-stream, the row stays "in_flight" on disk.  The boot-sweep
+ * inside runCollabMigrations() flips all `in_flight` rows back to
+ * `approved` so the new task's executor picks them up and re-dispatches —
+ * the Driver sees the LLM response start over rather than silently vanish.
+ *
+ * Failure path (transport error / native session offline): we log and leave
+ * the row as `in_flight`.  No inline retry (would loop on a permanently
+ * broken LLM); recovery happens on the next restart via the same sweep.
  *
  * This must be called:
  *   1. At session creation (POST /collab/session)
@@ -145,11 +160,17 @@ import type { CollabEvent } from "@opencode-ai/collab"
  */
 function registerQueueExecutor(collabSessionId: string): void {
   Queue.registerSession(collabSessionId, collabDb, async (suggestion) => {
-    // Mark "submitted" immediately — this removes the suggestion from
-    // getApprovedQueue so _scheduleNext won't call us again for this item.
-    collabDb.updateSuggestionStatus(suggestion.id, "submitted")
+    // Phase 1: mark in_flight — removes from getApprovedQueue so _scheduleNext
+    // doesn't re-pick this row, AND leaves a disk-visible marker that the
+    // dispatch is mid-flight.  See module-level comment above for recovery.
+    collabDb.updateSuggestionStatus(suggestion.id, "in_flight")
 
-    // Notify listeners that the prompt is being processed
+    // Notify listeners that the prompt is being processed.  Keep the
+    // `collab:prompt_submitted` event type + `status: "submitted"` payload
+    // for UI back-compat — the SPA renders "in queue" / "running" identically
+    // from this signal regardless of whether the underlying row is
+    // technically `in_flight` or `submitted`.  Post-restart re-dispatch will
+    // emit this event again, which the SPA treats as a benign duplicate.
     broadcastSse(collabSessionId, {
       type: "collab:prompt_submitted",
       suggestion: { ...suggestion, status: "submitted" },
@@ -161,7 +182,22 @@ function registerQueueExecutor(collabSessionId: string): void {
     const cs = Session.getCollabSession(collabSessionId)
     if (!cs) return
     const workspacePath = nativeSessionDirectory(collabSessionId, cs.repos)
-    await executePromptOnNativeSession(cs, suggestion.content, workspacePath, suggestion.model, suggestion.agent, suggestion.variant)
+    try {
+      await executePromptOnNativeSession(cs, suggestion.content, workspacePath, suggestion.model, suggestion.agent, suggestion.variant)
+    } catch (err) {
+      // Leave row as `in_flight` so a future container restart picks it up
+      // again via the boot sweep.  We deliberately do NOT flip back to
+      // `approved` here — that would loop forever against a broken LLM
+      // upstream and burn tokens.  Logging is the operator's signal.
+      console.error(
+        `[collab.queue] prompt_async failed for suggestion=${suggestion.id} session=${collabSessionId}; left as in_flight for boot-sweep recovery:`,
+        err,
+      )
+      throw err // re-throw so Queue's .catch records the failure (lock still released in finally)
+    }
+    // Phase 2: terminal "submitted" — only on success.
+    collabDb.updateSuggestionStatus(suggestion.id, "submitted")
+
     // After every LLM turn, check whether git HEAD has moved (LLM did a
     // checkout / pull / reset).  Mass file change confuses Vite/Webpack HMR,
     // so we restart the dev server on every HEAD change — best-effort,
@@ -1404,6 +1440,13 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
 
     const result = Preview.launchPreview(sessionId, repoFullName)
     if (!result.ok) return json({ error: result.error, ...("existing" in result ? { existing: result.existing } : {}) }, result.status)
+    // Persist the Driver's intent so an ECS task replacement re-spawns the
+    // preview on the next boot (resumePreviewsOnBoot in serve.ts).  Stored
+    // on the collab_session row alongside its `preview_intent_at` timestamp
+    // — the boot-resume picks the most-recent intent when multiple sessions
+    // had previews running at shutdown.  No-ops cleanly if the row was
+    // deleted between launch and this write.
+    Session.setPreviewIntent(sessionId, repoFullName)
     return json(result.state, 202)
   }
 
@@ -1415,6 +1458,9 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       return json({ error: "No preview running for this session." }, 404)
     }
     Preview.stopPreview("explicit")
+    // Clear the intent so resumePreviewsOnBoot doesn't resurrect a preview
+    // the Driver intentionally tore down.
+    Session.setPreviewIntent(sessionId, null)
     return json({ ok: true })
   }
 
