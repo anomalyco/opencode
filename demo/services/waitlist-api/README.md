@@ -218,3 +218,52 @@ GCP コンソール → Firestore → データベース **`waitlist`** → コ�
 - 重複排除は email（小文字化）の SHA-256 を doc ID にして `createDocument` の 409 で判定（原子的）。
 - レートリミットは未実装。乱用が見られる場合は Cloud Armor 等を検討。
 - ローカル実行時は `GOOGLE_ACCESS_TOKEN`（`gcloud auth print-access-token`）が必要。Cloud Run 上ではメタデータサーバから自動取得するため不要。
+
+---
+
+## 8. Slack 通知（任意）
+
+環境変数 `SLACK_WEBHOOK_URL` を設定すると、Firestore 書き込み成功後に Slack の Incoming Webhook へ通知する（**新規・重複の両方**を通知。本文に email を含む）。未設定なら通知しない。通知の失敗は登録処理をブロックしない（ログのみ）。
+
+通知例:
+
+```
+:tada: 新規 waitlist 登録: foo@example.com （source: lp-waitlist）
+:recycle: 既登録の再送信: foo@example.com （source: lp-waitlist）
+```
+
+### Webhook の発行
+
+Slack で [Incoming Webhooks](https://api.slack.com/messaging/webhooks) を有効化し、通知先チャンネル（**email を含むため社内クローズドなチャンネル推奨**）の Webhook URL を発行する。
+
+### 設定方法
+
+URL は秘匿情報なので **Secret Manager に格納**し、Cloud Run へは参照（`SLACK_WEBHOOK_URL`）で渡す。値が tfstate やコマンド履歴に平文で残らない。
+
+**1) Secret Manager に URL を登録**（一度だけ。URL は stdin 経由で履歴に残さない）
+
+```bash
+PROJECT=<プロジェクトID>
+printf '%s' "$WEBHOOK_URL" | gcloud secrets create waitlist-slack-webhook \
+  --data-file=- --project "$PROJECT" --replication-policy=automatic
+# 更新するときは create ではなく versions add:
+#   printf '%s' "$WEBHOOK_URL" | gcloud secrets versions add waitlist-slack-webhook --data-file=- --project "$PROJECT"
+```
+
+**2) Cloud Run へ参照を紐づけ**
+
+- **Terraform（推奨。このサービスは Terraform 管理）**: `slack_webhook_secret = "waitlist-slack-webhook"`（シークレット**名**）を指定して `terraform apply`。SA への `secretAccessor` 付与も Terraform が行う。空なら env を付与しない。
+- **gcloud（Terraform を使わない場合のみ）**:
+
+  ```bash
+  SA=$(gcloud run services describe waitlist-api --project "$PROJECT" --region "$REGION" \
+    --format='value(spec.template.spec.serviceAccountName)')
+  gcloud secrets add-iam-policy-binding waitlist-slack-webhook \
+    --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor --project "$PROJECT"
+  gcloud run services update waitlist-api --project "$PROJECT" --region "$REGION" \
+    --update-secrets "SLACK_WEBHOOK_URL=waitlist-slack-webhook:latest"
+  ```
+
+  > ⚠️ このサービスは Terraform 管理下にあるため、gcloud で手動注入すると **次回 `terraform apply` で巻き戻る**。Terraform を使う環境では上の Terraform 方式に揃えること。
+
+- **ローカル**: `.env` に `SLACK_WEBHOOK_URL=...` を直接入れる（コミットしない）。
