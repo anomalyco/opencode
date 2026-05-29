@@ -648,7 +648,7 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
               }}
             >
               <div data-slot="top-models-stack" style={{ "grid-template-rows": getTopModelsSegmentRows(day) }}>
-                <For each={visibleTopModelsSegments(day)}>
+                <For each={stackedTopModelsSegments(day)}>
                   {(item) => (
                     <i
                       data-series={item.index}
@@ -729,13 +729,19 @@ function getTopModelsMaxTotal(data: UsagePoint[]) {
 function getTopModelsSegmentRows(point: UsagePoint) {
   const total = usageTotal(point)
   if (total <= 0) return ""
-  return visibleTopModelsSegments(point)
+  return stackedTopModelsSegments(point)
     .map((item) => `${(item.segment.value / total) * 100}%`)
     .join(" ")
 }
 
 function visibleTopModelsSegments(point: UsagePoint) {
   return point.segments.map((segment, index) => ({ segment, index })).filter((item) => item.segment.value > 0)
+}
+
+function stackedTopModelsSegments(point: UsagePoint) {
+  return visibleTopModelsSegments(point)
+    .slice()
+    .sort((a, b) => a.segment.value - b.segment.value || a.index - b.index)
 }
 
 function getTopModelsSegmentColor(index: number, muted: boolean, activeSegment: number | undefined) {
@@ -982,35 +988,35 @@ function MarketShare(props: {
               onClick={() => props.onActiveIndexChange(index())}
               onPointerEnter={() => props.onActiveIndexChange(index())}
             >
-              <For each={day.authors}>
-                {(author, authorIndex) => (
+              <For each={stackedMarketAuthors(day)}>
+                {(item) => (
                   <span
-                    data-active={props.activeAuthor === author.author ? "true" : undefined}
+                    data-active={props.activeAuthor === item.author.author ? "true" : undefined}
                     data-muted={
-                      props.activeAuthor !== undefined && props.activeAuthor !== author.author ? "true" : undefined
+                      props.activeAuthor !== undefined && props.activeAuthor !== item.author.author ? "true" : undefined
                     }
                     style={{
                       "background-color": getMarketSegmentColor(
-                        author.author,
-                        marketColors[authorIndex()] ?? "var(--stats-text)",
+                        item.author.author,
+                        marketColors[item.index] ?? "var(--stats-text)",
                         props.activeAuthor,
                       ),
-                      "flex-grow": author.share,
+                      "flex-grow": item.author.share,
                     }}
                     onPointerEnter={(event) => {
                       event.stopPropagation()
                       props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(author.author)
+                      props.onActiveAuthorChange(item.author.author)
                     }}
                     onPointerDown={(event) => {
                       event.stopPropagation()
                       props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(author.author)
+                      props.onActiveAuthorChange(item.author.author)
                     }}
                     onClick={(event) => {
                       event.stopPropagation()
                       props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(author.author)
+                      props.onActiveAuthorChange(item.author.author)
                     }}
                   />
                 )}
@@ -1061,6 +1067,13 @@ function getMarketSegmentColor(author: string, color: string, activeAuthor: stri
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
   return "var(--stats-bar-idle)"
+}
+
+function stackedMarketAuthors(day: MarketDay) {
+  return day.authors
+    .map((author, index) => ({ author, index }))
+    .slice()
+    .sort((a, b) => a.author.share - b.author.share || a.index - b.index)
 }
 
 function isMarketMobileLabelHidden(index: number, count: number) {
