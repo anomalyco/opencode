@@ -11,6 +11,8 @@ import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
+const appVersion = import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version
+
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
 const getLocale = () => {
@@ -121,7 +123,7 @@ const clearAuthToken = () => {
 
 const platform: Platform = {
   platform: "web",
-  version: pkg.version,
+  version: appVersion,
   openLink,
   back,
   forward,
@@ -138,7 +140,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `web@${pkg.version}`,
+    release: import.meta.env.VITE_SENTRY_RELEASE ?? `web@${appVersion}`,
     initialScope: {
       tags: {
         platform: "web",
