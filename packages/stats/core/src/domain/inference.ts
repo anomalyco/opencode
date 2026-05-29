@@ -2,10 +2,17 @@ import { Resource } from "sst/resource"
 import type { AthenaData } from "../athena"
 import type { GeoStatAggregate } from "./geo"
 import type { ModelStatAggregate } from "./model"
+import {
+  EXCLUDED_MODELS,
+  MODEL_AUTHOR_OVERRIDES,
+  MODEL_AUTHOR_RULES,
+  modelAuthor,
+  normalizeInferenceModel,
+} from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
 import { normalizeCountry, normalizeTier, type StatBaseAggregate } from "./stat"
 
-export type StatDimension = "model" | "provider" | "geo"
+export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 
 export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: StatDimension) {
   const periodStartValue = sqlString(periodStart.toISOString())
@@ -20,8 +27,13 @@ export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: S
         groupBy: "provider, model",
       }
     if (dimension === "provider") return { select: "provider", groupBy: "provider" }
+    if (dimension === "geo_model")
+      return {
+        select: "provider, model, country, COALESCE(MAX(NULLIF(continent, '')), '') AS continent",
+        groupBy: "provider, model, country",
+      }
     return {
-      select: "country, COALESCE(MAX(NULLIF(continent, '')), '') AS continent",
+      select: "'all' AS provider, 'all' AS model, country, COALESCE(MAX(NULLIF(continent, '')), '') AS continent",
       groupBy: "country",
     }
   })()
@@ -48,32 +60,56 @@ export function buildStatsQuery(periodStart: Date, periodEnd: Date, dimension: S
     COUNT(*) AS sample_count`
 
   return `
-WITH filtered AS (
+WITH normalized AS (
   SELECT
     from_iso8601_timestamp(event_timestamp) AS event_time,
-    CASE
-      WHEN source = 'lite' THEN 'Go'
-      WHEN model IN ('gpt-5-nano', 'grok-code', 'big-pickle') OR model LIKE '%-free' THEN 'Free'
-      ELSE 'Paid'
-    END AS tier,
-    COALESCE(NULLIF(
-      CASE
-        WHEN starts_with(provider, 'minimax-plan') THEN 'minimax-plan'
-        WHEN starts_with(provider, 'zai-plan') THEN 'zai-plan'
-        WHEN starts_with(provider, 'azure-databricks') THEN 'azure-databricks'
-        WHEN regexp_like(provider, '^azure[0-9]+') THEN 'azure-openai'
-        ELSE provider
-      END,
-      ''
-    ), 'unknown') AS provider,
+    model AS raw_model,
+    COALESCE(NULLIF(regexp_replace(model, '(-free|:global)+$', ''), ''), 'unknown') AS model,
     COALESCE(NULLIF(provider_model, ''), '') AS provider_model,
-    COALESCE(NULLIF(model, ''), 'unknown') AS model,
     UPPER(COALESCE(NULLIF(cf_country, ''), 'ZZ')) AS country,
     COALESCE(NULLIF(cf_continent, ''), '') AS continent,
     session,
     status,
     duration AS duration_ms,
     time_to_first_byte AS ttfb_ms,
+    timestamp_first_byte,
+    timestamp_last_byte,
+    tokens_input,
+    tokens_output,
+    tokens_reasoning,
+    tokens_cache_read,
+    tokens_cache_write_5m,
+    cost_input_microcents,
+    cost_output_microcents,
+    cost_total_microcents,
+    cost_input,
+    cost_output,
+    cost_total,
+    source
+  FROM ${sourceTable}
+  WHERE event_type = 'completions'
+    AND model IS NOT NULL
+    AND model <> ''
+    AND (strpos(COALESCE(user_agent, ''), 'ai-sdk') > 0 OR strpos(COALESCE(user_agent, ''), 'opencode') > 0)
+    AND event_timestamp >= ${periodStartValue}
+    AND event_timestamp < ${periodEndValue}
+), filtered AS (
+  SELECT
+    event_time,
+    CASE
+      WHEN source = 'lite' THEN 'Go'
+      WHEN model IN ('gpt-5-nano', 'grok-code', 'big-pickle') OR regexp_like(raw_model, '-free(:global)?$') THEN 'Free'
+      ELSE 'Paid'
+    END AS tier,
+    ${modelAuthorSql("model")} AS provider,
+    provider_model,
+    model,
+    country,
+    continent,
+    session,
+    status,
+    duration_ms,
+    ttfb_ms,
     CASE
       WHEN timestamp_last_byte - timestamp_first_byte < 100 THEN null
       ELSE CAST(tokens_output AS double) / (timestamp_last_byte - timestamp_first_byte) * 1000
@@ -86,50 +122,47 @@ WITH filtered AS (
     COALESCE(cost_input_microcents, cost_input * 1000000) AS cost_input_microcents,
     COALESCE(cost_output_microcents, cost_output * 1000000) AS cost_output_microcents,
     COALESCE(cost_total_microcents, cost_total * 1000000) AS cost_total_microcents
-  FROM ${sourceTable}
-  WHERE event_type = 'completions'
-    AND model IS NOT NULL
-    AND model <> ''
-    AND (strpos(COALESCE(user_agent, ''), 'ai-sdk') > 0 OR strpos(COALESCE(user_agent, ''), 'opencode') > 0)
-    AND event_timestamp >= ${periodStartValue}
-    AND event_timestamp < ${periodEndValue}
+  FROM normalized
+  WHERE lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
+), weekly AS (
+  SELECT
+    concat(CAST(year_of_week(event_time) AS varchar), '-W', lpad(CAST(week(event_time) AS varchar), 2, '0')) AS week_key,
+    *
+  FROM filtered
 ), daily AS (
-  SELECT date_trunc('day', event_time) AS day, *
+  SELECT substr(to_iso8601(date_trunc('day', event_time)), 1, 10) AS day_key, *
   FROM filtered
 )
 SELECT
   'week' AS grain,
-  ${periodStartValue} AS period_start,
-  ${periodEndValue} AS period_end,
+  week_key AS period_key,
   ${sqlString(Resource.StatsSyncConfig.dataset)} AS dataset,
   tier,
   ${dimensionSql.select},
   ${aggregateColumns}
-FROM filtered
-GROUP BY tier, ${dimensionSql.groupBy}
+FROM weekly
+GROUP BY week_key, tier, ${dimensionSql.groupBy}
 UNION ALL
 SELECT
   'day' AS grain,
-  to_iso8601(day) AS period_start,
-  to_iso8601(least(day + INTERVAL '1' DAY, from_iso8601_timestamp(${periodEndValue}))) AS period_end,
+  day_key AS period_key,
   ${sqlString(Resource.StatsSyncConfig.dataset)} AS dataset,
   tier,
   ${dimensionSql.select},
   ${aggregateColumns}
 FROM daily
-GROUP BY day, tier, ${dimensionSql.groupBy}
-ORDER BY grain, period_start, total_tokens DESC
+GROUP BY day_key, tier, ${dimensionSql.groupBy}
+ORDER BY grain, period_key, total_tokens DESC
 `
 }
 
 export function toModelAggregate(data: AthenaData): ModelStatAggregate[] {
+  const model = normalizeInferenceModel(data.model)
+  const author = modelAuthor(model)
+  if (!author) return []
+
   return toStatBaseAggregate(data).flatMap((base) => [
-    {
-      ...base,
-      provider: data.provider || "unknown",
-      model: data.model || "unknown",
-      provider_model: data.provider_model || "",
-    },
+    { ...base, provider: author, model, provider_model: data.provider_model || "" },
   ])
 }
 
@@ -141,6 +174,8 @@ export function toGeoAggregate(data: AthenaData): GeoStatAggregate[] {
   return toStatBaseAggregate(data).flatMap((base) => [
     {
       ...base,
+      provider: data.provider || "all",
+      model: normalizeInferenceModel(data.model || "all"),
       country: normalizeCountry(data.country),
       continent: data.continent || "",
     },
@@ -149,15 +184,12 @@ export function toGeoAggregate(data: AthenaData): GeoStatAggregate[] {
 
 function toStatBaseAggregate(data: AthenaData): StatBaseAggregate[] {
   const grain = data.grain === "day" || data.grain === "week" ? data.grain : undefined
-  const periodStart = new Date(data.period_start ?? "")
-  const periodEnd = new Date(data.period_end ?? "")
-  if (!grain || Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) return []
+  if (!grain || !data.period_key) return []
 
   return [
     {
       grain,
-      period_start: periodStart,
-      period_end: periodEnd,
+      period_key: data.period_key,
       dataset: data.dataset || Resource.StatsSyncConfig.dataset,
       tier: normalizeTier(data.tier || "unknown"),
       sessions: integer(data, "sessions"),
@@ -209,4 +241,12 @@ function sqlIdentifier(value: string) {
 
 function sqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`
+}
+
+function modelAuthorSql(model: string) {
+  return `CASE
+${MODEL_AUTHOR_OVERRIDES.map((item) => `      WHEN lower(${model}) = ${sqlString(item.model)} THEN ${sqlString(item.author)}`).join("\n")}
+${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${model}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
+      ELSE 'unknown'
+    END`
 }
