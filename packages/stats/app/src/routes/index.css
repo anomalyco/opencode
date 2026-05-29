@@ -474,12 +474,13 @@
   position: relative;
   z-index: 1;
   width: min(374px, calc(100vw - 16px));
-  overflow: hidden;
-  background: var(--stats-layer);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  background: #fafafa;
   box-shadow:
-    0 0 0 0.5px #00000024,
-    0 16px 32px #0000001f,
-    0 8px 16px #00000014;
+    0 0 0 0.5px #0000001f,
+    0 4px 8px #00000014,
+    0 8px 16px #0000000a;
 }
 
 [data-page="stats"] [data-slot="modal-brand"] {
@@ -487,7 +488,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 122px;
+  height: 122px;
   background: #242424;
   color: #ffffff;
 }
@@ -512,7 +513,7 @@
   border-radius: 0;
   appearance: none;
   background: transparent;
-  color: #ffffff;
+  color: #808080;
   cursor: pointer;
 }
 
@@ -524,17 +525,17 @@
   display: grid;
   gap: 24px;
   padding: 24px 12px 12px;
-  background: var(--stats-layer);
+  background: #fafafa;
 }
 
 [data-page="stats"] [data-slot="modal-intro"] {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   text-align: center;
 }
 
 [data-page="stats"] [data-slot="modal-intro"] h2 {
-  color: var(--stats-text);
+  color: #161616;
   font-size: 16px;
   font-weight: 500;
   line-height: 24px;
@@ -542,7 +543,7 @@
 }
 
 [data-page="stats"] [data-slot="modal-intro"] p {
-  color: var(--stats-muted);
+  color: #5c5c5c;
   font-size: 16px;
   font-weight: 400;
   line-height: 24px;
@@ -550,7 +551,7 @@
 
 [data-page="stats"] [data-slot="subscribe-form"] {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 [data-page="stats"] [data-slot="subscribe-form"] input,
@@ -568,24 +569,49 @@
 
 [data-page="stats"] [data-slot="subscribe-form"] input {
   padding: 0 12px;
-  border: 1px solid var(--stats-line);
-  background: var(--stats-bg);
-  color: var(--stats-text);
+  border: 0;
+  background: #ffffff;
+  color: #161616;
+  box-shadow:
+    0 0 0 0.5px #00000024,
+    0 1px 1.5px #0000001a;
 }
 
 [data-page="stats"] [data-slot="subscribe-form"] input::placeholder {
-  color: var(--stats-faint);
+  color: #808080;
 }
 
 [data-page="stats"] [data-slot="subscribe-form"] button {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border: 0;
   background: #242424;
   color: #ffffff;
   font-weight: 500;
   cursor: pointer;
+  box-shadow:
+    0 0 0 0.5px #3a3a3a,
+    0 1px 1.5px #00000033,
+    inset 0 -1px 2px #0000000f,
+    inset 0 1px 2px #ffffff24;
+}
+
+[data-page="stats"] [data-slot="subscribe-form"] button::before {
+  position: absolute;
+  top: 0.25px;
+  right: 0;
+  left: 0;
+  height: 20px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(180deg, #ffffff00 0%, #ffffff12 100%);
+}
+
+[data-page="stats"] [data-slot="subscribe-form"] button span {
+  position: relative;
 }
 
 [data-page="stats"] [data-slot="subscribe-form"] button:disabled {
@@ -2245,6 +2271,20 @@
     0 2px 6px #00000052;
 }
 
+[data-page="stats"][data-theme="dark"] [data-component="leader-card"]:hover [data-slot="leader-watermark"],
+[data-page="stats"][data-theme="dark"] [data-component="leader-card"]:focus-visible [data-slot="leader-watermark"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="leader-card"]:hover
+  [data-slot="leader-watermark"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="leader-card"]:focus-visible
+  [data-slot="leader-watermark"] {
+  color: var(--stats-line-strong);
+  opacity: 0.78;
+}
+
 [data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"],
 [data-page="stats"][data-theme="dark"] [data-slot="menu-button"],
 :root[data-stats-theme="dark"]
@@ -2353,6 +2393,18 @@
       0 0 0 0.5px #ffffff24,
       0 6px 16px #0000003d,
       0 2px 6px #00000052;
+  }
+
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"]:hover
+    [data-slot="leader-watermark"],
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"]:focus-visible
+    [data-slot="leader-watermark"] {
+    color: var(--stats-line-strong);
+    opacity: 0.78;
   }
 
   :root:not([data-stats-theme="light"])

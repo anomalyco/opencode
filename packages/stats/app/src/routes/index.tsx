@@ -1672,7 +1672,7 @@ function SubscribeModal(props: { onClose: () => void }) {
           >
             <input ref={input} type="email" name="email" placeholder="Email address" required />
             <button type="submit" disabled={status() === "pending"}>
-              {status() === "pending" ? "Subscribing..." : "Subscribe"}
+              <span>{status() === "pending" ? "Subscribing..." : "Subscribe"}</span>
             </button>
           </form>
           <div data-slot="subscribe-feedback" aria-live="polite">
