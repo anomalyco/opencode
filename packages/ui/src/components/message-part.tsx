@@ -181,6 +181,7 @@ export interface MessagePartProps {
   virtualizeDiff?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  working?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -705,6 +706,8 @@ export function AssistantParts(props: {
                   return part().get(entry.ref.messageID)?.get(entry.ref.partID)
                 })
 
+                const tail = createMemo(() => entryAccessor().key === last())
+
                 return (
                   <Show when={message()}>
                     <Show when={item()}>
@@ -714,6 +717,7 @@ export function AssistantParts(props: {
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
                         defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                        working={props.working && tail()}
                       />
                     </Show>
                   </Show>
@@ -1274,6 +1278,7 @@ export function Part(props: MessagePartProps) {
         virtualizeDiff={props.virtualizeDiff}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        working={props.working}
       />
     </Show>
   )
@@ -1590,35 +1595,25 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 
   return (
     <Show when={text()}>
-      <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <Collapsible
-          open={open()}
-          onOpenChange={setOpen}
-          variant="ghost"
-          class="reasoning-collapsible"
-        >
-          <Collapsible.Trigger>
-            <div data-component="reasoning-trigger">
-              <span data-slot="reasoning-title" class="shrink-0">
-                <ToolStatusTitle
-                  active={streaming()}
-                  activeText={i18n.t("ui.reasoning.thinking")}
-                  doneText={i18n.t("ui.reasoning.summary")}
-                  split={false}
-                />
-              </span>
-              <Collapsible.Arrow />
-            </div>
-          </Collapsible.Trigger>
-          <Collapsible.Content>
-            <div data-component="reasoning-content">
-              <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-                <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+      <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+        <Collapsible.Trigger>
+          <div data-component="reasoning-part-trigger">
+            <span data-slot="reasoning-part-label">
+              <Show when={props.working && streaming()} fallback={i18n.t("ui.sessionTurn.status.reasoningSummary")}>
+                <TextShimmer text={i18n.t("ui.sessionTurn.status.reasoning")} />
               </Show>
-            </div>
-          </Collapsible.Content>
-        </Collapsible>
-      </div>
+            </span>
+            <Collapsible.Arrow />
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-component="reasoning-part" data-timeline-part-id={part().id}>
+            <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
+              <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+            </Show>
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
     </Show>
   )
 }
