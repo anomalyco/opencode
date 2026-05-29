@@ -61,10 +61,10 @@ function show(out: string) {
   const text = out.trimStart()
   if (!text.startsWith("opencode ")) {
     process.stderr.write(UI.logo() + EOL + EOL)
-    process.stderr.write(text)
+    process.stderr.write(text.trimEnd() + EOL)
     return
   }
-  process.stderr.write(out)
+  process.stderr.write(out.trimEnd() + EOL)
 }
 
 const cli = yargs(args)
