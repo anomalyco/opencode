@@ -37,6 +37,17 @@ const headerLinks = [
   { href: "#token-cost", label: "Token Cost" },
   { href: "#session-cost", label: "Session Cost" },
 ] as const
+const githubLink = {
+  href: "https://github.com/anomalyco/opencode",
+  apiHref: "https://api.github.com/repos/anomalyco/opencode",
+  label: "GitHub",
+  fallbackStars: "150K",
+  ariaLabel: "Star OpenCode on GitHub",
+}
+const compactNumberFormatter = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+})
 const usageColors = [
   "#ed6aff",
   "#a684ff",
@@ -61,12 +72,30 @@ const getData = query(async () => {
   return runtime.runPromise(getStatsHomeData())
 }, "getStatsHomeData")
 
+const getGitHubStars = query(async () => {
+  "use server"
+  return fetch(githubLink.apiHref, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  })
+    .then((response) => (response.ok ? response.json() : undefined))
+    .then((body: unknown) =>
+      body && typeof body === "object" && "stargazers_count" in body && typeof body.stargazers_count === "number"
+        ? compactNumberFormatter.format(body.stargazers_count)
+        : githubLink.fallbackStars,
+    )
+    .catch(() => githubLink.fallbackStars)
+}, "getGitHubStars")
+
 export default function StatsHome() {
   getRequestEvent()?.response.headers.set(
     "Cache-Control",
     "public, max-age=60, s-maxage=300, stale-while-revalidate=86400",
   )
   const data = createAsync(() => getData())
+  const githubStars = createAsync(() => getGitHubStars())
 
   return (
     <main data-page="stats">
@@ -76,7 +105,7 @@ export default function StatsHome() {
       <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
-      <Header />
+      <Header githubStars={githubStars() ?? githubLink.fallbackStars} />
       <div data-component="container">
         <div data-component="content">
           <Show when={data()} fallback={<StatsLoading />}>
@@ -720,6 +749,9 @@ function Leaderboard(props: { data: LeaderboardEntry[] }) {
           )}
         </For>
       </div>
+      <div data-slot="leaderboard-mobile" aria-label="Scrollable model token leaderboard">
+        <For each={props.data}>{(entry) => <LeaderboardCard entry={entry} size="featured" />}</For>
+      </div>
     </div>
   )
 }
@@ -864,11 +896,17 @@ function MarketShare(props: {
             <button
               type="button"
               data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
+              data-mobile-hidden={isMarketMobileLabelHidden(index(), props.data.length) ? "true" : undefined}
               onClick={() => props.onActiveIndexChange(index())}
               onPointerEnter={() => props.onActiveIndexChange(index())}
             >
-              <span>{formatTrillions(day.total)}</span>
-              <span>{day.date}</span>
+              <span data-slot="market-axis-label">
+                <span data-slot="market-total">{formatTrillions(day.total)}</span>
+                <span data-slot="market-date">
+                  <span data-slot="market-date-full">{day.date}</span>
+                  <span data-slot="market-date-mobile">{formatMarketMobileDate(day.date)}</span>
+                </span>
+              </span>
             </button>
           )}
         </For>
@@ -964,21 +1002,43 @@ function getMarketSegmentColor(author: string, color: string, activeAuthor: stri
   return "var(--stats-bar-idle)"
 }
 
+function isMarketMobileLabelHidden(index: number, count: number) {
+  return count > 7 && index % 2 === 1
+}
+
+function formatMarketMobileDate(label: string) {
+  return marketDateParts(label).start
+}
+
 function formatTrillions(value: number) {
   return `${value.toFixed(value >= 10 ? 0 : 1)}T`
 }
 
 function formatMarketDate(day: MarketDay | undefined) {
   if (!day) return "No data"
-  return `${day.date} ${new Date().getFullYear()}`
+  return formatMarketDateLabel(day.date)
 }
 
 function formatMarketRange(data: MarketDay[]) {
   const first = data[0]?.date
   const last = data[data.length - 1]?.date
   if (!first || !last) return "No data"
+  const start = marketDateParts(first).start
+  const end = marketDateParts(last).end
+  if (start === end) return formatMarketDateLabel(start)
+  return `${start} ${new Date().getFullYear()} → ${end} ${new Date().getFullYear()}`
+}
+
+function formatMarketDateLabel(label: string) {
+  const parts = marketDateParts(label)
   const year = new Date().getFullYear()
-  return `${first} ${year} → ${last} ${year}`
+  if (parts.start === parts.end) return `${parts.start} ${year}`
+  return `${parts.start} ${year} → ${parts.end} ${year}`
+}
+
+function marketDateParts(label: string) {
+  const [start, end] = label.split(" - ")
+  return { start: start ?? label, end: end ?? start ?? label }
 }
 
 function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
@@ -1019,7 +1079,7 @@ function TokenCostChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
-  const max = createMemo(() => Math.max(1, ...props.data.map((item) => item.total)))
+  const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.total)) || 1)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
   return (
@@ -1066,9 +1126,14 @@ function formatDollars(value: number) {
 }
 
 function MetricBar(props: { value: number; max: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(1, Math.max(props.value / props.max, props.value > 0 ? 0.03 : 0)))
   return (
-    <i data-component="metric-bar" data-active={props.active ? "true" : undefined}>
-      <b style={{ "flex-grow": Math.max(props.value / Math.max(props.max, 1), 0.05) }} />
+    <i
+      data-component="metric-bar"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--metric-bar-fill": `${fill() * 100}%` } as JSX.CSSProperties}
+    >
+      <b />
       <em />
     </i>
   )
@@ -1115,16 +1180,17 @@ function SessionCostChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
-  const maxCost = createMemo(() => Math.max(1, ...props.data.map((item) => item.cost)))
-  const maxTokens = createMemo(() => Math.max(1, ...props.data.map((item) => item.tokens)))
+  const maxCost = createMemo(() => Math.max(0, ...props.data.map((item) => item.cost)) || 1)
+  const maxTokens = createMemo(() => Math.max(0, ...props.data.map((item) => item.tokens)) || 1)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
   return (
     <div data-component="session-cost">
       <div data-slot="session-heading">
-        <span />
+        <strong aria-hidden="true" />
+        <span aria-hidden="true" />
         <p>COST / SESSION</p>
-        <p>TOKENS / SESSIONS</p>
+        <p>TOKENS / SESSION</p>
       </div>
       <For each={props.data}>
         {(item, index) => (
@@ -1178,7 +1244,7 @@ function formatSessionCost(value: number) {
   return `$${value.toFixed(4)}`
 }
 
-function Header() {
+function Header(props: { githubStars: string }) {
   const [menuOpen, setMenuOpen] = createSignal(false)
   const [menuViewport, setMenuViewport] = createSignal(false)
 
@@ -1231,12 +1297,13 @@ function Header() {
           <a
             data-slot="header-button"
             data-variant="neutral"
-            href="https://github.com/sst/opencode"
+            href={githubLink.href}
             target="_blank"
             rel="noreferrer"
+            aria-label={`${githubLink.ariaLabel} (${props.githubStars} stars)`}
           >
-            <strong>GitHub</strong>
-            <span>[150K]</span>
+            <strong>{githubLink.label}</strong>
+            <span>[{props.githubStars}]</span>
           </a>
           <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
             <strong>Try OpenCode</strong>
@@ -1261,12 +1328,13 @@ function Header() {
         <a
           data-slot="mobile-menu-item"
           data-variant="github"
-          href="https://github.com/sst/opencode"
+          href={githubLink.href}
           target="_blank"
           rel="noreferrer"
+          aria-label={`${githubLink.ariaLabel} (${props.githubStars} stars)`}
         >
-          <strong>GitHub</strong>
-          <span>[150K]</span>
+          <strong>{githubLink.label}</strong>
+          <span>[{props.githubStars}]</span>
         </a>
         <For each={headerLinks}>
           {(link) => (
@@ -1346,7 +1414,7 @@ function Footer() {
     { href: "mailto:hello@opencode.ai", label: "Contact us" },
     { href: "https://opencode.ai/discord", label: "Community" },
     { href: "https://x.com/opencode", label: "X" },
-    { href: "https://github.com/anomalyco/opencode", label: "GitHub" },
+    githubLink,
     { href: "https://www.youtube.com/@anomaly-co", label: "YouTube" },
   ]
 
