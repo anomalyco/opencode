@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import type { ContentBlock } from "@agentclientprotocol/sdk"
 import { pathToFileURL } from "node:url"
-import { contentBlockToParts, partsToContentChunks, promptContentToParts } from "../../src/acp-next/content"
+import { contentBlockToParts, partsToContentChunks, promptContentToParts } from "../../src/acp/content"
 
-describe("acp-next content conversion", () => {
+describe("acp content conversion", () => {
   test("plain text block becomes a text part", () => {
     expect(contentBlockToParts({ type: "text", text: "hello" })).toEqual([{ type: "text", text: "hello" }])
   })
@@ -158,7 +158,7 @@ describe("acp-next content conversion", () => {
   })
 })
 
-describe("acp-next replay conversion", () => {
+describe("acp replay conversion", () => {
   test("replays text audience annotations", () => {
     expect(partsToContentChunks([{ type: "text", text: "cached", synthetic: true }])).toEqual([
       {

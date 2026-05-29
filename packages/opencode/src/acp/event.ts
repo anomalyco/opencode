@@ -10,8 +10,8 @@ import type {
   ToolPart,
 } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
-import { ACPNextSession } from "./session"
-import { ACPNextPermission } from "./permission"
+import { ACPSession } from "./session"
+import { ACPPermission } from "./permission"
 import {
   duplicateRunningToolUpdate,
   errorToolUpdate,
@@ -21,7 +21,7 @@ import {
   completedToolUpdate,
 } from "./tool"
 
-const log = Log.create({ service: "acp-next-event" })
+const log = Log.create({ service: "acp-event" })
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
@@ -32,7 +32,7 @@ type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
 
-export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPNextSession.Interface }) {
+export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
   const subscription = new Subscription(input)
   subscription.start()
   return subscription
@@ -42,17 +42,17 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
-  private readonly permission: ACPNextPermission.Handler
+  private readonly permission: ACPPermission.Handler
   private started = false
 
   constructor(
     private readonly input: {
       sdk: OpencodeClient
       connection: Connection
-      session: ACPNextSession.Interface
+      session: ACPSession.Interface
     },
   ) {
-    this.permission = new ACPNextPermission.Handler(input)
+    this.permission = new ACPPermission.Handler(input)
   }
 
   start() {
@@ -316,4 +316,4 @@ export class Subscription {
   }
 }
 
-export * as ACPNextEvent from "./event"
+export * as ACPEvent from "./event"

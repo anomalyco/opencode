@@ -7,7 +7,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import { Context, Effect, Layer, SynchronizedRef } from "effect"
 
-const log = Log.create({ service: "acp-next-usage" })
+const log = Log.create({ service: "acp-usage" })
 
 export type AssistantTokenCost = Pick<OpenCodeAssistantMessage, "cost" | "tokens">
 
@@ -60,14 +60,14 @@ export interface Interface {
 }
 
 export class MessageLoader extends Context.Service<MessageLoader, MessageLoaderInterface>()(
-  "@opencode/ACPNextUsageMessageLoader",
+  "@opencode/ACPUsageMessageLoader",
 ) {}
 
 export class ContextLimitLoader extends Context.Service<ContextLimitLoader, ContextLimitLoaderInterface>()(
-  "@opencode/ACPNextUsageContextLimitLoader",
+  "@opencode/ACPUsageContextLimitLoader",
 ) {}
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ACPNextUsage") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ACPUsage") {}
 
 export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
   return MessageLoader.of({
@@ -124,7 +124,7 @@ export const contextLimitLoaderLayer = Layer.effect(
     const provider = yield* Provider.Service
 
     return ContextLimitLoader.of({
-      providers: Effect.fn("ACPNextUsageContextLimitLoader.providers")(function* (directory) {
+      providers: Effect.fn("ACPUsageContextLimitLoader.providers")(function* (directory) {
         const ctx = yield* store.load({ directory })
         return yield* Effect.gen(function* () {
           return yield* provider.list()
@@ -168,7 +168,7 @@ export const layer = Layer.effect(
       )
     })
 
-    const contextLimit = Effect.fn("ACPNextUsage.contextLimit")(function* (input: {
+    const contextLimit = Effect.fn("ACPUsage.contextLimit")(function* (input: {
       readonly directory: string
       readonly providerID: ProviderID
       readonly modelID: ModelID
@@ -176,7 +176,7 @@ export const layer = Layer.effect(
       return yield* yield* cachedLimit(input)
     })
 
-    const sendUpdate = Effect.fn("ACPNextUsage.sendUpdate")(function* (input: {
+    const sendUpdate = Effect.fn("ACPUsage.sendUpdate")(function* (input: {
       readonly connection: UsageConnection
       readonly sessionID: string
       readonly directory: string

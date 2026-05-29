@@ -1,35 +1,35 @@
 import { describe, expect, test } from "bun:test"
 import { RequestError } from "@agentclientprotocol/sdk"
-import * as ACPNextError from "../../src/acp-next/error"
+import * as ACPError from "../../src/acp/error"
 
-describe("acp-next.error", () => {
+describe("acp.error", () => {
   test("maps validation failures to invalid params", () => {
-    const cases: ACPNextError.Error[] = [
-      new ACPNextError.SessionNotFoundError({ sessionId: "ses_missing" }),
-      new ACPNextError.InvalidConfigOptionError({ configId: "temperature" }),
-      new ACPNextError.InvalidModelError({ providerId: "anthropic", modelId: "claude-missing" }),
-      new ACPNextError.InvalidEffortError({ effort: "extreme" }),
-      new ACPNextError.InvalidModeError({ mode: "turbo" }),
+    const cases: ACPError.Error[] = [
+      new ACPError.SessionNotFoundError({ sessionId: "ses_missing" }),
+      new ACPError.InvalidConfigOptionError({ configId: "temperature" }),
+      new ACPError.InvalidModelError({ providerId: "anthropic", modelId: "claude-missing" }),
+      new ACPError.InvalidEffortError({ effort: "extreme" }),
+      new ACPError.InvalidModeError({ mode: "turbo" }),
     ]
 
-    expect(cases.map((error) => ACPNextError.toRequestError(error).code)).toEqual([
+    expect(cases.map((error) => ACPError.toRequestError(error).code)).toEqual([
       -32602, -32602, -32602, -32602, -32602,
     ])
   })
 
   test("includes safe validation details", () => {
-    expect(ACPNextError.toRequestError(new ACPNextError.SessionNotFoundError({ sessionId: "ses_123" }))).toMatchObject({
+    expect(ACPError.toRequestError(new ACPError.SessionNotFoundError({ sessionId: "ses_123" }))).toMatchObject({
       code: -32602,
       data: { sessionId: "ses_123" },
     })
-    expect(ACPNextError.toRequestError(new ACPNextError.InvalidModelError({ modelId: "gpt-missing" }))).toMatchObject({
+    expect(ACPError.toRequestError(new ACPError.InvalidModelError({ modelId: "gpt-missing" }))).toMatchObject({
       code: -32602,
       data: { modelId: "gpt-missing" },
     })
   })
 
   test("maps auth required to the SDK auth error", () => {
-    const requestError = ACPNextError.toRequestError(new ACPNextError.AuthRequiredError({ providerId: "anthropic" }))
+    const requestError = ACPError.toRequestError(new ACPError.AuthRequiredError({ providerId: "anthropic" }))
 
     expect(requestError).toBeInstanceOf(RequestError)
     expect(requestError.code).toBe(-32000)
@@ -38,8 +38,8 @@ describe("acp-next.error", () => {
   })
 
   test("maps unsupported operations to method not found", () => {
-    const requestError = ACPNextError.toRequestError(
-      new ACPNextError.UnsupportedOperationError({ method: "session/new" }),
+    const requestError = ACPError.toRequestError(
+      new ACPError.UnsupportedOperationError({ method: "session/new" }),
     )
 
     expect(requestError.code).toBe(-32601)
@@ -47,8 +47,8 @@ describe("acp-next.error", () => {
   })
 
   test("maps service failures to safe internal errors", () => {
-    const requestError = ACPNextError.toRequestError(
-      new ACPNextError.ServiceFailureError({ service: "provider", safeMessage: "Provider request failed" }),
+    const requestError = ACPError.toRequestError(
+      new ACPError.ServiceFailureError({ service: "provider", safeMessage: "Provider request failed" }),
     )
 
     expect(requestError.code).toBe(-32603)
@@ -57,8 +57,8 @@ describe("acp-next.error", () => {
   })
 
   test("wraps unknown defects without leaking raw details", () => {
-    const requestError = ACPNextError.toRequestError(
-      ACPNextError.fromUnknownDefect(new Error("stack has sk-ant-secret and oauth refresh token")),
+    const requestError = ACPError.toRequestError(
+      ACPError.fromUnknownDefect(new Error("stack has sk-ant-secret and oauth refresh token")),
     )
     const serialized = JSON.stringify(requestError.toErrorResponse())
 

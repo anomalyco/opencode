@@ -5,18 +5,18 @@ import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { cliIt } from "../../lib/cli-process"
-import { expectOk } from "../acp/acp-test-client"
-import { createAcpNextClient, initialize, newSession, verifierConfig } from "./helpers"
+import { expectOk } from "./acp-test-client"
+import { createAcpClient, initialize, newSession, verifierConfig } from "./helpers"
 
 const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="
 
-describe("opencode acp-next prompt content subprocess", () => {
+describe("opencode acp prompt content subprocess", () => {
   cliIt.live(
     "accepts embedded text resource image and file resource link prompt content",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => writeFile(path.join(home, "README.md"), "# ACP content smoke\n"))
-        const acp = yield* createAcpNextClient(
+        const acp = yield* createAcpClient(
           { opencode },
           { OPENCODE_CONFIG_CONTENT: JSON.stringify(promptContentConfig(llm.url)) },
         )

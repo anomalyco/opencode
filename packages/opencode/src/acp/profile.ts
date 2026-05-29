@@ -39,4 +39,4 @@ function write(name: string, durationMs: number, fields?: Record<string, string 
   console.error(`[acp-profile] ${name} ${Math.round(durationMs)}ms${extra ? ` ${extra}` : ""}`)
 }
 
-export * as ACPNextProfile from "./profile"
+export * as ACPProfile from "./profile"

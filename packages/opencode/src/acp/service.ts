@@ -33,22 +33,22 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
 import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
-import * as ACPNextError from "./error"
+import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { promptContentToParts } from "./content"
 import { Directory } from "./directory"
-import { ACPNextEvent } from "./event"
-import { ACPNextSession } from "./session"
+import { ACPEvent } from "./event"
+import { ACPSession } from "./session"
 import { UsageService } from "./usage"
-import { ACPNextProfile } from "./profile"
+import { ACPProfile } from "./profile"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
 export const AuthMethodID = "opencode-login"
-const log = Log.create({ service: "acp-next-service" })
+const log = Log.create({ service: "acp-service" })
 
-export type Error = ACPNextError.Error
+export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 
@@ -70,26 +70,26 @@ export type Interface = {
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ACPNext/Service") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Service") {}
 
 export function make(input: {
   sdk: OpencodeClient
   connection?: ServiceConnection
   directory?: Directory.Interface
-  session?: ACPNextSession.Interface
+  session?: ACPSession.Interface
   usage?: UsageService.Interface
-  eventSubscription?: (subscription: ACPNextEvent.Subscription) => void
+  eventSubscription?: (subscription: ACPEvent.Subscription) => void
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
   const events = input.connection
-    ? ACPNextEvent.start({ sdk: input.sdk, connection: input.connection, session })
+    ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
     : undefined
   if (events) input.eventSubscription?.(events)
 
-  const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
+  const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
     const authMethod: AuthMethod = {
       description: "Run `opencode auth login` in the terminal",
@@ -132,25 +132,25 @@ export function make(input: {
         version: InstallationVersion,
       },
     }
-    ACPNextProfile.duration("acp.initialize", started)
+    ACPProfile.duration("acp.initialize", started)
     return response
   })
 
-  const authenticate = Effect.fn("ACPNext.authenticate")(function* (params: AuthenticateRequest) {
+  const authenticate = Effect.fn("ACP.authenticate")(function* (params: AuthenticateRequest) {
     if (params.methodId !== AuthMethodID) {
-      return yield* new ACPNextError.UnknownAuthMethodError({ methodId: params.methodId })
+      return yield* new ACPError.UnknownAuthMethodError({ methodId: params.methodId })
     }
     return {}
   })
 
-  const directorySnapshot = Effect.fn("ACPNext.directorySnapshot")(function* (cwd: string) {
+  const directorySnapshot = Effect.fn("ACP.directorySnapshot")(function* (cwd: string) {
     const started = performance.now()
     const snapshot = yield* directoryService.get(cwd)
-    ACPNextProfile.duration("acp.directory.snapshot", started)
+    ACPProfile.duration("acp.directory.snapshot", started)
     return snapshot
   })
 
-  const configSnapshot = Effect.fn("ACPNext.configSnapshot")(function* (state: ACPNextSession.Info) {
+  const configSnapshot = Effect.fn("ACP.configSnapshot")(function* (state: ACPSession.Info) {
     const snapshot = sessionSnapshots.get(state.id)
     if (snapshot) return snapshot
     const loaded = yield* directorySnapshot(state.cwd)
@@ -158,7 +158,7 @@ export function make(input: {
     return loaded
   })
 
-  const newSession = Effect.fn("ACPNext.newSession")(function* (params: NewSessionRequest) {
+  const newSession = Effect.fn("ACP.newSession")(function* (params: NewSessionRequest) {
     const started = performance.now()
     const snapshot = yield* directorySnapshot(params.cwd)
     const selected = selectDefaultModel(snapshot)
@@ -202,11 +202,11 @@ export function make(input: {
         modeId: state.modeId,
       }),
     }
-    ACPNextProfile.duration("acp.newSession", started)
+    ACPProfile.duration("acp.newSession", started)
     return response
   })
 
-  const loadSession = Effect.fn("ACPNext.loadSession")(function* (params: LoadSessionRequest) {
+  const loadSession = Effect.fn("ACP.loadSession")(function* (params: LoadSessionRequest) {
     const snapshot = yield* directorySnapshot(params.cwd)
     yield* request(
       () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
@@ -245,7 +245,7 @@ export function make(input: {
     }
   })
 
-  const listSessions = Effect.fn("ACPNext.listSessions")(function* (params: ListSessionsRequest) {
+  const listSessions = Effect.fn("ACP.listSessions")(function* (params: ListSessionsRequest) {
     const cursor = params.cursor ? Number(params.cursor) : undefined
     const limit = 100
     const sessions = yield* request(
@@ -291,7 +291,7 @@ export function make(input: {
     }
   })
 
-  const resumeSession = Effect.fn("ACPNext.resumeSession")(function* (params: ResumeSessionRequest) {
+  const resumeSession = Effect.fn("ACP.resumeSession")(function* (params: ResumeSessionRequest) {
     const snapshot = yield* directorySnapshot(params.cwd)
     yield* request(
       () => input.sdk.session.get({ directory: params.cwd, sessionID: params.sessionId }, { throwOnError: true }),
@@ -330,7 +330,7 @@ export function make(input: {
     }
   })
 
-  const closeSession = Effect.fn("ACPNext.closeSession")(function* (params: CloseSessionRequest) {
+  const closeSession = Effect.fn("ACP.closeSession")(function* (params: CloseSessionRequest) {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
@@ -349,7 +349,7 @@ export function make(input: {
     return {}
   })
 
-  const forkSession = Effect.fn("ACPNext.forkSession")(function* (params: ForkSessionRequest) {
+  const forkSession = Effect.fn("ACP.forkSession")(function* (params: ForkSessionRequest) {
     const snapshot = yield* directorySnapshot(params.cwd)
     const forked = yield* request(
       () =>
@@ -393,13 +393,13 @@ export function make(input: {
     }
   })
 
-  const setSessionConfigOption = Effect.fn("ACPNext.setSessionConfigOption")(function* (
+  const setSessionConfigOption = Effect.fn("ACP.setSessionConfigOption")(function* (
     params: SetSessionConfigOptionRequest,
   ) {
     const current = yield* session.get(params.sessionId)
     const snapshot = yield* configSnapshot(current)
     if (typeof params.value !== "string") {
-      return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
+      return yield* new ACPError.InvalidConfigOptionError({ configId: params.configId })
     }
 
     if (params.configId === "model") {
@@ -421,7 +421,7 @@ export function make(input: {
       const model = current.model ?? selectDefaultModel(snapshot)
       const variants = Directory.variants(snapshot, model)
       if (!variants || !Object.keys(variants).includes(params.value)) {
-        return yield* new ACPNextError.InvalidEffortError({ effort: params.value })
+        return yield* new ACPError.InvalidEffortError({ effort: params.value })
       }
       const state = yield* session.setVariant(params.sessionId, params.value)
       return {
@@ -435,7 +435,7 @@ export function make(input: {
 
     if (params.configId === "mode") {
       if (!snapshot.availableModes.some((mode) => mode.id === params.value)) {
-        return yield* new ACPNextError.InvalidModeError({ mode: params.value })
+        return yield* new ACPError.InvalidModeError({ mode: params.value })
       }
       const state = yield* session.setMode(params.sessionId, params.value)
       return {
@@ -447,20 +447,20 @@ export function make(input: {
       }
     }
 
-    return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
+    return yield* new ACPError.InvalidConfigOptionError({ configId: params.configId })
   })
 
-  const setSessionMode = Effect.fn("ACPNext.setSessionMode")(function* (params: SetSessionModeRequest) {
+  const setSessionMode = Effect.fn("ACP.setSessionMode")(function* (params: SetSessionModeRequest) {
     const current = yield* session.get(params.sessionId)
     const snapshot = yield* configSnapshot(current)
     if (!snapshot.availableModes.some((mode) => mode.id === params.modeId)) {
-      return yield* new ACPNextError.InvalidModeError({ mode: params.modeId })
+      return yield* new ACPError.InvalidModeError({ mode: params.modeId })
     }
     yield* session.setMode(params.sessionId, params.modeId)
     return {}
   })
 
-  const setSessionModel = Effect.fn("ACPNext.setSessionModel")(function* (params: SetSessionModelRequest) {
+  const setSessionModel = Effect.fn("ACP.setSessionModel")(function* (params: SetSessionModelRequest) {
     const current = yield* session.get(params.sessionId)
     const snapshot = yield* configSnapshot(current)
     const selected = yield* parseSelectedModel(snapshot, params.modelId)
@@ -487,7 +487,7 @@ export function make(input: {
     setSessionConfigOption,
     setSessionMode,
     setSessionModel,
-    prompt: Effect.fn("ACPNext.prompt")(function* (params: PromptRequest) {
+    prompt: Effect.fn("ACP.prompt")(function* (params: PromptRequest) {
       const current = yield* session.get(params.sessionId)
       const snapshot = yield* directorySnapshot(current.cwd)
       const selected = current.model ?? selectDefaultModel(snapshot)
@@ -563,15 +563,15 @@ export function make(input: {
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
       return promptResponse(undefined, params.messageId)
     }),
-    cancel: Effect.fn("ACPNext.cancel")(function* (_input: CancelNotification) {
-      return yield* new ACPNextError.UnsupportedOperationError({ method: "session/cancel" })
+    cancel: Effect.fn("ACP.cancel")(function* (_input: CancelNotification) {
+      return yield* new ACPError.UnsupportedOperationError({ method: "session/cancel" })
     }),
   }
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(ACPNextSession.defaultLayer).runSync(
-    ACPNextSession.Service.use((service) => Effect.succeed(service)),
+  return ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+    ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
 
@@ -592,7 +592,7 @@ function makeDirectoryService(sdk: OpencodeClient) {
 
 function makeUsageService(sdk: OpencodeClient) {
   const limits = new Map<string, Promise<number | undefined>>()
-  const contextLimit: UsageService.Interface["contextLimit"] = Effect.fn("ACPNext.promptUsage.contextLimit")(
+  const contextLimit: UsageService.Interface["contextLimit"] = Effect.fn("ACP.promptUsage.contextLimit")(
     function* (params) {
       const key = `${params.directory}\u0000${params.providerID}\u0000${params.modelID}`
       const current = limits.get(key)
@@ -615,7 +615,7 @@ function makeUsageService(sdk: OpencodeClient) {
     },
   )
 
-  const sendUpdate: UsageService.Interface["sendUpdate"] = Effect.fn("ACPNext.promptUsage.sendUpdate")(
+  const sendUpdate: UsageService.Interface["sendUpdate"] = Effect.fn("ACP.promptUsage.sendUpdate")(
     function* (params) {
       const messages = yield* request(
         () =>
@@ -675,7 +675,7 @@ function makeUsageService(sdk: OpencodeClient) {
   })
 }
 
-function replayMessages(subscription: ACPNextEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
+function replayMessages(subscription: ACPEvent.Subscription | undefined, messages: SessionMessageResponse[]) {
   if (!subscription) return Effect.void
   return Effect.promise(async () => {
     for (const message of messages) {
@@ -724,23 +724,23 @@ function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
 }
 
 function profiledRequest<T>(name: string, fn: () => Promise<T | SdkResponse<T>>, service?: string) {
-  return request(() => ACPNextProfile.measure(name, fn), service)
+  return request(() => ACPProfile.measure(name, fn), service)
 }
 
 async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
-  return ACPNextProfile.measure("acp.directory.load", async () => {
+  return ACPProfile.measure("acp.directory.load", async () => {
     const [providersResponse, agentsResponse, commandsResponse, skillsResponse, configResponse] = await Promise.all([
-      ACPNextProfile.measure("acp.directory.provider.list", () =>
+      ACPProfile.measure("acp.directory.provider.list", () =>
         sdk.config.providers({ directory }, { throwOnError: true }),
       ),
-      ACPNextProfile.measure("acp.directory.mode.defaultAgent.load", () =>
+      ACPProfile.measure("acp.directory.mode.defaultAgent.load", () =>
         sdk.app.agents({ directory }, { throwOnError: true }),
       ),
-      ACPNextProfile.measure("acp.directory.command.list", () =>
+      ACPProfile.measure("acp.directory.command.list", () =>
         sdk.command.list({ directory }, { throwOnError: true }),
       ),
-      ACPNextProfile.measure("acp.directory.skill.list", () => sdk.app.skills({ directory }, { throwOnError: true })),
-      ACPNextProfile.measure("acp.directory.defaultModel.config", () =>
+      ACPProfile.measure("acp.directory.skill.list", () => sdk.app.skills({ directory }, { throwOnError: true })),
+      ACPProfile.measure("acp.directory.defaultModel.config", () =>
         sdk.config.get({ directory }, { throwOnError: true }).catch(() => undefined),
       ),
     ])
@@ -754,7 +754,7 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
     >
     const defaultModelStarted = performance.now()
     const defaultModel = defaultModelFromConfig(configResponse?.data?.model, providers)
-    ACPNextProfile.duration("acp.directory.defaultModel.resolve", defaultModelStarted, { configured: !!defaultModel })
+    ACPProfile.duration("acp.directory.defaultModel.resolve", defaultModelStarted, { configured: !!defaultModel })
     const modes = agents
       .filter((agent) => agent.mode !== "subagent" && agent.hidden !== true)
       .map((agent) => ({
@@ -872,14 +872,14 @@ function parseSelectedModel(snapshot: Directory.Snapshot, modelId: string) {
   const model = provider?.models[ModelID.make(selected.model.modelID)]
   if (!model) {
     return Effect.fail(
-      new ACPNextError.InvalidModelError({
+      new ACPError.InvalidModelError({
         providerId: selected.model.providerID,
         modelId,
       }),
     )
   }
   if (selected.variant && !model.variants?.[selected.variant]) {
-    return Effect.fail(new ACPNextError.InvalidEffortError({ effort: selected.variant }))
+    return Effect.fail(new ACPError.InvalidEffortError({ effort: selected.variant }))
   }
   return Effect.succeed({
     model: {
@@ -954,7 +954,7 @@ function registerMcpServers(
   ).pipe(
     Effect.tap(() =>
       Effect.sync(() =>
-        ACPNextProfile.duration("acp.mcp.register", started, {
+        ACPProfile.duration("acp.mcp.register", started, {
           count: pending.size,
         }),
       ),
@@ -1020,20 +1020,20 @@ function isSdkResponse<T>(value: T | SdkResponse<T>): value is SdkResponse<T> {
 }
 
 function fromUnknownError(error: unknown, service?: string): Error {
-  if (isACPNextError(error)) return error
+  if (isACPError(error)) return error
   if (isAuthRequired(error)) {
-    return new ACPNextError.AuthRequiredError({ providerId: findProviderID(error) })
+    return new ACPError.AuthRequiredError({ providerId: findProviderID(error) })
   }
-  return new ACPNextError.ServiceFailureError({ safeMessage: "OpenCode service failure", service })
+  return new ACPError.ServiceFailureError({ safeMessage: "OpenCode service failure", service })
 }
 
-function isACPNextError(error: unknown): error is Error {
+function isACPError(error: unknown): error is Error {
   return (
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
     typeof error._tag === "string" &&
-    error._tag.startsWith("ACPNext")
+    error._tag.startsWith("ACP")
   )
 }
 

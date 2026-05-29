@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type { Event, Message, OpencodeClient, Part, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
-import { ACPNextEvent } from "@/acp-next/event"
-import * as ACPNextService from "@/acp-next/service"
-import { Directory } from "@/acp-next/directory"
-import { ACPNextSession } from "@/acp-next/session"
+import { ACPEvent } from "@/acp/event"
+import * as ACPService from "@/acp/service"
+import { Directory } from "@/acp/directory"
+import { ACPSession } from "@/acp/session"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type ToolSessionUpdateParams = SessionUpdateParams & {
@@ -30,8 +30,8 @@ const pollUntil = async (
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(ACPNextSession.defaultLayer).runSync(
-    ACPNextSession.Service.use((service) => Effect.succeed(service)),
+  return ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+    ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
 
@@ -107,7 +107,7 @@ function createHarness(messages: Record<string, SessionMessageResponse> = {}) {
     },
   } satisfies Pick<AgentSideConnection, "sessionUpdate">
   const session = makeSessionService()
-  const subscription = new ACPNextEvent.Subscription({ sdk, connection, session })
+  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
 
   return { calls, connection, events, sdk, session, subscription, updates }
 }
@@ -296,7 +296,7 @@ function toolUpdates(updates: SessionUpdateParams[]) {
 }
 
 async function createKnownSession(
-  session: ACPNextSession.Interface,
+  session: ACPSession.Interface,
   sessionId: string,
   part: { messageId: string; partId: string; partType: Part["type"]; role?: Message["role"] },
 ) {
@@ -312,7 +312,7 @@ async function createKnownSession(
   )
 }
 
-describe("acp-next event routing", () => {
+describe("acp event routing", () => {
   it("routes message.part.delta by sessionID without cross-session pollution", async () => {
     const harness = createHarness()
     await createKnownSession(harness.session, "ses_a", { messageId: "msg_a", partId: "part_a", partType: "text" })
@@ -348,8 +348,8 @@ describe("acp-next event routing", () => {
 
   it("does not create extra subscriptions on repeated loadSession", async () => {
     const harness = createHarness()
-    let subscription: ACPNextEvent.Subscription | undefined
-    const service = ACPNextService.make({
+    let subscription: ACPEvent.Subscription | undefined
+    const service = ACPService.make({
       sdk: harness.sdk,
       connection: harness.connection,
       directory: {
@@ -439,8 +439,8 @@ describe("acp-next event routing", () => {
         return Promise.resolve()
       },
     } satisfies Pick<AgentSideConnection, "sessionUpdate">
-    let subscription: ACPNextEvent.Subscription | undefined
-    const service = ACPNextService.make({
+    let subscription: ACPEvent.Subscription | undefined
+    const service = ACPService.make({
       sdk: {
         global: {
           event: (options?: { signal?: AbortSignal }) => Promise.resolve({ stream: events.stream(options?.signal) }),

@@ -12,10 +12,10 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
-import * as ACPNextService from "@/acp-next/service"
-import * as ACPNextError from "@/acp-next/error"
-import { ACPNextSession } from "@/acp-next/session"
-import { UsageService } from "@/acp-next/usage"
+import * as ACPService from "@/acp/service"
+import * as ACPError from "@/acp/error"
+import { ACPSession } from "@/acp/session"
+import { UsageService } from "@/acp/usage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import type { Provider } from "@/provider/provider"
 
@@ -141,7 +141,7 @@ const provider: Provider.Info = {
   },
 }
 
-describe("ACP next service sessions", () => {
+describe("ACP service sessions", () => {
   const makeService = (messages: readonly { info: unknown; parts: readonly unknown[] }[] = []) => {
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
@@ -254,7 +254,7 @@ describe("ACP next service sessions", () => {
     })
 
     return {
-      service: ACPNextService.make({ sdk, connection, usage }),
+      service: ACPService.make({ sdk, connection, usage }),
       updates,
       mcpAdds,
       aborts,
@@ -374,7 +374,7 @@ describe("ACP next service sessions", () => {
     const missing = await Effect.runPromise(
       service
         .setSessionConfigOption({ sessionId: created.sessionId, configId: "effort", value: "high" })
-        .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
     )
     expect(missing.code).toBe(-32602)
     expect(aborts).toEqual([created.sessionId])
@@ -382,8 +382,8 @@ describe("ACP next service sessions", () => {
   })
 
   it("does not fail close when backing abort fails", async () => {
-    const sessionService = ManagedRuntime.make(ACPNextSession.defaultLayer).runSync(
-      ACPNextSession.Service.use((service) => Effect.succeed(service)),
+    const sessionService = ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+      ACPSession.Service.use((service) => Effect.succeed(service)),
     )
     const { service } = makeService()
     const sdk = {
@@ -405,7 +405,7 @@ describe("ACP next service sessions", () => {
         add: () => Promise.resolve({ data: {} }),
       },
     } as unknown as OpencodeClient
-    const closing = ACPNextService.make({ sdk, session: sessionService })
+    const closing = ACPService.make({ sdk, session: sessionService })
     await Effect.runPromise(sessionService.create({ id: "ses_close", cwd: "/workspace" }))
 
     expect(await Effect.runPromise(closing.closeSession({ sessionId: "ses_close" }))).toEqual({})
@@ -467,7 +467,7 @@ describe("ACP next service sessions", () => {
   })
 
   it("maps provider auth failures to auth-required request errors", async () => {
-    const service = ACPNextService.make({
+    const service = ACPService.make({
       sdk: {
         config: {
           providers: () => Promise.reject({ name: "ProviderAuthError", data: { providerID: "test" } }),
@@ -485,7 +485,7 @@ describe("ACP next service sessions", () => {
     const error = await Effect.runPromise(
       service
         .newSession({ cwd: "/workspace", mcpServers: [] })
-        .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
     )
 
     expect(error.code).toBe(-32000)
@@ -519,12 +519,12 @@ describe("ACP next service sessions", () => {
         add: () => Promise.resolve({ data: {} }),
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
 
     const first = await Effect.runPromise(
       service
         .newSession({ cwd: "/workspace", mcpServers: [] })
-        .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
     )
     const second = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
@@ -562,7 +562,7 @@ describe("ACP next service sessions", () => {
         },
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
 
     await Effect.runPromise(
       service.newSession({
@@ -603,7 +603,7 @@ describe("ACP next service sessions", () => {
         add: () => Promise.resolve({ data: {} }),
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
 
     const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
@@ -642,7 +642,7 @@ describe("ACP next service sessions", () => {
         add: () => Promise.resolve({ data: {} }),
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
 
     const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
@@ -709,7 +709,7 @@ describe("ACP next service sessions", () => {
         Effect.runPromise(
           service
             .setSessionConfigOption({ sessionId: session.sessionId, ...input })
-            .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+            .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
         ),
       ),
     )
@@ -759,7 +759,7 @@ describe("ACP next service sessions", () => {
         },
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
     expect(calls).toEqual({ providers: 1, agents: 1, commands: 1, skills: 1, mcpAdds: 0 })
@@ -814,7 +814,7 @@ describe("ACP next service sessions", () => {
         add: () => Promise.resolve({ data: {} }),
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
     const updated = await Effect.runPromise(
       service.setSessionConfigOption({
@@ -884,7 +884,7 @@ describe("ACP next service sessions", () => {
         add: () => Promise.resolve({ data: {} }),
       },
     } as unknown as OpencodeClient
-    const service = ACPNextService.make({ sdk })
+    const service = ACPService.make({ sdk })
 
     const first = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
     const second = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
@@ -1065,7 +1065,7 @@ describe("ACP next service sessions", () => {
   it("maps prompt auth failures to auth-required request errors", async () => {
     const { service } = makeService()
     const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
-    const failing = ACPNextService.make({
+    const failing = ACPService.make({
       sdk: {
         config: {
           providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
@@ -1099,7 +1099,7 @@ describe("ACP next service sessions", () => {
     const error = await Effect.runPromise(
       failing
         .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
-        .pipe(Effect.mapError(ACPNextError.toRequestError), Effect.flip),
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
     )
 
     expect(error.code).toBe(-32000)

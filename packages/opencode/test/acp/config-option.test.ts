@@ -8,7 +8,7 @@ import {
   formatVariantName,
   parseModelSelection,
   type ConfigOptionProvider,
-} from "@/acp-next/config-option"
+} from "@/acp/config-option"
 
 const providers: ConfigOptionProvider[] = [
   {
@@ -46,7 +46,7 @@ const providers: ConfigOptionProvider[] = [
   },
 ]
 
-describe("acp-next config options", () => {
+describe("acp config options", () => {
   test("builds the model select option with ACP verifier category", () => {
     expect(
       buildModelSelectOption({

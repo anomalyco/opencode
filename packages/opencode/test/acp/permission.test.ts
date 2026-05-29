@@ -7,8 +7,8 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
-import { ACPNextEvent } from "@/acp-next/event"
-import { ACPNextSession } from "@/acp-next/session"
+import { ACPEvent } from "@/acp/event"
+import { ACPSession } from "@/acp/session"
 
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type PermissionReplyParams = Parameters<OpencodeClient["permission"]["reply"]>[0]
@@ -28,8 +28,8 @@ const pollUntil = async (
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(ACPNextSession.defaultLayer).runSync(
-    ACPNextSession.Service.use((service) => Effect.succeed(service)),
+  return ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+    ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
 
@@ -62,17 +62,17 @@ function createHarness(
       return Promise.resolve()
     },
   } satisfies Pick<AgentSideConnection, "requestPermission" | "sessionUpdate">
-  const subscription = new ACPNextEvent.Subscription({ sdk, connection, session })
+  const subscription = new ACPEvent.Subscription({ sdk, connection, session })
 
   return { connection, replies, requests, sdk, session, subscription, updates }
 }
 
-async function createSession(session: ACPNextSession.Interface, sessionId: string, cwd = "/workspace") {
+async function createSession(session: ACPSession.Interface, sessionId: string, cwd = "/workspace") {
   await Effect.runPromise(session.create({ id: sessionId, cwd }))
 }
 
 async function createKnownTextPart(
-  session: ACPNextSession.Interface,
+  session: ACPSession.Interface,
   sessionId: string,
   messageId: string,
   partId: string,
@@ -137,7 +137,7 @@ function textFromUpdates(updates: SessionUpdateParams[], sessionId: string) {
     .join("")
 }
 
-describe("acp-next permissions", () => {
+describe("acp permissions", () => {
   it("sends requestPermission and replies with the selected outcome", async () => {
     const harness = createHarness()
     await createSession(harness.session, "ses_a")

@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
-import * as ACPNextError from "@/acp-next/error"
-import * as ACPNextSession from "@/acp-next/session"
+import * as ACPError from "@/acp/error"
+import * as ACPSession from "@/acp/session"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { testEffect } from "../lib/effect"
 
-const sessionTest = testEffect(ACPNextSession.defaultLayer)
+const sessionTest = testEffect(ACPSession.defaultLayer)
 
-const model = (providerID: string, modelID: string): ACPNextSession.SelectedModel => ({
+const model = (providerID: string, modelID: string): ACPSession.SelectedModel => ({
   providerID: ProviderID.make(providerID),
   modelID: ModelID.make(modelID),
 })
@@ -20,11 +20,11 @@ const mcpServer: McpServer = {
   env: [],
 }
 
-describe("acp-next session state", () => {
+describe("acp session state", () => {
   sessionTest.effect("creates and retrieves session state", () =>
     Effect.gen(function* () {
       const createdAt = new Date("2026-05-25T00:00:00.000Z")
-      const created = yield* ACPNextSession.Service.use((session) =>
+      const created = yield* ACPSession.Service.use((session) =>
         session.create({
           id: "ses_1",
           cwd: "/workspace",
@@ -35,7 +35,7 @@ describe("acp-next session state", () => {
           modeId: "build",
         }),
       )
-      const loaded = yield* ACPNextSession.Service.use((session) => session.get("ses_1"))
+      const loaded = yield* ACPSession.Service.use((session) => session.get("ses_1"))
 
       expect(created).toMatchObject({
         id: "ses_1",
@@ -52,17 +52,17 @@ describe("acp-next session state", () => {
 
   sessionTest.effect("fails required lookups with typed SessionNotFound", () =>
     Effect.gen(function* () {
-      const error = yield* ACPNextSession.Service.use((session) => session.get("ses_missing")).pipe(Effect.flip)
+      const error = yield* ACPSession.Service.use((session) => session.get("ses_missing")).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(ACPNextError.SessionNotFoundError)
+      expect(error).toBeInstanceOf(ACPError.SessionNotFoundError)
       expect(error.sessionId).toBe("ses_missing")
     }),
   )
 
   sessionTest.effect("tryGet lets event routing ignore unknown sessions", () =>
     Effect.gen(function* () {
-      const missing = yield* ACPNextSession.Service.use((session) => session.tryGet("ses_missing"))
-      const missingPart = yield* ACPNextSession.Service.use((session) =>
+      const missing = yield* ACPSession.Service.use((session) => session.tryGet("ses_missing"))
+      const missingPart = yield* ACPSession.Service.use((session) =>
         session.tryGetPartMetadata({ sessionId: "ses_missing", messageId: "msg_1", partId: "part_1" }),
       )
 
@@ -73,7 +73,7 @@ describe("acp-next session state", () => {
 
   sessionTest.effect("updates selected model while preserving session identity and inputs", () =>
     Effect.gen(function* () {
-      yield* ACPNextSession.Service.use((session) =>
+      yield* ACPSession.Service.use((session) =>
         session.create({
           id: "ses_model",
           cwd: "/workspace",
@@ -84,7 +84,7 @@ describe("acp-next session state", () => {
         }),
       )
 
-      const updated = yield* ACPNextSession.Service.use((session) =>
+      const updated = yield* ACPSession.Service.use((session) =>
         session.setModel("ses_model", model("openai", "gpt-5")),
       )
 
@@ -99,7 +99,7 @@ describe("acp-next session state", () => {
 
   sessionTest.effect("updates selected variant and mode independently", () =>
     Effect.gen(function* () {
-      yield* ACPNextSession.Service.use((session) =>
+      yield* ACPSession.Service.use((session) =>
         session.load({
           id: "ses_config",
           cwd: "/workspace",
@@ -109,21 +109,21 @@ describe("acp-next session state", () => {
         }),
       )
 
-      yield* ACPNextSession.Service.use((session) => session.setVariant("ses_config", "high"))
-      expect(yield* ACPNextSession.Service.use((session) => session.getVariant("ses_config"))).toBe("high")
-      expect(yield* ACPNextSession.Service.use((session) => session.getMode("ses_config"))).toBe("plan")
+      yield* ACPSession.Service.use((session) => session.setVariant("ses_config", "high"))
+      expect(yield* ACPSession.Service.use((session) => session.getVariant("ses_config"))).toBe("high")
+      expect(yield* ACPSession.Service.use((session) => session.getMode("ses_config"))).toBe("plan")
 
-      yield* ACPNextSession.Service.use((session) => session.setMode("ses_config", "build"))
-      expect(yield* ACPNextSession.Service.use((session) => session.getVariant("ses_config"))).toBe("high")
-      expect(yield* ACPNextSession.Service.use((session) => session.getMode("ses_config"))).toBe("build")
+      yield* ACPSession.Service.use((session) => session.setMode("ses_config", "build"))
+      expect(yield* ACPSession.Service.use((session) => session.getVariant("ses_config"))).toBe("high")
+      expect(yield* ACPSession.Service.use((session) => session.getMode("ses_config"))).toBe("build")
     }),
   )
 
   sessionTest.effect("records known message part metadata for delta routing", () =>
     Effect.gen(function* () {
-      yield* ACPNextSession.Service.use((session) => session.create({ id: "ses_parts", cwd: "/workspace" }))
+      yield* ACPSession.Service.use((session) => session.create({ id: "ses_parts", cwd: "/workspace" }))
 
-      const metadata = yield* ACPNextSession.Service.use((session) =>
+      const metadata = yield* ACPSession.Service.use((session) =>
         session.recordPartMetadata({
           sessionId: "ses_parts",
           messageId: "msg_1",
@@ -132,7 +132,7 @@ describe("acp-next session state", () => {
           metadata: { output: "first chunk" },
         }),
       )
-      const routed = yield* ACPNextSession.Service.use((session) =>
+      const routed = yield* ACPSession.Service.use((session) =>
         session.getPartMetadata({ sessionId: "ses_parts", messageId: "msg_1", partId: "part_1" }),
       )
 
@@ -148,8 +148,8 @@ describe("acp-next session state", () => {
 
   sessionTest.effect("keeps repeated part ids distinct across messages", () =>
     Effect.gen(function* () {
-      yield* ACPNextSession.Service.use((session) => session.create({ id: "ses_duplicate_parts", cwd: "/workspace" }))
-      yield* ACPNextSession.Service.use((session) =>
+      yield* ACPSession.Service.use((session) => session.create({ id: "ses_duplicate_parts", cwd: "/workspace" }))
+      yield* ACPSession.Service.use((session) =>
         session.recordPartMetadata({
           sessionId: "ses_duplicate_parts",
           messageId: "msg_1",
@@ -157,7 +157,7 @@ describe("acp-next session state", () => {
           metadata: { output: "from first message" },
         }),
       )
-      yield* ACPNextSession.Service.use((session) =>
+      yield* ACPSession.Service.use((session) =>
         session.recordPartMetadata({
           sessionId: "ses_duplicate_parts",
           messageId: "msg_2",
@@ -166,10 +166,10 @@ describe("acp-next session state", () => {
         }),
       )
 
-      const first = yield* ACPNextSession.Service.use((session) =>
+      const first = yield* ACPSession.Service.use((session) =>
         session.getPartMetadata({ sessionId: "ses_duplicate_parts", messageId: "msg_1", partId: "part_1" }),
       )
-      const second = yield* ACPNextSession.Service.use((session) =>
+      const second = yield* ACPSession.Service.use((session) =>
         session.getPartMetadata({ sessionId: "ses_duplicate_parts", messageId: "msg_2", partId: "part_1" }),
       )
 
@@ -180,14 +180,14 @@ describe("acp-next session state", () => {
 
   sessionTest.effect("removing a session clears its known part metadata", () =>
     Effect.gen(function* () {
-      yield* ACPNextSession.Service.use((session) => session.create({ id: "ses_remove", cwd: "/workspace" }))
-      yield* ACPNextSession.Service.use((session) =>
+      yield* ACPSession.Service.use((session) => session.create({ id: "ses_remove", cwd: "/workspace" }))
+      yield* ACPSession.Service.use((session) =>
         session.recordPartMetadata({ sessionId: "ses_remove", messageId: "msg_1", partId: "part_1" }),
       )
 
-      const removed = yield* ACPNextSession.Service.use((session) => session.remove("ses_remove"))
-      const missing = yield* ACPNextSession.Service.use((session) => session.tryGet("ses_remove"))
-      const missingPart = yield* ACPNextSession.Service.use((session) =>
+      const removed = yield* ACPSession.Service.use((session) => session.remove("ses_remove"))
+      const missing = yield* ACPSession.Service.use((session) => session.tryGet("ses_remove"))
+      const missingPart = yield* ACPSession.Service.use((session) =>
         session.tryGetPartMetadata({ sessionId: "ses_remove", messageId: "msg_1", partId: "part_1" }),
       )
 

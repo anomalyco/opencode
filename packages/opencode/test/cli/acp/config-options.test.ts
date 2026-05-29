@@ -2,9 +2,9 @@ import { describe, expect } from "bun:test"
 import type { SetSessionConfigOptionResponse } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
-import { expectOk, flattenSelectOptions, selectConfigOption } from "../acp/acp-test-client"
+import { expectOk, flattenSelectOptions, selectConfigOption } from "./acp-test-client"
 import {
-  createAcpNextClient,
+  createAcpClient,
   expectAlternateValue,
   expectSelectOption,
   initialize,
@@ -12,12 +12,12 @@ import {
   verifierConfig,
 } from "./helpers"
 
-describe("opencode acp-next config option subprocess", () => {
+describe("opencode acp config option subprocess", () => {
   cliIt.live(
     'model option is listed with category "model"',
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
-        const acp = yield* createAcpNextClient(
+        const acp = yield* createAcpClient(
           { opencode },
           { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
@@ -35,7 +35,7 @@ describe("opencode acp-next config option subprocess", () => {
     "model switch updates currentValue",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
-        const acp = yield* createAcpNextClient(
+        const acp = yield* createAcpClient(
           { opencode },
           { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
@@ -62,7 +62,7 @@ describe("opencode acp-next config option subprocess", () => {
     'effort option is listed with category "thought_level" when selected model supports variants',
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
-        const acp = yield* createAcpNextClient(
+        const acp = yield* createAcpClient(
           { opencode },
           { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
@@ -80,7 +80,7 @@ describe("opencode acp-next config option subprocess", () => {
     "effort switch updates currentValue",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
-        const acp = yield* createAcpNextClient(
+        const acp = yield* createAcpClient(
           { opencode },
           { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
