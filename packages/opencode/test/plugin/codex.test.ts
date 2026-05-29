@@ -5,7 +5,7 @@ import {
   extractAccountIdFromClaims,
   extractAccountId,
   type IdTokenClaims,
-} from "../../src/plugin/codex"
+} from "../../src/plugin/openai/codex"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -120,6 +120,24 @@ describe("plugin.codex", () => {
         }),
       ).toBe("acc-123")
     })
+  })
+
+  test("installs websocket transport only when experimental websockets are enabled", async () => {
+    const disabled = await CodexAuthPlugin({} as never)
+    const enabled = await CodexAuthPlugin({} as never, { experimentalWebSockets: true })
+
+    const disabledOptions = await disabled.auth!.loader!(
+      async () => ({ type: "api", key: "sk-test" }) as never,
+      {} as never,
+    )
+    const enabledOptions = await enabled.auth!.loader!(
+      async () => ({ type: "api", key: "sk-test" }) as never,
+      {} as never,
+    )
+
+    expect(disabledOptions.fetch).toBeUndefined()
+    expect(enabledOptions.fetch).toBeFunction()
+    await enabled.dispose?.()
   })
 
   test("deduplicates concurrent Codex token refreshes", async () => {

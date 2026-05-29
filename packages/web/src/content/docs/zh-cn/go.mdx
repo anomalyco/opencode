@@ -56,9 +56,10 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
-- **MiniMax M2.7**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -78,20 +79,21 @@ OpenCode Go 包含以下限制：
 
 下表提供了基于典型 Go 使用模式的预估请求数：
 
-| Model              | 每 5 小时请求数 | 每周请求数 | 每月请求数 |
-| ------------------ | --------------- | ---------- | ---------- |
-| GLM-5.1            | 880             | 2,150      | 4,300      |
-| GLM-5              | 1,150           | 2,880      | 5,750      |
-| Kimi K2.6          | 1,150           | 2,880      | 5,750      |
-| Kimi K2.5          | 1,850           | 4,630      | 9,250      |
-| MiMo-V2.5 (≤ 256K) | 2,150           | 5,450      | 10,900     |
-| MiMo-V2.5-Pro      | 1,290           | 3,225      | 6,450      |
-| Qwen3.6 Plus       | 3,300           | 8,200      | 16,300     |
-| MiniMax M2.7       | 3,400           | 8,500      | 17,000     |
-| MiniMax M2.5       | 6,300           | 15,900     | 31,800     |
-| Qwen3.5 Plus       | 10,200          | 25,200     | 50,500     |
-| DeepSeek V4 Pro    | 3,450           | 8,550      | 17,150     |
-| DeepSeek V4 Flash  | 31,650          | 79,050     | 158,150    |
+| Model             | 每 5 小时请求数 | 每周请求数 | 每月请求数 |
+| ----------------- | --------------- | ---------- | ---------- |
+| GLM-5.1           | 880             | 2,150      | 4,300      |
+| GLM-5             | 1,150           | 2,880      | 5,750      |
+| Kimi K2.6         | 1,150           | 2,880      | 5,750      |
+| Kimi K2.5         | 1,850           | 4,630      | 9,250      |
+| MiMo-V2.5         | 30,100          | 75,200     | 150,400    |
+| MiMo-V2.5-Pro     | 3,250           | 8,150      | 16,300     |
+| MiniMax M2.7      | 3,400           | 8,500      | 17,000     |
+| MiniMax M2.5      | 6,300           | 15,900     | 31,800     |
+| Qwen3.7 Max       | 950             | 2,390      | 4,770      |
+| Qwen3.6 Plus      | 3,300           | 8,200      | 16,300     |
+| Qwen3.5 Plus      | 10,200          | 25,200     | 50,500     |
+| DeepSeek V4 Pro   | 3,450           | 8,550      | 17,150     |
+| DeepSeek V4 Flash | 31,650          | 79,050     | 158,150    |
 
 预估值基于观察到的平均请求模式：
 
@@ -99,11 +101,12 @@ OpenCode Go 包含以下限制：
 - Kimi K2.5/K2.6 — 每次请求 870 个输入 token，55,000 个缓存 token，200 个输出 token
 - DeepSeek V4 Pro — 每次请求 750 个输入 token，82,000 个缓存 token，290 个输出 token
 - DeepSeek V4 Flash — 每次请求 790 个输入 token，68,000 个缓存 token，280 个输出 token
-- MiMo-V2.5 — 每次请求 1000 个输入 token，60,000 个缓存 token，140 个输出 token
-- MiMo-V2.5-Pro — 每次请求 350 个输入 token，41,000 个缓存 token，250 个输出 token
+- MiMo-V2.5 — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
+- MiMo-V2.5-Pro — 每次请求 790 个输入 token，86,000 个缓存 token，305 个输出 token
 - MiniMax M2.7/M2.5 — 每次请求 300 个输入 token，55,000 个缓存 token，125 个输出 token
-- Qwen3.5 Plus — 每次请求 410 个输入 token，47,000 个缓存 token，140 个输出 token
+- Qwen3.7 Max — 每次请求 420 个输入 token，66,000 个缓存 token，200 个输出 token
 - Qwen3.6 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
+- Qwen3.5 Plus — 每次请求 410 个输入 token，47,000 个缓存 token，140 个输出 token
 
 你可以在 **<a href={console}>控制台</a>** 中跟踪你当前的使用情况。
 
@@ -137,6 +140,7 @@ OpenCode Go 包含以下限制：
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
