@@ -38,6 +38,12 @@ variable "allowed_origins" {
   default     = ""
 }
 
+variable "slack_webhook_secret" {
+  type        = string
+  description = "Slack Incoming Webhook URL を格納した Secret Manager のシークレット名（任意。例: waitlist-slack-webhook）。URL そのものではなくシークレット名を指定する。空なら通知しない。シークレットは事前に gcloud で作成しておくこと（Terraform 管理外）。指定すると SA への secretAccessor 付与も行う。"
+  default     = ""
+}
+
 variable "enable_apis" {
   type        = bool
   description = "必要 API（run/firestore/cloudbuild/artifactregistry）を Terraform で有効化するか"

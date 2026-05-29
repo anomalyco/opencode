@@ -1,3 +1,5 @@
 node_modules
 .env
 *.log
+# エクスポート出力（email = PII を含むためコミットしない）
+*.csv
