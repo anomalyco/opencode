@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http"
 import net, { type AddressInfo, type Socket } from "node:net"
@@ -6,6 +6,26 @@ import WebSocket, { WebSocketServer } from "ws"
 import { ProviderError } from "../../src/provider/error"
 import { OpenAIWebSocket } from "../../src/plugin/openai/ws"
 import { OpenAIWebSocketPool, TITLE_HEADER } from "../../src/plugin/openai/ws-pool"
+
+const proxyEnvKeys = [
+  "http_proxy",
+  "HTTP_PROXY",
+  "https_proxy",
+  "HTTPS_PROXY",
+  "all_proxy",
+  "ALL_PROXY",
+  "no_proxy",
+  "NO_PROXY",
+]
+const originalProxyEnv = Object.fromEntries(proxyEnvKeys.map((key) => [key, process.env[key]]))
+
+beforeEach(() => {
+  for (const key of proxyEnvKeys) delete process.env[key]
+})
+
+afterEach(() => {
+  for (const key of proxyEnvKeys) restoreEnv(key, originalProxyEnv[key])
+})
 
 describe("plugin.openai.ws", () => {
   test("derives websocket URLs and sends auth plus protocol headers", async () => {
@@ -190,7 +210,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${messages}` } }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
     })
 
@@ -212,7 +232,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${connections}` } }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       maxConnectionAge: 0,
     })
@@ -229,7 +249,7 @@ describe("plugin.openai.ws-pool", () => {
   test("falls back to HTTP after websocket setup retries are exhausted", async () => {
     const attempts: string[] = []
     await using server = await createRejectingWebSocketServer(() => attempts.push("websocket"))
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       connectTimeout: 100,
       streamRetries: 1,
@@ -252,7 +272,7 @@ describe("plugin.openai.ws-pool", () => {
   test("prunes HTTP fallback after its idle timeout", async () => {
     let websocketAttempts = 0
     await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       connectTimeout: 100,
       idleTimeout: 20,
@@ -278,7 +298,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: connections === 1 ? "response.failed" : "response.completed" }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
     })
 
@@ -316,7 +336,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_retry" } }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
     })
 
@@ -352,7 +372,7 @@ describe("plugin.openai.ws-pool", () => {
         )
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       streamRetries: 2,
     })
@@ -392,7 +412,7 @@ describe("plugin.openai.ws-pool", () => {
         )
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       streamRetries: 1,
     })
@@ -413,7 +433,7 @@ describe("plugin.openai.ws-pool", () => {
       connections += 1
       socket.once("message", () => {})
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       idleTimeout: 20,
       streamRetries: 1,
@@ -437,7 +457,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       idleTimeout: 20,
       streamRetries: 1,
@@ -469,7 +489,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: "response.completed", response: { id: `resp_${requests}` } }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       streamRetries: 1,
     })
@@ -491,7 +511,7 @@ describe("plugin.openai.ws-pool", () => {
 
   test("falls back to HTTP for missing session and title requests", async () => {
     await using server = await createWebSocketServer(() => {})
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch()
+    const fetch = createWebSocketFetch()
 
     const missingSession = await fetch(server.url, {
       method: "POST",
@@ -517,7 +537,7 @@ describe("plugin.openai.ws-pool", () => {
       })
     })
     const abort = new AbortController()
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
     })
 
@@ -537,7 +557,7 @@ describe("plugin.openai.ws-pool", () => {
   test("reserves a websocket lane while its socket is connecting", async () => {
     await using server = await createHangingTcpServer()
     await using fallback = await createHttpServer()
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       connectTimeout: 20,
       streamRetries: 0,
@@ -562,7 +582,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.close(1001, "server shutdown")
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
       streamRetries: 1,
     })
@@ -592,7 +612,7 @@ describe("plugin.openai.ws-pool", () => {
       })
     })
     const abort = new AbortController()
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
     })
 
@@ -622,7 +642,7 @@ describe("plugin.openai.ws-pool", () => {
         socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_after_cancel" } }))
       })
     })
-    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+    const fetch = createWebSocketFetch({
       url: server.url,
     })
 
@@ -638,6 +658,44 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 })
+
+function createWebSocketFetch(options?: Parameters<typeof OpenAIWebSocketPool.createWebSocketFetch>[0]) {
+  // Bun snapshots proxy env configuration for fetch at startup; use the real local server directly in these tests.
+  return OpenAIWebSocketPool.createWebSocketFetch({ ...options, httpFetch: directHttpFetch })
+}
+
+const directHttpFetch = Object.assign(
+  function directHttpFetch(input: RequestInfo | URL, init?: RequestInit) {
+    const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url)
+    return new Promise<Response>((resolve, reject) => {
+      const body = typeof init?.body === "string" ? init.body : ""
+      const headers = {
+        host: url.host,
+        connection: "close",
+        "content-length": String(Buffer.byteLength(body)),
+        ...OpenAIWebSocket.normalizeHeaders(init?.headers),
+      }
+      const socket = net.connect(Number(url.port), url.hostname)
+      const chunks: Buffer[] = []
+      socket.once("connect", () => {
+        socket.write(
+          `${init?.method ?? "GET"} ${url.pathname}${url.search} HTTP/1.1\r\n${Object.entries(headers)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join("\r\n")}\r\n\r\n${body}`,
+        )
+      })
+      socket.on("data", (data) => chunks.push(data))
+      socket.once("error", reject)
+      socket.once("end", () => {
+        const raw = Buffer.concat(chunks).toString()
+        const separator = raw.indexOf("\r\n\r\n")
+        const status = Number(raw.slice(0, separator).split(" ")[1])
+        resolve(new Response(raw.slice(separator + 4), { status }))
+      })
+    })
+  },
+  { preconnect: globalThis.fetch.preconnect },
+)
 
 function streamRequest(headers?: Record<string, string>, signal?: AbortSignal): RequestInit {
   return {
