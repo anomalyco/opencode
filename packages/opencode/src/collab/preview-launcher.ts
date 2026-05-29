@@ -48,6 +48,7 @@ const FRONTEND_DEFAULTS: PreviewConfig = {
   port: 8080,
   label: "Unleash live frontend",
   readyPattern: undefined,
+  upstreamScheme: "http",
 }
 
 /** Idle window — no traffic for this long → SIGTERM. */
@@ -75,6 +76,27 @@ export interface PreviewConfig {
   /** Regex on stdout; first match flips status → "running".  When undefined
    *  we treat the process as "running" 2s after spawn (best-effort). */
   readonly readyPattern?: string
+  /**
+   * Transport the dev server speaks on its local port.  Defaults to "http".
+   *
+   * Set to "https" when the dev server runs TLS in-container (e.g. Angular
+   * CLI with `--ssl`, Vite with `--https`, CRA with `HTTPS=true`).  The
+   * preview-router will then TLS-connect to 127.0.0.1:<port> instead of
+   * speaking plain HTTP, and accept the dev server's self-signed cert via
+   * `rejectUnauthorized: false` (safe over loopback — there is no MITM
+   * surface inside the same container).
+   *
+   * When `"https"`, the WS upgrade path also flips from net.connect to
+   * tls.connect — HMR / WebSocket traffic stays end-to-end encrypted from
+   * the browser's wss:// through the ALB to the dev server.
+   *
+   * Most repos shouldn't need this: terminating TLS twice in the same
+   * container adds no security (the ALB already speaks TLS to the
+   * browser).  Use only when the dev server's own code branches on
+   * `location.protocol === "https:"` (service-worker registration,
+   * secure-context APIs).
+   */
+  readonly upstreamScheme?: "http" | "https"
 }
 
 export type PreviewStatus = "installing" | "running" | "stopped" | "failed"
@@ -111,6 +133,14 @@ interface ActiveState extends PreviewStateSnapshot {
    *  May be null when launchPreview was called without a token (public-only
    *  install) — restartPreview then also runs unauthenticated. */
   _gitAccessToken: string | null
+  /** Transport the upstream dev server speaks on its loopback port.
+   *  Read by preview-router.ts via `getActiveUpstreamScheme(port)` to
+   *  decide between plain TCP / TLS for the proxy hop.  Materialised
+   *  from the resolved PreviewConfig at launch time so a swap of the
+   *  `.opencode-preview.json` file mid-session doesn't change behaviour
+   *  for the running process (the file is re-read on the next Restart).
+   *  NEVER surfaced via `getPreviewState()` — `_`-prefixed convention. */
+  _upstreamScheme: "http" | "https"
 }
 
 // ── Module state (singleton — "first-launch wins") ─────────────────────────
@@ -179,6 +209,22 @@ export function previewConfigForRepo(
         console.warn(`[collab.preview] ${path} readyPattern is not a valid regex; ignoring:`, e)
       }
     }
+    // Validate upstreamScheme — only "http" and "https" are honoured.
+    // Anything else (typo, "tcp", "ssh", a number, …) WARN + falls back
+    // to the default "http".  Matches the readyPattern try/warn shape so
+    // a misconfigured .opencode-preview.json never blocks a launch — it
+    // just downgrades to the closest sensible behaviour.
+    let upstreamScheme: "http" | "https" = FRONTEND_DEFAULTS.upstreamScheme ?? "http"
+    if (raw.upstreamScheme !== undefined) {
+      if (raw.upstreamScheme === "http" || raw.upstreamScheme === "https") {
+        upstreamScheme = raw.upstreamScheme
+      } else {
+        console.warn(
+          `[collab.preview] ${path} upstreamScheme=${JSON.stringify(raw.upstreamScheme)} ` +
+            `is not "http" or "https"; falling back to "${upstreamScheme}"`,
+        )
+      }
+    }
     return {
       command: raw.command,
       port: raw.port,
@@ -186,6 +232,7 @@ export function previewConfigForRepo(
       installCommand:
         typeof raw.installCommand === "string" ? raw.installCommand : FRONTEND_DEFAULTS.installCommand,
       readyPattern,
+      upstreamScheme,
     }
   } catch (err) {
     console.warn(`[collab.preview] ${path} parse failed; using defaults:`, err)
@@ -232,6 +279,31 @@ export function getPreviewState(): PreviewStateSnapshot | null {
  */
 export function markPreviewTraffic(): void {
   if (active) (active as { lastTraffic: number }).lastTraffic = Date.now()
+}
+
+/**
+ * Return the upstream transport the currently-active preview speaks on
+ * the given port.  Called by `preview-router.ts` once per HTTP request
+ * and once per WS upgrade — picks between plain HTTP/TCP and HTTPS/TLS
+ * for the loopback proxy hop.
+ *
+ * Returns "http" (the safe default) when:
+ *   - No preview is currently active (defensive — the router shouldn't
+ *     reach an upstream connect in this case, but a leftover SSE event
+ *     could race).
+ *   - A preview IS active but its port doesn't match the requested one
+ *     (the URL path's `<port>` segment was made-up or for a stale
+ *     session).  In both cases the connect attempt will fail at the
+ *     TCP layer anyway; we just pick the cheaper transport.
+ *
+ * Returns the active preview's resolved `upstreamScheme` ("http" or
+ * "https") when ports match — read once at launch time from the repo's
+ * `.opencode-preview.json` so a Driver swapping the file mid-session
+ * doesn't change behaviour for the running process.
+ */
+export function getActiveUpstreamScheme(port: number): "http" | "https" {
+  if (active && active.port === port) return active._upstreamScheme
+  return "http"
 }
 
 export type LaunchResult =
@@ -342,6 +414,10 @@ export function launchPreview(
     // Cache for restartPreview.  Normalise undefined → null so the field is
     // always a concrete `string | null` (avoids a third "unknown" case).
     _gitAccessToken: gitAccessToken ?? null,
+    // Read by preview-router.ts via getActiveUpstreamScheme(port).  Default
+    // to "http" when the resolved config omits it (legacy .opencode-preview.json
+    // files predate this field).
+    _upstreamScheme: config.upstreamScheme ?? "http",
   }
   active = state
 

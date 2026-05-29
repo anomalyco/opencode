@@ -22,9 +22,11 @@
  */
 
 import { connect as netConnect } from "node:net"
+import { connect as tlsConnect } from "node:tls"
 import type { IncomingMessage } from "node:http"
 import type { Socket } from "node:net"
 import { lookupCookieIdentityFromHeaders } from "./cookie-auth"
+import { getActiveUpstreamScheme } from "./preview-launcher"
 
 const PREVIEW_PREFIX = "/preview/"
 
@@ -80,22 +82,29 @@ function upstreamHostHeader(port: number): string {
 }
 
 /**
- * Forward a plain HTTP request through to the dev server on
- * 127.0.0.1:<port>, rewriting the Host header to
- * `local.unleashlive.com:<port>` so the dev server sees its expected
- * hostname.  Returns a Response the collab middleware can hand back to
- * the browser.  Hop-by-hop headers are stripped; everything else passes
- * through.
+ * Forward an HTTP request through to the dev server on 127.0.0.1:<port>
+ * while presenting Host: local.unleashlive.com:<port> on the wire.
+ * Returns a Response the collab middleware can hand back to the browser.
+ * Hop-by-hop headers are stripped; everything else passes through.
+ *
+ * URL uses the literal loopback IP (`PREVIEW_UPSTREAM_TCP_HOST`) so the
+ * TCP connect doesn't depend on /etc/hosts (incompatible with ECS awsvpc
+ * — see the constant's docstring).  Bun's fetch preserves the user-set
+ * Host header, so the dev server still sees the expected hostname.
+ *
+ * Transport (http vs https) is picked per-active-preview via
+ * `getActiveUpstreamScheme(port)` — opt-in for repos whose
+ * `.opencode-preview.json` sets `"upstreamScheme": "https"` (Angular CLI
+ * --ssl, Vite --https, CRA HTTPS=true, …).  Default "http" keeps every
+ * existing repo unchanged.  TLS uses `rejectUnauthorized: false` because
+ * the connect target is literal 127.0.0.1 in the same container — there
+ * is no MITM surface to defend against, and chained cert verification
+ * against an IP literal isn't possible anyway.
  */
 export async function handlePreviewHttp(req: Request, port: number, rest: string): Promise<Response> {
   const url = new URL(req.url)
-  // TCP-connect to literal 127.0.0.1 (NOT the hostname alias).  Mirrors
-  // the WebSocket path below — see PREVIEW_UPSTREAM_TCP_HOST for the
-  // rationale (awsvpc bans container-level extraHosts, so an alias-
-  // based fetch would ENOTFOUND on ECS).  The Host header rewrite
-  // further down is what makes the dev server see its expected
-  // hostname on the wire.
-  const target = `http://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest}${url.search}`
+  const scheme = getActiveUpstreamScheme(port)
+  const target = `${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest}${url.search}`
 
   // Strip hop-by-hop headers + the Host header (we set it ourselves below
   // so the dev server sees its expected hostname; the browser's original
@@ -141,6 +150,15 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
       // Stream the response back without buffering.
       // @ts-expect-error — Bun supports this option even though node fetch typing omits it.
       redirect: "manual",
+      // Bun-specific: when scheme === "https" the dev server's cert is
+      // a self-signed in-container blob (e.g. ssl/cert.pem from the repo).
+      // We're connecting to literal 127.0.0.1 — no MITM surface, and chain
+      // validation against an IP literal is impossible.  Accept any cert.
+      // For scheme === "http" this option is a harmless no-op.
+      // Future fallback if Bun ever drops this init field: node:https
+      // `https.request()` with `rejectUnauthorized: false` in agent options.
+      // @ts-expect-error — Bun-only fetch init field, not in standard typings.
+      tls: { rejectUnauthorized: false },
     })
 
     // Pass through the upstream's body (which may itself be a stream) and
@@ -156,14 +174,27 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
     })
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
+    // Hint at scheme mismatch — common 502 cause once HTTPS-upstream support
+    // exists.  Two cases:
+    //   - Proxy is configured "http" (default) but the dev server bound TLS
+    //     → the byte-level "Unable to connect" / EPROTO from TLS handshake
+    //       failure surfaces as a 502 here.  Set `upstreamScheme: "https"`.
+    //   - Proxy is configured "https" but the dev server is plain HTTP
+    //     → similar shape, opposite direction.  Drop `upstreamScheme` or
+    //       set it to "http".
+    const schemeHint =
+      scheme === "https"
+        ? `<p><em>Proxy is configured to speak HTTPS to the upstream.  If the dev server is actually plain HTTP, drop <code>"upstreamScheme"</code> from <code>.opencode-preview.json</code> (or set it to <code>"http"</code>).</em></p>`
+        : `<p><em>If the dev server runs TLS in-container (Angular CLI <code>--ssl</code>, Vite <code>--https</code>, CRA <code>HTTPS=true</code>), add <code>"upstreamScheme": "https"</code> to <code>.opencode-preview.json</code>.</em></p>`
     return new Response(
       `<!doctype html><meta charset="utf-8"><title>Preview unavailable</title>` +
-        `<div style="font-family:system-ui;margin:3rem auto;max-width:520px;line-height:1.5">` +
+        `<div style="font-family:system-ui;margin:3rem auto;max-width:560px;line-height:1.5">` +
         `<h1 style="margin:0 0 .5rem 0">Preview unavailable</h1>` +
-        `<p>Couldn't reach <code>127.0.0.1:${port}</code> from inside the workspace container.</p>` +
+        `<p>Couldn't reach <code>${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}</code> from inside the workspace container.</p>` +
         `<p>Is a dev server actually listening on port ${port}?  In the iframe terminal:</p>` +
         `<pre style="background:#111;color:#eee;padding:.75rem;border-radius:6px">ss -lntp | grep ${port}</pre>` +
         `<p>If the dev server is up but this still 502s, check that it's bound to <code>0.0.0.0</code> (or <code>127.0.0.1</code>) rather than an external interface.  Vite/Webpack default to localhost-only, which is fine; <code>--host 0.0.0.0</code> works too.</p>` +
+        schemeHint +
         `<p>Error: <code>${detail.replace(/</g, "&lt;")}</code></p>` +
         `</div>`,
       { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
@@ -207,15 +238,23 @@ export function attachPreviewUpgrade(server: {
       return
     }
 
-    // TCP-connect to the loopback alias.  Resolved via /etc/hosts to
-    // 127.0.0.1, but `netConnect` accepts hostnames so we can be explicit
-    // about the intent.  Using `127.0.0.1` here would still work because
-    // the Host header rewrite below is what the dev server actually sees;
-    // the hostname only matters when the upstream is on a remote IP.
-    // We use 127.0.0.1 for the TCP connect because it's strictly faster
-    // (skips the DNS lookup) and the dev server is always loopback —
-    // the hostname rewrite is purely for the Host header below.
-    const upstreamSocket = netConnect({ host: "127.0.0.1", port: parsed.port })
+    // Connect to the loopback dev server.  Plain TCP for the default
+    // "http" upstream, TLS for the opt-in "https" upstream (Angular CLI
+    // --ssl etc.).  Both `netConnect` and `tlsConnect` return a Duplex
+    // with identical .write / .on('data') / .pipe() surface, so the rest
+    // of this handler (the handshake-write below + the bidirectional
+    // pipe at the bottom) doesn't need to branch.
+    //
+    // `rejectUnauthorized: false` for TLS: we're connecting to literal
+    // 127.0.0.1 inside the same container — no MITM surface to defend
+    // against, and chain validation against an IP literal is impossible
+    // anyway.  See `handlePreviewHttp`'s tls option for the matching
+    // rationale on the HTTP path.
+    const upstreamScheme = getActiveUpstreamScheme(parsed.port)
+    const upstreamSocket: Socket =
+      upstreamScheme === "https"
+        ? (tlsConnect({ host: "127.0.0.1", port: parsed.port, rejectUnauthorized: false }) as unknown as Socket)
+        : netConnect({ host: "127.0.0.1", port: parsed.port })
 
     const cleanup = (err?: Error) => {
       if (err) {
@@ -235,7 +274,13 @@ export function attachPreviewUpgrade(server: {
     upstreamSocket.on("error", cleanup)
     clientSocket.on("error", cleanup)
 
-    upstreamSocket.once("connect", () => {
+    // For plain TCP, "connect" fires when the three-way handshake completes.
+    // For TLS, "connect" only signals TCP; we want "secureConnect" which
+    // fires after the TLS handshake (writes before secureConnect would be
+    // buffered + flushed plaintext-over-TLS in a way that worked by
+    // accident but is brittle).  One handler, picked once.
+    const upstreamReady = upstreamScheme === "https" ? "secureConnect" : "connect"
+    upstreamSocket.once(upstreamReady, () => {
       // Build the rewritten request line + headers.  Rewrite the URL by
       // stripping the /preview/<port> prefix; everything else (Sec-WebSocket-*
       // headers, Upgrade, Connection, Origin, etc.) passes through.
