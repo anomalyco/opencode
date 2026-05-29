@@ -1,4 +1,4 @@
-export { LLMClient, modelLimits, modelRef } from "./route/client"
+export { LLMClient } from "./route/client"
 export { Auth } from "./route/auth"
 export { Provider } from "./provider"
 export type {
@@ -6,7 +6,6 @@ export type {
   RouteRoutedModelInput,
   Interface as LLMClientShape,
   Service as LLMClientService,
-  ModelRefInput,
 } from "./route/client"
 export * from "./schema"
 export { Tool, ToolFailure, toDefinitions, tool } from "./tool"

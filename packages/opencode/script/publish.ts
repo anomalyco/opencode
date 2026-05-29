@@ -37,9 +37,16 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
   [
-    "#!/usr/bin/env node",
-    "console.error('The opencode native binary was not installed. Run `node postinstall.mjs` from the opencode-ai package directory to finish setup.')",
-    "process.exit(1)",
+    `echo "Error: ${pkg.name}-ai's postinstall script was not run." >&2`,
+    'echo "" >&2',
+    'echo "This occurs when using --ignore-scripts during installation, or when using a" >&2',
+    'echo "package manager like pnpm that does not run postinstall scripts by default." >&2',
+    'echo "" >&2',
+    'echo "To fix this, run the postinstall script manually:" >&2',
+    `echo "  cd node_modules/${pkg.name}-ai && node postinstall.mjs" >&2`,
+    'echo "" >&2',
+    `echo "Or reinstall ${pkg.name}-ai without the --ignore-scripts flag." >&2`,
+    "exit 1",
     "",
   ].join("\n"),
 )

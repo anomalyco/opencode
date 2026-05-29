@@ -8,6 +8,10 @@ function truthy(key: string) {
 const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
 const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
 
+function enabledByExperimental(key: string) {
+  return process.env[key] === undefined ? OPENCODE_EXPERIMENTAL : truthy(key)
+}
+
 export const Flag = {
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
@@ -21,7 +25,6 @@ export const Flag = {
   OPENCODE_DISABLE_PRUNE: truthy("OPENCODE_DISABLE_PRUNE"),
   OPENCODE_DISABLE_TERMINAL_TITLE: truthy("OPENCODE_DISABLE_TERMINAL_TITLE"),
   OPENCODE_SHOW_TTFD: truthy("OPENCODE_SHOW_TTFD"),
-  OPENCODE_PERMISSION: process.env["OPENCODE_PERMISSION"],
   OPENCODE_DISABLE_AUTOCOMPACT: truthy("OPENCODE_DISABLE_AUTOCOMPACT"),
   OPENCODE_DISABLE_MODELS_FETCH: truthy("OPENCODE_DISABLE_MODELS_FETCH"),
   OPENCODE_DISABLE_MOUSE: truthy("OPENCODE_DISABLE_MOUSE"),
@@ -43,7 +46,8 @@ export const Flag = {
   OPENCODE_DB: process.env["OPENCODE_DB"],
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
-  OPENCODE_EXPERIMENTAL_WORKSPACES: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  OPENCODE_EXPERIMENTAL_WORKSPACES: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  OPENCODE_EXPERIMENTAL_SESSION_SWITCHER: enabledByExperimental("OPENCODE_EXPERIMENTAL_SESSION_SWITCHER"),
 
   // Evaluated at access time (not module load) because tests, the CLI, and
   // external tooling set these env vars at runtime.
@@ -58,6 +62,9 @@ export const Flag = {
   },
   get OPENCODE_PURE() {
     return truthy("OPENCODE_PURE")
+  },
+  get OPENCODE_PERMISSION() {
+    return process.env["OPENCODE_PERMISSION"]
   },
   get OPENCODE_PLUGIN_META_FILE() {
     return process.env["OPENCODE_PLUGIN_META_FILE"]
