@@ -24,6 +24,7 @@ import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
+import { Provider } from "@/provider/provider"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
@@ -836,15 +837,16 @@ export const RunCommand = effectCmd({
             const error = await completed
             if (error) process.exitCode = 1
           }
+          const resolved = await Provider.resolveSelection(args.model, args.variant, localInstance)
 
           if (args.command) {
             const result = await client.session.command({
               sessionID,
               agent,
-              model: args.model,
+              model: resolved.model,
               command: args.command,
               arguments: message,
-              variant: args.variant,
+              variant: resolved.variant,
             })
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
@@ -855,12 +857,12 @@ export const RunCommand = effectCmd({
             return
           }
 
-          const model = pick(args.model)
+          const model = resolved.model ? Provider.parseModel(resolved.model) : undefined
           const result = await client.session.prompt({
             sessionID,
             agent,
             model,
-            variant: args.variant,
+            variant: resolved.variant,
             parts: [...files, { type: "text", text: message }],
           })
           if (result.error) {
@@ -967,6 +969,7 @@ type MiniCommandInput = {
   session?: string
   fork?: boolean
   model?: string
+  variant?: string
   agent?: string
   prompt?: string
   replay?: boolean
@@ -995,7 +998,7 @@ export async function runMini(input: MiniCommandInput) {
     username: input.username,
     dir: input.directory,
     port: undefined,
-    variant: undefined,
+    variant: input.variant,
     thinking: undefined,
     mini: true,
     interactive: false,
