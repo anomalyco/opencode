@@ -19,8 +19,8 @@ export type ModelStatRow = typeof modelStat.$inferInsert
 export type ModelStatAggregate = StatBaseAggregate & { provider: string; model: string; provider_model: string }
 
 export type ModelStatMetric = {
-  periodStart: Date
-  periodEnd: Date
+  periodKey: string
+  updatedAt: Date
   tier: string
   provider: string
   model: string
@@ -55,8 +55,8 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
           try: () =>
             db
               .select({
-                periodStart: modelStat.period_start,
-                periodEnd: modelStat.period_end,
+                periodKey: modelStat.period_key,
+                updatedAt: modelStat.updated_at,
                 tier: modelStat.tier,
                 provider: modelStat.provider,
                 model: modelStat.model,
@@ -72,7 +72,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
               })
               .from(modelStat)
               .where(and(eq(modelStat.grain, "day"), eq(modelStat.client, "all"), eq(modelStat.source, "all")))
-              .orderBy(asc(modelStat.period_start)),
+              .orderBy(asc(modelStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })
       })
@@ -88,7 +88,6 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   .values(chunk)
                   .onDuplicateKeyUpdate({
                     set: {
-                      period_end: inserted("period_end"),
                       provider_model: inserted("provider_model"),
                       sessions: inserted("sessions"),
                       requests: inserted("requests"),

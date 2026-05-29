@@ -94,6 +94,7 @@
     --v2-illustration-illustration-layer-03: var(--v2-grey-500);
 
     --font-family-text: "Inter", sans-serif;
+    --v2-font-family-sans: "Inter", sans-serif;
   }
 
   /* OS preference fallback (no JS needed) */

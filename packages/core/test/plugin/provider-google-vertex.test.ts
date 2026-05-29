@@ -7,6 +7,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model, withEnv } from "./provider-helper"
 
 const vertexOptions: Record<string, any>[] = []
+const googleAuthOptions: Record<string, any>[] = []
 
 void mock.module("@ai-sdk/google-vertex", () => ({
   createVertex: (options: Record<string, any>) => {
@@ -19,12 +20,14 @@ void mock.module("@ai-sdk/google-vertex", () => ({
 
 void mock.module("google-auth-library", () => ({
   GoogleAuth: class {
-    async getApplicationDefault() {
+    constructor(options: Record<string, any>) {
+      googleAuthOptions.push(options)
+    }
+
+    async getClient() {
       return {
-        credential: {
-          async getAccessToken() {
-            return { token: "vertex-token" }
-          },
+        async getAccessToken() {
+          return { token: "vertex-token" }
         },
       }
     }
@@ -247,6 +250,7 @@ describe("GoogleVertexPlugin", () => {
 
   it.effect("keeps Google auth fetch for OpenAI-compatible Vertex endpoints", () =>
     Effect.gen(function* () {
+      googleAuthOptions.length = 0
       const fetchCalls: { input: Parameters<typeof fetch>[0]; init?: RequestInit }[] = []
       const plugin = yield* PluginV2.Service
       yield* plugin.add(GoogleVertexPlugin)
@@ -292,6 +296,7 @@ describe("GoogleVertexPlugin", () => {
           }),
       )
       expect(fetchCalls).toHaveLength(1)
+      expect(googleAuthOptions).toEqual([{ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }])
       expect(fetchCalls[0].input).toBe("https://vertex.example")
       expect(new Headers(fetchCalls[0].init?.headers).get("authorization")).toBe("Bearer vertex-token")
       expect(new Headers(fetchCalls[0].init?.headers).get("x-test")).toBe("1")

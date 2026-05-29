@@ -10,7 +10,7 @@
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
     "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
-    "dev:stats": "bun run --cwd packages/stats/app dev",
+    "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "lint": "oxlint",
     "typecheck": "bun turbo typecheck",
@@ -38,9 +38,9 @@
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
-      "@opentui/core": "0.2.15",
-      "@opentui/keymap": "0.2.15",
-      "@opentui/solid": "0.2.15",
+      "@opentui/core": "0.2.16",
+      "@opentui/keymap": "0.2.16",
+      "@opentui/solid": "0.2.16",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",
       "@types/luxon": "3.7.1",
@@ -87,7 +87,7 @@
       "@sentry/vite-plugin": "4.6.0",
       "solid-js": "1.9.10",
       "vite-plugin-solid": "2.11.10",
-      "@lydell/node-pty": "1.2.0-beta.10"
+      "@lydell/node-pty": "1.2.0-beta.12"
     }
   },
   "devDependencies": {
