@@ -77,6 +77,7 @@ const languageBaseURL = (language: unknown) => (language as { config: { baseURL:
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
+const experimentalWebSockets = testEffect(providerLayer({ experimentalWebSockets: true }))
 
 const alphaProviderConfig = {
   provider: {
@@ -119,6 +120,42 @@ it.instance(
     expect(providers[ProviderID.anthropic]).toBeDefined()
   }),
   { config: { provider: { anthropic: { options: { apiKey: "config-api-key" } } } } },
+)
+
+experimentalWebSockets.instance(
+  "openai config apiKey installs websocket fetch without stored auth",
+  Effect.gen(function* () {
+    yield* setProcessEnv("OPENCODE_AUTH_CONTENT", "{}")
+    const providers = yield* list
+    expect(providers[ProviderID.openai]).toBeDefined()
+    expect(providers[ProviderID.openai].options.baseURL).toBe("https://api.openai.com/v1")
+    expect(providers[ProviderID.openai].options.fetch).toBeFunction()
+  }),
+  {
+    config: {
+      provider: {
+        openai: {
+          options: {
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk-test",
+          },
+        },
+      },
+    },
+  },
+)
+
+experimentalWebSockets.instance(
+  "openai env apiKey installs websocket fetch without stored auth",
+  Effect.gen(function* () {
+    yield* setProcessEnv("OPENCODE_AUTH_CONTENT", "{}")
+    yield* setProcessEnv("OPENAI_API_KEY", "test-openai-key")
+    const providers = yield* list
+    expect(providers[ProviderID.openai]).toBeDefined()
+    expect(providers[ProviderID.openai].source).toBe("env")
+    expect(providers[ProviderID.openai].key).toBe("test-openai-key")
+    expect(providers[ProviderID.openai].options.fetch).toBeFunction()
+  }),
 )
 
 it.instance(

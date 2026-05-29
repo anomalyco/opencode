@@ -1417,15 +1417,29 @@ export const layer = Layer.effect(
           if (!plugin.auth) continue
           const providerID = ProviderID.make(plugin.auth.provider)
           if (disabled.has(providerID)) continue
-
-          const stored = yield* auth.get(providerID).pipe(Effect.orDie)
-          if (!stored) continue
           if (!plugin.auth.loader) continue
+
+          const data = database[plugin.auth.provider]
+          if (!data) continue
+          const stored = yield* auth.get(providerID).pipe(Effect.orDie)
+          const configuredKey = iife(() => {
+            const key = providers[providerID]?.key ?? data.options.apiKey
+            return typeof key === "string" && key !== "" ? key : undefined
+          })
+          const syntheticAuth = !stored && configuredKey ? { type: "api" as const, key: configuredKey } : undefined
+          const pluginAuth = stored ?? syntheticAuth
+          if (!pluginAuth) continue
 
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
-              () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              toPublicInfo(database[plugin.auth!.provider]),
+              () =>
+                bridge.promise(
+                  auth.get(providerID).pipe(
+                    Effect.orDie,
+                    Effect.map((current) => current ?? syntheticAuth),
+                  ),
+                ) as any,
+              toPublicInfo(data),
             ),
           )
           const opts = options ?? {}
