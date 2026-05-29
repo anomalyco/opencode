@@ -597,7 +597,7 @@ function openaiCompatibleReasoningEfforts(id: string) {
 }
 
 function anthropicOpus47OrLater(apiId: string) {
-  const version = /opus-(\d+)[.-](\d+)(?:[.-]|$)/i.exec(apiId)
+  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)/i.exec(apiId)
   if (!version) return false
   const major = Number(version[1])
   const minor = Number(version[2])
