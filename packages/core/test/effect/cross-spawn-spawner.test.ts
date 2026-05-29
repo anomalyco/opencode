@@ -194,7 +194,7 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures stdout via .all when no stderr",
       Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
+        const handle = yield* js('process.stdout.write("hello from stdout")')
         const all = yield* decodeByteStream(handle.all)
         expect(all).toBe("hello from stdout")
       }),
@@ -420,6 +420,30 @@ describe("cross-spawn spawner", () => {
         )
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
       }),
+    )
+
+    fx.effect(
+      "does not wait for descendant stdio handles after process exit on Windows",
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+
+        const started = Date.now()
+        const handle = yield* js(
+          [
+            'const child = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)"], {',
+            "  detached: true,",
+            '  stdio: ["ignore", "inherit", "inherit"],',
+            "})",
+            "child.unref()",
+            "process.exit(0)",
+          ].join("\n"),
+        )
+        const code = yield* handle.exitCode
+
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(Date.now() - started).toBeLessThan(5_000)
+      }),
+      10_000,
     )
   })
 })
