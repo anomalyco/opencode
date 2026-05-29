@@ -335,7 +335,7 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
           "  <skill>",
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
+          `    <location>${skill.location === "<built-in>" ? skill.location : pathToFileURL(skill.location).href}</location>`,
           "  </skill>",
         ]),
       "</available_skills>",

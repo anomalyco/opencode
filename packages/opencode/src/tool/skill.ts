@@ -33,10 +33,13 @@ export const SkillTool = Tool.define(
             metadata: {},
           })
 
-          const dir = path.dirname(info.location)
-          const base = pathToFileURL(dir).href
+          const builtin = info.location === "<built-in>"
+          const dir = builtin ? "" : path.dirname(info.location)
+          const base = builtin ? info.location : pathToFileURL(dir).href
           const limit = 10
-          const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
+          const files = builtin
+            ? ""
+            : yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
             Stream.filter((file) => !file.includes("SKILL.md")),
             Stream.map((file) => path.resolve(dir, file)),
             Stream.take(limit),
@@ -63,7 +66,7 @@ export const SkillTool = Tool.define(
             ].join("\n"),
             metadata: {
               name: info.name,
-              dir,
+              dir: builtin ? info.location : dir,
             },
           }
         }).pipe(Effect.orDie),

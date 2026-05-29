@@ -1438,7 +1438,10 @@ export const layer = Layer.effect(
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            // NOTE: instructions are intentionally excluded from the system prompt
+            // to maximize prefix-cache stability. env_info now uses static text
+            // instead of dynamic values. See notes/system-prompt-cache-volatility.md
+            const system = [...env, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({

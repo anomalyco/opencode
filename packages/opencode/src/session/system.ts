@@ -52,11 +52,14 @@ export const layer = Layer.effect(
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
             `Here is some useful information about the environment you are running in:`,
             `<env>`,
-            `  Working directory: ${ctx.directory}`,
-            `  Workspace root folder: ${ctx.worktree}`,
-            `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
+            // NOTE: Change workspace root, git repo, date, and working directory
+            // fields to stabilize the system prompt for prefix caching.
+            // See notes/system-prompt-cache-volatility.md
             `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
+            `  Working directory: if needed, run command \`pwd\``,
+            `  Is directory a git repo: if needed, run command \`git rev-parse --is-inside-work-tree\``,
+            `  Git workspace root folder: if needed, run command \`git rev-parse --show-toplevel\``,
+            `  Today's date: if needed, run command \`date\``,
             `</env>`,
           ].join("\n"),
         ]
