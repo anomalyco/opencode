@@ -32,7 +32,14 @@ const channel = (() => {
   return "dev"
 })()
 
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+function targetArch() {
+  const rustTarget = process.env.RUST_TARGET
+  if (rustTarget?.includes("aarch64") || rustTarget?.includes("arm64")) return "arm64"
+  if (rustTarget?.includes("x86_64")) return "x64"
+  return process.arch
+}
+
+const nodePtyPkg = `@lydell/node-pty-${process.platform}-${targetArch()}`
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT

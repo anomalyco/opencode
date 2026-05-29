@@ -13,39 +13,13 @@ permissions:
   contents: write
 
 jobs:
-  build-cli:
-    runs-on: ubuntu-latest
-    env:
-      APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.11
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build CLI
-        run: |
-          cd packages/opencode
-          bun run build
-        env:
-          OPENCODE_VERSION: ${{ env.APP_VERSION }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: opencode-binaries
-          path: packages/opencode/dist
-
   build-macos-x64:
-    needs: build-cli
-    runs-on: macos-latest
+    runs-on: macos-13
     env:
       APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
-      PKG_VERSION: ${{ startsWith(inputs.version != '' && inputs.version || github.ref_name, 'v') && format('{0}', (inputs.version != '' && inputs.version || github.ref_name)) || (inputs.version != '' && inputs.version || github.ref_name) }}
+      OPENCODE_CHANNEL: prod
+      RUST_TARGET: x86_64-apple-darwin
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
 
@@ -53,22 +27,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/desktop/src-tauri
-          shared-key: x86_64-apple-darwin
-
-      - name: Download CLI artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: opencode-binaries
-          path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
         run: bun install
@@ -83,57 +41,40 @@ jobs:
           fi
           bun ./script/sync-version.ts "$VERSION"
 
-          cd packages/desktop
-
-          # List downloaded files for debugging
-          echo "Downloaded files:"
-          ls -R src-tauri/target/opencode-binaries
-
-          # Copy CLI binary to sidecar folder
-          mkdir -p src-tauri/sidecars
-          cp src-tauri/target/opencode-binaries/opencode-darwin-x64/bin/opencode src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
-          chmod +x src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
-
       - name: Build Desktop App
         run: |
           cd packages/desktop
-
-          # Build frontend
-          export NODE_ENV=production
-          bun vite build
-
-          # Create a temporary tauri config that skips beforeBuildCommand
-          jq '.build.beforeBuildCommand = ""' src-tauri/tauri.conf.json > src-tauri/tauri.build.conf.json
-
-          # Merge prod config (without updater for fork builds)
-          jq -s '.[0] * (.[1] | del(.plugins.updater) | del(.bundle.createUpdaterArtifacts))' \
-            src-tauri/tauri.build.conf.json \
-            src-tauri/tauri.prod.conf.json > src-tauri/tauri.final.conf.json
-
-          # Build with Tauri
-          bun tauri build --target x86_64-apple-darwin --config ./src-tauri/tauri.final.conf.json --bundles dmg
+          bun run package:mac
+          VERSION="${APP_VERSION#v}"
+          DMG="$(find dist -maxdepth 1 -name '*.dmg' -type f | head -n 1)"
+          test -n "$DMG"
+          mv "$DMG" "dist/OpenCode_${VERSION}_x64.dmg"
 
       - name: Upload macOS x64 DMG
         uses: actions/upload-artifact@v4
         with:
           name: opencode-desktop-macos-x64
-          path: packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          path: packages/desktop/dist/OpenCode_*_x64.dmg
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ inputs.version || github.ref_name }}
-          files: packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
-          draft: true
+        run: |
+          TAG="${APP_VERSION}"
+          ASSET="packages/desktop/dist/OpenCode_${TAG#v}_x64.dmg"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --title "$TAG" --target "$GITHUB_SHA"
+          gh release upload "$TAG" "$ASSET" -R "$GITHUB_REPOSITORY" --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-arm64:
-    needs: [build-cli, build-macos-x64]
-    runs-on: macos-latest
+    needs: build-macos-x64
+    runs-on: macos-14
     env:
       APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+      OPENCODE_CHANNEL: prod
+      RUST_TARGET: aarch64-apple-darwin
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
 
@@ -141,22 +82,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/desktop/src-tauri
-          shared-key: aarch64-apple-darwin
-
-      - name: Download CLI artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: opencode-binaries
-          path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
         run: bun install
@@ -171,62 +96,28 @@ jobs:
           fi
           bun ./script/sync-version.ts "$VERSION"
 
-          cd packages/desktop
-
-          # List downloaded files for debugging
-          echo "Downloaded files:"
-          ls -R src-tauri/target/opencode-binaries
-
-          # Copy CLI binary to sidecar folder
-          mkdir -p src-tauri/sidecars
-          cp src-tauri/target/opencode-binaries/opencode-darwin-arm64/bin/opencode src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
-          chmod +x src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
-
       - name: Build Desktop App
         run: |
           cd packages/desktop
-
-          # Build frontend
-          export NODE_ENV=production
-          bun vite build
-
-          # Create a temporary tauri config that skips beforeBuildCommand
-          jq '.build.beforeBuildCommand = ""' src-tauri/tauri.conf.json > src-tauri/tauri.build.conf.json
-
-          # Merge prod config (without updater for fork builds)
-          jq -s '.[0] * (.[1] | del(.plugins.updater) | del(.bundle.createUpdaterArtifacts))' \
-            src-tauri/tauri.build.conf.json \
-            src-tauri/tauri.prod.conf.json > src-tauri/tauri.final.conf.json
-
-          # Build with Tauri (with retry on DMG packaging failure)
-          for i in 1 2 3; do
-            echo "Build attempt $i..."
-            if bun tauri build --target aarch64-apple-darwin --config ./src-tauri/tauri.final.conf.json --bundles dmg; then
-              echo "Build succeeded on attempt $i"
-              break
-            else
-              if [ $i -lt 3 ]; then
-                echo "Build failed on attempt $i, retrying in 5 seconds..."
-                sleep 5
-              else
-                echo "Build failed after 3 attempts"
-                exit 1
-              fi
-            fi
-          done
+          bun run package:mac
+          VERSION="${APP_VERSION#v}"
+          DMG="$(find dist -maxdepth 1 -name '*.dmg' -type f | head -n 1)"
+          test -n "$DMG"
+          mv "$DMG" "dist/OpenCode_${VERSION}_aarch64.dmg"
 
       - name: Upload macOS arm64 DMG
         uses: actions/upload-artifact@v4
         with:
           name: opencode-desktop-macos-arm64
-          path: packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          path: packages/desktop/dist/OpenCode_*_aarch64.dmg
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ inputs.version || github.ref_name }}
-          files: packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-          draft: true
+        run: |
+          TAG="${APP_VERSION}"
+          ASSET="packages/desktop/dist/OpenCode_${TAG#v}_aarch64.dmg"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --title "$TAG" --target "$GITHUB_SHA"
+          gh release upload "$TAG" "$ASSET" -R "$GITHUB_REPOSITORY" --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,38 +13,12 @@ permissions:
   contents: write
 
 jobs:
-  build-cli:
-    runs-on: ubuntu-latest
-    env:
-      APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.11
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build CLI
-        run: |
-          cd packages/opencode
-          bun run build
-        env:
-          OPENCODE_VERSION: ${{ env.APP_VERSION }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: opencode-binaries
-          path: packages/opencode/dist
-
   build-windows-desktop:
-    needs: build-cli
     runs-on: windows-latest
     env:
       APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+      OPENCODE_CHANNEL: prod
+      RUST_TARGET: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
 
@@ -52,22 +26,6 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/desktop/src-tauri
-          shared-key: x86_64-pc-windows-msvc
-
-      - name: Download CLI artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: opencode-binaries
-          path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
         run: bun install
@@ -82,72 +40,41 @@ jobs:
             $rootVersion = "$base-$tag.$env:GITHUB_RUN_NUMBER"
           }
           bun ./script/sync-version.ts $rootVersion
-
-          cd packages/desktop
-
-          # List downloaded files for debugging
-          Write-Host "Downloaded files:"
-          Get-ChildItem -Recurse src-tauri/target/opencode-binaries
-
-          # Copy CLI binary to sidecar folder
-          New-Item -ItemType Directory -Force -Path src-tauri/sidecars
-          Copy-Item src-tauri/target/opencode-binaries/opencode-windows-x64/bin/opencode.exe src-tauri/sidecars/opencode-cli-x86_64-pc-windows-msvc.exe
         shell: pwsh
 
       - name: Build Desktop App
         run: |
           cd packages/desktop
+          bun run package:win
 
-          # Build frontend without typecheck
-          $env:NODE_ENV = "production"
-          bun vite build
-
-          # Create a temporary tauri config that skips beforeBuildCommand
-          $config = Get-Content src-tauri/tauri.prod.conf.json | ConvertFrom-Json
-          $baseConfig = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
-          $baseConfig.build.beforeBuildCommand = ""
-
-          # Remove updater config from prod config BEFORE merging (fork builds don't need auto-update)
-          if ($config.plugins -and $config.plugins.updater) {
-            $config.plugins.PSObject.Properties.Remove('updater')
+          $version = $env:APP_VERSION -replace '^v', ''
+          $installer = Get-ChildItem -Path dist -Filter "*.exe" -File |
+            Where-Object { $_.Name -notmatch "blockmap" } |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw "Windows installer was not produced"
           }
-          # Disable createUpdaterArtifacts to prevent updater-related build steps
-          if ($config.bundle -and $config.bundle.createUpdaterArtifacts) {
-            $config.bundle.PSObject.Properties.Remove('createUpdaterArtifacts')
-          }
-
-          # Merge prod config
-          $config.PSObject.Properties | ForEach-Object {
-            $baseConfig | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value -Force
-          }
-
-          # Double-check: ensure updater is removed after merge
-          if ($baseConfig.plugins -and $baseConfig.plugins.updater) {
-            $baseConfig.plugins.PSObject.Properties.Remove('updater')
-          }
-
-          $baseConfig | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.build.conf.json
-
-          # Build with Tauri (signing disabled for fork)
-          bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.build.conf.json --bundles nsis
+          Rename-Item -Path $installer.FullName -NewName "OpenCode_${version}_x64-setup.exe" -Force
+          ./../../script/sign-windows.ps1 "dist/OpenCode_${version}_x64-setup.exe"
         shell: pwsh
 
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
           name: opencode-desktop-windows-x64
-          path: |
-            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          path: packages/desktop/dist/OpenCode_*_x64-setup.exe
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ inputs.version || github.ref_name }}
-          files: |
-            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-          draft: true
+        run: |
+          $tag = $env:APP_VERSION
+          $version = $tag -replace '^v', ''
+          $asset = "packages/desktop/dist/OpenCode_${version}_x64-setup.exe"
+          gh release view $tag -R $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag -R $env:GITHUB_REPOSITORY --draft --title $tag --target $env:GITHUB_SHA
+          }
+          gh release upload $tag $asset -R $env:GITHUB_REPOSITORY --clobber
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
