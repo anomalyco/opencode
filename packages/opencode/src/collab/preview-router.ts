@@ -26,23 +26,55 @@ import { connect as tlsConnect } from "node:tls"
 import type { IncomingMessage } from "node:http"
 import type { Socket } from "node:net"
 import { lookupCookieIdentityFromHeaders } from "./cookie-auth"
-import { getActiveUpstreamScheme } from "./preview-launcher"
+import { getActiveUpstreamScheme, getActivePreviewPort } from "./preview-launcher"
 
 const PREVIEW_PREFIX = "/preview/"
 
 /**
- * Parse `/preview/<port>/<rest>` out of an incoming URL.
- * Returns null if the URL doesn't match.
+ * Parse a `/preview/...` URL.  Two shapes accepted:
+ *
+ *   1. /preview/<port>/<rest>     — explicit port (legacy / multi-preview-future)
+ *   2. /preview/<rest>            — portless; routes to the active preview's
+ *                                    port via `getActivePreviewPort()`.  This
+ *                                    is the shape unleashlive/frontend uses
+ *                                    (commit a `<base href="/preview/">` into
+ *                                    its build so chunk URLs don't need to
+ *                                    hardcode the port).
+ *
+ * Detection rule for the explicit form: the first path segment after
+ * `/preview/` must be all digits AND parse as an integer in [1, 65535].
+ * Anything else falls through to portless.  Trade-off: an SPA route whose
+ * first segment is purely numeric in that range (e.g. `/preview/3000`)
+ * would be mis-parsed as a port — accepted risk because real SPA routes
+ * almost never look like that, and the explicit-port form was here first.
+ *
+ * Returns null if no preview is currently active AND no explicit port was
+ * given.
  */
 export function parsePreviewPath(pathname: string): { port: number; rest: string } | null {
   if (!pathname.startsWith(PREVIEW_PREFIX)) return null
   const after = pathname.slice(PREVIEW_PREFIX.length)
   const slash = after.indexOf("/")
-  const portStr = slash === -1 ? after : after.slice(0, slash)
-  const rest = slash === -1 ? "" : after.slice(slash) // keeps leading "/"
-  const port = Number(portStr)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return null
-  return { port, rest: rest || "/" }
+  const firstSeg = slash === -1 ? after : after.slice(0, slash)
+  const restAfterFirstSeg = slash === -1 ? "" : after.slice(slash) // keeps leading "/"
+
+  // Explicit-port form: first segment is all-digits and in valid port range.
+  // Restrict to /^\d+$/ (not just `Number()` parse) so URL-encoded weirdness
+  // ("8080%20", "+8080") falls through to portless rather than masquerading.
+  if (/^\d+$/.test(firstSeg)) {
+    const port = Number(firstSeg)
+    if (port >= 1 && port <= 65535) {
+      return { port, rest: restAfterFirstSeg || "/" }
+    }
+  }
+
+  // Portless form.  Route the WHOLE path-after-/preview/ to the active
+  // preview's port.  Returns null when no preview is running — the caller
+  // (collab middleware) lets the request fall through to other routes,
+  // which then typically 404.
+  const activePort = getActivePreviewPort()
+  if (activePort === null) return null
+  return { port: activePort, rest: "/" + after }
 }
 
 /**

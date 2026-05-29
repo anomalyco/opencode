@@ -306,6 +306,23 @@ export function getActiveUpstreamScheme(port: number): "http" | "https" {
   return "http"
 }
 
+/**
+ * Return the port the currently-running preview is bound to, or null when
+ * no preview is active.  Used by `parsePreviewPath` in preview-router.ts to
+ * route the portless `/preview/...` form: when the first path segment isn't
+ * a valid port, fall back to whatever port the running preview claimed at
+ * launch time.
+ *
+ * Single-replica + first-launch-wins (ADR-0009 + the launchPreview 409 path)
+ * means there's at most ONE active preview per container, so this returns a
+ * scalar without ambiguity.  Future multi-preview support (separate ADR)
+ * will need to take a hint — for example the cookie's collab_sid — to pick
+ * which session's preview to target.
+ */
+export function getActivePreviewPort(): number | null {
+  return active ? active.port : null
+}
+
 export type LaunchResult =
   | { ok: true; state: PreviewStateSnapshot }
   | { ok: false; status: 409; error: string; existing: PreviewStateSnapshot }
