@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.15.12",
-  "name": "opencode",
+  "name": "imecode",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -19,7 +19,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "imecode": "./bin/imecode"
   },
   "exports": {
     "./*": "./src/*.ts"

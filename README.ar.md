@@ -86,14 +86,14 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 يحترم سكربت التثبيت ترتيب الاولوية التالي لمسار التثبيت:
 
-1. `$OPENCODE_INSTALL_DIR` - مجلد تثبيت مخصص
+1. `$IMECODE_INSTALL_DIR` - مجلد تثبيت مخصص
 2. `$XDG_BIN_DIR` - مسار متوافق مع مواصفات XDG Base Directory
 3. `$HOME/bin` - مجلد الثنائيات القياسي للمستخدم (ان وجد او امكن انشاؤه)
 4. `$HOME/.opencode/bin` - المسار الافتراضي الاحتياطي
 
 ```bash
 # امثلة
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+IMECODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 

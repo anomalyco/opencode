@@ -70,7 +70,7 @@ import { FormatError, FormatUnknownError } from "@/cli/error"
 import { CommandPaletteDialog } from "./component/command-palette"
 import {
   COMMAND_PALETTE_COMMAND,
-  OPENCODE_BASE_MODE,
+  IMECODE_BASE_MODE,
   OpencodeKeymapProvider,
   registerOpencodeKeymap,
   useBindings,
@@ -129,7 +129,7 @@ const appBindingCommands = [
 ] as const
 
 export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
-  const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
+  const mouseEnabled = !Flag.IMECODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
   return {
     externalOutputMode: "passthrough",
@@ -426,7 +426,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+      if (!Flag.IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
       Selection.handleSelectionKey(renderer, toast, event)
     },
     { priority: 1 },
@@ -453,27 +453,27 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   // Update terminal window title based on current route and session
   createEffect(() => {
-    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    if (!terminalTitleEnabled() || Flag.IMECODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle("IMECODE")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle("IMECODE")
         return
       }
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`IM | ${title}`)
       return
     }
 
     if (route.data.type === "plugin") {
-      renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      renderer.setTerminalTitle(`IM | ${route.data.id}`)
     }
   })
 
@@ -612,7 +612,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         name: "workspace.list",
         title: "Manage workspaces",
         category: "Workspace",
-        hidden: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+        hidden: !Flag.IMECODE_EXPERIMENTAL_WORKSPACES,
         slashName: "workspaces",
         run: () => {
           dialog.replace(() => <DialogWorkspaceList />)
@@ -940,7 +940,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }))
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: IMECODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
   }))
 
@@ -949,7 +949,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }))
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: IMECODE_BASE_MODE,
     enabled: () => {
       const current = promptRef.current
       if (!current?.focused) return true
@@ -1042,7 +1042,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     await DialogAlert.show(
       dialog,
       "Update Complete",
-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+      `Successfully updated to IMECODE v${result.data.version}. Please restart the application.`,
     )
 
     void exit()
@@ -1063,16 +1063,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (!Flag.IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
         if (!Selection.copy(renderer, toast)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
+      onMouseUp={Flag.IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
-      <Show when={Flag.OPENCODE_SHOW_TTFD}>
+      <Show when={Flag.IMECODE_SHOW_TTFD}>
         <TimeToFirstDraw />
       </Show>
       <Show when={ready()}>

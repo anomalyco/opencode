@@ -18,7 +18,7 @@ opencode web
 这会在 `127.0.0.1` 上启动一个本地服务器，使用随机可用端口，并自动在默认浏览器中打开 OpenCode。
 
 :::caution
-如果未设置 `OPENCODE_SERVER_PASSWORD`，服务器将没有安全保护。本地使用没有问题，但在网络访问时应当设置密码。
+如果未设置 `IMECODE_SERVER_PASSWORD`，服务器将没有安全保护。本地使用没有问题，但在网络访问时应当设置密码。
 :::
 
 :::tip[Windows 用户]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### 身份验证
 
-要保护服务器访问，可以通过 `OPENCODE_SERVER_PASSWORD` 环境变量设置密码：
+要保护服务器访问，可以通过 `IMECODE_SERVER_PASSWORD` 环境变量设置密码：
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+IMECODE_SERVER_PASSWORD=secret opencode web
 ```
 
-用户名默认为 `opencode`，可以通过 `OPENCODE_SERVER_USERNAME` 进行更改。
+用户名默认为 `opencode`，可以通过 `IMECODE_SERVER_USERNAME` 进行更改。
 
 ---
 

@@ -44,10 +44,10 @@ Izvori konfiguracije se učitavaju ovim redoslijedom (kasniji izvori poništavaj
 
 1. **Udaljena konfiguracija** (od `.well-known/opencode`) - organizacijske postavke
 2. **Globalna konfiguracija** (`~/.config/opencode/opencode.json`) - korisničke preferencije
-3. **Prilagođena konfiguracija** (`OPENCODE_CONFIG` env var) - prilagođena preinačenja
+3. **Prilagođena konfiguracija** (`IMECODE_CONFIG` env var) - prilagođena preinačenja
 4. **Konfiguracija projekta** (`opencode.json` u projektu) - postavke specifične za projekat
 5. **`.opencode` direktoriji** - agenti, komande, dodaci
-6. **Inline konfiguracija** (`OPENCODE_CONFIG_CONTENT` env var) - runtime preinačenja
+6. **Inline konfiguracija** (`IMECODE_CONFIG_CONTENT` env var) - runtime preinačenja
 
 To znači da konfiguracije projekta mogu nadjačati globalne zadane postavke, a globalne konfiguracije mogu nadjačati postavke udaljene organizacije.
 
@@ -121,10 +121,10 @@ Ovo je također sigurno provjeriti u Git i koristi istu shemu kao globalna.
 
 ### Prilagođena konfiguracija
 
-Navedite prilagođenu putanju konfiguracijske datoteke koristeći varijablu okruženja `OPENCODE_CONFIG`.
+Navedite prilagođenu putanju konfiguracijske datoteke koristeći varijablu okruženja `IMECODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -134,10 +134,10 @@ Prilagođena konfiguracija se učitava između globalne i projektne konfiguracij
 
 ### Prilagođeni direktorij
 
-Navedite prilagođeni konfiguracijski direktorij koristeći `OPENCODE_CONFIG_DIR` varijablu okruženja. U ovom direktoriju će se tražiti agenti, komande, modovi i dodaci baš kao standardni `.opencode` direktorij, i trebali bi pratiti istu strukturu.
+Navedite prilagođeni konfiguracijski direktorij koristeći `IMECODE_CONFIG_DIR` varijablu okruženja. U ovom direktoriju će se tražiti agenti, komande, modovi i dodaci baš kao standardni `.opencode` direktorij, i trebali bi pratiti istu strukturu.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -170,7 +170,7 @@ Koristite namjenski `tui.json` (ili `tui.jsonc`) fajl za postavke specifične za
 }
 ```
 
-Koristite `OPENCODE_TUI_CONFIG` da pokažete na prilagođeni TUI konfiguracijski fajl.
+Koristite `IMECODE_TUI_CONFIG` da pokažete na prilagođeni TUI konfiguracijski fajl.
 
 Stari `theme`, `keybinds`, i `tui` ključevi u `opencode.json` su zastarjeli i automatski će se migrirati kada je to moguće.
 
@@ -639,7 +639,7 @@ Koristite `{env:VARIABLE_NAME}` za zamjenu varijabli okruženja:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

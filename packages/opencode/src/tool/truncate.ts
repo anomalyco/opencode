@@ -40,7 +40,7 @@ export interface Interface {
    */
   readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
   /**
-   * Resolved truncation limits: values from `tool_output` in opencode config, or MAX_LINES / MAX_BYTES if unset.
+   * Resolved truncation limits: values from `tool_output` in imecode config, or MAX_LINES / MAX_BYTES if unset.
    */
   readonly limits: () => Effect.Effect<{ maxLines: number; maxBytes: number }>
 }

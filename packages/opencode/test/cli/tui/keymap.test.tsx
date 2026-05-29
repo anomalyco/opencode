@@ -6,7 +6,7 @@ import { onCleanup } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import {
   getOpencodeModeStack,
-  OPENCODE_BASE_MODE,
+  IMECODE_BASE_MODE,
   OpencodeKeymapProvider,
   registerOpencodeKeymap,
 } from "@/cli/cmd/tui/keymap"
@@ -81,7 +81,7 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
       ]),
     })
     const offBase = keymap.registerLayer({
-      mode: OPENCODE_BASE_MODE,
+      mode: IMECODE_BASE_MODE,
       commands: [{ name: "model.list", run() {} }],
       bindings: config.keybinds.gather("test.base", ["model.list"]),
     })

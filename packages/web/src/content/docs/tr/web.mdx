@@ -18,7 +18,7 @@ opencode web
 Bu, `127.0.0.1` üzerinde rastgele kullanılabilir bir bağlantı noktasına sahip yerel bir sunucuyu başlatır ve opencode'u varsayılan tarayıcınızda otomatik olarak açar.
 
 :::caution
-`OPENCODE_SERVER_PASSWORD` ayarlanmadıysa sunucunun güvenliği kaldırılacaktır. Bu, yerel kullanım için iyidir ancak ağ erişimi için ayarlanmalıdır.
+`IMECODE_SERVER_PASSWORD` ayarlanmadıysa sunucunun güvenliği kaldırılacaktır. Bu, yerel kullanım için iyidir ancak ağ erişimi için ayarlanmalıdır.
 :::
 
 :::tip[Windows Kullanıcıları]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### Kimlik Doğrulaması
 
-Erişimi korumak için `OPENCODE_SERVER_PASSWORD` ortam değişkenini kullanarak bir parola ayarlayın:
+Erişimi korumak için `IMECODE_SERVER_PASSWORD` ortam değişkenini kullanarak bir parola ayarlayın:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+IMECODE_SERVER_PASSWORD=secret opencode web
 ```
 
-Kullanıcı adı varsayılan olarak `opencode` şeklindedir ancak `OPENCODE_SERVER_USERNAME` ile değiştirilebilir.
+Kullanıcı adı varsayılan olarak `opencode` şeklindedir ancak `IMECODE_SERVER_USERNAME` ile değiştirilebilir.
 
 ---
 

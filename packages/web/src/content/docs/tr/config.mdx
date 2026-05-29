@@ -44,10 +44,10 @@ Yapılandırma kaynakları bu sırayla yüklenir (sonraki kaynaklar öncekileri 
 
 1. **Uzak yapılandırma** (`.well-known/opencode`'dan) - kurumsal varsayılanlar
 2. **Genel yapılandırma** (`~/.config/opencode/opencode.json`) - kullanıcı tercihleri
-3. **Özel yapılandırma** (`OPENCODE_CONFIG` env var) - özel geçersiz kılmalar
+3. **Özel yapılandırma** (`IMECODE_CONFIG` env var) - özel geçersiz kılmalar
 4. **Proje yapılandırması** (projedeki `opencode.json`) - projeye özgü ayarlar
 5. **`.opencode` dizinleri** - agent'lar, komutlar, eklentiler
-6. **Satır içi yapılandırma** (`OPENCODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
+6. **Satır içi yapılandırma** (`IMECODE_CONFIG_CONTENT` env var) - çalışma zamanı geçersiz kılmaları
 
 Bu, proje yapılandırmalarının genel varsayılanları geçersiz kılabileceği ve genel yapılandırmaların uzak organizasyonel varsayılanları geçersiz kılabileceği anlamına gelir.
 
@@ -117,10 +117,10 @@ Bunun Git'te kontrol edilmesi de güvenlidir ve global olanla aynı şemayı kul
 
 ### Özel yol
 
-`OPENCODE_CONFIG` ortam değişkenini kullanarak özel bir yapılandırma dosyası yolu belirtin.
+`IMECODE_CONFIG` ortam değişkenini kullanarak özel bir yapılandırma dosyası yolu belirtin.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,13 +130,13 @@ opencode run "Hello world"
 
 ### Özel dizin
 
-`OPENCODE_CONFIG_DIR` kullanarak özel bir yapılandırma dizini belirtin
+`IMECODE_CONFIG_DIR` kullanarak özel bir yapılandırma dizini belirtin
 ortam değişkeni. Bu dizin agent'lar, komutlar için aranacaktır.
 modlar ve eklentiler tıpkı standart `.opencode` dizini gibi olmalıdır ve
 aynı yapıyı takip edin.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -641,7 +641,7 @@ Ortam değişkenlerini değiştirmek için `{env:VARIABLE_NAME}` kullanın:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

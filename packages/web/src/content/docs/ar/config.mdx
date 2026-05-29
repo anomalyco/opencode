@@ -44,10 +44,10 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 1. **الإعدادات البعيدة** (من `.well-known/opencode`) - الإعدادات الافتراضية على مستوى المؤسسة
 2. **الإعدادات العامة** (`~/.config/opencode/opencode.json`) - تفضيلات المستخدم
-3. **إعدادات مخصصة** (`OPENCODE_CONFIG` env var) - تجاوزات مخصصة
+3. **إعدادات مخصصة** (`IMECODE_CONFIG` env var) - تجاوزات مخصصة
 4. **إعدادات المشروع** (`opencode.json` داخل المشروع) - إعدادات خاصة بالمشروع
 5. **أدلة `.opencode`** - الوكلاء، الأوامر، الإضافات
-6. **إعدادات ضمنية** (`OPENCODE_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
+6. **إعدادات ضمنية** (`IMECODE_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
 
 هذا يعني أن إعدادات المشروع يمكنها تجاوز الإعدادات العامة، وأن الإعدادات العامة يمكنها تجاوز الإعدادات الافتراضية البعيدة على مستوى المؤسسة.
 
@@ -117,10 +117,10 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 ### مسار مخصص
 
-حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG`.
+حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `IMECODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,12 +130,12 @@ opencode run "Hello world"
 
 ### دليل مخصص
 
-حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG_DIR`.
+حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `IMECODE_CONFIG_DIR`.
 سيتم البحث داخل هذا الدليل عن الوكلاء والأوامر والأوضاع والإضافات تمامًا مثل
 الدليل القياسي `.opencode`، ويجب أن يتبع نفس البنية.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -639,7 +639,7 @@ opencode run "Hello world"
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

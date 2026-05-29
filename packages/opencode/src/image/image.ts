@@ -64,7 +64,7 @@ export const layer = Layer.effect(
     const loadPhoton = yield* Effect.cached(
       Effect.sync(() => {
         // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
-        ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
+        ;(globalThis as typeof globalThis & { __IMECODE_PHOTON_WASM_PATH?: string }).__IMECODE_PHOTON_WASM_PATH =
           path.isAbsolute(photonWasm) ? photonWasm : fileURLToPath(new URL(photonWasm, import.meta.url))
       }).pipe(
         Effect.andThen(() => Effect.tryPromise(() => import("@silvia-odwyer/photon-node"))),

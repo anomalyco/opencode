@@ -43,10 +43,10 @@ Na przykład, jeśli konfiguracja globalna ustawi `theme: "opencode"` i `autoupd
 
 1. **Konfiguracja zdalna** (z `.well-known/opencode`) – ustawienia wymuszane przez organizację
 2. **Konfiguracja globalna** (`~/.config/opencode/opencode.json`) – preferencje użytkownika
-3. **Konfiguracja niestandardowa** (zmienna `OPENCODE_CONFIG`) — jawne nadpisanie
+3. **Konfiguracja niestandardowa** (zmienna `IMECODE_CONFIG`) — jawne nadpisanie
 4. **Konfiguracja projektu** (`opencode.json` w projekcie) - ustawienia specyficzne dla projektu
 5. **Katalogi `.opencode`** - agenci, polecenia, umiejętności
-6. **Konfiguracja wbudowana** (zmienna `OPENCODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
+6. **Konfiguracja wbudowana** (zmienna `IMECODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
 
 Oznacza to, że konfiguracje projektu mogą nadpisywać konfiguracje globalne, a konfiguracje globalne mogą nadpisywać konfiguracje zdalne.
 
@@ -120,10 +120,10 @@ Może on być przechowywany w Git i mieć ten sam schemat, co konfiguracja globa
 
 ### Niestandardowa ścieżka
 
-Możesz załadować niestandardowy plik konfiguracyjny, ustawiając zmienną środowiskową `OPENCODE_CONFIG`.
+Możesz załadować niestandardowy plik konfiguracyjny, ustawiając zmienną środowiskową `IMECODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -133,10 +133,10 @@ Konfiguracja niestandardowa jest ładowana po konfiguracji globalnej i przed kon
 
 ### Niestandardowy katalog
 
-Możesz ustawić niestandardowy katalog konfiguracyjny za pomocą zmiennej środowiskowej `OPENCODE_CONFIG_DIR`. Katalog ten będzie przeszukiwany pod kątem agentów, poleceń, trybów i wtyczek, tak jak standardowy katalog `.opencode` i powinien zachować tę samą strukturę.
+Możesz ustawić niestandardowy katalog konfiguracyjny za pomocą zmiennej środowiskowej `IMECODE_CONFIG_DIR`. Katalog ten będzie przeszukiwany pod kątem agentów, poleceń, trybów i wtyczek, tak jak standardowy katalog `.opencode` i powinien zachować tę samą strukturę.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -167,7 +167,7 @@ Użyj dedykowanego pliku `tui.json` (lub `tui.jsonc`) dla ustawień specyficznyc
 }
 ```
 
-Użyj `OPENCODE_TUI_CONFIG`, aby wskazać niestandardowy plik konfiguracyjny TUI.
+Użyj `IMECODE_TUI_CONFIG`, aby wskazać niestandardowy plik konfiguracyjny TUI.
 
 Przestarzałe klucze `theme`, `keybinds` i `tui` w `opencode.json` są wycofywane i automatycznie migrowane, gdy to możliwe.
 
@@ -634,7 +634,7 @@ Użyj `{env:VARIABLE_NAME}`, aby wstawić wartość zmiennej środowiskowej:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

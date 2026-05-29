@@ -128,7 +128,7 @@ describe("containsPath", () => {
         const ctx = { ...(yield* InstanceState.context), directory: subdir }
 
         // .opencode at worktree root, but we're running from packages/lib
-        expect(containsPath(path.join(test.directory, ".opencode", "state"), ctx)).toBe(true)
+        expect(containsPath(path.join(test.directory, ".imecode", "state"), ctx)).toBe(true)
         // sibling package should also be accessible
         expect(containsPath(path.join(test.directory, "packages", "other", "file.ts"), ctx)).toBe(true)
         // worktree root itself

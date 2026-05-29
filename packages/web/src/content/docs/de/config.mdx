@@ -44,10 +44,10 @@ Konfigurationsquellen werden in dieser Reihenfolge geladen (spätere Quellen üb
 
 1. **Remote-Konfiguration** (von `.well-known/opencode`) – Organisationsstandards
 2. **Globale Konfiguration** (`~/.config/opencode/opencode.json`) – Benutzereinstellungen
-3. **Benutzerdefinierte Konfiguration** (`OPENCODE_CONFIG` env var) – benutzerdefinierte Überschreibungen
+3. **Benutzerdefinierte Konfiguration** (`IMECODE_CONFIG` env var) – benutzerdefinierte Überschreibungen
 4. **Projektkonfiguration** (`opencode.json` im Projekt) – projektspezifische Einstellungen
 5. **`.opencode` Verzeichnisse** – Agenten, Befehle, Plugins
-6. **Inline-Konfiguration** (`OPENCODE_CONFIG_CONTENT` env var) – Laufzeitüberschreibungen
+6. **Inline-Konfiguration** (`IMECODE_CONFIG_CONTENT` env var) – Laufzeitüberschreibungen
 
 Dies bedeutet, dass Projektkonfigurationen globale Standardeinstellungen überschreiben können und globale Konfigurationen Remote-Organisationsstandards überschreiben können.
 
@@ -117,10 +117,10 @@ Dies kann auch sicher in Git eingecheckt werden und dasselbe Schema wie das glob
 
 ### Benutzerdefinierter Pfad
 
-Geben Sie mithilfe der Umgebungsvariablen `OPENCODE_CONFIG` einen benutzerdefinierten Konfigurationsdateipfad an.
+Geben Sie mithilfe der Umgebungsvariablen `IMECODE_CONFIG` einen benutzerdefinierten Konfigurationsdateipfad an.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,13 +130,13 @@ Die benutzerdefinierte Konfiguration wird in der Rangfolge zwischen globalen und
 
 ### Benutzerdefiniertes Verzeichnis
 
-Geben Sie mit `OPENCODE_CONFIG_DIR` ein benutzerdefiniertes Konfigurationsverzeichnis an.
+Geben Sie mit `IMECODE_CONFIG_DIR` ein benutzerdefiniertes Konfigurationsverzeichnis an.
 Umgebungsvariable. Dieses Verzeichnis wird nach Agenten, Befehlen,
 Modi und Plugins genau wie das Standardverzeichnis `.opencode` und sollten
 folgen der gleichen Struktur.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -638,7 +638,7 @@ Verwenden Sie `{env:VARIABLE_NAME}`, um Umgebungsvariablen zu ersetzen:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

@@ -387,7 +387,7 @@ export const layer = Layer.effect(
                 return bus
                   .publish(TuiEvent.ToastShow, {
                     title: "MCP Authentication Required",
-                    message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+                    message: `Server "${key}" requires authentication. Run: imecode mcp auth ${key}`,
                     variant: "warning",
                     duration: 8000,
                   })
@@ -432,7 +432,7 @@ export const layer = Layer.effect(
         cwd,
         env: {
           ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...(cmd === "imecode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
       })

@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | Letzte Sitzung fortsetzen                                                          |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Session-ID zum Fortfahren                                                          |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen abzweigen (mit `--continue` oder `--session` verwenden)    |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `OPENCODE_SERVER_PASSWORD`)                     |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `OPENCODE_SERVER_USERNAME` oder `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `IMECODE_SERVER_PASSWORD`)                     |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `IMECODE_SERVER_USERNAME` oder `opencode`) |
 
 ---
 
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |      | Format: default (formatiert) oder json (rohe JSON-Ereignisse)                                       |
 | <nobr><code>{"--title"}</code></nobr>    |      | Titel für die Sitzung (verwendet eine verkürzte Eingabeaufforderung, wenn kein Wert angegeben wird) |
 | <nobr><code>{"--attach"}</code></nobr>   |      | An einen laufenden OpenCode-Server anschließen (z.B. http://localhost:4096)                         |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `OPENCODE_SERVER_PASSWORD`)                                      |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `OPENCODE_SERVER_USERNAME` oder `opencode`)                  |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `IMECODE_SERVER_PASSWORD`)                                      |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `IMECODE_SERVER_USERNAME` oder `opencode`)                  |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Verzeichnis für die Ausführung, oder Pfad auf dem Remote-Server beim Anhängen                       |
 | <nobr><code>{"--variant"}</code></nobr>  |      | Modellvariante (anbieterspezifischer Reasoning-Aufwand)                                             |
 | <nobr><code>{"--thinking"}</code></nobr> |      | Denkblöcke anzeigen                                                                                 |
@@ -369,7 +369,7 @@ Starten Sie einen Headless-OpenCode-Server für den API-Zugriff. Sehen Sie sich 
 opencode serve
 ```
 
-Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf OpenCode-Funktionalität ohne die TUI-Schnittstelle bietet. Legen Sie `OPENCODE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
+Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf OpenCode-Funktionalität ohne die TUI-Schnittstelle bietet. Legen Sie `IMECODE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
 
 #### Optionen
 
@@ -465,7 +465,7 @@ Starten Sie einen Headless-OpenCode-Server mit einer Weboberfläche.
 opencode web
 ```
 
-Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über eine Webschnittstelle auf OpenCode zuzugreifen. Legen Sie `OPENCODE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
+Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über eine Webschnittstelle auf OpenCode zuzugreifen. Legen Sie `IMECODE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
 
 #### Optionen
 
@@ -564,29 +564,29 @@ OpenCode kann mithilfe von Umgebungsvariablen konfiguriert werden.
 
 | Variable                              | Typ             | Beschreibung                                                                     |
 | ------------------------------------- | --------------- | -------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolescher Wert | Sitzungen automatisch teilen                                                     |
-| `OPENCODE_GIT_BASH_PATH`              | Zeichenfolge    | Pfad zur ausführbaren Git Bash-Datei unter Windows                               |
-| `OPENCODE_CONFIG`                     | Zeichenfolge    | Pfad zur Konfigurationsdatei                                                     |
-| `OPENCODE_CONFIG_DIR`                 | Zeichenfolge    | Pfad zum Konfigurationsverzeichnis                                               |
-| `OPENCODE_CONFIG_CONTENT`             | Zeichenfolge    | Inline-JSON-Konfigurationsinhalt                                                 |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolescher Wert | Automatische Update-Prüfungen deaktivieren                                       |
-| `OPENCODE_DISABLE_PRUNE`              | boolescher Wert | Bereinigung alter Daten deaktivieren                                             |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolescher Wert | Deaktivieren Sie die automatische Aktualisierung von Terminaltiteln              |
-| `OPENCODE_PERMISSION`                 | Zeichenfolge    | Inline-JSON-Berechtigungskonfiguration                                           |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolescher Wert | Standard-Plugins deaktivieren                                                    |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolescher Wert | Automatische LSP-Server-Downloads deaktivieren                                   |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolescher Wert | Experimentelle Modelle aktivieren                                                |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolescher Wert | Automatische Kontextkomprimierung deaktivieren                                   |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolescher Wert | Deaktivieren Sie das Lesen von `.claude` (Prompt + Skills)                       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolescher Wert | Deaktivieren Sie das Lesen von `~/.claude/CLAUDE.md`                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolescher Wert | Deaktivieren Sie das Laden von `.claude/skills`                                  |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolescher Wert | Deaktivieren Sie das Abrufen von Modellen aus Remote-Quellen                     |
-| `OPENCODE_FAKE_VCS`                   | Zeichenfolge    | Gefälschter VCS-Anbieter zu Testzwecken                                          |
-| `OPENCODE_CLIENT`                     | Zeichenfolge    | Client-ID (standardmäßig `cli`)                                                  |
-| `OPENCODE_ENABLE_EXA`                 | boolescher Wert | Exa-Websuchtools aktivieren                                                      |
-| `OPENCODE_SERVER_PASSWORD`            | Zeichenfolge    | Aktivieren Sie die Basisauthentifizierung für `serve`/`web`                      |
-| `OPENCODE_SERVER_USERNAME`            | Zeichenfolge    | Benutzernamen für die Basisauthentifizierung überschreiben (Standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | Zeichenfolge    | Benutzerdefinierte URL zum Abrufen der Modellkonfiguration                       |
+| `IMECODE_AUTO_SHARE`                 | boolescher Wert | Sitzungen automatisch teilen                                                     |
+| `IMECODE_GIT_BASH_PATH`              | Zeichenfolge    | Pfad zur ausführbaren Git Bash-Datei unter Windows                               |
+| `IMECODE_CONFIG`                     | Zeichenfolge    | Pfad zur Konfigurationsdatei                                                     |
+| `IMECODE_CONFIG_DIR`                 | Zeichenfolge    | Pfad zum Konfigurationsverzeichnis                                               |
+| `IMECODE_CONFIG_CONTENT`             | Zeichenfolge    | Inline-JSON-Konfigurationsinhalt                                                 |
+| `IMECODE_DISABLE_AUTOUPDATE`         | boolescher Wert | Automatische Update-Prüfungen deaktivieren                                       |
+| `IMECODE_DISABLE_PRUNE`              | boolescher Wert | Bereinigung alter Daten deaktivieren                                             |
+| `IMECODE_DISABLE_TERMINAL_TITLE`     | boolescher Wert | Deaktivieren Sie die automatische Aktualisierung von Terminaltiteln              |
+| `IMECODE_PERMISSION`                 | Zeichenfolge    | Inline-JSON-Berechtigungskonfiguration                                           |
+| `IMECODE_DISABLE_DEFAULT_PLUGINS`    | boolescher Wert | Standard-Plugins deaktivieren                                                    |
+| `IMECODE_DISABLE_LSP_DOWNLOAD`       | boolescher Wert | Automatische LSP-Server-Downloads deaktivieren                                   |
+| `IMECODE_ENABLE_EXPERIMENTAL_MODELS` | boolescher Wert | Experimentelle Modelle aktivieren                                                |
+| `IMECODE_DISABLE_AUTOCOMPACT`        | boolescher Wert | Automatische Kontextkomprimierung deaktivieren                                   |
+| `IMECODE_DISABLE_CLAUDE_CODE`        | boolescher Wert | Deaktivieren Sie das Lesen von `.claude` (Prompt + Skills)                       |
+| `IMECODE_DISABLE_CLAUDE_CODE_PROMPT` | boolescher Wert | Deaktivieren Sie das Lesen von `~/.claude/CLAUDE.md`                             |
+| `IMECODE_DISABLE_CLAUDE_CODE_SKILLS` | boolescher Wert | Deaktivieren Sie das Laden von `.claude/skills`                                  |
+| `IMECODE_DISABLE_MODELS_FETCH`       | boolescher Wert | Deaktivieren Sie das Abrufen von Modellen aus Remote-Quellen                     |
+| `IMECODE_FAKE_VCS`                   | Zeichenfolge    | Gefälschter VCS-Anbieter zu Testzwecken                                          |
+| `IMECODE_CLIENT`                     | Zeichenfolge    | Client-ID (standardmäßig `cli`)                                                  |
+| `IMECODE_ENABLE_EXA`                 | boolescher Wert | Exa-Websuchtools aktivieren                                                      |
+| `IMECODE_SERVER_PASSWORD`            | Zeichenfolge    | Aktivieren Sie die Basisauthentifizierung für `serve`/`web`                      |
+| `IMECODE_SERVER_USERNAME`            | Zeichenfolge    | Benutzernamen für die Basisauthentifizierung überschreiben (Standard `opencode`) |
+| `IMECODE_MODELS_URL`                 | Zeichenfolge    | Benutzerdefinierte URL zum Abrufen der Modellkonfiguration                       |
 
 ---
 
@@ -596,21 +596,21 @@ Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich änder
 
 | Variable                                        | Typ             | Beschreibung                                              |
 | ----------------------------------------------- | --------------- | --------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolescher Wert | Experimentelle Funktionen unter dem Sammelflag aktivieren |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolescher Wert | Symbolerkennung aktivieren                                |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolescher Wert | Kopieren bei Auswahl in TUI deaktivieren                  |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Zahl            | Standard-Timeout für Bash-Befehle in ms                   |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Zahl            | Maximale Ausgabetokens für LLM-Antworten                  |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolescher Wert | Dateiüberwachung für das gesamte Verzeichnis aktivieren   |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolescher Wert | Oxfmt-Formatierer aktivieren                              |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolescher Wert | Experimentelles LSP-Tool aktivieren                       |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolescher Wert | Dateiüberwachung deaktivieren                             |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolescher Wert | Experimentelle Exa-Funktionen aktivieren                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolescher Wert | TY LSP für Python-Dateien aktivieren                      |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolescher Wert | Planmodus aktivieren                                      |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolescher Wert | Hintergrundaufgaben für Subagenten aktivieren             |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolescher Wert | Experimentelles Ereignissystem aktivieren                 |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolescher Wert | Nativen LLM-Anfragepfad aktivieren                        |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolescher Wert | Parallele Websuche aktivieren                             |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolescher Wert | Scout-Subagent aktivieren                                 |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolescher Wert | Workspace-Unterstützung aktivieren                        |
+| `IMECODE_EXPERIMENTAL`                         | boolescher Wert | Experimentelle Funktionen unter dem Sammelflag aktivieren |
+| `IMECODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolescher Wert | Symbolerkennung aktivieren                                |
+| `IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolescher Wert | Kopieren bei Auswahl in TUI deaktivieren                  |
+| `IMECODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Zahl            | Standard-Timeout für Bash-Befehle in ms                   |
+| `IMECODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Zahl            | Maximale Ausgabetokens für LLM-Antworten                  |
+| `IMECODE_EXPERIMENTAL_FILEWATCHER`             | boolescher Wert | Dateiüberwachung für das gesamte Verzeichnis aktivieren   |
+| `IMECODE_EXPERIMENTAL_OXFMT`                   | boolescher Wert | Oxfmt-Formatierer aktivieren                              |
+| `IMECODE_EXPERIMENTAL_LSP_TOOL`                | boolescher Wert | Experimentelles LSP-Tool aktivieren                       |
+| `IMECODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolescher Wert | Dateiüberwachung deaktivieren                             |
+| `IMECODE_EXPERIMENTAL_EXA`                     | boolescher Wert | Experimentelle Exa-Funktionen aktivieren                  |
+| `IMECODE_EXPERIMENTAL_LSP_TY`                  | boolescher Wert | TY LSP für Python-Dateien aktivieren                      |
+| `IMECODE_EXPERIMENTAL_PLAN_MODE`               | boolescher Wert | Planmodus aktivieren                                      |
+| `IMECODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolescher Wert | Hintergrundaufgaben für Subagenten aktivieren             |
+| `IMECODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolescher Wert | Experimentelles Ereignissystem aktivieren                 |
+| `IMECODE_EXPERIMENTAL_NATIVE_LLM`              | boolescher Wert | Nativen LLM-Anfragepfad aktivieren                        |
+| `IMECODE_EXPERIMENTAL_PARALLEL`                | boolescher Wert | Parallele Websuche aktivieren                             |
+| `IMECODE_EXPERIMENTAL_SCOUT`                   | boolescher Wert | Scout-Subagent aktivieren                                 |
+| `IMECODE_EXPERIMENTAL_WORKSPACES`              | boolescher Wert | Workspace-Unterstützung aktivieren                        |

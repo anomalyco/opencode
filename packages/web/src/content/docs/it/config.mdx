@@ -44,10 +44,10 @@ Le sorgenti di configurazione vengono caricate in questo ordine (le successive s
 
 1. **Config remota** (da `.well-known/opencode`) - default dell'organizzazione
 2. **Config globale** (`~/.config/opencode/opencode.json`) - preferenze utente
-3. **Config personalizzata** (variabile d'ambiente `OPENCODE_CONFIG`) - sovrascritture personalizzate
+3. **Config personalizzata** (variabile d'ambiente `IMECODE_CONFIG`) - sovrascritture personalizzate
 4. **Config di progetto** (`opencode.json` nel progetto) - impostazioni specifiche del progetto
 5. **Directory `.opencode`** - agenti, comandi, plugin
-6. **Config inline** (variabile d'ambiente `OPENCODE_CONFIG_CONTENT`) - sovrascritture a runtime
+6. **Config inline** (variabile d'ambiente `IMECODE_CONFIG_CONTENT`) - sovrascritture a runtime
 
 Questo significa che la configurazione di progetto puo sovrascrivere i default globali, e la configurazione globale puo sovrascrivere i default remoti dell'organizzazione.
 
@@ -121,10 +121,10 @@ Questo file puo essere tranquillamente versionato in Git e usa lo stesso schema 
 
 ### Percorso personalizzato
 
-Specifica un percorso personalizzato per il file di configurazione usando la variabile d'ambiente `OPENCODE_CONFIG`.
+Specifica un percorso personalizzato per il file di configurazione usando la variabile d'ambiente `IMECODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -134,10 +134,10 @@ La configurazione personalizzata viene caricata tra quella globale e quella di p
 
 ### Directory personalizzata
 
-Specifica una directory di configurazione personalizzata usando la variabile d'ambiente `OPENCODE_CONFIG_DIR`. Questa directory verra usata per cercare agenti, comandi, modalita e plugin proprio come la directory standard `.opencode` e dovrebbe seguire la stessa struttura.
+Specifica una directory di configurazione personalizzata usando la variabile d'ambiente `IMECODE_CONFIG_DIR`. Questa directory verra usata per cercare agenti, comandi, modalita e plugin proprio come la directory standard `.opencode` e dovrebbe seguire la stessa struttura.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -170,7 +170,7 @@ Usa un file dedicato `tui.json` (o `tui.jsonc`) per le impostazioni specifiche d
 }
 ```
 
-Usa `OPENCODE_TUI_CONFIG` per puntare a un file di configurazione TUI personalizzato.
+Usa `IMECODE_TUI_CONFIG` per puntare a un file di configurazione TUI personalizzato.
 
 Le chiavi legacy `theme`, `keybinds` e `tui` in `opencode.json` sono deprecate e vengono migrate automaticamente quando possibile.
 
@@ -639,7 +639,7 @@ Usa `{env:VARIABLE_NAME}` per sostituire variabili d'ambiente:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

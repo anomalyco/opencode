@@ -59,7 +59,7 @@ const args = hideBin(process.argv)
 
 function show(out: string) {
   const text = out.trimStart()
-  if (!text.startsWith("opencode ")) {
+  if (!text.startsWith("imecode ")) {
     process.stderr.write(UI.logo() + EOL + EOL)
     process.stderr.write(text)
     return
@@ -69,7 +69,7 @@ function show(out: string) {
 
 const cli = yargs(args)
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName("imecode")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
@@ -90,7 +90,7 @@ const cli = yargs(args)
   })
   .middleware(async (opts) => {
     if (opts.pure) {
-      process.env.OPENCODE_PURE = "1"
+      process.env.IMECODE_PURE = "1"
     }
 
     await Log.init({
@@ -107,7 +107,7 @@ const cli = yargs(args)
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
-    process.env.OPENCODE_PID = String(process.pid)
+    process.env.IMECODE_PID = String(process.pid)
 
     Log.Default.info("opencode", {
       version: InstallationVersion,

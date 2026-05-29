@@ -41,7 +41,7 @@ describe("opencode acp-next initialize/auth subprocess", () => {
 
         const rejected = yield* acp.request<AuthenticateResponse>("authenticate", { methodId: "missing-auth-method" })
         expectErrorCode(rejected.error, -32602)
-        expect(JSON.stringify(rejected.error)).not.toContain(process.env.OPENCODE_AUTH_CONTENT ?? "not-present")
+        expect(JSON.stringify(rejected.error)).not.toContain(process.env.IMECODE_AUTH_CONTENT ?? "not-present")
       }),
     60_000,
   )

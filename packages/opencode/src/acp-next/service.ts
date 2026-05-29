@@ -92,17 +92,17 @@ export function make(input: {
   const initialize = Effect.fn("ACPNext.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
     const authMethod: AuthMethod = {
-      description: "Run `opencode auth login` in the terminal",
-      name: "Login with opencode",
+      description: "Run `imecode auth login` in the terminal",
+      name: "Login with imecode",
       id: AuthMethodID,
     }
 
     if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
       authMethod._meta = {
         "terminal-auth": {
-          command: "opencode",
+          command: "imecode",
           args: ["auth", "login"],
-          label: "OpenCode Login",
+          label: "IMECODE Login",
         },
       }
     }
@@ -128,7 +128,7 @@ export function make(input: {
       },
       authMethods: [authMethod],
       agentInfo: {
-        name: "OpenCode",
+        name: "IMECODE",
         version: InstallationVersion,
       },
     }
@@ -1024,7 +1024,7 @@ function fromUnknownError(error: unknown, service?: string): Error {
   if (isAuthRequired(error)) {
     return new ACPNextError.AuthRequiredError({ providerId: findProviderID(error) })
   }
-  return new ACPNextError.ServiceFailureError({ safeMessage: "OpenCode service failure", service })
+  return new ACPNextError.ServiceFailureError({ safeMessage: "IMECODE service failure", service })
 }
 
 function isACPNextError(error: unknown): error is Error {

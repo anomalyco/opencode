@@ -309,7 +309,7 @@ export async function pollDeviceCodeToken(
 const HTML_SUCCESS = `<!doctype html>
 <html>
   <head>
-    <title>OpenCode - xAI Authorization Successful</title>
+    <title>IMECODE - xAI Authorization Successful</title>
     <style>
       body {
         font-family:
@@ -340,7 +340,7 @@ const HTML_SUCCESS = `<!doctype html>
   <body>
     <div class="container">
       <h1>Authorization Successful</h1>
-      <p>You can close this window and return to OpenCode.</p>
+      <p>You can close this window and return to IMECODE.</p>
     </div>
     <script>
       setTimeout(() => window.close(), 2000)
@@ -351,7 +351,7 @@ const HTML_SUCCESS = `<!doctype html>
 const HTML_ERROR = (error: string) => `<!doctype html>
 <html>
   <head>
-    <title>OpenCode - xAI Authorization Failed</title>
+    <title>IMECODE - xAI Authorization Failed</title>
     <style>
       body {
         font-family:
@@ -507,7 +507,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
       // After listen() succeeds, install a permanent log-only listener so
       // that subsequent server errors (e.g. accept() failures, socket-level
       // errors) don't trip Node's default "unhandled error event = throw"
-      // behavior and crash the entire opencode process. Matches the silent-
+      // behavior and crash the entire imecode process. Matches the silent-
       // swallow behavior the Codex plugin gets from its permanent
       // `oauthServer!.on("error", reject)`.
       server.on("error", (err) => log.warn("xai oauth server error", { error: err }))

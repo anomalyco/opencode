@@ -36,7 +36,7 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
+    "imecode": "workspace:*",
     "@types/node": "catalog:",
     "@astrojs/check": "0.9.6",
     "typescript": "catalog:"

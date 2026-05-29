@@ -16,7 +16,7 @@ export function createAcpNextClient(input: Pick<CliFixture, "opencode">, env?: R
     return createAcpClient(
       yield* input.opencode.acp({
         env: {
-          OPENCODE_ACP_NEXT: "1",
+          IMECODE_ACP_NEXT: "1",
           ...env,
         },
       }),

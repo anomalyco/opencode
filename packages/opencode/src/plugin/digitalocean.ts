@@ -65,7 +65,7 @@ const HTML_CALLBACK = `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>OpenCode - DigitalOcean Authorization</title>
+    <title>IMECODE - DigitalOcean Authorization</title>
     <style>
       body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e8eef9; }
       .container { text-align: center; padding: 2rem; max-width: 32rem; }
@@ -108,7 +108,7 @@ const HTML_CALLBACK = `<!doctype html>
             return
           }
           titleEl.textContent = "Authorization Successful"
-          msgEl.textContent = "You can close this window and return to OpenCode."
+          msgEl.textContent = "You can close this window and return to IMECODE."
           setTimeout(function () { window.close() }, 2000)
         } catch (e) {
           titleEl.textContent = "Authorization Failed"
@@ -347,7 +347,7 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
             return {
               url,
               instructions:
-                "Sign in to DigitalOcean in your browser. OpenCode will use your DigitalOcean API token directly for inference and load your Inference Routers. Re-run /connect to refresh routers later.",
+                "Sign in to DigitalOcean in your browser. IMECODE will use your DigitalOcean API token directly for inference and load your Inference Routers. Re-run /connect to refresh routers later.",
               method: "auto" as const,
               async callback() {
                 try {

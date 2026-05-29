@@ -156,7 +156,7 @@ Recherchez des fichiers à l'aide de modèles globaux tels que `**/*.js` ou `src
 Interagissez avec vos serveurs LSP configurés pour obtenir des fonctionnalités d'intelligence du code telles que des définitions, des références, des informations de survol et une hiérarchie d'appels.
 
 :::note
-Cet outil n'est disponible que lorsque `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (ou `OPENCODE_EXPERIMENTAL=true`).
+Cet outil n'est disponible que lorsque `IMECODE_EXPERIMENTAL_LSP_TOOL=true` (ou `IMECODE_EXPERIMENTAL=true`).
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ Permet au LLM de récupérer et de lire des pages Web. Utile pour rechercher de 
 Recherchez des informations sur le Web.
 
 :::note
-Cet outil n'est disponible que lors de l'utilisation du fournisseur OpenCode ou lorsque la variable d'environnement `OPENCODE_ENABLE_EXA` est définie sur une valeur véridique (par exemple, `true` ou `1`).
+Cet outil n'est disponible que lors de l'utilisation du fournisseur OpenCode ou lorsque la variable d'environnement `IMECODE_ENABLE_EXA` est définie sur une valeur véridique (par exemple, `true` ou `1`).
 
 À activer lors du lancement de OpenCode :
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

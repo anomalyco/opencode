@@ -18,7 +18,7 @@ describe("opencode acp-next prompt content subprocess", () => {
         yield* Effect.promise(() => writeFile(path.join(home, "README.md"), "# ACP content smoke\n"))
         const acp = yield* createAcpNextClient(
           { opencode },
-          { OPENCODE_CONFIG_CONTENT: JSON.stringify(promptContentConfig(llm.url)) },
+          { IMECODE_CONFIG_CONTENT: JSON.stringify(promptContentConfig(llm.url)) },
         )
         yield* initialize(acp)
         const session = yield* newSession(acp, home)

@@ -1,5 +1,5 @@
 // Temporary V2 bridge: core events are the publish path, but the rest of
-// opencode and the HTTP event stream still expect legacy bus/sync payloads.
+// imecode and the HTTP event stream still expect legacy bus/sync payloads.
 // This layer goes away once consumers subscribe to core EventV2 directly.
 import { Bus as ProjectBus } from "@/bus"
 import { GlobalBus } from "@/bus/global"

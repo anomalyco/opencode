@@ -62,10 +62,10 @@ OpenCode デスクトップアプリを使いつつ、サーバーは WSL で動
 環境によって `localhost` が使えない場合は、WSL 側で `hostname -I` を実行して IP アドレスを確認し、`http://<wsl-ip>:4096` に接続してください。
 :::
 :::caution
-`--hostname 0.0.0.0` を使う場合は、`OPENCODE_SERVER_PASSWORD` を設定してサーバーを保護してください。
+`--hostname 0.0.0.0` を使う場合は、`IMECODE_SERVER_PASSWORD` を設定してサーバーを保護してください。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+IMECODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
 :::

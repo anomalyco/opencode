@@ -3,12 +3,12 @@ import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import * as fs from "node:fs/promises"
 
-const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const IMECODE_SERVER_DIST = "../opencode/dist/node"
 
 const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
+  const raw = process.env.IMECODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
-  if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
+  if (process.env.IMECODE_CHANNEL === "latest") return "prod"
   return "dev"
 })()
 
@@ -34,7 +34,7 @@ const sentry =
 export default defineConfig({
   main: {
     define: {
-      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.IMECODE_CHANNEL": JSON.stringify(channel),
     },
     build: {
       rollupOptions: {
@@ -54,15 +54,15 @@ export default defineConfig({
         name: "opencode:virtual-server-module",
         enforce: "pre",
         resolveId(id) {
-          if (id === "virtual:opencode-server") return this.resolve(`${OPENCODE_SERVER_DIST}/node.js`)
+          if (id === "virtual:opencode-server") return this.resolve(`${IMECODE_SERVER_DIST}/node.js`)
         },
       },
       {
         name: "opencode:copy-server-assets",
         async writeBundle() {
-          for (const l of await fs.readdir(OPENCODE_SERVER_DIST)) {
+          for (const l of await fs.readdir(IMECODE_SERVER_DIST)) {
             if (!l.endsWith(".wasm")) continue
-            await fs.writeFile(`./out/main/chunks/${l}`, await fs.readFile(`${OPENCODE_SERVER_DIST}/${l}`))
+            await fs.writeFile(`./out/main/chunks/${l}`, await fs.readFile(`${IMECODE_SERVER_DIST}/${l}`))
           }
         },
       },

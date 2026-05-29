@@ -156,7 +156,7 @@ description: 管理 LLM 可以使用的工具。
 与已配置的 LSP 服务器交互，获取代码智能功能，如定义跳转、引用查找、悬停信息和调用层次结构。
 
 :::note
-该工具仅在设置 `OPENCODE_EXPERIMENTAL_LSP_TOOL=true`（或 `OPENCODE_EXPERIMENTAL=true`）时可用。
+该工具仅在设置 `IMECODE_EXPERIMENTAL_LSP_TOOL=true`（或 `IMECODE_EXPERIMENTAL=true`）时可用。
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ description: 管理 LLM 可以使用的工具。
 在网络上搜索信息。
 
 :::note
-该工具仅在使用 OpenCode 提供商时，或当 `OPENCODE_ENABLE_EXA` 环境变量设置为任意真值（例如 `true` 或 `1`）时可用。
+该工具仅在使用 OpenCode 提供商时，或当 `IMECODE_ENABLE_EXA` 环境变量设置为任意真值（例如 `true` 或 `1`）时可用。
 
 在启动 OpenCode 时启用：
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

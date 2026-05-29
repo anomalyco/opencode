@@ -13,7 +13,7 @@ const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ dire
 
 describe("OpencodePlugin", () => {
   it.effect("uses a public key and disables paid models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ IMECODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -34,7 +34,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("keeps free models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ IMECODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -55,7 +55,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("treats output-only cost as free without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ IMECODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -75,8 +75,8 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("uses OPENCODE_API_KEY as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: "secret" }, () =>
+  it.effect("uses IMECODE_API_KEY as credentials", () =>
+    withEnv({ IMECODE_API_KEY: "secret" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -97,14 +97,14 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured provider env vars as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
+    withEnv({ IMECODE_API_KEY: undefined, CUSTOM_IMECODE_API_KEY: "secret" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
         const load = yield* catalog.loader()
         yield* load((catalog) => {
-          const item = provider("opencode", { env: ["CUSTOM_OPENCODE_API_KEY"] })
+          const item = provider("opencode", { env: ["CUSTOM_IMECODE_API_KEY"] })
           catalog.provider.update(item.id, (draft) => {
             draft.env = [...item.env]
           })
@@ -120,7 +120,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured apiKey as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ IMECODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -152,7 +152,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses auth-enabled providers as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ IMECODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -175,7 +175,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("ignores non-opencode providers and models", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ IMECODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service

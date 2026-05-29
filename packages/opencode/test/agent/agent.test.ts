@@ -594,7 +594,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const skillDir = path.join(test.directory, ".opencode", "skill", "perm-skill")
+      const skillDir = path.join(test.directory, ".imecode", "skill", "perm-skill")
       yield* Effect.promise(() =>
         Bun.write(
           path.join(skillDir, "SKILL.md"),
@@ -608,11 +608,11 @@ description: Permission skill.
         ),
       )
 
-      const home = process.env.OPENCODE_TEST_HOME
-      process.env.OPENCODE_TEST_HOME = test.directory
+      const home = process.env.IMECODE_TEST_HOME
+      process.env.IMECODE_TEST_HOME = test.directory
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
-          process.env.OPENCODE_TEST_HOME = home
+          process.env.IMECODE_TEST_HOME = home
         }),
       )
 

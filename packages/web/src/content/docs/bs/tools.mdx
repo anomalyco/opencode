@@ -156,7 +156,7 @@ Trazi datoteke koristeci glob obrasce kao `**/*.js` ili `src/**/*.ts`. Vraca put
 Komunicira sa konfigurisanim LSP serverima za funkcije inteligencije koda kao definicije, reference, hover info i hijerarhija poziva.
 
 :::note
-Ovaj alat je dostupan samo kada je `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (ili `OPENCODE_EXPERIMENTAL=true`).
+Ovaj alat je dostupan samo kada je `IMECODE_EXPERIMENTAL_LSP_TOOL=true` (ili `IMECODE_EXPERIMENTAL=true`).
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ Omogucava LLM-u da preuzima i cita web stranice. Korisno za dokumentaciju i onli
 Pretrazuje web za informacije.
 
 :::note
-Ovaj alat je dostupan samo uz OpenCode provajdera ili kada je varijabla `OPENCODE_ENABLE_EXA` postavljena na truthy vrijednost (npr. `true` ili `1`).
+Ovaj alat je dostupan samo uz OpenCode provajdera ili kada je varijabla `IMECODE_ENABLE_EXA` postavljena na truthy vrijednost (npr. `true` ili `1`).
 
 Da ukljucite pri pokretanju OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

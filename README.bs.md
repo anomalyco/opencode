@@ -86,14 +86,14 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 Instalacijska skripta koristi sljedeći redoslijed prioriteta za putanju instalacije:
 
-1. `$OPENCODE_INSTALL_DIR` - Prilagođeni instalacijski direktorij
+1. `$IMECODE_INSTALL_DIR` - Prilagođeni instalacijski direktorij
 2. `$XDG_BIN_DIR` - Putanja usklađena sa XDG Base Directory specifikacijom
 3. `$HOME/bin` - Standardni korisnički bin direktorij (ako postoji ili se može kreirati)
 4. `$HOME/.opencode/bin` - Podrazumijevana rezervna lokacija
 
 ```bash
 # Primjeri
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+IMECODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 

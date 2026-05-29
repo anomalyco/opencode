@@ -44,10 +44,10 @@ Las fuentes de configuración se cargan en este orden (las fuentes posteriores a
 
 1. **Configuración remota** (de `.well-known/opencode`): valores predeterminados de la organización
 2. **Configuración global** (`~/.config/opencode/opencode.json`) - preferencias del usuario
-3. **Configuración personalizada** (`OPENCODE_CONFIG` env var): anulaciones personalizadas
+3. **Configuración personalizada** (`IMECODE_CONFIG` env var): anulaciones personalizadas
 4. **Configuración del proyecto** (`opencode.json` en el proyecto): configuración específica del proyecto
 5. Directorios **`.opencode`** - agentes, comandos, complementos
-6. **Configuración en línea** (`OPENCODE_CONFIG_CONTENT` env var): anulaciones del tiempo de ejecución
+6. **Configuración en línea** (`IMECODE_CONFIG_CONTENT` env var): anulaciones del tiempo de ejecución
 
 Esto significa que las configuraciones del proyecto pueden anular los valores predeterminados globales y las configuraciones globales pueden anular los valores predeterminados de la organización remota.
 
@@ -117,10 +117,10 @@ Esto también es seguro para registrarlo en Git y utiliza el mismo esquema que e
 
 ### Ruta personalizada
 
-Especifique una ruta de archivo de configuración personalizada utilizando la variable de entorno `OPENCODE_CONFIG`.
+Especifique una ruta de archivo de configuración personalizada utilizando la variable de entorno `IMECODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,13 +130,13 @@ La configuración personalizada se carga entre las configuraciones globales y de
 
 ### Directorio personalizado
 
-Especifique un directorio de configuración personalizado usando `OPENCODE_CONFIG_DIR`
+Especifique un directorio de configuración personalizado usando `IMECODE_CONFIG_DIR`
 variable de entorno. En este directorio se buscarán agentes, comandos,
 modos y complementos como el directorio estándar `.opencode`, y debería
 Sigue la misma estructura.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -639,7 +639,7 @@ Utilice `{env:VARIABLE_NAME}` para sustituir variables de entorno:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

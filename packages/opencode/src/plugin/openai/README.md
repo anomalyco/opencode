@@ -1,6 +1,6 @@
 # OpenAI Responses WebSocket
 
-Enabled by default on `local`, `dev`, and `beta`. On `latest` and `prod`, set `OPENCODE_EXPERIMENTAL_WEBSOCKETS=true`.
+Enabled by default on `local`, `dev`, and `beta`. On `latest` and `prod`, set `IMECODE_EXPERIMENTAL_WEBSOCKETS=true`.
 
 ## Flow
 

@@ -77,7 +77,7 @@ export const layer: Layer.Layer<
 
     const relative = Effect.fnUntraced(function* (instruction: string) {
       const ctx = yield* InstanceState.context
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      if (!Flag.IMECODE_DISABLE_PROJECT_CONFIG) {
         return yield* fs
           .globUp(instruction, ctx.directory, ctx.worktree)
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
@@ -119,7 +119,7 @@ export const layer: Layer.Layer<
       }
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      if (!Flag.IMECODE_DISABLE_PROJECT_CONFIG) {
         for (const file of instructionFiles) {
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)

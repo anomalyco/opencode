@@ -59,8 +59,8 @@ Options:
   -c, --continue    continue the last session                                              [boolean]
   -s, --session     session id to continue                                                  [string]
       --fork        fork the session when continuing (use with --continue or --session)    [boolean]
-  -p, --password    basic auth password (defaults to OPENCODE_SERVER_PASSWORD)              [string]
-  -u, --username    basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')[string]"
+  -p, --password    basic auth password (defaults to IMECODE_SERVER_PASSWORD)              [string]
+  -u, --username    basic auth username (defaults to IMECODE_SERVER_USERNAME or 'opencode')[string]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode run --help 1`] = `
@@ -92,9 +92,9 @@ Options:
                                       provided)                                             [string]
       --attach                        attach to a running opencode server (e.g.,
                                       http://localhost:4096)                                [string]
-  -p, --password                      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)
+  -p, --password                      basic auth password (defaults to IMECODE_SERVER_PASSWORD)
                                                                                             [string]
-  -u, --username                      basic auth username (defaults to OPENCODE_SERVER_USERNAME or
+  -u, --username                      basic auth username (defaults to IMECODE_SERVER_USERNAME or
                                       'opencode')                                           [string]
       --dir                           directory to run in, path on remote server if attaching
                                                                                             [string]

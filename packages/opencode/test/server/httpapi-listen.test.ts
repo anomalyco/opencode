@@ -11,38 +11,38 @@ import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 void Log.init({ print: false })
 
 const original = {
-  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
-  envPassword: process.env.OPENCODE_SERVER_PASSWORD,
-  envUsername: process.env.OPENCODE_SERVER_USERNAME,
+  IMECODE_SERVER_PASSWORD: Flag.IMECODE_SERVER_PASSWORD,
+  IMECODE_SERVER_USERNAME: Flag.IMECODE_SERVER_USERNAME,
+  envPassword: process.env.IMECODE_SERVER_PASSWORD,
+  envUsername: process.env.IMECODE_SERVER_USERNAME,
 }
 const auth = { username: "opencode", password: "listen-secret" }
 const testPty = process.platform === "win32" ? test.skip : test
 
 afterEach(async () => {
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  if (original.envPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
-  else process.env.OPENCODE_SERVER_PASSWORD = original.envPassword
-  if (original.envUsername === undefined) delete process.env.OPENCODE_SERVER_USERNAME
-  else process.env.OPENCODE_SERVER_USERNAME = original.envUsername
+  Flag.IMECODE_SERVER_PASSWORD = original.IMECODE_SERVER_PASSWORD
+  Flag.IMECODE_SERVER_USERNAME = original.IMECODE_SERVER_USERNAME
+  if (original.envPassword === undefined) delete process.env.IMECODE_SERVER_PASSWORD
+  else process.env.IMECODE_SERVER_PASSWORD = original.envPassword
+  if (original.envUsername === undefined) delete process.env.IMECODE_SERVER_USERNAME
+  else process.env.IMECODE_SERVER_USERNAME = original.envUsername
   await disposeAllInstances()
   await resetDatabase()
 })
 
 async function startListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = auth.password
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  process.env.OPENCODE_SERVER_PASSWORD = auth.password
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
+  Flag.IMECODE_SERVER_PASSWORD = auth.password
+  Flag.IMECODE_SERVER_USERNAME = auth.username
+  process.env.IMECODE_SERVER_PASSWORD = auth.password
+  process.env.IMECODE_SERVER_USERNAME = auth.username
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 
 async function startNoAuthListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = undefined
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  delete process.env.OPENCODE_SERVER_PASSWORD
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
+  Flag.IMECODE_SERVER_PASSWORD = undefined
+  Flag.IMECODE_SERVER_USERNAME = auth.username
+  delete process.env.IMECODE_SERVER_PASSWORD
+  process.env.IMECODE_SERVER_USERNAME = auth.username
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 

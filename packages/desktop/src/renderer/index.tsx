@@ -45,7 +45,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
         (i) =>
           i.name !== "Breadcrumbs" &&
           !(
-            import.meta.env.OPENCODE_CHANNEL === "prod" &&
+            import.meta.env.IMECODE_CHANNEL === "prod" &&
             (i.name === "GlobalHandlers" || i.name === "BrowserApiErrors")
           ),
       )
@@ -59,9 +59,9 @@ const deepLinkEvent = "opencode:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
-  window.__OPENCODE__ ??= {}
-  const pending = window.__OPENCODE__.deepLinks ?? []
-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.__IMECODE__ ??= {}
+  const pending = window.__IMECODE__.deepLinks ?? []
+  window.__IMECODE__.deepLinks = [...pending, ...urls]
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 

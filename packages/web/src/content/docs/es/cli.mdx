@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuar la última sesión                                                                |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de sesión para continuar                                                               |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Bifurcar la sesión al continuar (usar con `--continue` o `--session`)                     |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `OPENCODE_SERVER_PASSWORD`)           |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `OPENCODE_SERVER_USERNAME` u `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `IMECODE_SERVER_PASSWORD`)           |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `IMECODE_SERVER_USERNAME` u `opencode`) |
 
 ---
 
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |       | Formato: predeterminado (formateado) o json (eventos JSON sin formato)                    |
 | <nobr><code>{"--title"}</code></nobr>    |       | Título de la sesión (utiliza un mensaje truncado si no se proporciona ningún valor)       |
 | <nobr><code>{"--attach"}</code></nobr>   |       | Adjuntar a un servidor opencode en ejecución (por ejemplo, http://localhost:4096)         |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `OPENCODE_SERVER_PASSWORD`)           |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `OPENCODE_SERVER_USERNAME` u `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `IMECODE_SERVER_PASSWORD`)           |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `IMECODE_SERVER_USERNAME` u `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |       | Directorio de ejecución, o ruta en el servidor remoto al adjuntar                         |
 | <nobr><code>{"--variant"}</code></nobr>  |       | Variante del modelo (esfuerzo de razonamiento específico del proveedor)                   |
 | <nobr><code>{"--thinking"}</code></nobr> |       | Mostrar bloques de pensamiento                                                            |
@@ -369,7 +369,7 @@ Inicie un servidor OpenCode sin cabeza para acceso API. Consulte los [documentos
 opencode serve
 ```
 
-Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad opencode sin la interfaz TUI. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
+Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad opencode sin la interfaz TUI. Configure `IMECODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
 
 #### Opciones
 
@@ -465,7 +465,7 @@ Inicie un servidor OpenCode sin cabeza con una interfaz web.
 opencode web
 ```
 
-Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
+Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `IMECODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
 
 #### Opciones
 
@@ -564,29 +564,29 @@ OpenCode se puede configurar mediante variables de entorno.
 
 | Variable                              | Type     | Description                                                                     |
 | ------------------------------------- | -------- | ------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | booleano | Compartir sesiones automáticamente                                              |
-| `OPENCODE_GIT_BASH_PATH`              | cadena   | Ruta al ejecutable de Git Bash en Windows                                       |
-| `OPENCODE_CONFIG`                     | cadena   | Ruta al archivo de configuración                                                |
-| `OPENCODE_CONFIG_DIR`                 | cadena   | Ruta al directorio de configuración                                             |
-| `OPENCODE_CONFIG_CONTENT`             | cadena   | Contenido de configuración json en línea                                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | booleano | Deshabilitar las comprobaciones automáticas de actualizaciones                  |
-| `OPENCODE_DISABLE_PRUNE`              | booleano | Deshabilitar la poda de datos antiguos                                          |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | booleano | Deshabilitar las actualizaciones automáticas de títulos de terminal             |
-| `OPENCODE_PERMISSION`                 | cadena   | Configuración de permisos json incorporados                                     |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | booleano | Deshabilitar complementos predeterminados                                       |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | booleano | Deshabilitar las descargas automáticas del servidor LSP                         |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | booleano | Habilitar modelos experimentales                                                |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | booleano | Deshabilitar la compactación automática de contexto                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | booleano | Deshabilitar la lectura desde `.claude` (mensaje + habilidades)                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booleano | Desactivar lectura `~/.claude/CLAUDE.md`                                        |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booleano | Deshabilitar la carga `.claude/skills`                                          |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | booleano | Deshabilitar la recuperación de modelos desde fuentes remotas                   |
-| `OPENCODE_FAKE_VCS`                   | cadena   | Proveedor de VCS falso para fines de prueba                                     |
-| `OPENCODE_CLIENT`                     | cadena   | Identificador de cliente (por defecto `cli`)                                    |
-| `OPENCODE_ENABLE_EXA`                 | booleano | Habilitar las herramientas de búsqueda web de Exa                               |
-| `OPENCODE_SERVER_PASSWORD`            | cadena   | Habilite la autenticación básica para `serve`/`web`                             |
-| `OPENCODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
-| `OPENCODE_MODELS_URL`                 | cadena   | URL personalizada para buscar la configuración de modelos                       |
+| `IMECODE_AUTO_SHARE`                 | booleano | Compartir sesiones automáticamente                                              |
+| `IMECODE_GIT_BASH_PATH`              | cadena   | Ruta al ejecutable de Git Bash en Windows                                       |
+| `IMECODE_CONFIG`                     | cadena   | Ruta al archivo de configuración                                                |
+| `IMECODE_CONFIG_DIR`                 | cadena   | Ruta al directorio de configuración                                             |
+| `IMECODE_CONFIG_CONTENT`             | cadena   | Contenido de configuración json en línea                                        |
+| `IMECODE_DISABLE_AUTOUPDATE`         | booleano | Deshabilitar las comprobaciones automáticas de actualizaciones                  |
+| `IMECODE_DISABLE_PRUNE`              | booleano | Deshabilitar la poda de datos antiguos                                          |
+| `IMECODE_DISABLE_TERMINAL_TITLE`     | booleano | Deshabilitar las actualizaciones automáticas de títulos de terminal             |
+| `IMECODE_PERMISSION`                 | cadena   | Configuración de permisos json incorporados                                     |
+| `IMECODE_DISABLE_DEFAULT_PLUGINS`    | booleano | Deshabilitar complementos predeterminados                                       |
+| `IMECODE_DISABLE_LSP_DOWNLOAD`       | booleano | Deshabilitar las descargas automáticas del servidor LSP                         |
+| `IMECODE_ENABLE_EXPERIMENTAL_MODELS` | booleano | Habilitar modelos experimentales                                                |
+| `IMECODE_DISABLE_AUTOCOMPACT`        | booleano | Deshabilitar la compactación automática de contexto                             |
+| `IMECODE_DISABLE_CLAUDE_CODE`        | booleano | Deshabilitar la lectura desde `.claude` (mensaje + habilidades)                 |
+| `IMECODE_DISABLE_CLAUDE_CODE_PROMPT` | booleano | Desactivar lectura `~/.claude/CLAUDE.md`                                        |
+| `IMECODE_DISABLE_CLAUDE_CODE_SKILLS` | booleano | Deshabilitar la carga `.claude/skills`                                          |
+| `IMECODE_DISABLE_MODELS_FETCH`       | booleano | Deshabilitar la recuperación de modelos desde fuentes remotas                   |
+| `IMECODE_FAKE_VCS`                   | cadena   | Proveedor de VCS falso para fines de prueba                                     |
+| `IMECODE_CLIENT`                     | cadena   | Identificador de cliente (por defecto `cli`)                                    |
+| `IMECODE_ENABLE_EXA`                 | booleano | Habilitar las herramientas de búsqueda web de Exa                               |
+| `IMECODE_SERVER_PASSWORD`            | cadena   | Habilite la autenticación básica para `serve`/`web`                             |
+| `IMECODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
+| `IMECODE_MODELS_URL`                 | cadena   | URL personalizada para buscar la configuración de modelos                       |
 
 ---
 
@@ -596,21 +596,21 @@ Estas variables de entorno habilitan funciones experimentales que pueden cambiar
 
 | Variable                                        | Type     | Description                                                |
 | ----------------------------------------------- | -------- | ---------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | booleano | Habilitar funciones experimentales de la bandera global    |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booleano | Habilitar descubrimiento de íconos                         |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booleano | Deshabilitar copia al seleccionar en TUI                   |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | número   | Tiempo de espera predeterminado para comandos bash en ms   |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | número   | Tokens de salida máximos para respuestas LLM               |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | booleano | Habilite el observador de archivos para todo el directorio |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | booleano | Habilitar el formateador oxfmt                             |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | booleano | Habilitar herramienta experimental LSP                     |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booleano | Deshabilitar el observador de archivos                     |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | booleano | Habilitar funciones experimentales de Exa                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booleano | Habilitar Habilitar TY LSP para archivos python            |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booleano | Habilitar modo de plan                                     |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booleano | Habilitar tareas de subagentes en segundo plano            |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | booleano | Habilitar sistema de eventos experimental                  |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | booleano | Habilitar ruta nativa de solicitud LLM                     |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | booleano | Habilitar ejecución paralela de búsqueda web               |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | booleano | Habilitar subagente Scout                                  |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | booleano | Habilitar soporte de espacios de trabajo                   |
+| `IMECODE_EXPERIMENTAL`                         | booleano | Habilitar funciones experimentales de la bandera global    |
+| `IMECODE_EXPERIMENTAL_ICON_DISCOVERY`          | booleano | Habilitar descubrimiento de íconos                         |
+| `IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booleano | Deshabilitar copia al seleccionar en TUI                   |
+| `IMECODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | número   | Tiempo de espera predeterminado para comandos bash en ms   |
+| `IMECODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | número   | Tokens de salida máximos para respuestas LLM               |
+| `IMECODE_EXPERIMENTAL_FILEWATCHER`             | booleano | Habilite el observador de archivos para todo el directorio |
+| `IMECODE_EXPERIMENTAL_OXFMT`                   | booleano | Habilitar el formateador oxfmt                             |
+| `IMECODE_EXPERIMENTAL_LSP_TOOL`                | booleano | Habilitar herramienta experimental LSP                     |
+| `IMECODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booleano | Deshabilitar el observador de archivos                     |
+| `IMECODE_EXPERIMENTAL_EXA`                     | booleano | Habilitar funciones experimentales de Exa                  |
+| `IMECODE_EXPERIMENTAL_LSP_TY`                  | booleano | Habilitar Habilitar TY LSP para archivos python            |
+| `IMECODE_EXPERIMENTAL_PLAN_MODE`               | booleano | Habilitar modo de plan                                     |
+| `IMECODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booleano | Habilitar tareas de subagentes en segundo plano            |
+| `IMECODE_EXPERIMENTAL_EVENT_SYSTEM`            | booleano | Habilitar sistema de eventos experimental                  |
+| `IMECODE_EXPERIMENTAL_NATIVE_LLM`              | booleano | Habilitar ruta nativa de solicitud LLM                     |
+| `IMECODE_EXPERIMENTAL_PARALLEL`                | booleano | Habilitar ejecución paralela de búsqueda web               |
+| `IMECODE_EXPERIMENTAL_SCOUT`                   | booleano | Habilitar subagente Scout                                  |
+| `IMECODE_EXPERIMENTAL_WORKSPACES`              | booleano | Habilitar soporte de espacios de trabajo                   |

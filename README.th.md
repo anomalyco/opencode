@@ -86,14 +86,14 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 สคริปต์การติดตั้งจะใช้ลำดับความสำคัญตามเส้นทางการติดตั้ง:
 
-1. `$OPENCODE_INSTALL_DIR` - ไดเรกทอรีการติดตั้งที่กำหนดเอง
+1. `$IMECODE_INSTALL_DIR` - ไดเรกทอรีการติดตั้งที่กำหนดเอง
 2. `$XDG_BIN_DIR` - เส้นทางที่สอดคล้องกับ XDG Base Directory Specification
 3. `$HOME/bin` - ไดเรกทอรีไบนารีผู้ใช้มาตรฐาน (หากมีอยู่หรือสามารถสร้างได้)
 4. `$HOME/.opencode/bin` - ค่าสำรองเริ่มต้น
 
 ```bash
 # ตัวอย่าง
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+IMECODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 

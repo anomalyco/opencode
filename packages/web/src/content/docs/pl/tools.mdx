@@ -156,7 +156,7 @@ Szukaj plików przy użyciu wzorców glob, takich jak `**/*.js` lub `src/**/*.ts
 Interakcja ze skonfigurowanymi serwerami LSP w celu uzyskania funkcji analizy kodu, takich jak definicje, referencje, podpowiedzi (hover) i hierarchia wywołań.
 
 :::note
-To narzędzie jest dostępne tylko wtedy, gdy `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (lub `OPENCODE_EXPERIMENTAL=true`).
+To narzędzie jest dostępne tylko wtedy, gdy `IMECODE_EXPERIMENTAL_LSP_TOOL=true` (lub `IMECODE_EXPERIMENTAL=true`).
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ Umożliwia LLM pobieranie i odczytywanie stron internetowych. Przydatne do wyszu
 Wyszukaj informacje w Internecie.
 
 :::note
-To narzędzie jest dostępne tylko w przypadku korzystania z dostawcy OpenCode lub gdy zmienna środowiskowa `OPENCODE_ENABLE_EXA` jest ustawiona na dowolną wartość prawdziwą (np. `true` lub `1`).
+To narzędzie jest dostępne tylko w przypadku korzystania z dostawcy OpenCode lub gdy zmienna środowiskowa `IMECODE_ENABLE_EXA` jest ustawiona na dowolną wartość prawdziwą (np. `true` lub `1`).
 
 Aby włączyć przy uruchamianiu OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

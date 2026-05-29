@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c`    | متابعة آخر جلسة                                                                   |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`    | معرّف الجلسة للمتابعة                                                             |
 | <nobr><code>{"--fork"}</code></nobr>     |         | تفريع الجلسة عند المتابعة (استخدمه مع `--continue` أو `--session`)                |
-| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_PASSWORD`)                |
-| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_USERNAME` أو `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `IMECODE_SERVER_PASSWORD`)                |
+| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `IMECODE_SERVER_USERNAME` أو `opencode`) |
 
 ---
 
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |         | التنسيق: default (منسق) أو json (أحداث JSON خام)                                  |
 | <nobr><code>{"--title"}</code></nobr>    |         | عنوان للجلسة (يستخدم موجهًا مقتطعًا إن لم تُحدَّد قيمة)                           |
 | <nobr><code>{"--attach"}</code></nobr>   |         | الإرفاق بخادم opencode قيد التشغيل (مثل http://localhost:4096)                    |
-| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_PASSWORD`)                |
-| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_USERNAME` أو `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `IMECODE_SERVER_PASSWORD`)                |
+| <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `IMECODE_SERVER_USERNAME` أو `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |         | دليل التشغيل، أو المسار على الخادم البعيد عند الإرفاق                             |
 | <nobr><code>{"--variant"}</code></nobr>  |         | متغير النموذج (جهد الاستدلال الخاص بالمزود)                                       |
 | <nobr><code>{"--thinking"}</code></nobr> |         | عرض كتل التفكير                                                                   |
@@ -369,7 +369,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 opencode serve
 ```
 
-يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف opencode دون واجهة TUI. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف opencode دون واجهة TUI. اضبط `IMECODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
 
 #### الرايات
 
@@ -465,7 +465,7 @@ opencode import https://opncd.ai/s/abc123
 opencode web
 ```
 
-يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `IMECODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
 
 #### الرايات
 
@@ -564,29 +564,29 @@ opencode upgrade v0.1.48
 
 | المتغير                               | النوع   | الوصف                                                     |
 | ------------------------------------- | ------- | --------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
-| `OPENCODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
-| `OPENCODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
-| `OPENCODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
-| `OPENCODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
-| `OPENCODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
-| `OPENCODE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
-| `OPENCODE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
-| `OPENCODE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
-| `OPENCODE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
-| `OPENCODE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
+| `IMECODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
+| `IMECODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
+| `IMECODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
+| `IMECODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
+| `IMECODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
+| `IMECODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
+| `IMECODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
+| `IMECODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
+| `IMECODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
+| `IMECODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
+| `IMECODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
+| `IMECODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
+| `IMECODE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
+| `IMECODE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
+| `IMECODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
+| `IMECODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
+| `IMECODE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
+| `IMECODE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
+| `IMECODE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
+| `IMECODE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
+| `IMECODE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
+| `IMECODE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `opencode`) |
+| `IMECODE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
 
 ---
 
@@ -596,21 +596,21 @@ opencode upgrade v0.1.48
 
 | المتغير                                         | النوع   | الوصف                                        |
 | ----------------------------------------------- | ------- | -------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | تفعيل الميزات التجريبية الخاضعة للعلم الشامل |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                       |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI               |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية  |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل             |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                           |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                       |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                          |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | تمكين TY LSP لملفات python                   |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                              |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | تفعيل مهام subagent في الخلفية               |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | تفعيل نظام الأحداث التجريبي                  |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | تفعيل مسار طلبات LLM الأصلي                  |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | تفعيل تنفيذ بحث الويب بالتوازي               |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | تفعيل Scout subagent                         |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | تفعيل دعم مساحات العمل                       |
+| `IMECODE_EXPERIMENTAL`                         | boolean | تفعيل الميزات التجريبية الخاضعة للعلم الشامل |
+| `IMECODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                       |
+| `IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI               |
+| `IMECODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية  |
+| `IMECODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM     |
+| `IMECODE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل             |
+| `IMECODE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                           |
+| `IMECODE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                       |
+| `IMECODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                          |
+| `IMECODE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                    |
+| `IMECODE_EXPERIMENTAL_LSP_TY`                  | boolean | تمكين TY LSP لملفات python                   |
+| `IMECODE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                              |
+| `IMECODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | تفعيل مهام subagent في الخلفية               |
+| `IMECODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | تفعيل نظام الأحداث التجريبي                  |
+| `IMECODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | تفعيل مسار طلبات LLM الأصلي                  |
+| `IMECODE_EXPERIMENTAL_PARALLEL`                | boolean | تفعيل تنفيذ بحث الويب بالتوازي               |
+| `IMECODE_EXPERIMENTAL_SCOUT`                   | boolean | تفعيل Scout subagent                         |
+| `IMECODE_EXPERIMENTAL_WORKSPACES`              | boolean | تفعيل دعم مساحات العمل                       |

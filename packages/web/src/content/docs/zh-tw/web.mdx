@@ -18,7 +18,7 @@ opencode web
 這會在 `127.0.0.1` 上啟動一個本地伺服器，使用隨機可用連接埠，並自動在預設瀏覽器中開啟 OpenCode。
 
 :::caution
-如果未設定 `OPENCODE_SERVER_PASSWORD`，伺服器將沒有安全保護。本地使用沒有問題，但在網路存取時應當設定密碼。
+如果未設定 `IMECODE_SERVER_PASSWORD`，伺服器將沒有安全保護。本地使用沒有問題，但在網路存取時應當設定密碼。
 :::
 
 :::tip[Windows 使用者]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### 身分驗證
 
-要保護伺服器存取，可以透過 `OPENCODE_SERVER_PASSWORD` 環境變數設定密碼：
+要保護伺服器存取，可以透過 `IMECODE_SERVER_PASSWORD` 環境變數設定密碼：
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+IMECODE_SERVER_PASSWORD=secret opencode web
 ```
 
-使用者名稱預設為 `opencode`，可以透過 `OPENCODE_SERVER_USERNAME` 進行更改。
+使用者名稱預設為 `opencode`，可以透過 `IMECODE_SERVER_USERNAME` 進行更改。
 
 ---
 

@@ -44,10 +44,10 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 1. **远程配置**（来自 `.well-known/opencode`）- 组织默认值
 2. **全局配置**（`~/.config/opencode/opencode.json`）- 用户偏好
-3. **自定义配置**（`OPENCODE_CONFIG` 环境变量）- 自定义覆盖
+3. **自定义配置**（`IMECODE_CONFIG` 环境变量）- 自定义覆盖
 4. **项目配置**（项目中的 `opencode.json`）- 项目特定设置
 5. **`.opencode` 目录** - 代理、命令、插件
-6. **内联配置**（`OPENCODE_CONFIG_CONTENT` 环境变量）- 运行时覆盖
+6. **内联配置**（`IMECODE_CONFIG_CONTENT` 环境变量）- 运行时覆盖
 
 这意味着项目配置可以覆盖全局默认值，全局配置可以覆盖远程组织默认值。
 
@@ -117,10 +117,10 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ### 自定义路径
 
-使用 `OPENCODE_CONFIG` 环境变量指定自定义配置文件路径。
+使用 `IMECODE_CONFIG` 环境变量指定自定义配置文件路径。
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,10 +130,10 @@ opencode run "Hello world"
 
 ### 自定义目录
 
-使用 `OPENCODE_CONFIG_DIR` 环境变量指定自定义配置目录。该目录会像标准 `.opencode` 目录一样被搜索代理、命令、模式和插件，并且应遵循相同的结构。
+使用 `IMECODE_CONFIG_DIR` 环境变量指定自定义配置目录。该目录会像标准 `.opencode` 目录一样被搜索代理、命令、模式和插件，并且应遵循相同的结构。
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -637,7 +637,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

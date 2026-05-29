@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavi posljednju sesiju                                                                     |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                         |
 | <nobr><code>{"--fork"}</code></nobr>     |        | Forkuj sesiju prilikom nastavka (koristite sa `--continue` ili `--session`)                   |
-| <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_PASSWORD`)                       |
-| <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_USERNAME` ili `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `IMECODE_SERVER_PASSWORD`)                       |
+| <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `IMECODE_SERVER_USERNAME` ili `opencode`) |
 
 ---
 
@@ -349,8 +349,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |        | Format: default (formatiran) ili json (sirovi JSON događaji)                                  |
 | <nobr><code>{"--title"}</code></nobr>    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)                          |
 | <nobr><code>{"--attach"}</code></nobr>   |        | Priključite na pokrenuti OpenCode server (npr. http://localhost:4096)                         |
-| <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_PASSWORD`)                       |
-| <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_USERNAME` ili `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `IMECODE_SERVER_PASSWORD`)                       |
+| <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `IMECODE_SERVER_USERNAME` ili `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |        | Direktorij za pokretanje, ili putanja na udaljenom serveru pri spajanju                       |
 | <nobr><code>{"--variant"}</code></nobr>  |        | Varijanta modela (napor zaključivanja specifičan za provajdera)                               |
 | <nobr><code>{"--thinking"}</code></nobr> |        | Prikaži blokove razmišljanja                                                                  |
@@ -366,7 +366,7 @@ Pokrenite OpenCode headless server za API pristup. Pogledajte [server docs](/doc
 opencode serve
 ```
 
-Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti OpenCode-a bez TUI interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
+Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti OpenCode-a bez TUI interfejsa. Postavite `IMECODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
 
 #### Opcije
 
@@ -462,7 +462,7 @@ Pokrenite OpenCode headless server sa web interfejsom.
 opencode web
 ```
 
-Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode-u preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
+Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode-u preko web interfejsa. Postavite `IMECODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
 
 #### Opcije
 
@@ -561,30 +561,30 @@ OpenCode se može konfigurirati pomoću varijabli okruženja.
 
 | Varijabla                             | Tip     | Opis                                                               |
 | ------------------------------------- | ------- | ------------------------------------------------------------------ |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Automatski dijeli sesije                                           |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Putanja do Git Bash izvršne datoteke na Windows-u                  |
-| `OPENCODE_CONFIG`                     | string  | Putanja do konfiguracijskog fajla                                  |
-| `OPENCODE_TUI_CONFIG`                 | string  | Putanja do TUI konfiguracijskog fajla                              |
-| `OPENCODE_CONFIG_DIR`                 | string  | Putanja do konfiguracijskog direktorija                            |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json konfiguracijski sadržaj                                |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Onemogući automatske provjere ažuriranja                           |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Onemogući brisanje (pruning) starih podataka                       |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Onemogući automatsko ažuriranje naslova terminala                  |
-| `OPENCODE_PERMISSION`                 | string  | Inline json konfiguracija dozvola                                  |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Onemogući podrazumijevane dodatke (plugins)                        |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Onemogući automatsko preuzimanje LSP servera                       |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Omogući eksperimentalne modele                                     |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Onemogući automatsko sažimanje konteksta                           |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Onemogući čitanje iz `.claude` (prompt + vještine)                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Onemogući čitanje `~/.claude/CLAUDE.md`                            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Onemogući učitavanje `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Onemogući dohvaćanje modela iz udaljenih izvora                    |
-| `OPENCODE_FAKE_VCS`                   | string  | Lažni VCS provajder za potrebe testiranja                          |
-| `OPENCODE_CLIENT`                     | string  | Identifikator klijenta (zadano na `cli`)                           |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Omogući Exa alate za web pretraživanje                             |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Omogući osnovnu autentifikaciju za `serve`/`web`                   |
-| `OPENCODE_SERVER_USERNAME`            | string  | Poništi osnovno korisničko ime autentifikacije (zadano `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Prilagođeni URL za dohvaćanje konfiguracije modela                 |
+| `IMECODE_AUTO_SHARE`                 | boolean | Automatski dijeli sesije                                           |
+| `IMECODE_GIT_BASH_PATH`              | string  | Putanja do Git Bash izvršne datoteke na Windows-u                  |
+| `IMECODE_CONFIG`                     | string  | Putanja do konfiguracijskog fajla                                  |
+| `IMECODE_TUI_CONFIG`                 | string  | Putanja do TUI konfiguracijskog fajla                              |
+| `IMECODE_CONFIG_DIR`                 | string  | Putanja do konfiguracijskog direktorija                            |
+| `IMECODE_CONFIG_CONTENT`             | string  | Inline json konfiguracijski sadržaj                                |
+| `IMECODE_DISABLE_AUTOUPDATE`         | boolean | Onemogući automatske provjere ažuriranja                           |
+| `IMECODE_DISABLE_PRUNE`              | boolean | Onemogući brisanje (pruning) starih podataka                       |
+| `IMECODE_DISABLE_TERMINAL_TITLE`     | boolean | Onemogući automatsko ažuriranje naslova terminala                  |
+| `IMECODE_PERMISSION`                 | string  | Inline json konfiguracija dozvola                                  |
+| `IMECODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Onemogući podrazumijevane dodatke (plugins)                        |
+| `IMECODE_DISABLE_LSP_DOWNLOAD`       | boolean | Onemogući automatsko preuzimanje LSP servera                       |
+| `IMECODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Omogući eksperimentalne modele                                     |
+| `IMECODE_DISABLE_AUTOCOMPACT`        | boolean | Onemogući automatsko sažimanje konteksta                           |
+| `IMECODE_DISABLE_CLAUDE_CODE`        | boolean | Onemogući čitanje iz `.claude` (prompt + vještine)                 |
+| `IMECODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Onemogući čitanje `~/.claude/CLAUDE.md`                            |
+| `IMECODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Onemogući učitavanje `.claude/skills`                              |
+| `IMECODE_DISABLE_MODELS_FETCH`       | boolean | Onemogući dohvaćanje modela iz udaljenih izvora                    |
+| `IMECODE_FAKE_VCS`                   | string  | Lažni VCS provajder za potrebe testiranja                          |
+| `IMECODE_CLIENT`                     | string  | Identifikator klijenta (zadano na `cli`)                           |
+| `IMECODE_ENABLE_EXA`                 | boolean | Omogući Exa alate za web pretraživanje                             |
+| `IMECODE_SERVER_PASSWORD`            | string  | Omogući osnovnu autentifikaciju za `serve`/`web`                   |
+| `IMECODE_SERVER_USERNAME`            | string  | Poništi osnovno korisničko ime autentifikacije (zadano `opencode`) |
+| `IMECODE_MODELS_URL`                 | string  | Prilagođeni URL za dohvaćanje konfiguracije modela                 |
 
 ---
 
@@ -594,21 +594,21 @@ Ove varijable okruženja omogućavaju eksperimentalne karakteristike koje se mog
 
 | Varijabla                                       | Tip     | Opis                                                    |
 | ----------------------------------------------- | ------- | ------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Omogući eksperimentalne funkcije pod zbirnom zastavicom |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Omogući otkrivanje ikona                                |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Onemogući kopiranje pri odabiru u TUI                   |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Zadano vremensko ograničenje za bash naredbe u ms       |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Maksimalni izlazni tokeni za LLM odgovore               |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Omogući praćenje datoteka za cijeli direktorij          |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Omogući oxfmt formatter                                 |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Omogući eksperimentalni LSP alat                        |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Onemogući praćenje datoteka                             |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Omogući eksperimentalne Exa funkcije                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Omogući TY LSP za python datoteke                       |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Omogući Plan mod                                        |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Omogući pozadinske zadatke subagenata                   |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Omogući eksperimentalni sistem događaja                 |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Omogući nativnu putanju LLM zahtjeva                    |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Omogući paralelno izvršavanje web pretrage              |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Omogući Scout subagenta                                 |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Omogući podršku za radne prostore                       |
+| `IMECODE_EXPERIMENTAL`                         | boolean | Omogući eksperimentalne funkcije pod zbirnom zastavicom |
+| `IMECODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Omogući otkrivanje ikona                                |
+| `IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Onemogući kopiranje pri odabiru u TUI                   |
+| `IMECODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Zadano vremensko ograničenje za bash naredbe u ms       |
+| `IMECODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Maksimalni izlazni tokeni za LLM odgovore               |
+| `IMECODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Omogući praćenje datoteka za cijeli direktorij          |
+| `IMECODE_EXPERIMENTAL_OXFMT`                   | boolean | Omogući oxfmt formatter                                 |
+| `IMECODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Omogući eksperimentalni LSP alat                        |
+| `IMECODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Onemogući praćenje datoteka                             |
+| `IMECODE_EXPERIMENTAL_EXA`                     | boolean | Omogući eksperimentalne Exa funkcije                    |
+| `IMECODE_EXPERIMENTAL_LSP_TY`                  | boolean | Omogući TY LSP za python datoteke                       |
+| `IMECODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Omogući Plan mod                                        |
+| `IMECODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Omogući pozadinske zadatke subagenata                   |
+| `IMECODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Omogući eksperimentalni sistem događaja                 |
+| `IMECODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Omogući nativnu putanju LLM zahtjeva                    |
+| `IMECODE_EXPERIMENTAL_PARALLEL`                | boolean | Omogući paralelno izvršavanje web pretrage              |
+| `IMECODE_EXPERIMENTAL_SCOUT`                   | boolean | Omogući Scout subagenta                                 |
+| `IMECODE_EXPERIMENTAL_WORKSPACES`              | boolean | Omogući podršku za radne prostore                       |

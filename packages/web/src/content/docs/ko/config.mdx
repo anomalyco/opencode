@@ -44,10 +44,10 @@ config source는 다음 순서로 로드됩니다(나중 source가 앞선 source
 
 1. **Remote config**(`.well-known/opencode`) - 조직 기본값
 2. **Global config**(`~/.config/opencode/opencode.json`) - 사용자 기본 설정
-3. **Custom config**(`OPENCODE_CONFIG` env var) - custom override
+3. **Custom config**(`IMECODE_CONFIG` env var) - custom override
 4. **Project config**(프로젝트의 `opencode.json`) - 프로젝트별 설정
 5. **`.opencode` directories** - agents, commands, plugins
-6. **Inline config**(`OPENCODE_CONFIG_CONTENT` env var) - 런타임 override
+6. **Inline config**(`IMECODE_CONFIG_CONTENT` env var) - 런타임 override
 
 즉, 프로젝트 config는 전역 기본값을 override할 수 있고, 전역 config는 조직의 Remote 기본값을 override할 수 있습니다.
 
@@ -121,10 +121,10 @@ OpenCode 시작 시 현재 디렉토리에서 config 파일을 찾고, 없으면
 
 ### Custom path
 
-`OPENCODE_CONFIG` 환경 변수로 custom config 파일 경로를 지정하세요.
+`IMECODE_CONFIG` 환경 변수로 custom config 파일 경로를 지정하세요.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -134,10 +134,10 @@ Custom config는 우선순위상 전역 config와 프로젝트 config 사이에�
 
 ### Custom directory
 
-`OPENCODE_CONFIG_DIR` 환경 변수로 custom config 디렉토리를 지정할 수 있습니다. 이 디렉토리는 표준 `.opencode` 디렉토리와 동일하게 agents, commands, modes, plugins를 검색하며, 동일한 구조를 따라야 합니다.
+`IMECODE_CONFIG_DIR` 환경 변수로 custom config 디렉토리를 지정할 수 있습니다. 이 디렉토리는 표준 `.opencode` 디렉토리와 동일하게 agents, commands, modes, plugins를 검색하며, 동일한 구조를 따라야 합니다.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -170,7 +170,7 @@ TUI 관련 설정에는 전용 `tui.json` (또는 `tui.jsonc`) 파일을 사용�
 }
 ```
 
-`OPENCODE_TUI_CONFIG`를 사용하여 사용자 지정 TUI 설정 파일을 가리킬 수 있습니다.
+`IMECODE_TUI_CONFIG`를 사용하여 사용자 지정 TUI 설정 파일을 가리킬 수 있습니다.
 
 `opencode.json`의 기존 `theme`, `keybinds`, `tui` 키는 더 이상 사용되지 않으며(deprecated) 가능한 경우 자동으로 마이그레이션됩니다.
 
@@ -639,7 +639,7 @@ config 파일에서 환경 변수와 파일 내용을 참조할 수 있도록 �
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

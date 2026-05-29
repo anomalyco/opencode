@@ -1,4 +1,4 @@
-// Per-tool display rules shared across `opencode run` output paths.
+// Per-tool display rules shared across `imecode run` output paths.
 //
 // Each known tool (bash, edit, write, task, etc.) has a ToolRule that controls
 // five display hooks:

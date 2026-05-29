@@ -2,7 +2,7 @@
 // These exercise the real CLI binary against a TestLLMServer running in the
 // same process. See `test/lib/cli-process.ts` for the harness — each test uses
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
-// `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
+// `IMECODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"

@@ -58,11 +58,11 @@ const InfoCommand = effectCmd({
       : undefined
     const terminal = [termProgram, process.env.TERM].filter((item): item is string => Boolean(item)).join(" / ")
 
-    console.log(`opencode version: ${InstallationVersion}`)
+    console.log(`imecode version: ${InstallationVersion}`)
     console.log(`os: ${os.type()} ${os.release()} ${os.arch()}`)
     console.log(`terminal: ${terminal || "unknown"}`)
     console.log("plugins:")
-    if (Flag.OPENCODE_PURE) {
+    if (Flag.IMECODE_PURE) {
       console.log("external plugins disabled (--pure)")
       return
     }

@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://opencode.ai/desktop-theme.json",
-  "title": "OpenCode Desktop Theme",
-  "description": "A theme definition for the OpenCode desktop application",
+  "title": "IMECODE Desktop Theme",
+  "description": "A theme definition for the IMECODE desktop application",
   "type": "object",
   "required": ["name", "id", "light", "dark"],
   "properties": {

@@ -119,7 +119,7 @@ export namespace PluginLoader {
         },
       }
 
-    // npm plugins can declare which opencode versions they support; file plugins are treated
+    // npm plugins can declare which imecode versions they support; file plugins are treated
     // as local development code and skip this compatibility gate.
     if (base.source === "npm") {
       try {

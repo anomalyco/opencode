@@ -8,7 +8,7 @@ const ignoredMethods = new Set(["GET", "HEAD", "OPTIONS"])
 export const fenceLayer = HttpRouter.middleware<{ handles: unknown }>()((effect) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
-    if (!Flag.OPENCODE_WORKSPACE_ID || ignoredMethods.has(request.method)) return yield* effect
+    if (!Flag.IMECODE_WORKSPACE_ID || ignoredMethods.has(request.method)) return yield* effect
 
     const previous = Fence.load()
     const response = yield* effect

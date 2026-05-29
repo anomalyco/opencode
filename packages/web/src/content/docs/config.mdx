@@ -45,10 +45,10 @@ Config sources are loaded in this order (later sources override earlier ones):
 
 1. **Remote config** (from `.well-known/opencode`) - organizational defaults
 2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
-3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
+3. **Custom config** (`IMECODE_CONFIG` env var) - custom overrides
 4. **Project config** (`opencode.json` in project) - project-specific settings
 5. **`.opencode` directories** - agents, commands, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+6. **Inline config** (`IMECODE_CONFIG_CONTENT` env var) - runtime overrides
 7. **Managed config files** (`/Library/Application Support/opencode/` on macOS) - admin-controlled
 8. **macOS managed preferences** (`.mobileconfig` via MDM) - highest priority, not user-overridable
 
@@ -124,10 +124,10 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ### Custom path
 
-Specify a custom config file path using the `OPENCODE_CONFIG` environment variable.
+Specify a custom config file path using the `IMECODE_CONFIG` environment variable.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -137,13 +137,13 @@ Custom config is loaded between global and project configs in the precedence ord
 
 ### Custom directory
 
-Specify a custom config directory using the `OPENCODE_CONFIG_DIR`
+Specify a custom config directory using the `IMECODE_CONFIG_DIR`
 environment variable. This directory will be searched for agents, commands,
 modes, and plugins just like the standard `.opencode` directory, and should
 follow the same structure.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -283,7 +283,7 @@ Use a dedicated `tui.json` (or `tui.jsonc`) file for TUI-specific settings.
 }
 ```
 
-Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.
+Use `IMECODE_TUI_CONFIG` to point to a custom TUI config file.
 
 Set `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).
 
@@ -857,7 +857,7 @@ Use `{env:VARIABLE_NAME}` to substitute environment variables:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

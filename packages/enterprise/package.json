@@ -8,7 +8,7 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "IMECODE_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start",
     "shell-prod": "sst shell --target Teams --stage production"
   },

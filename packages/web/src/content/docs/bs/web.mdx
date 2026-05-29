@@ -18,7 +18,7 @@ opencode web
 Ovo pokreće lokalni server na `127.0.0.1` sa nasumičnim dostupnim portom i automatski otvara OpenCode u vašem podrazumevanom pretraživaču.
 
 :::caution
-Ako `OPENCODE_SERVER_PASSWORD` nije postavljen, server će biti nezaštićen. Ovo je u redu za lokalnu upotrebu, ali bi trebalo biti postavljeno za pristup mreži.
+Ako `IMECODE_SERVER_PASSWORD` nije postavljen, server će biti nezaštićen. Ovo je u redu za lokalnu upotrebu, ali bi trebalo biti postavljeno za pristup mreži.
 :::
 
 :::tip[Windows korisnici]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### Autentifikacija
 
-Da biste zaštitili pristup, postavite lozinku koristeći varijablu okruženja `OPENCODE_SERVER_PASSWORD`:
+Da biste zaštitili pristup, postavite lozinku koristeći varijablu okruženja `IMECODE_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+IMECODE_SERVER_PASSWORD=secret opencode web
 ```
 
-Korisničko ime podrazumevano je `opencode`, ali se može promeniti sa `OPENCODE_SERVER_USERNAME`.
+Korisničko ime podrazumevano je `opencode`, ali se može promeniti sa `IMECODE_SERVER_USERNAME`.
 
 ---
 

@@ -86,14 +86,14 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 설치 스크립트는 설치 경로를 다음 우선순위로 결정합니다.
 
-1. `$OPENCODE_INSTALL_DIR` - 사용자 지정 설치 디렉터리
+1. `$IMECODE_INSTALL_DIR` - 사용자 지정 설치 디렉터리
 2. `$XDG_BIN_DIR` - XDG Base Directory Specification 준수 경로
 3. `$HOME/bin` - 표준 사용자 바이너리 디렉터리 (존재하거나 생성 가능할 경우)
 4. `$HOME/.opencode/bin` - 기본 폴백
 
 ```bash
 # 예시
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+IMECODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 

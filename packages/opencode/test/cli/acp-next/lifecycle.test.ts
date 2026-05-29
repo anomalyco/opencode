@@ -15,7 +15,7 @@ describe("opencode acp-next lifecycle subprocess", () => {
     "stdin EOF exits cleanly",
     ({ opencode }) =>
       Effect.gen(function* () {
-        const acp = yield* opencode.acp({ env: { OPENCODE_ACP_NEXT: "1" } })
+        const acp = yield* opencode.acp({ env: { IMECODE_ACP_NEXT: "1" } })
         acp.close()
 
         const code = yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(5)))
@@ -30,7 +30,7 @@ describe("opencode acp-next lifecycle subprocess", () => {
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
           { opencode },
-          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
+          { IMECODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
         const initialized = yield* initialize(acp)
         expect(initialized.agentCapabilities?.sessionCapabilities?.close).toEqual({})
@@ -47,7 +47,7 @@ describe("opencode acp-next lifecycle subprocess", () => {
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
           { opencode },
-          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
+          { IMECODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
         const initialized = yield* initialize(acp)
         expect(initialized.agentCapabilities?.loadSession).toBe(true)
@@ -71,7 +71,7 @@ describe("opencode acp-next lifecycle subprocess", () => {
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
           { opencode },
-          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
+          { IMECODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
         yield* initialize(acp)
         const session = yield* newSession(acp, home)
@@ -99,7 +99,7 @@ describe("opencode acp-next lifecycle subprocess", () => {
       Effect.gen(function* () {
         const acp = yield* createAcpNextClient(
           { opencode },
-          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
+          { IMECODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
         )
         yield* initialize(acp)
         const session = yield* newSession(acp, home)

@@ -156,7 +156,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 構成された LSP サーバーと対話して、定義、参照、ホバー情報、呼び出し階層などのコードインテリジェンス機能を取得します。
 
 :::note
-このツールは、`OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (または `OPENCODE_EXPERIMENTAL=true`) の場合にのみ使用できます。
+このツールは、`IMECODE_EXPERIMENTAL_LSP_TOOL=true` (または `IMECODE_EXPERIMENTAL=true`) の場合にのみ使用できます。
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ LLM が Web ページをフェッチして読み取ることを許可します�
 ウェブで情報を検索してください。
 
 :::note
-このツールは、OpenCode プロバイダーを使用している場合、または `OPENCODE_ENABLE_EXA` 環境変数が真実の値 (`true` または `1` など) に設定されている場合にのみ使用できます。
+このツールは、OpenCode プロバイダーを使用している場合、または `IMECODE_ENABLE_EXA` 環境変数が真実の値 (`true` または `1` など) に設定されている場合にのみ使用できます。
 
 OpenCode の起動時に有効にするには:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

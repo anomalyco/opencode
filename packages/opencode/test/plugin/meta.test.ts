@@ -23,7 +23,7 @@ async function map<Value>(file: string): Promise<Record<string, Value>> {
 }
 
 afterEach(() => {
-  delete process.env.OPENCODE_PLUGIN_META_FILE
+  delete process.env.IMECODE_PLUGIN_META_FILE
 })
 
 describe("plugin.meta", () => {
@@ -36,8 +36,8 @@ describe("plugin.meta", () => {
       },
     })
 
-    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
-    const file = process.env.OPENCODE_PLUGIN_META_FILE!
+    process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
+    const file = process.env.IMECODE_PLUGIN_META_FILE!
     const spec = pathToFileURL(tmp.extra.file).href
 
     const one = await PluginMeta.touch(spec, spec, "demo.file")
@@ -77,8 +77,8 @@ describe("plugin.meta", () => {
       },
     })
 
-    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
-    const file = process.env.OPENCODE_PLUGIN_META_FILE!
+    process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
+    const file = process.env.IMECODE_PLUGIN_META_FILE!
 
     const one = await PluginMeta.touch("acme-plugin@latest", tmp.extra.mod, "acme-plugin")
     expect(one.state).toBe("first")
@@ -108,8 +108,8 @@ describe("plugin.meta", () => {
       },
     })
 
-    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
-    const file = process.env.OPENCODE_PLUGIN_META_FILE!
+    process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
+    const file = process.env.IMECODE_PLUGIN_META_FILE!
     const spec = pathToFileURL(tmp.extra.file).href
     const n = 12
 

@@ -823,9 +823,9 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
 function ChannelIndicator() {
   return (
     <>
-      {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
+      {["beta", "dev"].includes(import.meta.env.VITE_IMECODE_CHANNEL) && (
         <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
+          {import.meta.env.VITE_IMECODE_CHANNEL.toUpperCase()}
         </div>
       )}
     </>

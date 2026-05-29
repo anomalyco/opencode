@@ -25,7 +25,7 @@ export const AcpCommand = effectCmd({
   },
   handler: Effect.fn("Cli.acp")(function* (args) {
     ACPNextProfile.mark("cli.acp.handler")
-    process.env.OPENCODE_CLIENT = "acp"
+    process.env.IMECODE_CLIENT = "acp"
     const flags = yield* RuntimeFlags.Service
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() =>

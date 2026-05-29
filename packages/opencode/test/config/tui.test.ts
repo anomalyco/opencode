@@ -20,8 +20,8 @@ const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.j
 
 const cleanState = Effect.gen(function* () {
   const fs = yield* AppFileSystem.Service
-  delete process.env.OPENCODE_CONFIG
-  delete process.env.OPENCODE_TUI_CONFIG
+  delete process.env.IMECODE_CONFIG
+  delete process.env.IMECODE_TUI_CONFIG
   yield* Effect.forEach(globalConfigFiles, (file) => fs.remove(file, { force: true }).pipe(Effect.ignore), {
     discard: true,
   })
@@ -77,7 +77,7 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
-      const local = path.join(test.directory, ".opencode")
+      const local = path.join(test.directory, ".imecode")
       yield* fs.makeDirectory(local, { recursive: true })
 
       yield* fs.writeJson(path.join(Global.Path.config, "opencode.json"), {
@@ -119,7 +119,7 @@ it.instance("loads tui config with the same precedence order as server config pa
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { theme: "global" })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { theme: "project" })
       yield* fs.writeWithDirs(
-        path.join(test.directory, ".opencode", "tui.json"),
+        path.join(test.directory, ".imecode", "tui.json"),
         JSON.stringify({ theme: "local", diff_style: "stacked" }, null, 2),
       )
 
@@ -402,7 +402,7 @@ it.instance("top-level keys in tui.json take precedence over nested tui key", ()
   ),
 )
 
-it.instance("project config takes precedence over OPENCODE_TUI_CONFIG (matches OPENCODE_CONFIG)", () =>
+it.instance("project config takes precedence over IMECODE_TUI_CONFIG (matches IMECODE_CONFIG)", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
@@ -412,7 +412,7 @@ it.instance("project config takes precedence over OPENCODE_TUI_CONFIG (matches O
       yield* fs.writeJson(custom, { theme: "custom", diff_style: "stacked" })
 
       yield* withEnv(
-        "OPENCODE_TUI_CONFIG",
+        "IMECODE_TUI_CONFIG",
         custom,
         Effect.gen(function* () {
           const config = yield* getTuiConfig(test.directory)
@@ -625,7 +625,7 @@ it.instance("keeps explicit configured keybind input undo on Windows", () =>
   ),
 )
 
-it.instance("OPENCODE_TUI_CONFIG provides settings when no project config exists", () =>
+it.instance("IMECODE_TUI_CONFIG provides settings when no project config exists", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
@@ -634,7 +634,7 @@ it.instance("OPENCODE_TUI_CONFIG provides settings when no project config exists
       yield* fs.writeJson(custom, { theme: "from-env", diff_style: "stacked" })
 
       yield* withEnv(
-        "OPENCODE_TUI_CONFIG",
+        "IMECODE_TUI_CONFIG",
         custom,
         Effect.gen(function* () {
           const config = yield* getTuiConfig(test.directory)
@@ -646,7 +646,7 @@ it.instance("OPENCODE_TUI_CONFIG provides settings when no project config exists
   ),
 )
 
-it.instance("does not derive tui path from OPENCODE_CONFIG", () =>
+it.instance("does not derive tui path from IMECODE_CONFIG", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
@@ -657,7 +657,7 @@ it.instance("does not derive tui path from OPENCODE_CONFIG", () =>
       yield* fs.writeJson(path.join(customDir, "tui.json"), { theme: "should-not-load" })
 
       yield* withEnv(
-        "OPENCODE_CONFIG",
+        "IMECODE_CONFIG",
         path.join(customDir, "opencode.json"),
         Effect.gen(function* () {
           const config = yield* getTuiConfig(test.directory)
@@ -716,7 +716,7 @@ it.instance("loads .opencode/tui.json", () =>
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
       yield* fs.writeWithDirs(
-        path.join(test.directory, ".opencode", "tui.json"),
+        path.join(test.directory, ".imecode", "tui.json"),
         JSON.stringify({ diff_style: "stacked" }, null, 2),
       )
 
@@ -844,7 +844,7 @@ it.instance("silently skips malformed tui.json - load failures degrade to {}", (
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(path.join(test.directory, "tui.json"), '{ "theme": "broken",')
-      yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+      yield* fs.writeWithDirs(path.join(test.directory, ".imecode", "tui.json"), JSON.stringify({ theme: "fallback" }))
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("fallback")
@@ -858,7 +858,7 @@ it.instance("silently skips non-ENOENT read failures (e.g. tui.json is a directo
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
       yield* fs.makeDirectory(path.join(test.directory, "tui.json"), { recursive: true })
-      yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+      yield* fs.writeWithDirs(path.join(test.directory, ".imecode", "tui.json"), JSON.stringify({ theme: "fallback" }))
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("fallback")

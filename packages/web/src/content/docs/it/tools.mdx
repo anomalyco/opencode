@@ -156,7 +156,7 @@ Cerca file usando pattern glob come `**/*.js` o `src/**/*.ts`. Restituisce i per
 Interagisci con i server LSP configurati per ottenere funzionalita' di code intelligence come definizioni, riferimenti, hover info e call hierarchy.
 
 :::note
-Questo strumento e' disponibile solo quando `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (oppure `OPENCODE_EXPERIMENTAL=true`).
+Questo strumento e' disponibile solo quando `IMECODE_EXPERIMENTAL_LSP_TOOL=true` (oppure `IMECODE_EXPERIMENTAL=true`).
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ Permette all'LLM di recuperare e leggere pagine web. Utile per consultare docume
 Cerca informazioni sul web.
 
 :::note
-Questo strumento e' disponibile solo quando usi il provider OpenCode o quando la variabile d'ambiente `OPENCODE_ENABLE_EXA` e' impostata a un valore truthy (ad esempio `true` o `1`).
+Questo strumento e' disponibile solo quando usi il provider OpenCode o quando la variabile d'ambiente `IMECODE_ENABLE_EXA` e' impostata a un valore truthy (ad esempio `true` o `1`).
 
 Per abilitarlo all'avvio di OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

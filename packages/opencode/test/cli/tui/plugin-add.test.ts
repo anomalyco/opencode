@@ -31,7 +31,7 @@ test("adds tui plugin at runtime from spec", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [],
   })
@@ -58,7 +58,7 @@ test("adds tui plugin at runtime from spec", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -73,7 +73,7 @@ test("retries runtime add for file plugins after dependency wait", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [],
   })
@@ -105,6 +105,6 @@ test("retries runtime add for file plugins after dependency wait", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })

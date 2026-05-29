@@ -35,7 +35,7 @@ Aqui estamos usando um componente CI/CD criado pela comunidade para opencode —
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # O nome da variável para seu JSON de autenticação do OpenCode
+         auth_json: $IMECODE_AUTH_JSON # O nome da variável para seu JSON de autenticação do OpenCode
          command: optional-custom-command
          message: "Seu prompt aqui"
    ```

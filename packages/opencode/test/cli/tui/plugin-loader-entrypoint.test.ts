@@ -44,7 +44,7 @@ test("loads npm tui plugin from package ./tui export", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_origins: [
@@ -71,7 +71,7 @@ test("loads npm tui plugin from package ./tui export", async () => {
     install.mockRestore()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -105,7 +105,7 @@ test("does not use npm package exports dot for tui entry", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [tmp.extra.spec],
     plugin_origins: [
@@ -129,7 +129,7 @@ test("does not use npm package exports dot for tui entry", async () => {
     install.mockRestore()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -167,7 +167,7 @@ test("rejects npm tui export that resolves outside plugin directory", async () =
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [tmp.extra.spec],
     plugin_origins: [
@@ -193,7 +193,7 @@ test("rejects npm tui export that resolves outside plugin directory", async () =
     install.mockRestore()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -229,7 +229,7 @@ test("rejects npm tui plugin that exports server and tui together", async () => 
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [tmp.extra.spec],
     plugin_origins: [
@@ -253,7 +253,7 @@ test("rejects npm tui plugin that exports server and tui together", async () => 
     install.mockRestore()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -287,7 +287,7 @@ test("does not use npm package main for tui entry", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [tmp.extra.spec],
     plugin_origins: [
@@ -317,7 +317,7 @@ test("does not use npm package main for tui entry", async () => {
     wait.mockRestore()
     warn.mockRestore()
     error.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -352,7 +352,7 @@ test("does not use directory package main for tui entry", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [tmp.extra.spec],
     plugin_origins: [
@@ -374,7 +374,7 @@ test("does not use directory package main for tui entry", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -399,7 +399,7 @@ test("uses directory index fallback for tui when package.json is missing", async
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [tmp.extra.spec],
     plugin_origins: [
@@ -421,7 +421,7 @@ test("uses directory index fallback for tui when package.json is missing", async
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })
 
@@ -456,7 +456,7 @@ test("uses npm package name when tui plugin id is omitted", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  process.env.IMECODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_origins: [
@@ -480,6 +480,6 @@ test("uses npm package name when tui plugin id is omitted", async () => {
     install.mockRestore()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    delete process.env.IMECODE_PLUGIN_META_FILE
   }
 })

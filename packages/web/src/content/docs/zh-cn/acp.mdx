@@ -110,7 +110,7 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        IMECODE_API_KEY = os.getenv("IMECODE_API_KEY")
       }
     }
   }
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 此配置将 CodeCompanion 设置为使用 OpenCode 作为聊天的 ACP 代理。
 
-如果需要传递环境变量（如 `OPENCODE_API_KEY`），请参阅 CodeCompanion.nvim 文档中的[配置适配器：环境变量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)了解详细信息。
+如果需要传递环境变量（如 `IMECODE_API_KEY`），请参阅 CodeCompanion.nvim 文档中的[配置适配器：环境变量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)了解详细信息。
 
 ## 支持
 

@@ -12,7 +12,7 @@ export function toKind(value: string): Kind {
 }
 
 // Keep the exposed tool ID and permission key as "bash" for compatibility with
-// existing plugins, users, and saved permissions. Rename with opencode 2.0.
+// existing plugins, users, and saved permissions. Rename with imecode 2.0.
 export const ToolID = "bash"
 export type ToolID = typeof ToolID
 

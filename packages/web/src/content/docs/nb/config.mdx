@@ -45,10 +45,10 @@ Konfigurasjonskilder lastes inn i denne rekkefølgen (senere kilder overstyrer t
 
 1. **Ekstern konfigurasjon** (fra `.well-known/opencode`) - organisasjonsstandarder
 2. **Global konfigurasjon** (`~/.config/opencode/opencode.json`) - brukerinnstillinger
-3. **Egendefinert konfigurasjon** (`OPENCODE_CONFIG` env var) - egendefinerte overstyringer
+3. **Egendefinert konfigurasjon** (`IMECODE_CONFIG` env var) - egendefinerte overstyringer
 4. **Prosjektkonfigurasjon** (`opencode.json` i prosjekt) - prosjektspesifikke innstillinger
 5. **`.opencode` kataloger** - agenter, kommandoer, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - kjøretidsoverstyringer
+6. **Inline config** (`IMECODE_CONFIG_CONTENT` env var) - kjøretidsoverstyringer
 
 Dette betyr at prosjektkonfigurasjoner kan overstyre globale standardinnstillinger, og globale konfigurasjoner kan overstyre eksterne organisasjonsstandarder.
 
@@ -118,10 +118,10 @@ Det er også trygt å sjekke inn dette i Git og bruker samme skjema som det glob
 
 ### Egendefinert bane
 
-Spesifiser en tilpasset konfigurasjonsfilbane ved å bruke miljøvariabelen `OPENCODE_CONFIG`.
+Spesifiser en tilpasset konfigurasjonsfilbane ved å bruke miljøvariabelen `IMECODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -131,13 +131,13 @@ Egendefinert konfigurasjon lastes inn mellom globale og prosjektkonfigurasjoner 
 
 ### Egendefinert katalog
 
-Spesifiser en tilpasset konfigurasjonskatalog ved å bruke `OPENCODE_CONFIG_DIR`
+Spesifiser en tilpasset konfigurasjonskatalog ved å bruke `IMECODE_CONFIG_DIR`
 miljøvariabel. Denne katalogen vil bli søkt etter agenter, kommandoer,
 moduser og plugins akkurat som standard `.opencode` katalog, og bør
 følge samme struktur.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -642,7 +642,7 @@ Bruk `{env:VARIABLE_NAME}` for å erstatte miljøvariabler:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

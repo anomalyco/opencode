@@ -346,7 +346,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           }
 
           // Region resolution precedence (highest to lowest):
-          // 1. options.region from opencode.json provider config
+          // 1. options.region from imecode.json provider config
           // 2. defaultRegion from AWS_REGION environment variable
           // 3. Default "us-east-1" (baked into defaultRegion)
           const region = options?.region ?? defaultRegion
@@ -795,7 +795,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+            "Set it via environment variable or run `imecode auth cloudflare-ai-gateway`.",
         )
       }
 

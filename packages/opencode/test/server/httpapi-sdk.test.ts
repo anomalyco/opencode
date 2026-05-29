@@ -35,8 +35,8 @@ const it = testEffect(
 )
 
 const original = {
-  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
+  IMECODE_SERVER_PASSWORD: Flag.IMECODE_SERVER_PASSWORD,
+  IMECODE_SERVER_USERNAME: Flag.IMECODE_SERVER_USERNAME,
 }
 
 type ServerPath = "default" | "raw"
@@ -49,8 +49,8 @@ type TestServices = AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpaw
 type TestScope = Scope.Scope | TestServices
 
 function app(serverPath: ServerPath, input?: { password?: string; username?: string }) {
-  Flag.OPENCODE_SERVER_PASSWORD = input?.password
-  Flag.OPENCODE_SERVER_USERNAME = input?.username
+  Flag.IMECODE_SERVER_PASSWORD = input?.password
+  Flag.IMECODE_SERVER_USERNAME = input?.username
   if (serverPath === "default") return Server.Default().app
 
   const handler = HttpRouter.toWebHandler(
@@ -58,8 +58,8 @@ function app(serverPath: ServerPath, input?: { password?: string; username?: str
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input?.password,
-            OPENCODE_SERVER_USERNAME: input?.username,
+            IMECODE_SERVER_PASSWORD: input?.password,
+            IMECODE_SERVER_USERNAME: input?.username,
           }),
         ),
       ),
@@ -285,7 +285,7 @@ function writeStandardFiles(dir: string) {
 function writeProjectSkill(dir: string) {
   return AppFileSystem.Service.use((fs) =>
     fs.writeWithDirs(
-      path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
+      path.join(dir, ".imecode", "skills", "project-rest-skill", "SKILL.md"),
       `---
 name: project-rest-skill
 description: A project skill visible to REST API prompts.
@@ -328,8 +328,8 @@ function seedMessage(directory: string, sessionID: string) {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  Flag.IMECODE_SERVER_PASSWORD = original.IMECODE_SERVER_PASSWORD
+  Flag.IMECODE_SERVER_USERNAME = original.IMECODE_SERVER_USERNAME
   await disposeAllInstances()
   await resetDatabase()
 })

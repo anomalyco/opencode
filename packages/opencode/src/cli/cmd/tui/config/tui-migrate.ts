@@ -25,13 +25,13 @@ interface MigrateInput {
 }
 
 /**
- * Migrates tui-specific keys (theme, keybinds, tui) from opencode.json files
+ * Migrates tui-specific keys (theme, keybinds, tui) from imecode.json files
  * into dedicated tui.json files. Migration is performed per-directory and
  * skips only locations where a tui.json already exists.
  */
 export async function migrateTuiConfig(input: MigrateInput) {
-  const opencode = await opencodeFiles(input)
-  for (const file of opencode) {
+  const imecode = await imecodeFiles(input)
+  for (const file of imecode) {
     const source = await Filesystem.readText(file).catch((error) => {
       log.warn("failed to read config for tui migration", { path: file, error })
       return undefined
@@ -134,15 +134,15 @@ async function backupAndStripLegacy(file: string, source: string) {
     })
 }
 
-async function opencodeFiles(input: { directories: string[]; cwd: string }) {
+async function imecodeFiles(input: { directories: string[]; cwd: string }) {
   const files = [
-    ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode"),
-    ...(await Filesystem.findUp(["opencode.json", "opencode.jsonc"], input.cwd, undefined, { rootFirst: true })),
+    ...ConfigPaths.fileInDirectory(Global.Path.config, "imecode"),
+    ...(await Filesystem.findUp(["imecode.json", "imecode.jsonc"], input.cwd, undefined, { rootFirst: true })),
   ]
   for (const dir of unique(input.directories)) {
-    files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))
+    files.push(...ConfigPaths.fileInDirectory(dir, "imecode"))
   }
-  if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
+  if (Flag.IMECODE_CONFIG) files.push(Flag.IMECODE_CONFIG)
 
   const existing = await Promise.all(
     unique(files).map(async (file) => {

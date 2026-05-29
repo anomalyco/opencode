@@ -58,7 +58,7 @@ export function WindowsAppMenu(props: {
             variant="ghost-muted"
             size="large"
             icon={<IconV2 name="menu" />}
-            aria-label="OpenCode menu"
+            aria-label="IMECODE menu"
             onPointerDown={rememberFocus}
             onKeyDown={rememberFocus}
           />
@@ -69,7 +69,7 @@ export function WindowsAppMenu(props: {
           icon="menu"
           variant="ghost"
           class="titlebar-icon rounded-md shrink-0"
-          aria-label="OpenCode menu"
+          aria-label="IMECODE menu"
           onPointerDown={rememberFocus}
           onKeyDown={rememberFocus}
         />
@@ -77,7 +77,7 @@ export function WindowsAppMenu(props: {
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="desktop-app-menu">
           <DropdownMenu.Group>
-            <DropdownMenu.GroupLabel class="desktop-app-menu-heading">OpenCode</DropdownMenu.GroupLabel>
+            <DropdownMenu.GroupLabel class="desktop-app-menu-heading">IMECODE</DropdownMenu.GroupLabel>
             {DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows")).map((menu) => (
               <DesktopMenuSubmenu label={menu.label}>
                 {menu.items

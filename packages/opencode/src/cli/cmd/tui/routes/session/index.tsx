@@ -89,7 +89,7 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
+import { IMECODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
 
 addDefaultParsers(parsers.parsers)
@@ -354,7 +354,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}imecode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -1082,7 +1082,7 @@ export function Session() {
   }))
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: IMECODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 

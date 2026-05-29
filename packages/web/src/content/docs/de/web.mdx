@@ -18,7 +18,7 @@ opencode web
 Dadurch wird ein lokaler Server auf `127.0.0.1` mit einem zufällig verfügbaren Port gestartet und OpenCode automatisch in Ihrem Standardbrowser geöffnet.
 
 :::caution
-Wenn `OPENCODE_SERVER_PASSWORD` nicht gesetzt ist, ist der Server ungesichert. Dies ist für den lokalen Gebrauch in Ordnung, sollte aber für den Netzwerkzugriff eingestellt werden.
+Wenn `IMECODE_SERVER_PASSWORD` nicht gesetzt ist, ist der Server ungesichert. Dies ist für den lokalen Gebrauch in Ordnung, sollte aber für den Netzwerkzugriff eingestellt werden.
 :::
 
 :::tip[Windows-Nutzer]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### Authentifizierung
 
-Um den Zugriff zu schützen, legen Sie mithilfe der Umgebungsvariablen `OPENCODE_SERVER_PASSWORD` ein Passwort fest:
+Um den Zugriff zu schützen, legen Sie mithilfe der Umgebungsvariablen `IMECODE_SERVER_PASSWORD` ein Passwort fest:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+IMECODE_SERVER_PASSWORD=secret opencode web
 ```
 
-Der Benutzername ist standardmäßig `opencode`, kann aber mit `OPENCODE_SERVER_USERNAME` geändert werden.
+Der Benutzername ist standardmäßig `opencode`, kann aber mit `IMECODE_SERVER_USERNAME` geändert werden.
 
 ---
 

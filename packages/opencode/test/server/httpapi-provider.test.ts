@@ -119,10 +119,10 @@ function requestCallback(input: {
 function writeProviderAuthPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
+    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".imecode")))
 
     yield* fs.writeWithDirs(
-      path.join(dir, ".opencode", "plugin", "provider-oauth-parity.ts"),
+      path.join(dir, ".imecode", "plugin", "provider-oauth-parity.ts"),
       [
         "export default {",
         '  id: "test.provider-oauth-parity",',
@@ -154,10 +154,10 @@ function writeProviderAuthPlugin(dir: string) {
 function writeProviderAuthValidationPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
+    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".imecode")))
 
     yield* fs.writeWithDirs(
-      path.join(dir, ".opencode", "plugin", "provider-oauth-validation.ts"),
+      path.join(dir, ".imecode", "plugin", "provider-oauth-validation.ts"),
       [
         "export default {",
         '  id: "test.provider-oauth-validation",',
@@ -196,10 +196,10 @@ function writeProviderAuthValidationPlugin(dir: string) {
 function writeFunctionOptionsPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
+    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".imecode")))
 
     yield* fs.writeWithDirs(
-      path.join(dir, ".opencode", "plugin", "provider-function-options.ts"),
+      path.join(dir, ".imecode", "plugin", "provider-function-options.ts"),
       [
         "export default {",
         '  id: "test.provider-function-options",',
@@ -228,10 +228,10 @@ function writeFunctionOptionsPlugin(dir: string) {
 function writeProviderModelsMutationPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
+    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".imecode")))
 
     yield* fs.writeWithDirs(
-      path.join(dir, ".opencode", "plugin", "provider-models-mutation.ts"),
+      path.join(dir, ".imecode", "plugin", "provider-models-mutation.ts"),
       [
         "export default {",
         '  id: "test.provider-models-mutation",',
@@ -380,7 +380,7 @@ describe("provider HttpApi", () => {
       const instance = yield* TestInstance
       yield* writeFunctionOptionsPlugin(instance.directory)
       yield* setEnvScoped(
-        "OPENCODE_AUTH_CONTENT",
+        "IMECODE_AUTH_CONTENT",
         JSON.stringify({
           google: { type: "oauth", refresh: "dummy", access: "dummy", expires: 9999999999999 },
         }),

@@ -6,7 +6,7 @@
  * requests, uses the right instance context, mutates storage when expected, and
  * returns the expected response shape.
  *
- * The script intentionally isolates `OPENCODE_DB` before importing modules that touch
+ * The script intentionally isolates `IMECODE_DB` before importing modules that touch
  * storage. Scenarios may create/delete sessions and reset the database after each run,
  * so this must never point at a developer's real session database.
  *

@@ -109,7 +109,7 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        IMECODE_API_KEY = os.getenv("IMECODE_API_KEY")
       }
     }
   }
@@ -137,7 +137,7 @@ require("codecompanion").setup({
 
 この構成は、OpenCode をチャットの ACP エージェントとして使用するように CodeCompanion をセットアップします。
 
-環境変数 (`OPENCODE_API_KEY` など) を渡す必要がある場合、詳細については、CodeCompanion.nvim ドキュメントの「[アダプターの構成: 環境変数](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)」を参照してください。
+環境変数 (`IMECODE_API_KEY` など) を渡す必要がある場合、詳細については、CodeCompanion.nvim ドキュメントの「[アダプターの構成: 環境変数](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)」を参照してください。
 
 ## サポート
 

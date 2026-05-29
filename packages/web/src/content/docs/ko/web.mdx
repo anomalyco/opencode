@@ -18,7 +18,7 @@ opencode web
 `127.0.0.1`의 로컬 서버를 랜덤 사용 가능한 포트로 시작하고 기본 브라우저에서 opencode를 자동으로 엽니다.
 
 :::caution
-`OPENCODE_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
+`IMECODE_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
 :::
 
 :::tip[Windows 사용자]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### 인증
 
-액세스를 보호하려면 `OPENCODE_SERVER_PASSWORD` 환경 변수를 사용하여 암호를 설정하십시오.
+액세스를 보호하려면 `IMECODE_SERVER_PASSWORD` 환경 변수를 사용하여 암호를 설정하십시오.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+IMECODE_SERVER_PASSWORD=secret opencode web
 ```
 
-`opencode`에 대한 사용자의 기본값은 `OPENCODE_SERVER_USERNAME`로 변경할 수 있습니다.
+`opencode`에 대한 사용자의 기본값은 `IMECODE_SERVER_USERNAME`로 변경할 수 있습니다.
 
 ---
 

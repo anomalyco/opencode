@@ -86,14 +86,14 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 Το script εγκατάστασης τηρεί την ακόλουθη σειρά προτεραιότητας για τη διαδρομή εγκατάστασης:
 
-1. `$OPENCODE_INSTALL_DIR` - Προσαρμοσμένος κατάλογος εγκατάστασης
+1. `$IMECODE_INSTALL_DIR` - Προσαρμοσμένος κατάλογος εγκατάστασης
 2. `$XDG_BIN_DIR` - Διαδρομή συμβατή με τις προδιαγραφές XDG Base Directory
 3. `$HOME/bin` - Τυπικός κατάλογος εκτελέσιμων αρχείων χρήστη (εάν υπάρχει ή μπορεί να δημιουργηθεί)
 4. `$HOME/.opencode/bin` - Προεπιλεγμένη εφεδρική διαδρομή
 
 ```bash
 # Παραδείγματα
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+IMECODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 

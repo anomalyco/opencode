@@ -187,7 +187,7 @@ function isZedActiveEditorRow(row: ZedEditorRow): row is ZedActiveEditorRow {
 
 export function resolveZedDbPath() {
   const candidates = [
-    process.env.OPENCODE_ZED_DB,
+    process.env.IMECODE_ZED_DB,
     path.join(os.homedir(), "Library", "Application Support", "Zed", "db", "0-stable", "db.sqlite"),
     path.join(os.homedir(), ".local", "share", "zed", "db", "0-stable", "db.sqlite"),
   ].filter((item): item is string => Boolean(item))

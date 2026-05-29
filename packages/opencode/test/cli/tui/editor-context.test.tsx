@@ -8,11 +8,11 @@ import { tmpdir } from "../../fixture/fixture"
 import { FakeWebSocket } from "../../lib/websocket"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
-const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
+const originalOpencodePort = process.env.IMECODE_EDITOR_SSE_PORT
 
 afterEach(() => {
   process.env.CLAUDE_CODE_SSE_PORT = originalClaudePort
-  process.env.OPENCODE_EDITOR_SSE_PORT = originalOpencodePort
+  process.env.IMECODE_EDITOR_SSE_PORT = originalOpencodePort
 })
 
 function nextTick() {
@@ -116,7 +116,7 @@ test("useEditorContext reconnect switches editor server by session directory", a
   )
 
   process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
+  process.env.IMECODE_EDITOR_SSE_PORT = undefined
   spyOn(process, "cwd").mockImplementation(() => startupDirectory)
   spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const firstSocket = new FakeWebSocket("ws://127.0.0.1:3001")
@@ -157,7 +157,7 @@ test("useEditorContext favors configured port over lock files", async () => {
   )
 
   process.env.CLAUDE_CODE_SSE_PORT = "4010"
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
+  process.env.IMECODE_EDITOR_SSE_PORT = undefined
   spyOn(process, "cwd").mockImplementation(() => startupDirectory)
   spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:4010")
@@ -185,7 +185,7 @@ test("useEditorContext clears selection when reconnecting", async () => {
   )
 
   process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
+  process.env.IMECODE_EDITOR_SSE_PORT = undefined
   spyOn(process, "cwd").mockImplementation(() => startupDirectory)
   spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:3001")
@@ -245,7 +245,7 @@ test("useEditorContext preserves selection for the next reconnect when requested
   )
 
   process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
+  process.env.IMECODE_EDITOR_SSE_PORT = undefined
   spyOn(process, "cwd").mockImplementation(() => startupDirectory)
   spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:3001")
@@ -272,10 +272,10 @@ test("useEditorContext preserves selection for the next reconnect when requested
   mounted.dispose()
 })
 
-test("useEditorContext connects with OPENCODE_EDITOR_SSE_PORT", async () => {
+test("useEditorContext connects with IMECODE_EDITOR_SSE_PORT", async () => {
   await using tmp = await tmpdir()
   process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = "4020"
+  process.env.IMECODE_EDITOR_SSE_PORT = "4020"
   spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:4020")
 

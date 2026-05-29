@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | 마지막 세션 이어서 실행                                                    |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | 이어서 실행할 세션 ID                                                      |
 | <nobr><code>{"--fork"}</code></nobr>     |      | 이어서 실행할 때 세션 포크 (`--continue` 또는 `--session`과 함께 사용)     |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `OPENCODE_SERVER_PASSWORD`)                    |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `OPENCODE_SERVER_USERNAME` 또는 `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `IMECODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `IMECODE_SERVER_USERNAME` 또는 `opencode`) |
 
 ---
 
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)                     |
 | <nobr><code>{"--title"}</code></nobr>    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                           |
 | <nobr><code>{"--attach"}</code></nobr>   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)                  |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `OPENCODE_SERVER_PASSWORD`)                    |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `OPENCODE_SERVER_USERNAME` 또는 `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `IMECODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `IMECODE_SERVER_USERNAME` 또는 `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |      | 실행할 디렉터리, 또는 연결 시 원격 서버 경로                               |
 | <nobr><code>{"--variant"}</code></nobr>  |      | 모델 변형 (제공자별 추론 수준)                                             |
 | <nobr><code>{"--thinking"}</code></nobr> |      | 사고 블록 표시                                                             |
@@ -369,7 +369,7 @@ API 접근용 headless OpenCode 서버를 시작합니다. 전체 HTTP 인터페
 opencode serve
 ```
 
-이 명령은 TUI 없이 opencode 기능에 접근할 수 있는 HTTP 서버를 시작합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+이 명령은 TUI 없이 opencode 기능에 접근할 수 있는 HTTP 서버를 시작합니다. `IMECODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
 
 #### 플래그
 
@@ -465,7 +465,7 @@ opencode import https://opncd.ai/s/abc123
 opencode web
 ```
 
-이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 OpenCode에 접속합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 OpenCode에 접속합니다. `IMECODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
 
 #### 플래그
 
@@ -564,29 +564,29 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 
 | 변수                                  | 타입    | 설명                                           |
 | ------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 세션 자동 공유                                 |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로            |
-| `OPENCODE_CONFIG`                     | string  | 설정 파일 경로                                 |
-| `OPENCODE_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                             |
-| `OPENCODE_CONFIG_CONTENT`             | string  | 인라인 JSON 설정 내용                          |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 자동 업데이트 확인 비활성화                    |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | 오래된 데이터 정리(prune) 비활성화             |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 터미널 제목 자동 업데이트 비활성화             |
-| `OPENCODE_PERMISSION`                 | string  | 인라인 JSON 권한 설정                          |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 기본 플러그인 비활성화                         |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | LSP 서버 자동 다운로드 비활성화                |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 실험적 모델 활성화                             |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 자동 컨텍스트 컴팩션 비활성화                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                 |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화      |
-| `OPENCODE_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                     |
-| `OPENCODE_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)               |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                        |
-| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                 |
-| `OPENCODE_SERVER_USERNAME`            | string  | 기본 인증 사용자명 오버라이드(기본 `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | 모델 설정을 가져올 사용자 지정 URL             |
+| `IMECODE_AUTO_SHARE`                 | boolean | 세션 자동 공유                                 |
+| `IMECODE_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로            |
+| `IMECODE_CONFIG`                     | string  | 설정 파일 경로                                 |
+| `IMECODE_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                             |
+| `IMECODE_CONFIG_CONTENT`             | string  | 인라인 JSON 설정 내용                          |
+| `IMECODE_DISABLE_AUTOUPDATE`         | boolean | 자동 업데이트 확인 비활성화                    |
+| `IMECODE_DISABLE_PRUNE`              | boolean | 오래된 데이터 정리(prune) 비활성화             |
+| `IMECODE_DISABLE_TERMINAL_TITLE`     | boolean | 터미널 제목 자동 업데이트 비활성화             |
+| `IMECODE_PERMISSION`                 | string  | 인라인 JSON 권한 설정                          |
+| `IMECODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 기본 플러그인 비활성화                         |
+| `IMECODE_DISABLE_LSP_DOWNLOAD`       | boolean | LSP 서버 자동 다운로드 비활성화                |
+| `IMECODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 실험적 모델 활성화                             |
+| `IMECODE_DISABLE_AUTOCOMPACT`        | boolean | 자동 컨텍스트 컴팩션 비활성화                  |
+| `IMECODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화       |
+| `IMECODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화            |
+| `IMECODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                 |
+| `IMECODE_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화      |
+| `IMECODE_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                     |
+| `IMECODE_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)               |
+| `IMECODE_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                        |
+| `IMECODE_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                 |
+| `IMECODE_SERVER_USERNAME`            | string  | 기본 인증 사용자명 오버라이드(기본 `opencode`) |
+| `IMECODE_MODELS_URL`                 | string  | 모델 설정을 가져올 사용자 지정 URL             |
 
 ---
 
@@ -596,21 +596,21 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 
 | 변수                                            | 타입    | 설명                                        |
 | ----------------------------------------------- | ------- | ------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | 엄브렐라 플래그로 제어되는 실험 기능 활성화 |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화                          |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화               |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)                 |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수                  |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화              |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화                         |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화                      |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화                          |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화                      |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | python 파일에 대해 TY LSP 활성화            |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화                            |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | 백그라운드 subagent 작업 활성화             |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | 실험적 이벤트 시스템 활성화                 |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | 네이티브 LLM 요청 경로 활성화               |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | 병렬 웹 검색 실행 활성화                    |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Scout subagent 활성화                       |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | workspace 지원 활성화                       |
+| `IMECODE_EXPERIMENTAL`                         | boolean | 엄브렐라 플래그로 제어되는 실험 기능 활성화 |
+| `IMECODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화                          |
+| `IMECODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화               |
+| `IMECODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)                 |
+| `IMECODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수                  |
+| `IMECODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화              |
+| `IMECODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화                         |
+| `IMECODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화                      |
+| `IMECODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화                          |
+| `IMECODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화                      |
+| `IMECODE_EXPERIMENTAL_LSP_TY`                  | boolean | python 파일에 대해 TY LSP 활성화            |
+| `IMECODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화                            |
+| `IMECODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | 백그라운드 subagent 작업 활성화             |
+| `IMECODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | 실험적 이벤트 시스템 활성화                 |
+| `IMECODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | 네이티브 LLM 요청 경로 활성화               |
+| `IMECODE_EXPERIMENTAL_PARALLEL`                | boolean | 병렬 웹 검색 실행 활성화                    |
+| `IMECODE_EXPERIMENTAL_SCOUT`                   | boolean | Scout subagent 활성화                       |
+| `IMECODE_EXPERIMENTAL_WORKSPACES`              | boolean | workspace 지원 활성화                       |

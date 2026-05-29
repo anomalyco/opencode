@@ -125,11 +125,11 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
 
 export function permissionAlwaysLines(request: PermissionRequest): string[] {
   if (request.always.length === 1 && request.always[0] === "*") {
-    return [`This will allow ${request.permission} until OpenCode is restarted.`]
+    return [`This will allow ${request.permission} until IMECODE is restarted.`]
   }
 
   return [
-    "This will allow the following patterns until OpenCode is restarted.",
+    "This will allow the following patterns until IMECODE is restarted.",
     ...request.always.map((item) => `- ${item}`),
   ]
 }

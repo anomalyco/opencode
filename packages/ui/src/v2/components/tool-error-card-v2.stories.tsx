@@ -3,7 +3,7 @@ import { ButtonV2 } from "./button-v2"
 import { ToolErrorCardV2, type ToolErrorCardV2Props } from "./tool-error-card-v2"
 
 const docs = `### Overview
-Compact tool error row with optional expandable detail, aligned to the OpenCode design system spec.
+Compact tool error row with optional expandable detail, aligned to the IMECODE design system spec.
 
 ### API
 - \`ToolErrorCardV2\` wraps Kobalte \`Collapsible\` directly. Pass \`open\`, \`defaultOpen\`, and \`onOpenChange\` like any disclosure (controlled when \`open\` is defined).

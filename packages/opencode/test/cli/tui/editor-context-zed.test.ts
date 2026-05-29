@@ -88,14 +88,14 @@ test("resolveZedDbPath skips candidates that cannot be stated", async () => {
   const loop = path.join(tmp.path, "loop")
   await symlink(loop, loop)
   const home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
-  const previous = process.env.OPENCODE_ZED_DB
-  process.env.OPENCODE_ZED_DB = loop
+  const previous = process.env.IMECODE_ZED_DB
+  process.env.IMECODE_ZED_DB = loop
 
   try {
     expect(resolveZedDbPath()).toBeUndefined()
   } finally {
-    if (previous === undefined) delete process.env.OPENCODE_ZED_DB
-    else process.env.OPENCODE_ZED_DB = previous
+    if (previous === undefined) delete process.env.IMECODE_ZED_DB
+    else process.env.IMECODE_ZED_DB = previous
     home.mockRestore()
   }
 })

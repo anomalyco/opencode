@@ -35,7 +35,7 @@ if (snapshotArg === "--snapshot=") {
 const ver = raw.replace(/^v/, "")
 const root = path.resolve(import.meta.dir, "..")
 const lockfile = path.join(root, "bun.lock")
-const skip = new Set([".git", ".opencode", ".turbo", "dist", "node_modules"])
+const skip = new Set([".git", ".imecode", ".turbo", "dist", "node_modules"])
 const keys = ["@opentui/core", "@opentui/keymap", "@opentui/solid"] as const
 
 const files = (await Array.fromAsync(new Bun.Glob("**/package.json").scan({ cwd: root }))).filter(

@@ -156,7 +156,7 @@ description: จัดการเครื่องมือที่ LLM ส�
 โต้ตอบกับเซิร์ฟเวอร์ LSP ที่กำหนดค่าของคุณเพื่อรับฟีเจอร์อัจฉริยะด้านโค้ด เช่น คำจำกัดความ การอ้างอิง ข้อมูลโฮเวอร์ และลำดับชั้นการโทร
 
 :::note
-เครื่องมือนี้ใช้ได้เฉพาะเมื่อ `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (หรือ `OPENCODE_EXPERIMENTAL=true`)
+เครื่องมือนี้ใช้ได้เฉพาะเมื่อ `IMECODE_EXPERIMENTAL_LSP_TOOL=true` (หรือ `IMECODE_EXPERIMENTAL=true`)
 :::
 
 ```json title="opencode.json" {4}
@@ -253,12 +253,12 @@ description: จัดการเครื่องมือที่ LLM ส�
 ค้นหาข้อมูลในเว็บ
 
 :::note
-เครื่องมือนี้ใช้ได้เฉพาะเมื่อใช้ผู้ให้บริการ OpenCode หรือเมื่อตัวแปรสภาพแวดล้อม `OPENCODE_ENABLE_EXA` ถูกตั้งค่าเป็นค่าความจริง (เช่น `true` หรือ `1`)
+เครื่องมือนี้ใช้ได้เฉพาะเมื่อใช้ผู้ให้บริการ OpenCode หรือเมื่อตัวแปรสภาพแวดล้อม `IMECODE_ENABLE_EXA` ถูกตั้งค่าเป็นค่าความจริง (เช่น `true` หรือ `1`)
 
 หากต้องการเปิดใช้งานเมื่อเปิดตัว OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+IMECODE_ENABLE_EXA=1 opencode
 ```
 
 :::

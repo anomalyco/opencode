@@ -33,10 +33,10 @@ test("skips external tui plugins in pure mode", async () => {
     },
   })
 
-  const pure = process.env.OPENCODE_PURE
-  const meta = process.env.OPENCODE_PLUGIN_META_FILE
-  process.env.OPENCODE_PURE = "1"
-  process.env.OPENCODE_PLUGIN_META_FILE = tmp.extra.meta
+  const pure = process.env.IMECODE_PURE
+  const meta = process.env.IMECODE_PLUGIN_META_FILE
+  process.env.IMECODE_PURE = "1"
+  process.env.IMECODE_PLUGIN_META_FILE = tmp.extra.meta
 
   const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
@@ -59,14 +59,14 @@ test("skips external tui plugins in pure mode", async () => {
     cwd.mockRestore()
     wait.mockRestore()
     if (pure === undefined) {
-      delete process.env.OPENCODE_PURE
+      delete process.env.IMECODE_PURE
     } else {
-      process.env.OPENCODE_PURE = pure
+      process.env.IMECODE_PURE = pure
     }
     if (meta === undefined) {
-      delete process.env.OPENCODE_PLUGIN_META_FILE
+      delete process.env.IMECODE_PLUGIN_META_FILE
     } else {
-      process.env.OPENCODE_PLUGIN_META_FILE = meta
+      process.env.IMECODE_PLUGIN_META_FILE = meta
     }
   }
 })

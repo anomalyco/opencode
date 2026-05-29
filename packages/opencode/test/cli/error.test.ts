@@ -13,9 +13,9 @@ describe("cli.error", () => {
       },
       {
         tag: "ConfigDirectoryTypoError",
-        data: { path: "/tmp/opencode.jsonc", dir: ".opencode", suggestion: "opencode" },
+        data: { path: "/tmp/opencode.jsonc", dir: ".imecode", suggestion: "opencode" },
         expected:
-          'Directory ".opencode" in /tmp/opencode.jsonc is not valid. Rename the directory to "opencode" or remove it. This is a common typo.',
+          'Directory ".imecode" in /tmp/opencode.jsonc is not valid. Rename the directory to "opencode" or remove it. This is a common typo.',
       },
       {
         tag: "ConfigFrontmatterError",

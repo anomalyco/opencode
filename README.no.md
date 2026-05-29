@@ -86,14 +86,14 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 Installasjonsskriptet bruker følgende prioritet for installasjonsstien:
 
-1. `$OPENCODE_INSTALL_DIR` - Egendefinert installasjonsmappe
+1. `$IMECODE_INSTALL_DIR` - Egendefinert installasjonsmappe
 2. `$XDG_BIN_DIR` - Sti som følger XDG Base Directory Specification
 3. `$HOME/bin` - Standard brukerbinar-mappe (hvis den finnes eller kan opprettes)
 4. `$HOME/.opencode/bin` - Standard fallback
 
 ```bash
 # Eksempler
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+IMECODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 

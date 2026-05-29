@@ -45,10 +45,10 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 1. **การกำหนดค่าระยะไกล** (จาก `.well-known/opencode`) - ค่าเริ่มต้นขององค์กร
 2. **การกำหนดค่าสากล** (`~/.config/opencode/opencode.json`) - การตั้งค่าของผู้ใช้
-3. **การกำหนดค่าแบบกำหนดเอง** (`OPENCODE_CONFIG` env var) - การแทนที่แบบกำหนดเอง
+3. **การกำหนดค่าแบบกำหนดเอง** (`IMECODE_CONFIG` env var) - การแทนที่แบบกำหนดเอง
 4. **การกำหนดค่าโครงการ** (`opencode.json` ในโครงการ) - การตั้งค่าเฉพาะโครงการ
 5. **`.opencode` ไดเรกทอรี** - ตัวแทน คำสั่ง ปลั๊กอิน
-6. **การกำหนดค่าแบบอินไลน์** (`OPENCODE_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
+6. **การกำหนดค่าแบบอินไลน์** (`IMECODE_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
 
 ซึ่งหมายความว่าการกำหนดค่าโปรเจ็กต์สามารถแทนที่ค่าเริ่มต้นส่วนกลางได้ และการกำหนดค่าส่วนกลางสามารถแทนที่ค่าเริ่มต้นขององค์กรระยะไกลได้
 
@@ -122,10 +122,10 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### เส้นทางที่กำหนดเอง
 
-ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `OPENCODE_CONFIG`
+ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `IMECODE_CONFIG`
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -135,13 +135,13 @@ opencode run "Hello world"
 
 ### ไดเรกทอรีที่กำหนดเอง
 
-ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `OPENCODE_CONFIG_DIR`
+ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `IMECODE_CONFIG_DIR`
 ตัวแปรสภาพแวดล้อม ไดเร็กทอรีนี้จะถูกค้นหาตัวแทน, คำสั่ง,
 โหมดและปลั๊กอินเหมือนกับไดเร็กทอรี `.opencode` มาตรฐานและควร
 เป็นไปตามโครงสร้างเดียวกัน
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -174,7 +174,7 @@ opencode run "Hello world"
 }
 ```
 
-ใช้ `OPENCODE_TUI_CONFIG` เพื่อชี้ไปยังไฟล์กำหนดค่า TUI ที่กำหนดเอง
+ใช้ `IMECODE_TUI_CONFIG` เพื่อชี้ไปยังไฟล์กำหนดค่า TUI ที่กำหนดเอง
 
 คีย์ `theme`, `keybinds` และ `tui` แบบเดิมใน `opencode.json` เลิกใช้แล้วและจะถูกย้ายโดยอัตโนมัติเมื่อเป็นไปได้
 
@@ -644,7 +644,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

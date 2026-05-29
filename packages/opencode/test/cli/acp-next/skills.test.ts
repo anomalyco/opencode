@@ -16,7 +16,7 @@ describe("opencode acp-next skills subprocess", () => {
         yield* Effect.promise(() => Bun.write(path.join(skills, "verifier-skill", "SKILL.md"), verifierSkill))
         const acp = yield* createAcpNextClient(
           { opencode },
-          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url, skills)) },
+          { IMECODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url, skills)) },
         )
         yield* initialize(acp)
         const session = yield* newSession(acp, home)

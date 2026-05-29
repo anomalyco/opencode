@@ -44,10 +44,10 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 1. **リモート設定** (`.well-known/opencode` から) - 組織のデフォルト
 2. **グローバル設定** (`~/.config/opencode/opencode.json`) - ユーザー設定
-3. **カスタム設定** (`OPENCODE_CONFIG` 環境変数) - カスタムオーバーライド
+3. **カスタム設定** (`IMECODE_CONFIG` 環境変数) - カスタムオーバーライド
 4. **プロジェクト設定** (プロジェクト内の `opencode.json`) - プロジェクト固有の設定
 5. **`.opencode` ディレクトリ** - エージェント、コマンド、プラグイン
-6. **インライン設定** (`OPENCODE_CONFIG_CONTENT` 環境変数) - ランタイムオーバーライド
+6. **インライン設定** (`IMECODE_CONFIG_CONTENT` 環境変数) - ランタイムオーバーライド
 
 つまり、プロジェクト設定はグローバルのデフォルトをオーバーライドでき、グローバル設定はリモート組織のデフォルトをオーバーライドできます。
 
@@ -121,10 +121,10 @@ OpenCode が起動すると、現在のディレクトリで設定ファイル�
 
 ### カスタムパス
 
-`OPENCODE_CONFIG` 環境変数を使用してカスタム設定ファイルのパスを指定します。
+`IMECODE_CONFIG` 環境変数を使用してカスタム設定ファイルのパスを指定します。
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export IMECODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -134,13 +134,13 @@ opencode run "Hello world"
 
 ### カスタムディレクトリ
 
-`OPENCODE_CONFIG_DIR` を使用してカスタム設定ディレクトリを指定します。
+`IMECODE_CONFIG_DIR` を使用してカスタム設定ディレクトリを指定します。
 環境変数。このディレクトリでは、エージェント、コマンド、
 モードとプラグインは標準の `.opencode` ディレクトリと同様であり、次のようにする必要があります。
 同じ構造に従います。
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export IMECODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -173,7 +173,7 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 }
 ```
 
-カスタム TUI 設定ファイルを指定するには、`OPENCODE_TUI_CONFIG` を使用します。
+カスタム TUI 設定ファイルを指定するには、`IMECODE_TUI_CONFIG` を使用します。
 
 `opencode.json` 内の従来の `theme`、`keybinds`、および `tui` キーは非推奨となり、可能であれば自動的に移行されます。
 
@@ -638,7 +638,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:IMECODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},

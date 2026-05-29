@@ -60,7 +60,7 @@ export async function read(): Promise<Content | undefined> {
   const os = platform()
 
   if (os === "darwin") {
-    const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
+    const tmpfile = path.join(tmpdir(), "imecode-clipboard.png")
     try {
       await Process.run(
         [
