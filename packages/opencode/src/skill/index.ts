@@ -296,7 +296,7 @@ export const layer = Layer.effect(
 
     const all = Effect.fn("Skill.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.values(s.skills)
+      return Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
