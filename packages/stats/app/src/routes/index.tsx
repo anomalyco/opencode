@@ -67,10 +67,18 @@ const usageColors = [
   "#ff6467",
 ]
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
+const themePreferences = ["dark", "light", "system"] as const
+const themePreferenceLabels = {
+  dark: "Dark",
+  light: "Light",
+  system: "System",
+} as const
+const themeStorageKey = "opencode:stats-theme"
 
 type UsageProduct = (typeof products)[number]
 type TokenProduct = (typeof tokenProducts)[number]
 type UsageRange = (typeof ranges)[number]
+type ThemePreference = (typeof themePreferences)[number]
 
 const getData = query(async () => {
   "use server"
@@ -104,9 +112,24 @@ export default function StatsHome() {
   const statsUnfurlUrl = new URL(statsUnfurlRankings, statsHomeUrl).toString()
   const data = createAsync(() => getData())
   const githubStars = createAsync(() => getGitHubStars())
+  const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
+  const updateThemePreference = (preference: ThemePreference) => {
+    applyThemePreference(preference)
+    setThemePreference(preference)
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(themeStorageKey, preference)
+  }
+
+  onMount(() => {
+    if (typeof window === "undefined") return
+    const preference = window.localStorage.getItem(themeStorageKey)
+    const nextPreference = isThemePreference(preference) ? preference : "system"
+    applyThemePreference(nextPreference)
+    setThemePreference(nextPreference)
+  })
 
   return (
-    <main data-page="stats">
+    <main data-page="stats" data-theme={themePreference()}>
       <Title>{statsHomeTitle}</Title>
       <Meta name="description" content={statsHomeDescription} />
       <Link rel="canonical" href={statsHomeUrl} />
@@ -145,10 +168,24 @@ export default function StatsHome() {
             )}
           </Show>
         </div>
-        <Footer />
+        <Footer themePreference={themePreference()} onThemePreferenceChange={updateThemePreference} />
       </div>
     </main>
   )
+}
+
+function isThemePreference(value: string | null): value is ThemePreference {
+  return value === "dark" || value === "light" || value === "system"
+}
+
+function applyThemePreference(preference: ThemePreference) {
+  if (typeof document === "undefined") return
+  document.documentElement.dataset.statsTheme = preference
+  if (preference === "system") {
+    document.documentElement.style.removeProperty("color-scheme")
+    return
+  }
+  document.documentElement.style.setProperty("color-scheme", preference)
 }
 
 function Hero(props: { updatedAt: string | null }) {
@@ -1421,7 +1458,10 @@ function OpenCodeMark() {
   )
 }
 
-function Footer() {
+function Footer(props: {
+  themePreference: ThemePreference
+  onThemePreferenceChange: (preference: ThemePreference) => void
+}) {
   const [subscribeOpen, setSubscribeOpen] = createSignal(false)
   const modelStats = [
     { href: "#top-models", label: "Top Models" },
@@ -1466,11 +1506,93 @@ function Footer() {
           <span>© 2026 Anomaly Innovations Inc.</span>
           <span data-slot="status">All systems Operational</span>
         </div>
+        <div data-slot="theme-toggle" role="group" aria-label="Theme">
+          <For each={themePreferences}>
+            {(preference) => (
+              <button
+                data-slot="theme-option"
+                type="button"
+                aria-label={themePreferenceLabels[preference]}
+                aria-pressed={props.themePreference === preference ? "true" : "false"}
+                title={themePreferenceLabels[preference]}
+                onClick={() => props.onThemePreferenceChange(preference)}
+              >
+                <ThemePreferenceIcon preference={preference} />
+              </button>
+            )}
+          </For>
+        </div>
       </div>
       <Show when={subscribeOpen()}>
         <SubscribeModal onClose={() => setSubscribeOpen(false)} />
       </Show>
     </footer>
+  )
+}
+
+function ThemePreferenceIcon(props: { preference: ThemePreference }) {
+  return (
+    <svg data-slot="theme-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <Show
+        when={props.preference === "dark"}
+        fallback={
+          <Show
+            when={props.preference === "light"}
+            fallback={
+              <>
+                <rect x="1.5552" y="2.4448" width="12.8896" height="8.8888" fill="currentColor" opacity="0.3" />
+                <svg
+                  x="1.0552"
+                  y="1.9446"
+                  width="13.8889"
+                  height="12.5325"
+                  viewBox="0 0 13.8889 12.5325"
+                  preserveAspectRatio="none"
+                  overflow="visible"
+                >
+                  <path
+                    d="M4.05559 12.0555C4.72936 11.8431 5.72492 11.6111 6.94448 11.6111M6.94448 11.6111C7.65114 11.6111 8.66981 11.6893 9.83336 12.0555M6.94448 11.6111L6.94448 9.38888M13.3889 0.5H0.500102C0.500102 0.5 0.500017 1.29594 0.500017 2.27778V7.61112C0.500017 8.59298 0.500007 9.38889 0.500007 9.38889H13.3889C13.3889 9.38889 13.3889 8.59298 13.3889 7.61112V2.27778C13.3889 1.29594 13.3889 0.5 13.3889 0.5Z"
+                    stroke="currentColor"
+                  />
+                </svg>
+              </>
+            }
+          >
+            <svg
+              x="0.6102"
+              y="0.6102"
+              width="14.7778"
+              height="14.7778"
+              viewBox="0 0 14.7778 14.7778"
+              preserveAspectRatio="none"
+              overflow="visible"
+            >
+              <path
+                d="M7.38889 0.5V1.38889M12.26 2.51782L11.6315 3.14627M14.2778 7.38892H13.3889M12.26 12.26L11.6315 11.6316M7.38889 14.2778V13.3889M2.51778 12.26L3.14622 11.6316M0.5 7.38892H1.38889M2.51778 2.51782L3.14622 3.14627M7.38888 11.1666C9.47528 11.1666 11.1667 9.47526 11.1667 7.38886C11.1667 5.30245 9.47528 3.61108 7.38888 3.61108C5.30247 3.61108 3.6111 5.30245 3.6111 7.38886C3.6111 9.47526 5.30247 11.1666 7.38888 11.1666Z"
+                stroke="currentColor"
+                stroke-linecap="square"
+              />
+            </svg>
+          </Show>
+        }
+      >
+        <svg
+          x="2.0549"
+          y="1.742"
+          width="12.3867"
+          height="12.3971"
+          viewBox="0 0 12.3867 12.3971"
+          preserveAspectRatio="none"
+          overflow="visible"
+        >
+          <path
+            d="M9.05556 8.39711C6.37067 8.39711 4.19444 6.22089 4.19444 3.536C4.19444 2.48445 4.53122 1.51456 5.09822 0.71889C2.48178 1.20733 0.5 3.49944 0.5 6.25822C0.5 9.37244 3.02467 11.8971 6.13889 11.8971C8.76156 11.8971 10.9596 10.1036 11.5903 7.67844C10.8514 8.13189 9.98578 8.39711 9.05556 8.39711Z"
+            stroke="currentColor"
+            stroke-linecap="round"
+          />
+        </svg>
+      </Show>
+    </svg>
   )
 }
 

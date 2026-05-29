@@ -43,6 +43,7 @@
 }
 
 [data-page="stats"] {
+  color-scheme: light;
   --color-background: #ffffff;
   --color-background-weak: #fafafa;
   --color-background-weak-hover: #eeeeee;
@@ -61,6 +62,7 @@
   --stats-text: #161616;
   --stats-muted: #5c5c5c;
   --stats-faint: #808080;
+  --stats-theme-icon-active: #3a3a3a;
   --stats-accent: #3b5cf6;
   --stats-accent-text: #6c7dff;
   --stats-bar-idle: #d4d4d4;
@@ -440,6 +442,7 @@
 }
 
 [data-page="stats"] [data-slot="subscribe-button"]:focus-visible,
+[data-page="stats"] [data-slot="theme-option"]:focus-visible,
 [data-page="stats"] [data-component="subscribe-modal"] button:focus-visible,
 [data-page="stats"] [data-component="subscribe-modal"] input:focus-visible {
   outline: 2px solid var(--stats-accent);
@@ -638,6 +641,54 @@
 
 [data-page="stats"] [data-slot="footer-bottom"] > div:first-child {
   gap: 24px;
+}
+
+[data-page="stats"] [data-slot="theme-toggle"] {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="theme-option"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--stats-faint);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="theme-icon"] {
+  display: block;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+[data-page="stats"] [data-slot="theme-option"]:hover {
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="theme-option"][aria-pressed="true"] {
+  background: var(--stats-bg);
+  color: var(--stats-theme-icon-active);
+  box-shadow:
+    0 0 0 0 #0000,
+    0 0 0 0.5px #0000001f,
+    0 1px 2px -1px #00000014,
+    0 2px 4px 0 #0000000a;
 }
 
 [data-page="stats"] [data-slot="status"] {
@@ -2114,8 +2165,123 @@
   width: fit-content;
 }
 
+[data-page="stats"][data-theme="dark"],
+:root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) {
+  color-scheme: dark;
+  --color-background: #161616;
+  --color-background-weak: #242424;
+  --color-background-weak-hover: #303030;
+  --color-background-strong: #ffffff;
+  --color-background-strong-hover: #eeeeee;
+  --color-text: #d4d4d4;
+  --color-text-weak: #808080;
+  --color-text-strong: #ffffff;
+  --color-text-inverted: #161616;
+  --color-border-weak: #ffffff1a;
+  --stats-bg: #161616;
+  --stats-layer: #242424;
+  --stats-layer-2: #303030;
+  --stats-line: #ffffff1a;
+  --stats-line-strong: #ffffff33;
+  --stats-text: #ffffff;
+  --stats-muted: #d4d4d4;
+  --stats-faint: #808080;
+  --stats-theme-icon-active: #fafafa;
+  --stats-bar-idle: #303030;
+  --stats-dot: #303030;
+  --stats-hero-muted: #808080;
+  --stats-hero-pattern: #303030;
+  --stats-logo-bg: #f1ecec;
+  --stats-logo-fill: #b7b1b1;
+  --stats-logo-stroke: #211e1e;
+}
+
+[data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
+:root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
+  background: #242424f2;
+}
+
+[data-page="stats"][data-theme="dark"] [data-section="top-models"] [data-component="chart-tooltip"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-section="top-models"]
+  [data-component="chart-tooltip"] {
+  background: #242424f2;
+  box-shadow:
+    0 0 0 0.5px #ffffff24,
+    0 8px 16px #0000003d,
+    0 4px 8px #00000052;
+}
+
+[data-page="stats"][data-theme="dark"] [data-section="top-models"] [data-component="chart-tooltip"] > span,
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-section="top-models"]
+  [data-component="chart-tooltip"]
+  > span {
+  color: var(--stats-faint);
+}
+
+[data-page="stats"][data-theme="dark"] [data-component="leader-card"][data-size="compact"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="leader-card"][data-size="compact"] {
+  box-shadow:
+    0 0 0 0.5px #ffffff1f,
+    0 1px 2px -1px #00000052,
+    0 2px 4px #0000003d;
+}
+
+[data-page="stats"][data-theme="dark"] [data-component="leader-card"]:hover,
+[data-page="stats"][data-theme="dark"] [data-component="leader-card"]:focus-visible,
+:root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="leader-card"]:hover,
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="leader-card"]:focus-visible {
+  background: #303030;
+  box-shadow:
+    0 0 0 0.5px #ffffff24,
+    0 6px 16px #0000003d,
+    0 2px 6px #00000052;
+}
+
+[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"],
+[data-page="stats"][data-theme="dark"] [data-slot="menu-button"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-slot="header-button"][data-variant="neutral"],
+:root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
+  color: #fafafa;
+  background: #ffffff0f;
+  box-shadow:
+    0 -0.5px 0 0 #ffffff33,
+    0 0 0 0.5px #ffffff33,
+    0 1px 2px 0 #00000066;
+}
+
+[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"] span,
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-slot="header-button"][data-variant="neutral"]
+  span {
+  color: #aeaeae;
+}
+
+[data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="contrast"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-slot="header-button"][data-variant="contrast"] {
+  color: #ffffff;
+  background: #5c5c5c;
+  box-shadow:
+    0 -0.5px 0 0 #ffffff4d,
+    0 0 0 0.5px #ffffff66,
+    0 1px 2px 0 #00000066;
+}
+
 @media (prefers-color-scheme: dark) {
-  [data-page="stats"] {
+  :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) {
+    color-scheme: dark;
     --color-background: #161616;
     --color-background-weak: #242424;
     --color-background-weak-hover: #303030;
@@ -2134,6 +2300,7 @@
     --stats-text: #ffffff;
     --stats-muted: #d4d4d4;
     --stats-faint: #808080;
+    --stats-theme-icon-active: #fafafa;
     --stats-bar-idle: #303030;
     --stats-dot: #303030;
     --stats-hero-muted: #808080;
@@ -2143,11 +2310,14 @@
     --stats-logo-stroke: #211e1e;
   }
 
-  [data-page="stats"] [data-component="chart-tooltip"] {
+  :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
     background: #242424f2;
   }
 
-  [data-page="stats"] [data-section="top-models"] [data-component="chart-tooltip"] {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-section="top-models"]
+    [data-component="chart-tooltip"] {
     background: #242424f2;
     box-shadow:
       0 0 0 0.5px #ffffff24,
@@ -2155,19 +2325,29 @@
       0 4px 8px #00000052;
   }
 
-  [data-page="stats"] [data-section="top-models"] [data-component="chart-tooltip"] > span {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-section="top-models"]
+    [data-component="chart-tooltip"]
+    > span {
     color: var(--stats-faint);
   }
 
-  [data-page="stats"] [data-component="leader-card"][data-size="compact"] {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"][data-size="compact"] {
     box-shadow:
       0 0 0 0.5px #ffffff1f,
       0 1px 2px -1px #00000052,
       0 2px 4px #0000003d;
   }
 
-  [data-page="stats"] [data-component="leader-card"]:hover,
-  [data-page="stats"] [data-component="leader-card"]:focus-visible {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"]:hover,
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"]:focus-visible {
     background: #303030;
     box-shadow:
       0 0 0 0.5px #ffffff24,
@@ -2175,8 +2355,10 @@
       0 2px 6px #00000052;
   }
 
-  [data-page="stats"] [data-slot="header-button"][data-variant="neutral"],
-  [data-page="stats"] [data-slot="menu-button"] {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-slot="header-button"][data-variant="neutral"],
+  :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-slot="menu-button"] {
     color: #fafafa;
     background: #ffffff0f;
     box-shadow:
@@ -2185,11 +2367,16 @@
       0 1px 2px 0 #00000066;
   }
 
-  [data-page="stats"] [data-slot="header-button"][data-variant="neutral"] span {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-slot="header-button"][data-variant="neutral"]
+    span {
     color: #aeaeae;
   }
 
-  [data-page="stats"] [data-slot="header-button"][data-variant="contrast"] {
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-slot="header-button"][data-variant="contrast"] {
     color: #ffffff;
     background: #5c5c5c;
     box-shadow:
