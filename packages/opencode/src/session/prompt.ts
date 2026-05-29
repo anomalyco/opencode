@@ -1300,12 +1300,19 @@ export const layer = Layer.effect(
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
-          const task = tasks.pop()
 
-          if (task?.type === "subtask") {
-            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+          // Dispatch all pending subtasks in parallel (#29638)
+          const subtasks = tasks.filter((t): t is MessageV2.SubtaskPart => t.type === "subtask")
+          if (subtasks.length > 0) {
+            yield* Effect.forEach(
+              subtasks,
+              (task) => handleSubtask({ task, model, lastUser, sessionID, session, msgs }),
+              { concurrency: "unbounded" },
+            )
             continue
           }
+
+          const task = tasks.pop()
 
           if (task?.type === "compaction") {
             const result = yield* compaction.process({
