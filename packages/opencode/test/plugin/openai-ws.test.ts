@@ -50,6 +50,45 @@ describe("plugin.openai.ws", () => {
     ).rejects.toThrow("Expected 101 status code")
   })
 
+  test("routes websocket connections through configured HTTP proxies under Bun", async () => {
+    let directConnections = 0
+    await using target = await createWebSocketServer(() => directConnections++)
+    await using proxy = await createRejectingConnectProxy()
+    using _env = setEnv({
+      http_proxy: proxy.url,
+      HTTP_PROXY: undefined,
+      all_proxy: undefined,
+      ALL_PROXY: undefined,
+      no_proxy: undefined,
+      NO_PROXY: undefined,
+    })
+
+    await expect(OpenAIWebSocket.connectResponsesWebSocket({ url: target.wsUrl, headers: {} })).rejects.toThrow()
+
+    expect(proxy.connections()).toBe(1)
+    expect(directConnections).toBe(0)
+  })
+
+  test("bypasses configured websocket proxies for NO_PROXY targets", async () => {
+    let directConnections = 0
+    await using target = await createWebSocketServer(() => directConnections++)
+    await using proxy = await createRejectingConnectProxy()
+    using _env = setEnv({
+      http_proxy: proxy.url,
+      HTTP_PROXY: undefined,
+      all_proxy: undefined,
+      ALL_PROXY: undefined,
+      no_proxy: "127.0.0.1",
+      NO_PROXY: undefined,
+    })
+
+    const socket = await OpenAIWebSocket.connectResponsesWebSocket({ url: target.wsUrl, headers: {} })
+
+    expect(proxy.connections()).toBe(0)
+    expect(directConnections).toBe(1)
+    socket.terminate()
+  })
+
   test("enforces websocket send idle timeout", async () => {
     const socket = new (class extends EventEmitter {
       send(_data: string, _callback: (error?: Error) => void) {}
@@ -666,6 +705,24 @@ async function createRejectingWebSocketServer(onAttempt: () => void) {
   return websocketServerHandle(server, http)
 }
 
+async function createRejectingConnectProxy() {
+  let connections = 0
+  const server = createServer()
+  server.on("connect", (_request, socket) => {
+    connections += 1
+    socket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n")
+  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    connections: () => connections,
+    async [Symbol.asyncDispose]() {
+      await closeHttpServer(server)
+    },
+  }
+}
+
 async function createHttpServer() {
   const httpRequests: IncomingMessage[] = []
   const server = createServer((request, response) => {
@@ -700,6 +757,24 @@ function websocketServerHandle(server: WebSocketServer, http: Awaited<ReturnType
 
 function closeHttpServer(server: HttpServer) {
   return new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+}
+
+function setEnv(values: Record<string, string | undefined>) {
+  const original = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]))
+  for (const [key, value] of Object.entries(values)) restoreEnv(key, value)
+  return {
+    [Symbol.dispose]() {
+      for (const [key, value] of Object.entries(original)) restoreEnv(key, value)
+    },
+  }
+}
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+  process.env[key] = value
 }
 
 async function waitFor(predicate: () => boolean, message: string) {
