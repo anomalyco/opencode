@@ -2,6 +2,7 @@ import { Effect, Option, Schema, Scope, Stream } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
+import * as Truncate from "./truncate"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
@@ -11,15 +12,22 @@ import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 import { Reference } from "@/reference/reference"
 
-const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-const MAX_BYTES = 50 * 1024
-const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
+
+function formatSize(bytes: number) {
+  const kb = 1024
+  const mb = kb * 1024
+  const gb = mb * 1024
+  if (bytes < kb) return `${bytes} B`
+  if (bytes < mb) return `${(bytes / kb).toFixed(1)} KB`
+  if (bytes < gb) return `${(bytes / mb).toFixed(1)} MB`
+  return `${(bytes / gb).toFixed(1)} GB`
+}
 
 // `offset` and `limit` were originally `z.coerce.number()` — the runtime
 // coercion was useful when the tool was called from a shell but serves no
@@ -32,7 +40,7 @@ export const Parameters = Schema.Struct({
     description: "The line number to start reading from (1-indexed)",
   }),
   limit: Schema.optional(NonNegativeInt).annotate({
-    description: "The maximum number of lines to read (defaults to 2000)",
+    description: "The maximum number of lines to read (defaults to configured read limit, or 2000)",
   }),
 })
 
@@ -44,6 +52,7 @@ export const ReadTool = Tool.define(
     const lsp = yield* LSP.Service
     const reference = yield* Reference.Service
     const scope = yield* Scope.Scope
+    const truncate = yield* Truncate.Service
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
       const dir = path.dirname(filepath)
@@ -105,7 +114,10 @@ export const ReadTool = Tool.define(
       )
     })
 
-    const lines = Effect.fn("ReadTool.lines")(function* (filepath: string, opts: { limit: number; offset: number }) {
+    const lines = Effect.fn("ReadTool.lines")(function* (
+      filepath: string,
+      opts: { limit: number; offset: number; maxBytes: number },
+    ) {
       const start = opts.offset - 1
       const raw: string[] = []
       const flags = { bytes: 0, count: 0, cut: false, more: false, done: false }
@@ -132,7 +144,7 @@ export const ReadTool = Tool.define(
 
             const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
             const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-            if (flags.bytes + size <= MAX_BYTES) {
+            if (flags.bytes + size <= opts.maxBytes) {
               raw.push(line)
               flags.bytes += size
               return
@@ -233,13 +245,31 @@ export const ReadTool = Tool.define(
 
       if (!stat) return yield* miss(filepath)
 
+      const truncateLimits = yield* truncate.limits()
+      const limit = Math.max(1, params.limit ?? truncateLimits.maxLines)
+      const offset = params.offset || 1
+      const maxBytes = truncateLimits.maxBytes
+
       if (stat.type === "Directory") {
         const items = yield* list(filepath)
-        const limit = params.limit ?? DEFAULT_READ_LIMIT
-        const offset = params.offset || 1
         const start = offset - 1
-        const sliced = items.slice(start, start + limit)
-        const truncated = start + sliced.length < items.length
+        const sliced = items.slice(start, start + limit).reduce(
+          (acc, entry) => {
+            if (acc.cut) return acc
+            const size = Buffer.byteLength(entry, "utf-8") + (acc.items.length > 0 ? 1 : 0)
+            if (acc.bytes + size > maxBytes) return { ...acc, cut: true }
+            return { items: [...acc.items, entry], bytes: acc.bytes + size, cut: false }
+          },
+          { items: [] as string[], bytes: 0, cut: false },
+        )
+        const truncated = sliced.cut || start + sliced.items.length < items.length
+        const entriesMessage = sliced.cut
+          ? sliced.items.length > 0
+            ? `\n(Output capped at ${formatSize(maxBytes)}. Showing ${sliced.items.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.items.length})`
+            : `\n(Output capped at ${formatSize(maxBytes)} before any entries could be shown. Increase tool_output.max_bytes to read this directory.)`
+          : truncated
+            ? `\n(Showing ${sliced.items.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.items.length})`
+            : `\n(${items.length} entries)`
 
         return {
           title,
@@ -247,14 +277,12 @@ export const ReadTool = Tool.define(
             `<path>${filepath}</path>`,
             `<type>directory</type>`,
             `<entries>`,
-            sliced.join("\n"),
-            truncated
-              ? `\n(Showing ${sliced.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
-              : `\n(${items.length} entries)`,
+            sliced.items.join("\n"),
+            entriesMessage,
             `</entries>`,
           ].join("\n"),
           metadata: {
-            preview: sliced.slice(0, 20).join("\n"),
+            preview: sliced.items.slice(0, 20).join("\n"),
             truncated,
             loaded: [] as string[],
           },
@@ -292,7 +320,7 @@ export const ReadTool = Tool.define(
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
-      const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 })
+      const file = yield* lines(filepath, { limit, offset, maxBytes })
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),
@@ -306,7 +334,10 @@ export const ReadTool = Tool.define(
       const next = last + 1
       const truncated = file.more || file.cut
       if (file.cut) {
-        output += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${file.offset}-${last}. Use offset=${next} to continue.)`
+        output +=
+          file.raw.length > 0
+            ? `\n\n(Output capped at ${formatSize(maxBytes)}. Showing lines ${file.offset}-${last}. Use offset=${next} to continue.)`
+            : `\n\n(Output capped at ${formatSize(maxBytes)} before any lines could be shown. Increase tool_output.max_bytes to read this file.)`
       } else if (file.more) {
         output += `\n\n(Showing lines ${file.offset}-${last} of ${file.count}. Use offset=${next} to continue.)`
       } else {

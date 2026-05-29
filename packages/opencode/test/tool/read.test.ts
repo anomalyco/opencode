@@ -19,6 +19,7 @@ import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
+import { TestConfig } from "../fixture/config"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -57,6 +58,8 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const it = testEffect(readLayer())
 const scout = testEffect(readLayer({ experimentalScout: true }))
+const configuredIt = (config: Config.Info) =>
+  testEffect(Layer.mergeAll(readLayer(), TestConfig.layer({ get: () => Effect.succeed(config) })))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
@@ -489,6 +492,43 @@ describe("tool.read truncation", () => {
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).not.toContain("Showing 5 of 10 entries")
     }),
+  )
+
+  configuredIt({ tool_output: { max_lines: 100, max_bytes: 24 } }).live(
+    "truncates directory listing by configured byte count",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        yield* Effect.forEach(
+          ["aaaaaaaaaa.txt", "bbbbbbbbbb.txt", "cccccccccc.txt"],
+          (name) => put(path.join(dir, "dir", name), name),
+          { concurrency: "unbounded" },
+        )
+
+        const result = yield* exec(dir, { filePath: path.join(dir, "dir") })
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output).toContain("Output capped at 24 B")
+        expect(result.output).toContain("aaaaaaaaaa.txt")
+        expect(result.output).not.toContain("bbbbbbbbbb.txt")
+      }),
+  )
+
+  configuredIt({ tool_output: { max_lines: 3, max_bytes: 1024 * 1024 } }).live(
+    "uses configured max_lines when limit is omitted",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        const lines = Array.from({ length: 10 }, (_, i) => `line${i + 1}`).join("\n")
+        yield* put(path.join(dir, "configured-lines.txt"), lines)
+
+        const result = yield* exec(dir, { filePath: path.join(dir, "configured-lines.txt") })
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output).toContain("Showing lines 1-3 of 10")
+        expect(result.output).toContain("Use offset=4")
+        expect(result.output).toContain("1: line1")
+        expect(result.output).toContain("3: line3")
+        expect(result.output).not.toContain("4: line4")
+      }),
   )
 
   it.live("truncates long lines", () =>
