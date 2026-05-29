@@ -58,6 +58,10 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
+    // Serialise all file mutations — McpAuth.set/remove use a read-modify-write
+    // pattern. Without a lock, concurrent saves (e.g. token refresh + client info
+    // save racing at startup) can overwrite each other's changes. (#29804)
+    const sem = yield* Effect.makeSemaphore(1)
 
     const all = Effect.fn("McpAuth.all")(function* () {
       return yield* fs.readJson(filepath).pipe(
@@ -80,15 +84,23 @@ export const layer = Layer.effect(
     })
 
     const set = Effect.fn("McpAuth.set")(function* (mcpName: string, entry: Entry, serverUrl?: string) {
-      const data = yield* all()
-      if (serverUrl) entry.serverUrl = serverUrl
-      yield* fs.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600).pipe(Effect.orDie)
+      yield* sem.withPermit(
+        Effect.gen(function* () {
+          const data = yield* all()
+          if (serverUrl) entry.serverUrl = serverUrl
+          yield* fs.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600).pipe(Effect.orDie)
+        }),
+      )
     })
 
     const remove = Effect.fn("McpAuth.remove")(function* (mcpName: string) {
-      const data = yield* all()
-      delete data[mcpName]
-      yield* fs.writeJson(filepath, data, 0o600).pipe(Effect.orDie)
+      yield* sem.withPermit(
+        Effect.gen(function* () {
+          const data = yield* all()
+          delete data[mcpName]
+          yield* fs.writeJson(filepath, data, 0o600).pipe(Effect.orDie)
+        }),
+      )
     })
 
     const updateField = <K extends keyof Entry>(field: K, spanName: string) =>
