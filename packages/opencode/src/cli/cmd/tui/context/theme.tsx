@@ -36,6 +36,18 @@ import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import carbonfox from "./theme/carbonfox.json" with { type: "json" }
+import berlin from "./theme/berlin.json" with { type: "json" }
+import bogota from "./theme/bogota.json" with { type: "json" }
+import helsinki from "./theme/helsinki.json" with { type: "json" }
+import lahabana from "./theme/lahabana.json" with { type: "json" }
+import london from "./theme/london.json" with { type: "json" }
+import madrid from "./theme/madrid.json" with { type: "json" }
+import miami from "./theme/miami.json" with { type: "json" }
+import oslo from "./theme/oslo.json" with { type: "json" }
+import paris from "./theme/paris.json" with { type: "json" }
+import praha from "./theme/praha.json" with { type: "json" }
+import tokio from "./theme/tokio.json" with { type: "json" }
+import x from "./theme/x.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
@@ -120,6 +132,18 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vercel,
   zenburn,
   carbonfox,
+  berlin,
+  bogota,
+  helsinki,
+  lahabana,
+  london,
+  madrid,
+  miami,
+  oslo,
+  paris,
+  praha,
+  tokio,
+  x,
 }
 
 type State = {
