@@ -580,7 +580,11 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             icon={
               <Show
                 when={props.state.opening}
-                fallback={<AppIcon id={props.state.currentIcon} />}
+                fallback={
+                  <div class="flex size-4 items-center justify-center [&_[data-component=app-icon]]:size-4">
+                    <AppIcon id={props.state.currentIcon} />
+                  </div>
+                }
               >
                 <Spinner class="size-3.5" style={{ color: props.state.tint ?? "var(--icon-base)" }} />
               </Show>
