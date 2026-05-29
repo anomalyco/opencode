@@ -351,6 +351,18 @@ export function launchPreview(
     ? `${config.installCommand} && ${config.command}`
     : config.command
 
+  // Log the resolved launch parameters so CloudWatch shows exactly what
+  // we're about to spawn.  The shellCmd may include the OAuth token if
+  // someone embeds it in a custom installCommand — we deliberately do
+  // NOT log gitAccessToken itself anywhere, but the shellCmd value is
+  // operator-authored config and we treat it as safe to log.
+  console.log(
+    `[collab.preview] launching session=${collabSessionId} repo=${repoFullName} ` +
+      `port=${config.port} scheme=${config.upstreamScheme ?? "http"} ` +
+      `cwd=${cwd}\n` +
+      `[collab.preview]   shellCmd: ${shellCmd}`,
+  )
+
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OPENCODE_PREVIEW: "1",
@@ -641,6 +653,16 @@ function wireChildStreams(state: ActiveState): void {
         state._log.splice(0, state._log.length - LOG_LINES_RETAINED)
       }
 
+      // Mirror to container stdout so CloudWatch captures the dev server's
+      // output without the operator needing iframe-terminal access.  Tag
+      // with the collab session id + stream so a single log group with
+      // multiple sessions stays searchable.  Truncate to 1 KB per line so
+      // a runaway dev server can't blow up the log stream.
+      const consoleFn = stream === "stderr" ? console.error : console.log
+      consoleFn(
+        `[collab.preview/${state.collabSessionId}/${stream}] ${line.slice(0, 1024)}`,
+      )
+
       // Status transition: "installing" → "running" on the readyPattern OR
       // on a built-in heuristic (the line mentions "Local:" / "ready" / "listening").
       // RegExp construction is validated at config-load (previewConfigForRepo
@@ -680,6 +702,10 @@ function wireChildStreams(state: ActiveState): void {
   state.child.once("exit", (code, signal) => {
     if (active !== state) return // already replaced
     const wasStopped = state._stopRequested
+    console.log(
+      `[collab.preview] child exit session=${state.collabSessionId} ` +
+        `code=${code} signal=${signal} wasStopped=${wasStopped} status=${state.status}`,
+    )
 
     if (wasStopped) {
       // stopPreview() drove this exit.  It already broadcast

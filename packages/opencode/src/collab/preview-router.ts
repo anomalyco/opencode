@@ -106,6 +106,12 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
   const scheme = getActiveUpstreamScheme(port)
   const target = `${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest}${url.search}`
 
+  // Log every request so CloudWatch shows the full proxy attempt history.
+  // Volume is bounded by `/preview/<port>/*` traffic, which is itself idle-
+  // swept at 30 min — quiet during normal browsing, just verbose enough
+  // during a debugging session to be useful.
+  console.log(`[collab.preview-proxy] ${req.method} ${rest} → ${target}`)
+
   // Strip hop-by-hop headers + the Host header (we set it ourselves below
   // so the dev server sees its expected hostname; the browser's original
   // Host header would otherwise leak collab.utils.unleashlive.com which
@@ -161,12 +167,30 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
       tls: { rejectUnauthorized: false },
     })
 
+    console.log(
+      `[collab.preview-proxy] ${req.method} ${rest} ← ${upstream.status} ${upstream.statusText} ` +
+        `(content-encoding=${upstream.headers.get("content-encoding") ?? "none"})`,
+    )
+
     // Pass through the upstream's body (which may itself be a stream) and
     // headers as-is, minus anything hop-by-hop the upstream might have set.
     const respHeaders = new Headers(upstream.headers)
     respHeaders.delete("connection")
     respHeaders.delete("keep-alive")
     respHeaders.delete("transfer-encoding")
+    // Bun's fetch auto-decompresses gzip / br / deflate response bodies and
+    // hands `upstream.body` to us as the DECODED byte stream — but
+    // `upstream.headers` still claim the original Content-Encoding (from
+    // the upstream server) and Content-Length (the on-the-wire compressed
+    // size).  Forwarding those headers verbatim makes the BROWSER try to
+    // decompress an already-decompressed body → ERR_CONTENT_DECODING_FAILED.
+    // Strip both; the browser will treat the body as raw bytes.
+    //
+    // Side note: this also fixes the `Content-Length` mismatch which
+    // would otherwise risk a "response truncated" error if the browser
+    // relied on the header to know when to stop reading.
+    respHeaders.delete("content-encoding")
+    respHeaders.delete("content-length")
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
@@ -174,6 +198,16 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
     })
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
+    // CloudWatch needs the same info the user sees in the 502 body, so the
+    // operator can diagnose without iframe-terminal access.  Includes the
+    // stack trace if `err` is an Error — usually it's a TypeError("fetch
+    // failed") wrapping a transport error in `.cause`.
+    console.error(
+      `[collab.preview-proxy] upstream ${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest} failed: ${detail}`,
+      err instanceof Error && (err as Error & { cause?: unknown }).cause
+        ? `cause: ${String((err as Error & { cause?: unknown }).cause)}`
+        : "",
+    )
     // Hint at scheme mismatch — common 502 cause once HTTPS-upstream support
     // exists.  Two cases:
     //   - Proxy is configured "http" (default) but the dev server bound TLS
@@ -251,6 +285,9 @@ export function attachPreviewUpgrade(server: {
     // anyway.  See `handlePreviewHttp`'s tls option for the matching
     // rationale on the HTTP path.
     const upstreamScheme = getActiveUpstreamScheme(parsed.port)
+    console.log(
+      `[collab.preview-proxy] WS upgrade ${pathname} → ${upstreamScheme}://127.0.0.1:${parsed.port}${parsed.rest}`,
+    )
     const upstreamSocket: Socket =
       upstreamScheme === "https"
         ? (tlsConnect({ host: "127.0.0.1", port: parsed.port, rejectUnauthorized: false }) as unknown as Socket)
@@ -258,6 +295,10 @@ export function attachPreviewUpgrade(server: {
 
     const cleanup = (err?: Error) => {
       if (err) {
+        console.error(
+          `[collab.preview-proxy] WS upgrade upstream error ` +
+            `${upstreamScheme}://127.0.0.1:${parsed.port}: ${err.message}`,
+        )
         try {
           clientSocket.write(
             "HTTP/1.1 502 Bad Gateway\r\n" +
