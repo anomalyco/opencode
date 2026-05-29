@@ -39,21 +39,6 @@ type TextModel = {
   text?: TextProp
   yBlock?: YBlock
 }
-type DragWidget = HTMLElement & {
-  anchorBlockId?: {
-    value: string | null
-  }
-  dragging?: boolean
-  hide?: (force?: boolean) => void
-  pointerEventWatcher?: {
-    showDragHandleOnHoverBlock?: () => void
-  }
-}
-type BlockEl = HTMLElement & {
-  model?: {
-    role?: string
-  }
-}
 
 const IMAGES = new Set(["gif", "jpeg", "jpg", "png", "webp"])
 
@@ -102,10 +87,8 @@ const image = (file: File) => kind(file).startsWith("image/")
 
 export async function createPage(input: DocMountInput) {
   await ensureEffects()
-  const [{ PageEditor }, { PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider }] = await Promise.all([
-    import("@blocksuite/presets"),
-    import("@blocksuite/blocks"),
-  ])
+  const [{ PageEditor }, { DocModeExtension, PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider }] =
+    await Promise.all([import("@blocksuite/presets"), import("@blocksuite/blocks")])
 
   const schema = new Schema().register(withFileReferenceSchema(AffineSchemas))
   const page = "page"
@@ -161,16 +144,31 @@ export async function createPage(input: DocMountInput) {
   }
 
   let doc = draft ?? collection.getDoc(page, { readonly: input.readonly, query }) ?? collection.createDoc({ id: page, query })
+  const dnd = (item: Doc) => {
+    if (!input.readonly) item.awarenessStore.setFlag("enable_new_dnd", false)
+  }
   if (!doc.loaded) doc.load()
   if (!doc.root && input.init !== false && !input.readonly) initDoc(doc)
   if (!input.readonly) baseline(doc)
+  dnd(doc)
   if (input.sync && !input.readonly) {
     unlink = await link(direct!, collection.doc, doc.spaceDoc)
   }
 
   const editor = new PageEditor()
   editor.doc = doc
-  editor.specs = [...(input.readonly ? PreviewEditorBlockSpecs : PageEditorBlockSpecs), ...FileReferenceBlockSpec]
+  editor.specs = [
+    ...(input.readonly ? PreviewEditorBlockSpecs : PageEditorBlockSpecs),
+    DocModeExtension({
+      getEditorMode: () => "page",
+      getPrimaryMode: () => "page",
+      onPrimaryModeChange: () => ({ dispose() {} }),
+      setEditorMode: () => {},
+      setPrimaryMode: () => {},
+      togglePrimaryMode: () => "page",
+    }),
+    ...FileReferenceBlockSpec,
+  ]
   editor.hasViewport = true
 
   let reload: (() => void) | undefined
@@ -195,70 +193,6 @@ export async function createPage(input: DocMountInput) {
   let unload: (() => void) | undefined
   let cursors: (() => void) | undefined
   let unkeys: (() => void) | undefined
-  let undrag: (() => void) | undefined
-  let point: PointerEvent | undefined
-  let hover = ""
-  const patched = new WeakSet<DragWidget>()
-
-  const hovered = (event: PointerEvent) =>
-    document.elementsFromPoint(event.clientX, event.clientY).find((item): item is BlockEl => {
-      const el = item.closest("[data-block-id]") as BlockEl | null
-      return !!el && editor.contains(el) && el.model?.role === "content"
-    })?.closest("[data-block-id]") as BlockEl | null
-
-  const over = () =>
-    !!point &&
-    document
-      .elementsFromPoint(point.clientX, point.clientY)
-      .some((item) => editor.contains(item) && (item.closest("[data-block-id]") || item.closest("affine-drag-handle-widget")))
-
-  const widget = () => editor.querySelector("affine-drag-handle-widget") as DragWidget | null
-
-  const show = () => {
-    const item = widget()
-    if (!hover || !item?.anchorBlockId || item.dragging) return
-    item.anchorBlockId.value = hover
-    item.pointerEventWatcher?.showDragHandleOnHoverBlock?.()
-  }
-
-  const patch = (item: DragWidget) => {
-    if (patched.has(item) || !item.hide) return
-    patched.add(item)
-    const hide = item.hide.bind(item)
-    item.hide = (force = false) => {
-      if (!force && hover && over()) {
-        show()
-        return
-      }
-      hide(force)
-    }
-  }
-
-  const drag = (event: PointerEvent) => {
-    if (input.readonly) return
-    point = event
-    const el = hovered(event)
-    if (!el) {
-      if (over()) show()
-      return
-    }
-    const id = el.getAttribute("data-block-id")
-    const item = widget()
-    if (!id || !item) return
-    hover = id
-    patch(item)
-    show()
-  }
-
-  const bind = () => {
-    undrag?.()
-    undrag = undefined
-    if (input.readonly) return
-    editor.addEventListener("pointermove", drag)
-    undrag = () => editor.removeEventListener("pointermove", drag)
-  }
-
-  bind()
 
   const rebind = () => {
     const current = editor.std?.doc ?? doc
@@ -269,6 +203,7 @@ export async function createPage(input: DocMountInput) {
     const fresh = collection.getDoc(page, { readonly: input.readonly, query })
     if (!fresh) return
     if (!fresh.loaded) fresh.load()
+    dnd(fresh)
     doc = fresh
     editor.doc = fresh
     if (fresh !== current) current.dispose()
@@ -401,7 +336,6 @@ export async function createPage(input: DocMountInput) {
       cursors = input.readonly ? undefined : watchCursorLabels(editor, el)
       unkeys?.()
       unkeys = undefined
-      bind()
       const send = input.submit
       if (!input.readonly && send) {
         const onKey = (event: KeyboardEvent) => {
@@ -432,8 +366,6 @@ export async function createPage(input: DocMountInput) {
   const detach = () => {
     unkeys?.()
     unkeys = undefined
-    undrag?.()
-    undrag = undefined
     cursors?.()
     cursors = undefined
     resize?.disconnect()
