@@ -1,18 +1,23 @@
 import { describe, expect, test } from "bun:test"
 import { LLM, LLMResponse } from "../src"
-import { LLMRequest, Message, ModelRef, ToolChoice, ToolDefinition } from "../src/schema"
+import * as OpenAIChat from "../src/protocols/openai-chat"
+import * as OpenAIResponses from "../src/protocols/openai-responses"
+import { LLMRequest, Message, Model, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart } from "../src/schema"
+
+const chatRoute = OpenAIChat.route
+const responsesRoute = OpenAIResponses.route
 
 describe("llm constructors", () => {
   test("builds canonical schema classes from ergonomic input", () => {
     const request = LLM.request({
       id: "req_1",
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "You are concise.",
       prompt: "Say hello.",
     })
 
     expect(request).toBeInstanceOf(LLMRequest)
-    expect(request.model).toBeInstanceOf(ModelRef)
+    expect(request.model).toBeInstanceOf(Model)
     expect(request.messages[0]).toBeInstanceOf(Message)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
@@ -23,12 +28,12 @@ describe("llm constructors", () => {
   test("updates requests without spreading schema class instances", () => {
     const base = LLM.request({
       id: "req_1",
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
     const updated = LLM.updateRequest(base, {
       generation: { maxTokens: 20 },
-      messages: [...base.messages, LLM.assistant("Hi.")],
+      messages: [...base.messages, Message.assistant("Hi.")],
     })
 
     expect(updated).toBeInstanceOf(LLMRequest)
@@ -38,16 +43,16 @@ describe("llm constructors", () => {
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
   })
 
-  test("keeps request options separate from model defaults", () => {
+  test("keeps request options separate from route defaults", () => {
     const request = LLM.request({
-      model: LLM.model({
+      model: Model.make({
         id: "fake-model",
         provider: "fake",
-        route: "openai-chat",
-        baseURL: "https://fake.local",
-        generation: { maxTokens: 100, temperature: 1 },
-        providerOptions: { openai: { store: false, metadata: { model: true } } },
-        http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
+        route: chatRoute.with({
+          generation: { maxTokens: 100, temperature: 1 },
+          providerOptions: { openai: { store: false, metadata: { model: true } } },
+          http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
+        }),
       }),
       prompt: "Say hello.",
       generation: { temperature: 0 },
@@ -67,10 +72,10 @@ describe("llm constructors", () => {
   test("updates canonical requests from the request datatype", () => {
     const base = LLM.request({
       id: "req_1",
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
-    const updated = LLMRequest.update(base, { messages: [...base.messages, LLM.assistant("Hi.")] })
+    const updated = LLMRequest.update(base, { messages: [...base.messages, Message.assistant("Hi.")] })
 
     expect(updated).toBeInstanceOf(LLMRequest)
     expect(updated.id).toBe("req_1")
@@ -80,32 +85,40 @@ describe("llm constructors", () => {
   })
 
   test("updates canonical models from the model datatype", () => {
-    const base = LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" })
-    const updated = ModelRef.update(base, { route: "openai-responses" })
+    const base = Model.make({
+      id: "fake-model",
+      provider: "fake",
+      route: chatRoute,
+    })
+    const updated = Model.update(base, { route: responsesRoute })
 
-    expect(updated).toBeInstanceOf(ModelRef)
+    expect(updated).toBeInstanceOf(Model)
     expect(String(updated.id)).toBe("fake-model")
-    expect(updated.route).toBe("openai-responses")
-    expect(String(ModelRef.input(updated).provider)).toBe("fake")
-    expect(ModelRef.update(updated, {})).toBe(updated)
+    expect(updated.route).toBe(responsesRoute)
+    expect(String(Model.input(updated).provider)).toBe("fake")
+    expect(Model.update(updated, {})).toBe(updated)
   })
 
   test("builds tool choices from names and tools", () => {
-    const tool = LLM.toolDefinition({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
+    const tool = ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
 
     expect(tool).toBeInstanceOf(ToolDefinition)
-    expect(LLM.toolChoice("lookup")).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
-    expect(LLM.toolChoiceName("required")).toEqual(new ToolChoice({ type: "tool", name: "required" }))
-    expect(LLM.toolChoice(tool)).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
+    expect(ToolChoice.make("lookup")).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
+    expect(ToolChoice.named("required")).toEqual(new ToolChoice({ type: "tool", name: "required" }))
+    expect(ToolChoice.make(tool)).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
   })
 
   test("builds tool choice modes from reserved strings", () => {
-    expect(LLM.toolChoice("auto")).toEqual(new ToolChoice({ type: "auto" }))
-    expect(LLM.toolChoice("none")).toEqual(new ToolChoice({ type: "none" }))
-    expect(LLM.toolChoice("required")).toEqual(new ToolChoice({ type: "required" }))
+    expect(ToolChoice.make("auto")).toEqual(new ToolChoice({ type: "auto" }))
+    expect(ToolChoice.make("none")).toEqual(new ToolChoice({ type: "none" }))
+    expect(ToolChoice.make("required")).toEqual(new ToolChoice({ type: "required" }))
     expect(
       LLM.request({
-        model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+        model: Model.make({
+          id: "fake-model",
+          provider: "fake",
+          route: chatRoute,
+        }),
         prompt: "Use tools if needed.",
         toolChoice: "required",
       }).toolChoice,
@@ -113,11 +126,11 @@ describe("llm constructors", () => {
   })
 
   test("builds assistant tool calls and tool result messages", () => {
-    const call = LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })
-    const result = LLM.toolResult({ id: "call_1", name: "lookup", result: { temperature: 72 } })
+    const call = ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })
+    const result = ToolResultPart.make({ id: "call_1", name: "lookup", result: { temperature: 72 } })
 
-    expect(LLM.assistant([call]).content).toEqual([call])
-    expect(LLM.toolMessage(result).content).toEqual([
+    expect(Message.assistant([call]).content).toEqual([call])
+    expect(Message.tool(result).content).toEqual([
       { type: "tool-result", id: "call_1", name: "lookup", result: { type: "json", value: { temperature: 72 } } },
     ])
   })
@@ -126,8 +139,8 @@ describe("llm constructors", () => {
     expect(
       LLMResponse.text({
         events: [
-          { type: "text-delta", text: "hi" },
-          { type: "request-finish", reason: "stop" },
+          { type: "text-delta", id: "text-0", text: "hi" },
+          { type: "finish", reason: "stop" },
         ],
       }),
     ).toBe("hi")

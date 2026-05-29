@@ -3,6 +3,7 @@ import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
@@ -10,9 +11,9 @@ import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
-const FILES = [
+const files = (disableClaudeCodePrompt: boolean) => [
   "AGENTS.md",
-  ...(Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT ? [] : ["CLAUDE.md"]),
+  ...(disableClaudeCodePrompt ? [] : ["CLAUDE.md"]),
   "CONTEXT.md", // deprecated
 ]
 
@@ -50,18 +51,20 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Config.Service | Global.Service | HttpClient.HttpClient
+  AppFileSystem.Service | Config.Service | Global.Service | HttpClient.HttpClient | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const cfg = yield* Config.Service
     const fs = yield* AppFileSystem.Service
     const global = yield* Global.Service
+    const flags = yield* RuntimeFlags.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
     const globalFiles = [
       path.join(global.config, "AGENTS.md"),
-      ...(!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
+      ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
     ]
+    const instructionFiles = files(flags.disableClaudeCodePrompt)
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -117,8 +120,10 @@ export const layer: Layer.Layer<
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        for (const file of FILES) {
-          const matches = yield* fs.findUp(file, ctx.directory, ctx.worktree)
+        for (const file of instructionFiles) {
+          const matches = yield* fs
+            .findUp(file, ctx.directory, ctx.worktree)
+            .pipe(Effect.catch(() => Effect.succeed([])))
           if (matches.length > 0) {
             matches.forEach((item) => paths.add(path.resolve(item)))
             break
@@ -163,7 +168,7 @@ export const layer: Layer.Layer<
     })
 
     const find = Effect.fn("Instruction.find")(function* (dir: string) {
-      for (const file of FILES) {
+      for (const file of instructionFiles) {
         const filepath = path.resolve(path.join(dir, file))
         if (yield* fs.existsSafe(filepath)) return filepath
       }
@@ -223,6 +228,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Global.layer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export function loaded(messages: MessageV2.WithParts[]) {

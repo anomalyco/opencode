@@ -55,6 +55,29 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 
+const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+
+export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
+  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+  if (icon?.override) return icon.override
+  if (icon?.color) return undefined
+  return icon?.url
+}
+
+export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
+  session: Session,
+  projects: T[],
+  byID: Map<string, T>,
+) {
+  const direct = byID.get(session.projectID)
+  if (direct) return direct
+  const directory = pathKey(session.directory)
+  return projects.find(
+    (project) =>
+      pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+  )
+}
+
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {
     const data = (err as { data?: { message?: string } }).data

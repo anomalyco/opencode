@@ -111,7 +111,7 @@ describe("cross-spawn spawner", () => {
             ChildProcess.make(process.execPath, ["-e", "process.stdout.write(process.cwd())"], { cwd: tmp.path }),
           ),
         )
-        expect(out).toBe(tmp.path)
+        expect(yield* Effect.promise(() => fs.realpath(out))).toBe(yield* Effect.promise(() => fs.realpath(tmp.path)))
       }),
     )
 
@@ -119,7 +119,9 @@ describe("cross-spawn spawner", () => {
       "fails for invalid cwd",
       Effect.gen(function* () {
         const exit = yield* Effect.exit(
-          ChildProcess.make("echo", ["test"], { cwd: "/nonexistent/directory/path" }).asEffect(),
+          ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+            svc.spawn(ChildProcess.make("echo", ["test"], { cwd: "/nonexistent/directory/path" })),
+          ),
         )
         expect(Exit.isFailure(exit)).toBe(true)
       }),
