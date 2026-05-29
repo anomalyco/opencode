@@ -162,6 +162,7 @@ export interface MessagePartProps {
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  hideUserMeta?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -534,6 +535,7 @@ export function AssistantParts(props: {
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
+  hideUserMeta?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -614,6 +616,7 @@ export function AssistantParts(props: {
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
+                        hideUserMeta={props.hideUserMeta}
                         defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                       />
                     </Show>
@@ -1268,6 +1271,7 @@ export function Part(props: MessagePartProps) {
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        hideUserMeta={props.hideUserMeta}
       />
     </Show>
   )
@@ -1508,10 +1512,9 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const agent = (props.message as AssistantMessage).agent
-    // ENT-69 운영 빌드에서는 모델명을 메타에서 가림 (로컬 vite dev에서만 표시).
     const items = [
-      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      import.meta.env.DEV ? model() : "",
+      props.hideUserMeta ? "" : agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      props.hideUserMeta ? "" : model(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]

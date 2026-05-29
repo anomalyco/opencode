@@ -266,7 +266,7 @@
     position: relative;
     display: inline-block;
     max-width: min(78%, 58ch);
-    margin: 4px 6px 7px 0;
+    margin: 4px 6px 3px 0;
     overflow: visible;
     filter:
       drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.1))
@@ -368,6 +368,11 @@
   [data-component="codle-session"] [data-slot="user-message-text"] [data-highlight="agent"] {
     color: currentColor;
     font-weight: 500;
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-copy-wrapper"] {
+    margin-top: 2px;
+    min-height: 12px;
   }
 
   [data-component="session-prompt-dock"][data-variant="codle"] {
