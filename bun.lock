@@ -67,6 +67,7 @@
         "solid-list": "catalog:",
         "tailwindcss": "catalog:",
         "virtua": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
