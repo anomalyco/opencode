@@ -77,6 +77,7 @@ interface ProcessorContext extends Input {
   blocked: boolean
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
+  currentTextWritten: boolean
   reasoningMap: Record<string, MessageV2.ReasoningPart>
 }
 
@@ -117,6 +118,7 @@ export const layer = Layer.effect(
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
+        currentTextWritten: false,
         reasoningMap: {},
       }
       let aborted = false
@@ -635,11 +637,18 @@ export const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            yield* session.updatePart(ctx.currentText)
+            ctx.currentTextWritten = false
+            // Defer session.updatePart to the first text-delta so that models
+            // which skip prose and go straight to a tool call never persist an
+            // empty text part (#29650).
             return
 
           case "text-delta":
             if (!ctx.currentText) return
+            if (!ctx.currentTextWritten) {
+              yield* session.updatePart(ctx.currentText)
+              ctx.currentTextWritten = true
+            }
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
@@ -653,6 +662,12 @@ export const layer = Layer.effect(
 
           case "text-end":
             if (!ctx.currentText) return
+            if (!ctx.currentTextWritten) {
+              // Model went straight to a tool call with no prose — discard the
+              // empty text part that was staged in text-start (#29650).
+              ctx.currentText = undefined
+              return
+            }
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
             ctx.currentText.text = (yield* plugin.trigger(
@@ -705,9 +720,11 @@ export const layer = Layer.effect(
         }
 
         if (ctx.currentText) {
-          const end = Date.now()
-          ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-          yield* session.updatePart(ctx.currentText)
+          if (ctx.currentTextWritten) {
+            const end = Date.now()
+            ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+            yield* session.updatePart(ctx.currentText)
+          }
           ctx.currentText = undefined
         }
 
@@ -785,6 +802,7 @@ export const layer = Layer.effect(
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
+            ctx.currentTextWritten = false
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
