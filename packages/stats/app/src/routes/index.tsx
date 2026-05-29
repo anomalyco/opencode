@@ -6,6 +6,7 @@ import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/I
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
 import ibmPlexMonoBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2?url"
 import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
+import statsUnfurlRankings from "../asset/unfurl-rankings.png?url"
 import {
   getStatsHomeData,
   type LeaderboardEntry,
@@ -30,6 +31,10 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
+const statsHomeTitle = "OpenCode Stats"
+const statsHomeDescription = "OpenCode usage, market share, token cost, and session cost stats."
+const statsHomeFallbackUrl = "https://stats.opencode.ai"
+const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
   { href: "#leaderboard", label: "Leaderboard" },
@@ -90,17 +95,36 @@ const getGitHubStars = query(async () => {
 }, "getGitHubStars")
 
 export default function StatsHome() {
-  getRequestEvent()?.response.headers.set(
-    "Cache-Control",
-    "public, max-age=60, s-maxage=300, stale-while-revalidate=86400",
-  )
+  const event = getRequestEvent()
+  event?.response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=86400")
+  const statsHomeUrl = new URL(
+    import.meta.env.BASE_URL,
+    event?.request.url ?? (typeof window === "undefined" ? statsHomeFallbackUrl : window.location.href),
+  ).toString()
+  const statsUnfurlUrl = new URL(statsUnfurlRankings, statsHomeUrl).toString()
   const data = createAsync(() => getData())
   const githubStars = createAsync(() => getGitHubStars())
 
   return (
     <main data-page="stats">
-      <Title>OpenCode Stats</Title>
-      <Meta name="description" content="OpenCode usage, market share, token cost, and session cost stats." />
+      <Title>{statsHomeTitle}</Title>
+      <Meta name="description" content={statsHomeDescription} />
+      <Link rel="canonical" href={statsHomeUrl} />
+      <Meta property="og:type" content="website" />
+      <Meta property="og:site_name" content="OpenCode" />
+      <Meta property="og:title" content={statsHomeTitle} />
+      <Meta property="og:description" content={statsHomeDescription} />
+      <Meta property="og:url" content={statsHomeUrl} />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
+      <Meta name="twitter:title" content={statsHomeTitle} />
+      <Meta name="twitter:description" content={statsHomeDescription} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Link rel="preload" href={ibmPlexMonoRegularLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
       <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
