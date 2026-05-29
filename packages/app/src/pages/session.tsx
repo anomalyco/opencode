@@ -2,6 +2,7 @@ import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
+  type Component,
   batch,
   onCleanup,
   Show,
@@ -1705,7 +1706,7 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-  const SessionPanelContent = () => (
+  const SessionPanelBody = () => (
     <>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
@@ -1808,35 +1809,60 @@ export default function Page() {
           promptDock = el
         }}
       />
-
-      <Show when={isDesktop()}>
-        <div style={{ "--resize-gap-offset": "7px" }} onPointerDown={() => size.start()}>
-          <ResizeHandle
-            showHandle={true}
-            direction="horizontal"
-            size={layout.session.width()}
-            min={300}
-            max={typeof window === "undefined" ? 1000 : window.innerWidth - 380}
-            onResize={(width) => {
-              size.touch()
-              layout.session.resize(width)
-            }}
-          />
-        </div>
-      </Show>
     </>
+  )
+
+  const SessionPanelResize = () => (
+    <Show when={isDesktop()}>
+      <div
+        class="absolute inset-y-0 right-0 z-30 w-0 overflow-visible"
+        style={{ "--resize-gap-offset": "7px" }}
+        onPointerDown={() => size.start()}
+      >
+        <ResizeHandle
+          showHandle={true}
+          direction="horizontal"
+          size={layout.session.width()}
+          min={300}
+          max={typeof window === "undefined" ? 1000 : window.innerWidth - 380}
+          onResize={(width) => {
+            size.touch()
+            layout.session.resize(width)
+          }}
+        />
+      </div>
+    </Show>
+  )
+
+  const SessionPanelColumn: Component<{
+    class?: string
+    classList?: Record<string, boolean | undefined>
+    style?: Record<string, string>
+  }> = (props) => (
+    <div
+      data-component="codle-session-column"
+      classList={{
+        "relative flex min-h-0 min-w-0 flex-1 flex-col": true,
+        ...(props.classList ?? {}),
+        [props.class ?? ""]: !!props.class,
+      }}
+      style={props.style}
+    >
+      <div
+        data-component="codle-session-frame"
+        class="@container relative flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <SessionPanelBody />
+      </div>
+      <SessionPanelResize />
+    </div>
   )
 
   if (env.productionLayout()) {
     return (
       <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
         <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
-          <div
-            data-component="codle-session-frame"
-            class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0 overflow-visible"
-          >
-            <SessionPanelContent />
-          </div>
+          <SessionPanelColumn class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0" />
           <SessionSidePanel
             reviewPanel={reviewPanel}
             activeDiff={tree.activeDiff}
@@ -1879,19 +1905,16 @@ export default function Page() {
         </Show>
 
         {/* Session panel */}
-        <div
-          data-component="codle-session-frame"
+        <SessionPanelColumn
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
+            "shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
           style={{
             width: sessionPanelWidth(),
           }}
-        >
-          <SessionPanelContent />
-        </div>
+        />
 
         <SessionSidePanel
           reviewPanel={reviewPanel}

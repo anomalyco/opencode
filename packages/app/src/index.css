@@ -11,9 +11,9 @@
     --app-line: var(--border-weaker-base);
     --app-line-strong: var(--border-weak-base);
     --app-pill: 999px;
-    --app-radius: 22px;
-    --app-card-shadow: 0 22px 80px rgba(0, 0, 0, 0.15), 0 8px 26px rgba(0, 0, 0, 0.08);
-    --app-prompt-shadow: 0 18px 48px rgba(0, 0, 0, 0.15), 0 2px 7px rgba(0, 0, 0, 0.08);
+    --app-radius: 10px;
+    --app-card-shadow: var(--shadow-md);
+    --app-prompt-shadow: var(--shadow-md);
     --app-mix: white;
     --app-frame: var(--surface-raised-stronger-non-alpha);
     --app-neutral-hover: rgba(0, 0, 0, 0.04);
@@ -80,13 +80,13 @@
   [data-component="codle-home-sidebar"] [data-component="button"] {
     width: 100%;
     justify-content: flex-start;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
   }
 
   [data-component="codle-home-prompt"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     box-shadow: var(--app-prompt-shadow);
   }
 
@@ -118,25 +118,25 @@
   [data-component="codle-project-card"] {
     background: color-mix(in srgb, var(--app-paper-strong) 92%, var(--app-mix) 8%);
     border: 1px solid var(--app-line);
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-xs);
     transition:
-      transform 140ms ease,
-      box-shadow 140ms ease,
-      border-color 140ms ease;
+      transform var(--dur-fast) var(--ease-standard),
+      box-shadow var(--dur-fast) var(--ease-standard),
+      border-color var(--dur-fast) var(--ease-standard);
   }
 
   [data-component="codle-project-card"]:hover {
     border-color: var(--app-line-strong);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-hover);
     transform: translateY(-1px);
   }
 
   [data-component="codle-project-preview"] {
     background:
-      radial-gradient(circle at 18% 18%, rgba(62, 136, 255, 0.72), transparent 34%),
-      radial-gradient(circle at 78% 70%, rgba(67, 228, 249, 0.62), transparent 30%),
-      linear-gradient(135deg, #234e91, #363636 54%, #2c61b5);
+      radial-gradient(circle at 18% 18%, rgba(255, 206, 43, 0.45), transparent 34%),
+      radial-gradient(circle at 78% 70%, rgba(31, 58, 82, 0.35), transparent 30%),
+      linear-gradient(135deg, #1f3a52, #14130f 54%, #2a2823);
   }
 
   [data-component="codle-session"] {
@@ -150,9 +150,14 @@
   [data-component="codle-session-frame"] {
     background: var(--app-frame);
     border: 1px solid var(--app-line);
-    border-radius: 20px;
-    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
     overflow: hidden;
+    isolation: isolate;
+  }
+
+  [data-component="codle-session-frame"] > * {
+    min-width: 0;
   }
 
   [data-component="codle-session"] [data-component="codle-scroll-bottom"] {
@@ -219,7 +224,7 @@
   [data-component="codle-session"] [data-slot="user-message-text"] {
     background: var(--app-user-bubble);
     border: 0;
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     color: var(--app-user-bubble-text);
     padding: 10px 16px;
     line-height: 1.45;
@@ -242,40 +247,51 @@
   }
 
   [data-component="session-prompt-dock"][data-variant="codle"] {
-    --surface-raised-stronger-non-alpha: var(--app-frame);
-    background: var(--app-frame);
+    --surface-raised-stronger-non-alpha: var(--input-base);
+    background: transparent;
   }
 
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] {
-    background: var(--app-frame);
-    border: 1px solid var(--app-line);
-    border-radius: 20px;
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--app-paper-strong) 70%, transparent) inset;
+    background: var(--input-base);
+    border: 1px solid var(--border-strong-base);
+    border-radius: var(--radius-xs);
+    box-shadow: none;
+    overflow: hidden;
+  }
+
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"]:focus-within,
+  [data-component="codle-session"] [data-dock-surface="shell"]:focus-within {
+    border-color: var(--text-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring-color);
   }
 
   [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="tray"] {
     background: color-mix(in srgb, var(--app-paper) 82%, var(--app-frame) 18%);
     border-color: color-mix(in srgb, var(--app-line) 72%, transparent);
-    border-radius: 0 0 18px 18px;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     box-shadow: none;
   }
 
   [data-component="session-followup-dock"] [data-component="button"],
   [data-component="codle-session"] [data-component="button"],
   [data-component="codle-home"] [data-component="button"] {
-    border-radius: var(--app-pill);
+    border-radius: var(--radius-sm);
+  }
+
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input"],
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input-placeholder"] {
+    padding: 12px 14px;
   }
 
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input"] {
     min-height: 86px;
-    padding-top: 14px;
   }
 
-  /* Embedded Excalidraw: flat toolbars (parent dock shell already has frame/shadow). */
-  [data-component="prompt-drawing"] .excalidraw {
-    --shadow-island: none;
-    --library-dropdown-shadow: none;
-    --island-bg-color: var(--surface-raised-stronger-non-alpha);
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-doc-shell"],
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-draw-shell"] {
+    border-radius: inherit;
+    overflow: hidden;
   }
 
   [data-component="prompt-drawing"] .excalidraw .Island {
@@ -469,7 +485,8 @@
     background: color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%);
   }
 
-  [data-codle-menu="true"] {
+  [data-codle-menu="true"],
+  [data-jitda-menu="true"] {
     --surface-raised-stronger-non-alpha: var(--app-menu);
     --surface-raised-base-hover: var(--app-neutral-hover);
     --surface-raised-base-active: var(--app-neutral-pressed);
@@ -480,17 +497,19 @@
     --icon-strong-base: var(--app-ink);
     background: var(--app-menu);
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     box-shadow: var(--app-menu-shadow);
     padding: 4px;
     background-clip: padding-box;
   }
 
-  [data-codle-menu="true"] [data-slot="select-select-content-list"] {
+  [data-codle-menu="true"] [data-slot="select-select-content-list"],
+  [data-jitda-menu="true"] [data-slot="select-select-content-list"] {
     gap: 0;
   }
 
-  [data-codle-menu="true"] [data-slot="select-select-item"] {
+  [data-codle-menu="true"] [data-slot="select-select-item"],
+  [data-jitda-menu="true"] [data-slot="select-select-item"] {
     min-height: 32px;
     border-radius: 8px;
   }
@@ -507,7 +526,7 @@
     --icon-strong-base: var(--app-ink);
     background: var(--app-menu);
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     box-shadow: var(--app-menu-shadow);
     padding: 4px;
     background-clip: padding-box;
@@ -579,15 +598,11 @@
     background: color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%);
   }
 
-  [data-component="codle-session"] [data-slot="tabs-trigger-wrapper"] {
-    background: transparent;
-  }
-
   [data-component="codle-side-panel"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
-    border-radius: 18px;
-    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.08);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
   }
 
   [data-component="codle-preview-panel"] {
@@ -723,22 +738,18 @@
       box-shadow: 0 18px 56px rgba(0, 0, 0, 0.26);
     }
 
+    [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"],
     [data-component="codle-session"] [data-dock-surface="shell"] {
-      border-color: color-mix(in srgb, var(--border-strong-base) 72%, transparent);
-      box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.1),
-        0 1px 0 rgba(255, 255, 255, 0.08) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.28) inset,
-        0 12px 28px rgba(0, 0, 0, 0.22);
+      background: var(--input-base);
+      border-color: var(--border-strong-base);
+      border-radius: var(--radius-xs);
+      box-shadow: none;
     }
 
+    [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"]:focus-within,
     [data-component="codle-session"] [data-dock-surface="shell"]:focus-within {
-      border-color: color-mix(in srgb, var(--border-strong-base) 92%, white 8%);
-      box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.18),
-        0 1px 0 rgba(255, 255, 255, 0.12) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.22) inset,
-        0 14px 32px rgba(0, 0, 0, 0.28);
+      border-color: var(--text-strong);
+      box-shadow: 0 0 0 2px var(--focus-ring-color);
     }
 
     [data-component="codle-session"] [data-component="codle-scroll-bottom"] {

@@ -1,5 +1,50 @@
 /* Loaded after @excalidraw/excalidraw/index.css — unlayered so it beats Excalidraw defaults. */
 
+[data-component="prompt-drawing"] .excalidraw {
+  --shadow-island: none;
+  --library-dropdown-shadow: none;
+  --island-bg-color: var(--surface-raised-stronger-non-alpha);
+  --default-bg-color: var(--input-base);
+  --input-bg-color: var(--input-base);
+  --input-border-color: var(--border-strong-base);
+  --input-hover-bg-color: var(--input-hover);
+  --text-primary-color: var(--text-strong);
+  --focus-highlight-color: var(--focus-ring-color);
+  --color-brand-hover: var(--text-strong);
+  --color-brand-active: var(--text-strong);
+  --ExcTextField--background: var(--input-base);
+  --ExcTextField--border: var(--border-strong-base);
+  --ExcTextField--border-hover: var(--text-strong);
+  --ExcTextField--border-active: var(--text-strong);
+  --ExcTextField--color: var(--text-strong);
+}
+
+[data-component="prompt-drawing"] .excalidraw input[type="text"],
+[data-component="prompt-drawing"] .excalidraw textarea:not(.excalidraw-wysiwyg) {
+  padding: 12px 14px;
+  border-width: 1px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  line-height: var(--line-height-large);
+}
+
+[data-component="prompt-drawing"] .excalidraw input[type="text"]:focus,
+[data-component="prompt-drawing"] .excalidraw textarea:not(.excalidraw-wysiwyg):focus {
+  border-color: var(--text-strong);
+  box-shadow: 0 0 0 2px var(--focus-ring-color);
+}
+
+[data-component="prompt-drawing"] .excalidraw .ExcTextField__input {
+  border-radius: var(--radius-xs);
+}
+
+[data-component="prompt-drawing"] .excalidraw .ExcTextField__input:not(.excalidraw .ExcTextField__input--readonly):active,
+[data-component="prompt-drawing"] .excalidraw .ExcTextField__input:not(.excalidraw .ExcTextField__input--readonly):focus-within {
+  border-color: var(--text-strong);
+  box-shadow: 0 0 0 2px var(--focus-ring-color);
+}
+
 /* Wide prompt: default `.App-toolbar { width: 100% }` stretches the Island past its icons. */
 [data-component="prompt-drawing"] .excalidraw .App-menu_top {
   grid-template-columns: 1fr auto 1fr;

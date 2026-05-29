@@ -1,6 +1,7 @@
 import { Component, createSignal, JSX, Show } from "solid-js"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useClientEnv } from "@/context/client-env"
 import { useLanguage } from "@/context/language"
 import { PromptDrawingColors } from "./drawing-colors"
 import { PromptDrawingPanel } from "./drawing-panel"
@@ -19,6 +20,7 @@ type ShellProps = {
 }
 
 export const PromptDrawingShell: Component<ShellProps> = (props) => {
+  const env = useClientEnv()
   const language = useLanguage()
   const [copied, setCopied] = createSignal(false)
   const history = () => (props.variant === "doc" ? props.doc.history : props.drawing.history)
@@ -51,25 +53,27 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
       >
         <Show when={props.variant === "doc"} fallback={<PromptDrawingPanel drawing={props.drawing} />}>
           <PromptDocPanel doc={props.doc} />
-          <div
-            data-component="prompt-doc-id"
-            class="absolute bottom-0 right-0 z-10 max-w-[40%] rounded-tl-[10px] text-text-weaker"
-          >
-            <Tooltip
-              placement="top"
-              value={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
+          <Show when={!env.productionLayout()}>
+            <div
+              data-component="prompt-doc-id"
+              class="absolute bottom-0 right-0 z-10 max-w-[40%] rounded-tl-[10px] text-text-weaker"
             >
-              <button
-                type="button"
-                class="flex max-w-full items-center justify-start rounded-tl-lg rounded-tr-none rounded-br-none rounded-bl-none bg-surface-raised-stronger-non-alpha px-2 py-1 font-mono text-11-regular leading-[13px] text-text-weaker shadow-sm ring-1 ring-border-weaker-base hover:ring-border-base"
-                title={props.doc.docID() ?? ""}
-                onClick={copy}
-                aria-label={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
+              <Tooltip
+                placement="top"
+                value={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
               >
-                <span class="truncate">{label()}</span>
-              </button>
-            </Tooltip>
-          </div>
+                <button
+                  type="button"
+                  class="flex max-w-full items-center justify-start rounded-tl-lg rounded-tr-none rounded-br-none rounded-bl-none bg-surface-raised-stronger-non-alpha px-2 py-1 font-mono text-11-regular leading-[13px] text-text-weaker shadow-sm ring-1 ring-border-weaker-base hover:ring-border-base"
+                  title={props.doc.docID() ?? ""}
+                  onClick={copy}
+                  aria-label={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
+                >
+                  <span class="truncate">{label()}</span>
+                </button>
+              </Tooltip>
+            </div>
+          </Show>
         </Show>
       </div>
       <div

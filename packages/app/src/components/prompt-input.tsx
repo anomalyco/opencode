@@ -1791,7 +1791,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
           onPointerDown={resize}
         >
-          <div class="h-0.5 w-18 rounded-full bg-border-base transition-colors group-hover:bg-border-strong-base" />
+          <div class="h-0.5 w-18 rounded-none bg-border-weaker-base transition-colors group-hover:bg-border-strong-base" />
         </div>
       </Show>
       <PromptPopover
@@ -1813,7 +1813,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleFormSubmit}
         classList={{
           "group/prompt-input": true,
-          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
           [props.class ?? ""]: !!props.class,
@@ -1900,7 +1899,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onKeyDown={handleKeyDown}
                       classList={{
                         "select-text": true,
-                        "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                        "w-full text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                         "[&_[data-type=file]]:text-syntax-property": true,
                         "[&_[data-type=agent]]:text-syntax-type": true,
                         "font-mono!": store.mode === "shell",
@@ -1909,7 +1908,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     />
                     <Show when={!prompt.dirty()}>
                       <div
-                        class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                        data-component="prompt-input-placeholder"
+                        class="absolute top-0 inset-x-0 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                         classList={{ "font-mono!": store.mode === "shell" }}
                         style={{ "padding-bottom": space }}
                       >

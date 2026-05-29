@@ -10,15 +10,17 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v3.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/fonts/pretendard/pretendard.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/dist/webfonts/variable/complete.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jetbrains-mono@1.0.6/css/jetbrains-mono.min.css" />
     <!-- 테마를 aura 라이트로 고정(context.tsx)했으므로 prefers-color-scheme 분기 대신 aura --background-base 단일 값 사용 -->
-    <meta name="theme-color" content="#f6f3fe" />
+    <meta name="theme-color" content="#f4f2ec" />
     <!-- <meta name="theme-color" content="#F8F7F7" />
     <meta name="theme-color" content="#131010" media="(prefers-color-scheme: dark)" /> -->
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
     <!-- localStorage의 opencode-theme-id/color-scheme을 읽어 data-theme을 설정하는 프리로드 스크립트.
          aura 라이트로 고정한 뒤에는 저장된 값이 강제 테마와 충돌해 FOUC를 유발하므로 비활성화. -->
-    <!-- <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script> -->
+    <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>
   </head>
   <body class="antialiased overscroll-none text-12-regular overflow-hidden">
     <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -1,6 +1,6 @@
 ;(function () {
   // Keep in sync with packages/ui/src/theme/pin.ts
-  var THEME_ID = "codle"
+  var THEME_ID = "jitda"
   var COLOR_SCHEME = "system"
   var themeKey = "opencode-theme-id"
   var schemeKey = "opencode-color-scheme"

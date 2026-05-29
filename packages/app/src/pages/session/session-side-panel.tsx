@@ -256,14 +256,16 @@ export function SessionSidePanel(props: {
                           <div class="flex items-center gap-1.5">
                             <div>{language.t("session.tab.review")}</div>
                             <Show when={hasReview()}>
-                              <div>{reviewCount()}</div>
+                              <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
                             </Show>
                           </div>
                         </Tabs.Trigger>
                       </Show>
                       <Show when={previewTab()}>
                         <Tabs.Trigger value="preview">
-                          <div>{language.t("session.tab.preview")}</div>
+                          <div class="flex items-center gap-1.5">
+                            <div>{language.t("session.tab.preview")}</div>
+                          </div>
                         </Tabs.Trigger>
                       </Show>
                       <Show when={contextOpen()}>
@@ -402,7 +404,7 @@ export function SessionSidePanel(props: {
               >
                 <Tabs.List>
                   <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {reviewCount()}{" "}
+                    <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
                     {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>

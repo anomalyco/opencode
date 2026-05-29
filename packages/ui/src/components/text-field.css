@@ -47,7 +47,7 @@
       width: 100%;
       padding-right: 4px;
 
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-xs);
       border: 1px solid var(--border-weak-base);
       background: var(--input-base);
 
