@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
-import { UsageService } from "@/acp-next/usage"
+import { UsageService } from "@/acp/usage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import { Effect, Layer } from "effect"
@@ -122,7 +122,7 @@ const connection = (updates: SessionNotification[]) => ({
   },
 })
 
-describe("acp-next usage", () => {
+describe("acp usage", () => {
   test("builds ACP Usage from assistant token shape", () => {
     expect(
       UsageService.buildUsage({

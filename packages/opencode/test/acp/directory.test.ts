@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Directory } from "@/acp-next/directory"
+import { Directory } from "@/acp/directory"
 import { Command } from "@/command"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
@@ -97,7 +97,7 @@ const fakeLayer = (calls: string[]) =>
     ),
   )
 
-describe("ACP next directory snapshot", () => {
+describe("ACP directory snapshot", () => {
   it.effect("two concurrent callers share one load", () => {
     const calls: string[] = []
     return Effect.gen(function* () {

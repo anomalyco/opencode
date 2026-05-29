@@ -3,11 +3,11 @@ import * as Log from "@opencode-ai/core/util/log"
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { exists, readText } from "@/util/filesystem"
-import type { ACPNextSession } from "./session"
+import type { ACPSession } from "./session"
 import { toLocations, toToolKind, type ToolInput } from "./tool"
 import { Effect } from "effect"
 
-const log = Log.create({ service: "acp-next-permission" })
+const log = Log.create({ service: "acp-permission" })
 
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type Reply = "once" | "always" | "reject"
@@ -26,7 +26,7 @@ export class Handler {
     private readonly input: {
       sdk: OpencodeClient
       connection: Connection
-      session: ACPNextSession.Interface
+      session: ACPSession.Interface
     },
   ) {}
 
@@ -142,4 +142,4 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined
 }
 
-export * as ACPNextPermission from "./permission"
+export * as ACPPermission from "./permission"

@@ -4,9 +4,9 @@ import { Effect } from "effect"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { cliIt } from "../../lib/cli-process"
-import { createAcpNextClient, initialize, newSession, verifierConfig, verifierSkill } from "./helpers"
+import { createAcpClient, initialize, newSession, verifierConfig, verifierSkill } from "./helpers"
 
-describe("opencode acp-next skills subprocess", () => {
+describe("opencode acp skills subprocess", () => {
   cliIt.live(
     "skill slash command appears through available_commands_update",
     ({ home, llm, opencode }) =>
@@ -14,7 +14,7 @@ describe("opencode acp-next skills subprocess", () => {
         const skills = path.join(home, "skills")
         yield* Effect.promise(() => mkdir(path.join(skills, "verifier-skill"), { recursive: true }))
         yield* Effect.promise(() => Bun.write(path.join(skills, "verifier-skill", "SKILL.md"), verifierSkill))
-        const acp = yield* createAcpNextClient(
+        const acp = yield* createAcpClient(
           { opencode },
           { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url, skills)) },
         )

@@ -5,7 +5,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Provider } from "@/provider/provider"
 import { Context, Effect, Layer, SynchronizedRef } from "effect"
-import type * as ACPNextError from "./error"
+import type * as ACPError from "./error"
 
 export type ModelOption = {
   readonly providerID: ProviderID
@@ -39,18 +39,18 @@ export type Snapshot = {
 }
 
 export interface LoaderInterface {
-  readonly load: (directory: string) => Effect.Effect<Snapshot, ACPNextError.Error>
+  readonly load: (directory: string) => Effect.Effect<Snapshot, ACPError.Error>
 }
 
 export interface Interface {
-  readonly get: (directory: string) => Effect.Effect<Snapshot, ACPNextError.Error>
-  readonly refresh: (directory: string) => Effect.Effect<Snapshot, ACPNextError.Error>
+  readonly get: (directory: string) => Effect.Effect<Snapshot, ACPError.Error>
+  readonly refresh: (directory: string) => Effect.Effect<Snapshot, ACPError.Error>
   readonly variants: (snapshot: Snapshot, model: DefaultModel) => ModelVariants | undefined
 }
 
-export class Loader extends Context.Service<Loader, LoaderInterface>()("@opencode/ACPNextDirectoryLoader") {}
+export class Loader extends Context.Service<Loader, LoaderInterface>()("@opencode/ACPDirectoryLoader") {}
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ACPNextDirectory") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ACPDirectory") {}
 
 export const modelKey = (model: DefaultModel) => `${model.providerID}/${model.modelID}`
 
@@ -110,7 +110,7 @@ export const loaderLayer = Layer.effect(
     const command = yield* Command.Service
 
     return Loader.of({
-      load: Effect.fn("ACPNextDirectoryLoader.load")(function* (directory) {
+      load: Effect.fn("ACPDirectoryLoader.load")(function* (directory) {
         const ctx = yield* store.load({ directory })
         return yield* Effect.gen(function* () {
           const providers = yield* provider.list()
@@ -142,7 +142,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const loader = yield* Loader
-    const snapshots = yield* SynchronizedRef.make(new Map<string, Effect.Effect<Snapshot, ACPNextError.Error>>())
+    const snapshots = yield* SynchronizedRef.make(new Map<string, Effect.Effect<Snapshot, ACPError.Error>>())
 
     const cached = Effect.fnUntraced(function* (directory: string) {
       return yield* SynchronizedRef.modifyEffect(
@@ -166,11 +166,11 @@ export const layer = Layer.effect(
       )
     })
 
-    const get = Effect.fn("ACPNextDirectory.get")(function* (directory: string) {
+    const get = Effect.fn("ACPDirectory.get")(function* (directory: string) {
       return yield* yield* cached(directory)
     })
 
-    const refresh = Effect.fn("ACPNextDirectory.refresh")(function* (directory: string) {
+    const refresh = Effect.fn("ACPDirectory.refresh")(function* (directory: string) {
       return yield* SynchronizedRef.modifyEffect(
         snapshots,
         Effect.fnUntraced(function* (items) {

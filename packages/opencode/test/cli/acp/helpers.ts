@@ -4,23 +4,16 @@ import { Effect } from "effect"
 import type { CliFixture } from "../../lib/cli-process"
 import { testProviderConfig } from "../../lib/test-provider"
 import {
-  createAcpClient,
+  createAcpClient as createJsonRpcAcpClient,
   expectOk,
   flattenSelectOptions,
   selectConfigOption,
   type AcpClient,
-} from "../acp/acp-test-client"
+} from "./acp-test-client"
 
-export function createAcpNextClient(input: Pick<CliFixture, "opencode">, env?: Record<string, string>) {
+export function createAcpClient(input: Pick<CliFixture, "opencode">, env?: Record<string, string>) {
   return Effect.gen(function* () {
-    return createAcpClient(
-      yield* input.opencode.acp({
-        env: {
-          OPENCODE_ACP_NEXT: "1",
-          ...env,
-        },
-      }),
-    )
+    return createJsonRpcAcpClient(yield* input.opencode.acp(env ? { env } : undefined))
   })
 }
 
@@ -30,7 +23,7 @@ export function initialize(acp: AcpClient) {
       yield* acp.request<InitializeResponse>("initialize", {
         protocolVersion: 1,
         clientCapabilities: { _meta: { "terminal-auth": true } },
-        clientInfo: { name: "opencode-local-acp-next", version: "0.1.0" },
+        clientInfo: { name: "opencode-local-acp", version: "0.1.0" },
       }),
     )
   })

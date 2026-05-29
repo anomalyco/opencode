@@ -38,9 +38,9 @@ const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
   { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#market-share", label: "Market Share" },
   { href: "#token-cost", label: "Token Cost" },
   { href: "#session-cost", label: "Session Cost" },
+  { href: "#market-share", label: "Market Share" },
 ] as const
 const githubLink = {
   href: "https://github.com/anomalyco/opencode",
@@ -159,11 +159,10 @@ export default function StatsHome() {
             {(stats) => (
               <>
                 <Hero updatedAt={stats().updatedAt} />
-                <TopModelsSection data={stats().usage} />
-                <LeaderboardSection data={stats().leaderboard} />
-                <MarketShareSection data={stats().market} />
+                <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
                 <TokenCostSection data={stats().tokenCost} />
                 <SessionCostSection data={stats().sessionCost} />
+                <MarketShareSection data={stats().market} />
               </>
             )}
           </Show>
@@ -368,11 +367,13 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
   return `${value.date}, ${value.time}`
 }
 
-function TopModelsSection(props: { data: StatsHomeData["usage"] }) {
+function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: StatsHomeData["leaderboard"] }) {
   const [product, setProduct] = createSignal<UsageProduct>("All Users")
-  const [range, setRange] = createSignal<UsageRange>("1W")
+  const [range, setRange] = createSignal<UsageRange>("2M")
   const [sheet, setSheet] = createSignal<"product" | "range">()
+  const [activeModel, setActiveModel] = createSignal<string>()
   const data = createMemo(() => props.data[product()][range()])
+  const leaderboard = createMemo(() => props.leaderboard[product()][range()])
 
   createEffect(() => {
     if (!sheet()) return
@@ -397,28 +398,42 @@ function TopModelsSection(props: { data: StatsHomeData["usage"] }) {
       <h2 data-slot="top-models-title">
         <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
       </h2>
-      <div data-slot="top-models-mobile-controls">
-        <MobileFilterButton
-          label="Product filter"
-          value={product()}
-          expanded={sheet() === "product"}
-          onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
-        />
-        <MobileFilterButton
-          label="Date range"
-          value={range()}
-          expanded={sheet() === "range"}
-          onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
-        />
-      </div>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title="No usage data" description="No model_stat rows matched this product and range." />}
       >
-        <TopModelsChart data={data()} range={range()} />
+        <TopModelsChart
+          data={data()}
+          range={range()}
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+        />
+      </Show>
+      <div id="leaderboard" data-slot="leaderboard-pattern" aria-hidden="true" />
+      <Show
+        when={leaderboard().length > 0}
+        fallback={
+          <EmptyState title="No leaderboard data" description="No model_stat rows matched this product and range." />
+        }
+      >
+        <Leaderboard data={leaderboard()} activeModel={activeModel()} onActiveModelChange={setActiveModel} />
       </Show>
       <div data-slot="chart-footer">
         <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
+        <div data-slot="top-models-mobile-controls">
+          <MobileFilterButton
+            label="Product filter"
+            value={product()}
+            expanded={sheet() === "product"}
+            onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
+          />
+          <MobileFilterButton
+            label="Date range"
+            value={range()}
+            expanded={sheet() === "range"}
+            onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
+          />
+        </div>
       </div>
       <Show when={sheet()}>
         {(kind) => (
@@ -575,24 +590,36 @@ function FilterPills<T extends string>(props: {
   )
 }
 
-function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
+function TopModelsChart(props: {
+  data: UsagePoint[]
+  range: UsageRange
+  activeModel: string | undefined
+  onActiveModelChange: (model: string | undefined) => void
+}) {
+  let chartRef: HTMLDivElement | undefined
   const [activeIndex, setActiveIndex] = createSignal<number>()
-  const [activeSegment, setActiveSegment] = createSignal<number>()
   const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
+  const segmentOrder = createMemo(() => getTopModelsSegmentOrder(props.data))
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
+
+  createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
 
   return (
     <div
+      ref={chartRef}
       data-component="top-models-chart"
       data-range={props.range}
+      data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
       aria-label="Stacked top model usage chart"
+      style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
     >
       <div data-slot="top-models-axis" aria-hidden="true">
         <For each={props.data}>
           {(day, index) => (
             <div
               data-active={activeIndex() === index() ? "true" : undefined}
+              data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
               data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
             >
               <span data-slot="axis-label">
@@ -620,60 +647,69 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
               onPointerDown={(event) => {
                 if (event.pointerType !== "touch") return
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
               onPointerEnter={() => {
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
               onPointerLeave={(event) => {
                 if (event.pointerType === "touch") return
                 setActiveIndex(undefined)
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
-              onClick={() => setActiveIndex(dayIndex())}
+              onClick={() => {
+                setActiveIndex(dayIndex())
+                props.onActiveModelChange(undefined)
+              }}
               onFocus={() => {
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
               onBlur={() => {
                 setActiveIndex(undefined)
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return
                 event.preventDefault()
                 setActiveIndex(dayIndex())
-                setActiveSegment(undefined)
+                props.onActiveModelChange(undefined)
               }}
             >
-              <div data-slot="top-models-stack" style={{ "grid-template-rows": getTopModelsSegmentRows(day) }}>
-                <For each={stackedTopModelsSegments(day)}>
+              <div
+                data-slot="top-models-stack"
+                style={{ "grid-template-rows": getTopModelsSegmentRows(day, segmentOrder()) }}
+              >
+                <For each={stackedTopModelsSegments(day, segmentOrder())}>
                   {(item) => (
                     <i
                       data-series={item.index}
-                      data-active={activeSegment() === item.index ? "true" : undefined}
+                      data-model={item.segment.model}
+                      data-active={props.activeModel === item.segment.model ? "true" : undefined}
                       style={{
                         background: getTopModelsSegmentColor(
+                          item.segment.model,
                           item.index,
+                          segmentOrder(),
                           activeIndex() !== undefined && activeIndex() !== dayIndex(),
-                          activeSegment(),
+                          props.activeModel,
                         ),
                       }}
                       onPointerEnter={(event) => {
                         event.stopPropagation()
                         setActiveIndex(dayIndex())
-                        setActiveSegment(item.index)
+                        props.onActiveModelChange(item.segment.model)
                       }}
                       onPointerDown={(event) => {
                         event.stopPropagation()
                         setActiveIndex(dayIndex())
-                        setActiveSegment(item.index)
+                        props.onActiveModelChange(item.segment.model)
                       }}
                       onClick={(event) => {
                         event.stopPropagation()
                         setActiveIndex(dayIndex())
-                        setActiveSegment(item.index)
+                        props.onActiveModelChange(item.segment.model)
                       }}
                     />
                   )}
@@ -691,13 +727,20 @@ function TopModelsChart(props: { data: UsagePoint[]; range: UsageRange }) {
                     <For each={visibleTopModelsSegments(point())}>
                       {(item) => (
                         <p
-                          data-active={activeSegment() === item.index ? "true" : undefined}
+                          data-active={props.activeModel === item.segment.model ? "true" : undefined}
                           data-muted={
-                            activeSegment() !== undefined && activeSegment() !== item.index ? "true" : undefined
+                            props.activeModel !== undefined && props.activeModel !== item.segment.model
+                              ? "true"
+                              : undefined
                           }
                         >
                           <span data-slot="tooltip-label">
-                            <i style={{ background: usageColors[item.index] }} /> {item.segment.model}
+                            <i
+                              style={{
+                                background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
+                              }}
+                            />{" "}
+                            {item.segment.model}
                           </span>
                           <b>{formatTokens(item.segment.value)}</b>
                         </p>
@@ -726,10 +769,10 @@ function getTopModelsMaxTotal(data: UsagePoint[]) {
   return max
 }
 
-function getTopModelsSegmentRows(point: UsagePoint) {
+function getTopModelsSegmentRows(point: UsagePoint, order: Map<string, number>) {
   const total = usageTotal(point)
   if (total <= 0) return ""
-  return stackedTopModelsSegments(point)
+  return stackedTopModelsSegments(point, order)
     .map((item) => `${(item.segment.value / total) * 100}%`)
     .join(" ")
 }
@@ -738,21 +781,52 @@ function visibleTopModelsSegments(point: UsagePoint) {
   return point.segments.map((segment, index) => ({ segment, index })).filter((item) => item.segment.value > 0)
 }
 
-function stackedTopModelsSegments(point: UsagePoint) {
+function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>) {
   return visibleTopModelsSegments(point)
     .slice()
-    .sort((a, b) => a.segment.value - b.segment.value || a.index - b.index)
+    .sort((a, b) => (order.get(b.segment.model) ?? b.index) - (order.get(a.segment.model) ?? a.index))
 }
 
-function getTopModelsSegmentColor(index: number, muted: boolean, activeSegment: number | undefined) {
-  if (activeSegment !== undefined)
-    return activeSegment === index ? (usageColors[index] ?? "var(--stats-text)") : "var(--stats-layer-2)"
+function getTopModelsSegmentOrder(data: UsagePoint[]) {
+  return getRankOrder(
+    data.flatMap((point) =>
+      point.segments.map((segment, index) => ({ key: segment.model, value: segment.value, index })),
+    ),
+  )
+}
+
+function getTopModelsSegmentColor(
+  model: string,
+  index: number,
+  order: Map<string, number>,
+  muted: boolean,
+  activeModel: string | undefined,
+) {
+  if (activeModel !== undefined)
+    return activeModel === model ? getRankColor(model, index, order, usageColors) : "var(--stats-layer-2)"
   if (muted) return "var(--stats-layer-2)"
-  return usageColors[index] ?? "var(--stats-text)"
+  return getRankColor(model, index, order, usageColors)
 }
 
 function isTopModelsMobileAxisHidden(index: number, count: number) {
   return count > 7 && index % 2 === 1
+}
+
+function isColumnLabelHidden(index: number, count: number) {
+  if (count <= 20) return false
+  const interval = Math.ceil(count / 8)
+  return index !== count - 1 && index % interval !== 0
+}
+
+function isDenseColumnRange(range: UsageRange) {
+  return range === "1M" || range === "2M"
+}
+
+function scrollDenseChartToEnd(element: HTMLDivElement | undefined, range: UsageRange, count: number) {
+  if (!element || count <= 0 || !isDenseColumnRange(range) || typeof window === "undefined") return
+  window.requestAnimationFrame(() => {
+    element.scrollLeft = element.scrollWidth - element.clientWidth
+  })
 }
 
 function formatTopModelsMobileDate(label: string, range: UsageRange) {
@@ -769,67 +843,49 @@ function formatTokens(value: number) {
   return `${Math.round(value * 1000)}B`
 }
 
-function LeaderboardSection(props: { data: StatsHomeData["leaderboard"] }) {
-  const [product, setProduct] = createSignal<UsageProduct>("All Users")
-  const [range, setRange] = createSignal<UsageRange>("1W")
-  const data = createMemo(() => props.data[product()][range()])
-
-  return (
-    <section id="leaderboard" data-section="leaderboard">
-      <SectionTitle
-        title="Leaderboard"
-        description="Shown are the sum of prompt and completion tokens per model, including reasoning tokens."
-      />
-      <Show
-        when={data().length > 0}
-        fallback={
-          <EmptyState title="No leaderboard data" description="No model_stat rows matched this product and range." />
-        }
-      >
-        <Leaderboard data={data()} />
-      </Show>
-      <div data-slot="chart-footer">
-        <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
-      </div>
-    </section>
-  )
-}
-
-function Leaderboard(props: { data: LeaderboardEntry[] }) {
-  const featured = createMemo(() => props.data.slice(0, 3))
-  const columns = createMemo(() =>
-    [0, 1, 2].map((index) => props.data.slice(3 + index * 5, 8 + index * 5)).filter((column) => column.length > 0),
-  )
-
+function Leaderboard(props: {
+  data: LeaderboardEntry[]
+  activeModel: string | undefined
+  onActiveModelChange: (model: string | undefined) => void
+}) {
   return (
     <div data-component="leaderboard" role="list" aria-label="Model token leaderboard">
-      <div data-slot="leaderboard-featured">
-        <For each={featured()}>{(entry) => <LeaderboardCard entry={entry} size="featured" />}</For>
-      </div>
-      <div data-slot="leaderboard-pattern" aria-hidden="true" />
-      <div data-slot="leaderboard-compact">
-        <For each={columns()}>
-          {(column) => (
-            <div data-slot="leaderboard-column">
-              <For each={column}>{(entry) => <LeaderboardCard entry={entry} size="compact" />}</For>
-            </div>
+      <div data-slot="leaderboard-scroll" aria-label="Scrollable model token leaderboard">
+        <For each={props.data}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
           )}
         </For>
-      </div>
-      <div data-slot="leaderboard-mobile" aria-label="Scrollable model token leaderboard">
-        <For each={props.data}>{(entry) => <LeaderboardCard entry={entry} size="featured" />}</For>
       </div>
     </div>
   )
 }
 
-function LeaderboardCard(props: { entry: LeaderboardEntry; size: "featured" | "compact" }) {
+function LeaderboardCard(props: {
+  entry: LeaderboardEntry
+  active: boolean
+  onActiveModelChange: (model: string | undefined) => void
+}) {
   return (
     <article
       data-component="leader-card"
-      data-size={props.size}
+      data-size="featured"
+      data-active={props.active ? "true" : undefined}
       role="listitem"
+      tabIndex={0}
       aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} by ${props.entry.author}`}
+      onPointerEnter={() => props.onActiveModelChange(props.entry.model)}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        props.onActiveModelChange(undefined)
+      }}
+      onFocus={() => props.onActiveModelChange(props.entry.model)}
+      onBlur={() => props.onActiveModelChange(undefined)}
+      onClick={() => props.onActiveModelChange(props.entry.model)}
     >
       <span data-slot="rank">{String(props.entry.rank).padStart(2, "0")}</span>
       <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
@@ -870,11 +926,12 @@ function formatChange(value: number) {
 }
 
 function MarketShareSection(props: { data: StatsHomeData["market"] }) {
-  const [range, setRange] = createSignal<UsageRange>("1W")
+  const [range, setRange] = createSignal<UsageRange>("2M")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const [activeAuthor, setActiveAuthor] = createSignal<string>()
   const [inspecting, setInspecting] = createSignal(false)
   const data = createMemo(() => props.data[range()])
+  const authorOrder = createMemo(() => getMarketAuthorOrder(data()))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(data().length - 1, 0)))
   const activeDay = createMemo(() => data()[selectedIndex()])
 
@@ -888,7 +945,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         setInspecting(false)
       }}
     >
-      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
+      <SectionBridge label="SESSION COST" href="#session-cost" />
       <SectionTitle title="Market Share" description="Compare token share by model author." />
       <Show
         when={activeDay()}
@@ -898,6 +955,8 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
           <>
             <MarketShare
               data={data()}
+              range={range()}
+              authorOrder={authorOrder()}
               activeIndex={selectedIndex()}
               activeAuthor={activeAuthor()}
               inspecting={inspecting()}
@@ -912,6 +971,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
             />
             <MarketShareList
               data={day().authors}
+              authorOrder={authorOrder()}
               activeAuthor={activeAuthor()}
               onActiveAuthorChange={(author) => {
                 setActiveAuthor(author)
@@ -944,15 +1004,24 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
 
 function MarketShare(props: {
   data: MarketDay[]
+  range: UsageRange
+  authorOrder: Map<string, number>
   activeIndex: number
   activeAuthor: string | undefined
   inspecting: boolean
   onActiveIndexChange: (index: number) => void
   onActiveAuthorChange: (author: string) => void
 }) {
+  let chartRef: HTMLDivElement | undefined
+
+  createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+
   return (
     <div
+      ref={chartRef}
       data-component="market-share"
+      data-range={props.range}
+      data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
       aria-label="Market share by model author"
       style={{ "--market-count": props.data.length } as JSX.CSSProperties}
@@ -963,6 +1032,7 @@ function MarketShare(props: {
             <button
               type="button"
               data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
+              data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
               data-mobile-hidden={isMarketMobileLabelHidden(index(), props.data.length) ? "true" : undefined}
               onClick={() => props.onActiveIndexChange(index())}
               onPointerEnter={() => props.onActiveIndexChange(index())}
@@ -988,9 +1058,10 @@ function MarketShare(props: {
               onClick={() => props.onActiveIndexChange(index())}
               onPointerEnter={() => props.onActiveIndexChange(index())}
             >
-              <For each={stackedMarketAuthors(day)}>
+              <For each={stackedMarketAuthors(day, props.authorOrder)}>
                 {(item) => (
                   <span
+                    data-author={item.author.author}
                     data-active={props.activeAuthor === item.author.author ? "true" : undefined}
                     data-muted={
                       props.activeAuthor !== undefined && props.activeAuthor !== item.author.author ? "true" : undefined
@@ -998,7 +1069,7 @@ function MarketShare(props: {
                     style={{
                       "background-color": getMarketSegmentColor(
                         item.author.author,
-                        marketColors[item.index] ?? "var(--stats-text)",
+                        getRankColor(item.author.author, item.index, props.authorOrder, marketColors),
                         props.activeAuthor,
                       ),
                       "flex-grow": item.author.share,
@@ -1031,6 +1102,7 @@ function MarketShare(props: {
 
 function MarketShareList(props: {
   data: MarketDay["authors"]
+  authorOrder: Map<string, number>
   activeAuthor: string | undefined
   onActiveAuthorChange: (author: string) => void
 }) {
@@ -1052,7 +1124,7 @@ function MarketShareList(props: {
             }}
           >
             <span>{String(index() + 1).padStart(2, "0")}</span>
-            <i style={{ background: marketColors[index()] }} />
+            <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
             <strong>{item.author}</strong>
             <em>{formatTrillions(item.tokens)}</em>
             <b>{item.share.toFixed(1)}%</b>
@@ -1069,11 +1141,38 @@ function getMarketSegmentColor(author: string, color: string, activeAuthor: stri
   return "var(--stats-bar-idle)"
 }
 
-function stackedMarketAuthors(day: MarketDay) {
+function stackedMarketAuthors(day: MarketDay, order: Map<string, number>) {
   return day.authors
     .map((author, index) => ({ author, index }))
     .slice()
-    .sort((a, b) => a.author.share - b.author.share || a.index - b.index)
+    .sort((a, b) => (order.get(b.author.author) ?? b.index) - (order.get(a.author.author) ?? a.index))
+}
+
+function getMarketAuthorOrder(data: MarketDay[]) {
+  return getRankOrder(
+    data.flatMap((day) => day.authors.map((author, index) => ({ key: author.author, value: author.tokens, index }))),
+  )
+}
+
+function getRankOrder(items: { key: string; value: number; index: number }[]) {
+  return new Map<string, number>(
+    Object.values(
+      items.reduce<Record<string, { key: string; value: number; index: number }>>((result, item) => {
+        result[item.key] = {
+          key: item.key,
+          value: (result[item.key]?.value ?? 0) + item.value,
+          index: Math.min(result[item.key]?.index ?? item.index, item.index),
+        }
+        return result
+      }, {}),
+    )
+      .toSorted((a, b) => b.value - a.value || a.index - b.index || a.key.localeCompare(b.key))
+      .map((item, index) => [item.key, index] as const),
+  )
+}
+
+function getRankColor(key: string, fallbackIndex: number, order: Map<string, number>, colors: readonly string[]) {
+  return colors[order.get(key) ?? fallbackIndex] ?? "var(--stats-text)"
 }
 
 function isMarketMobileLabelHidden(index: number, count: number) {
@@ -1124,7 +1223,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
 
   return (
     <section id="token-cost" data-section="token-cost">
-      <SectionBridge label="MARKET SHARE" href="#market-share" />
+      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
       <SectionTitle title="Token Cost" description="Price per 1M tokens." />
       <Show
         when={visible().length > 0}
@@ -1479,9 +1578,9 @@ function Footer(props: {
   const modelStats = [
     { href: "#top-models", label: "Top Models" },
     { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#market-share", label: "Market Share" },
     { href: "#token-cost", label: "Token Cost" },
     { href: "#session-cost", label: "Session Cost" },
+    { href: "#market-share", label: "Market Share" },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
@@ -1497,7 +1596,7 @@ function Footer(props: {
 
   return (
     <footer data-component="footer">
-      <SectionBridge label="SESSION COST" href="#session-cost" />
+      <SectionBridge label="MARKET SHARE" href="#market-share" />
       <div data-slot="footer-grid">
         <a data-slot="footer-mark" href="https://opencode.ai" aria-label="OpenCode home">
           <OpenCodeMark />

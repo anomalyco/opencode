@@ -7,9 +7,9 @@ import {
   shellOutputSnapshot,
   toLocations,
   toToolKind,
-} from "../../src/acp-next/tool"
+} from "../../src/acp/tool"
 
-describe("acp-next tool conversion", () => {
+describe("acp tool conversion", () => {
   test("maps OpenCode tool ids to ACP tool kinds", () => {
     expect(toToolKind("bash")).toBe("execute")
     expect(toToolKind("shell")).toBe("execute")
