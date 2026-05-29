@@ -282,6 +282,30 @@
   color: var(--text-base);
   line-height: var(--line-height-normal);
 
+  [data-component="reasoning-trigger"] {
+    width: 100%;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    cursor: default;
+
+    [data-slot="reasoning-title"] {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+
+    [data-slot="collapsible-arrow"] {
+      color: var(--icon-weaker);
+      cursor: pointer;
+    }
+  }
+
+  [data-component="reasoning-content"] {
+    padding-left: 12px;
+  }
+
   [data-component="markdown"] {
     margin-top: 16px;
     font-style: normal;

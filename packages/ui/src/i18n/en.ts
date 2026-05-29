@@ -173,4 +173,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Select all answers that apply",
   "ui.question.singleHint": "Select one answer",
   "ui.question.custom.placeholder": "Type your answer...",
+
+  "ui.reasoning.thinking": "Reasoning",
+  "ui.reasoning.summary": "Reasoning Summary",
 }
