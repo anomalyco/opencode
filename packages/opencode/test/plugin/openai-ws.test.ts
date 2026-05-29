@@ -39,6 +39,17 @@ describe("plugin.openai.ws", () => {
     ).rejects.toThrow("WebSocket connect timed out")
   })
 
+  test("surfaces websocket upgrade rejection messages", async () => {
+    await using server = await createRejectingWebSocketServer(() => {})
+
+    await expect(
+      OpenAIWebSocket.connectResponsesWebSocket({
+        url: server.wsUrl,
+        headers: {},
+      }),
+    ).rejects.toThrow("Expected 101 status code")
+  })
+
   test("enforces websocket send idle timeout", async () => {
     const socket = new (class extends EventEmitter {
       send(_data: string, _callback: (error?: Error) => void) {}

@@ -43,9 +43,9 @@ function authFetch(fetchWithRuntimeOptions?: unknown) {
   // do not, so inject a Google access token into their fetch path.
   return async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const { GoogleAuth } = await import("google-auth-library")
-    const auth = new GoogleAuth()
-    const client = await auth.getApplicationDefault()
-    const token = await client.credential.getAccessToken()
+    const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
+    const client = await auth.getClient()
+    const token = await client.getAccessToken()
     const headers = new Headers(init?.headers)
     headers.set("Authorization", `Bearer ${token.token}`)
     return typeof fetchWithRuntimeOptions === "function"

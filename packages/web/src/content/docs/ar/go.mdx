@@ -57,7 +57,6 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -75,7 +74,7 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 - **الحد الأسبوعي** — استخدام بقيمة $30
 - **الحد الشهري** — استخدام بقيمة $60
 
-تُحدَّد الحدود بالقيمة بالدولار. وهذا يعني أن عدد طلباتك الفعلي يعتمد على النموذج الذي تستخدمه. تتيح النماذج الأقل تكلفة مثل MiniMax M2.5 عددًا أكبر من الطلبات، بينما تتيح النماذج الأعلى تكلفة مثل GLM-5.1 عددًا أقل.
+تُحدَّد الحدود بالقيمة بالدولار. وهذا يعني أن عدد طلباتك الفعلي يعتمد على النموذج الذي تستخدمه. تتيح النماذج الأقل تكلفة مثل DeepSeek V4 Flash عددًا أكبر من الطلبات، بينما تتيح النماذج الأعلى تكلفة مثل GLM-5.1 عددًا أقل.
 
 يوضح الجدول أدناه عددًا تقديريًا للطلبات بناءً على أنماط استخدام Go المعتادة:
 
@@ -91,7 +90,6 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 | MiniMax M2.5      | 6,300               | 15,900             | 31,800           |
 | Qwen3.7 Max       | 950                 | 2,390              | 4,770            |
 | Qwen3.6 Plus      | 3,300               | 8,200              | 16,300           |
-| Qwen3.5 Plus      | 10,200              | 25,200             | 50,500           |
 | DeepSeek V4 Pro   | 3,450               | 8,550              | 17,150           |
 | DeepSeek V4 Flash | 31,650              | 79,050             | 158,150          |
 
@@ -104,7 +102,6 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 - MiniMax M2.7/M2.5 — ‏300 input، و55,000 cached، و125 output tokens لكل طلب
 - Qwen3.7 Max — ‏420 input، و66,000 cached، و200 output tokens لكل طلب
 - Qwen3.6 Plus — ‏500 input، و57,000 cached، و190 output tokens لكل طلب
-- Qwen3.5 Plus — ‏410 input، و47,000 cached، و140 output tokens لكل طلب
 - MiMo-V2.5 — ‏830 input، و71,500 cached، و295 output tokens لكل طلب
 - MiMo-V2.5-Pro — ‏790 input، و86,000 cached، و305 output tokens لكل طلب
 
@@ -142,7 +139,6 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 يستخدم [model id](/docs/config/#models) في إعدادات OpenCode لديك التنسيق `opencode-go/<model-id>`. على سبيل المثال، بالنسبة إلى Kimi K2.6، ستستخدم `opencode-go/kimi-k2.6` في إعداداتك.
 
