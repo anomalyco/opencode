@@ -3,6 +3,8 @@
 
 import WebSocket from "ws"
 import { ProviderError } from "@/provider/error"
+import { errorMessage } from "@/util/error"
+import { ProxyEnv } from "@/util/proxy-env"
 
 export const PROTOCOL_HEADER = "responses_websockets=2026-02-06"
 
@@ -71,7 +73,13 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
     }
     delete headers["content-length"]
 
-    const socket = new WebSocket(options.url, { headers })
+    // Bun does not apply HTTP(S)_PROXY to WebSockets unless the proxy is supplied explicitly.
+    const proxy =
+      typeof Bun === "undefined"
+        ? undefined
+        : ProxyEnv.getProxyForUrl(options.url.replace(/^wss:/, "https:").replace(/^ws:/, "http:"))
+    const connect = { headers, ...(proxy ? { proxy } : {}) }
+    const socket = new WebSocket(options.url, connect)
     const timeout = options.timeout
       ? setTimeout(() => {
           cleanup()
@@ -94,10 +102,10 @@ export function connectResponsesWebSocket(options: ConnectResponsesWebSocketOpti
       resolve(socket)
     }
 
-    function onError(error: Error) {
+    function onError(error: unknown) {
       socket.on("error", () => {})
       cleanup()
-      reject(error)
+      reject(error instanceof Error ? error : new Error(errorMessage(error), { cause: error }))
     }
 
     function onClose(code: number, reason: Buffer) {

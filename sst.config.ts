@@ -30,10 +30,7 @@ export default $config({
   async run() {
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    if (stage.deployAws) {
-      await import("./infra/lake.js")
-      await import("./infra/stats.js")
-    }
+    const stats = stage.deployAws ? await import("./infra/lake.js").then(() => import("./infra/stats.js")) : undefined
     const { stat } = await import("./infra/console.js")
     await import("./infra/enterprise.js")
     if ($app.stage === "production" || $app.stage === "vimtor") {
@@ -42,7 +39,7 @@ export default $config({
 
     return {
       StatWorkerUrl: stat.url,
-      // StatsUrl: stats.app.url,
+      ...(stats ? { StatsUrl: stats.app.url } : {}),
       AwsStage: stage.awsStage,
     }
   },
