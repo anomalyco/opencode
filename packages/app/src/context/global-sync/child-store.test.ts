@@ -6,6 +6,7 @@ import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
+const queryGroups: Array<() => { queries: Array<{ enabled?: boolean }> }> = []
 
 const child = () => createStore({} as State)
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
@@ -48,12 +49,15 @@ beforeAll(async () => {
     persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
   }))
   mock.module("@tanstack/solid-query", () => ({
-    useQueries: () => [
-      { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
-      { isLoading: false, data: {} },
-      { isLoading: false, data: [] },
-      { isLoading: false, data: provider },
-    ],
+    useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
+      queryGroups.push(options)
+      return [
+        { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
+        { isLoading: false, data: {} },
+        { isLoading: false, data: [] },
+        { isLoading: false, data: provider },
+      ]
+    },
   }))
 
   createChildStoreManager = (await import("./child-store")).createChildStoreManager
@@ -73,6 +77,7 @@ describe("createChildStoreManager", () => {
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
+      onMcp() {},
       onDispose() {},
       translate: (key) => key,
       queryOptions: queryOptionsApi,
@@ -103,6 +108,7 @@ describe("createChildStoreManager", () => {
         onBootstrap(directory) {
           bootstraps.push(directory)
         },
+        onMcp() {},
         onDispose() {},
         translate: (key) => key,
         queryOptions: queryOptionsApi,
@@ -117,6 +123,47 @@ describe("createChildStoreManager", () => {
 
       expect(store.status).toBe("loading")
       expect(bootstraps).toEqual(["/project"])
+    } finally {
+      dispose()
+    }
+  })
+
+  test("enables MCP only when requested for the directory", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+    const offset = queryGroups.length
+    const mcpLoads: string[] = []
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap() {},
+        onMcp(directory) {
+          mcpLoads.push(directory)
+        },
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+      const [, setStore] = manager.child("/project", { bootstrap: false })
+      const queries = queryGroups[offset]
+      if (!queries) throw new Error("queries required")
+      expect(queries().queries[1]?.enabled).toBe(false)
+
+      setStore("status", "complete")
+      manager.child("/project", { bootstrap: false, mcp: true })
+      expect(queries().queries[1]?.enabled).toBe(true)
+      expect(mcpLoads).toEqual(["/project"])
+
+      manager.disableMcp("/project")
+      expect(queries().queries[1]?.enabled).toBe(false)
+      expect(manager.mcp("/project")).toBe(false)
     } finally {
       dispose()
     }
