@@ -348,6 +348,22 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Opstartsscript for arbejdsområde",
   "dialog.project.edit.worktree.startup.description": "Køres efter oprettelse af et nyt arbejdsområde (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
+
+  "dialog.newProject.title": "Nyt projekt",
+  "dialog.newProject.tab.github": "Importer fra GitHub",
+  "dialog.newProject.tab.folder": "Importer fra mappe",
+  "dialog.newProject.url.label": "Repository-URL",
+  "dialog.newProject.destination.label": "Klon-destination",
+  "dialog.newProject.destination.placeholder": "Vælg en destinationsmappe",
+  "dialog.newProject.destination.browse": "Gennemse",
+  "dialog.newProject.destination.pick": "Vælg klon-destination",
+  "dialog.newProject.clone": "Klon repository",
+  "dialog.newProject.cloning": "Kloner...",
+  "dialog.newProject.error.cloneFailed": "Kunne ikke klone repository",
+  "dialog.newProject.folder.title": "Åbn et eksisterende projekt",
+  "dialog.newProject.folder.description": "Vælg en lokal mappe for at tilføje den som et projekt i OpenCode.",
+  "dialog.newProject.folder.action": "Vælg mappe",
+
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":
     'Omtrentlig fordeling af input-tokens. "Andre" inkluderer værktøjsdefinitioner og overhead.',

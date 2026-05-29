@@ -350,6 +350,21 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Pokreće se nakon kreiranja novog radnog prostora (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "npr. bun install",
 
+  "dialog.newProject.title": "Novi projekat",
+  "dialog.newProject.tab.github": "Uvezi iz GitHub-a",
+  "dialog.newProject.tab.folder": "Uvezi iz fascikle",
+  "dialog.newProject.url.label": "URL repozitorija",
+  "dialog.newProject.destination.label": "Destinacija kloniranja",
+  "dialog.newProject.destination.placeholder": "Izaberite odredišnu fasciklu",
+  "dialog.newProject.destination.browse": "Pregledaj",
+  "dialog.newProject.destination.pick": "Izaberite destinaciju kloniranja",
+  "dialog.newProject.clone": "Kloniraj repozitorij",
+  "dialog.newProject.cloning": "Kloniranje...",
+  "dialog.newProject.error.cloneFailed": "Neuspješno kloniranje repozitorija",
+  "dialog.newProject.folder.title": "Otvori postojeći projekat",
+  "dialog.newProject.folder.description": "Izaberite lokalnu fasciklu da dodate kao projekat u OpenCode.",
+  "dialog.newProject.folder.action": "Izaberite fasciklu",
+
   "context.breakdown.title": "Razlaganje konteksta",
   "context.breakdown.note":
     'Približna raspodjela ulaznih tokena. "Ostalo" uključuje definicije alata i dodatni overhead.',

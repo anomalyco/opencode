@@ -320,6 +320,22 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
   "dialog.project.edit.worktree.startup.placeholder": "例: bun install",
+
+  "dialog.newProject.title": "新規プロジェクト",
+  "dialog.newProject.tab.github": "GitHubからインポート",
+  "dialog.newProject.tab.folder": "フォルダからインポート",
+  "dialog.newProject.url.label": "リポジトリURL",
+  "dialog.newProject.destination.label": "クローン先",
+  "dialog.newProject.destination.placeholder": "保存先フォルダを選択",
+  "dialog.newProject.destination.browse": "参照",
+  "dialog.newProject.destination.pick": "クローン先を選択",
+  "dialog.newProject.clone": "リポジトリをクローン",
+  "dialog.newProject.cloning": "クローン中...",
+  "dialog.newProject.error.cloneFailed": "リポジトリのクローンに失敗しました",
+  "dialog.newProject.folder.title": "既存のプロジェクトを開く",
+  "dialog.newProject.folder.description": "OpenCode にプロジェクトとして追加するローカルフォルダを選択してください。",
+  "dialog.newProject.folder.action": "フォルダを選択",
+
   "context.breakdown.title": "コンテキストの内訳",
   "context.breakdown.note": '入力トークンのおおよその内訳です。"その他"にはツールの定義やオーバーヘッドが含まれます。',
   "context.breakdown.system": "システム",

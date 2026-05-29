@@ -9,6 +9,12 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/project"
+
+const ClonePayload = Schema.Struct({
+  url: Schema.String.annotate({ description: "Git repository URL to clone" }),
+  destination: Schema.String.annotate({ description: "Local directory path to clone into" }),
+})
+
 const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(Project.Info.fields.icon),
@@ -47,6 +53,18 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.initGit",
             summary: "Initialize git repository",
             description: "Create a git repository for the current project and return the refreshed project info.",
+          }),
+        ),
+        HttpApiEndpoint.post("clone", `${root}/clone`, {
+          query: WorkspaceRoutingQuery,
+          payload: ClonePayload,
+          success: described(Schema.Struct({ directory: Schema.String }), "Cloned directory path"),
+          error: [HttpApiError.BadRequest],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.clone",
+            summary: "Clone a repository",
+            description: "Clone a git repository from a URL to a local destination directory.",
           }),
         ),
         HttpApiEndpoint.patch("update", `${root}/:projectID`, {

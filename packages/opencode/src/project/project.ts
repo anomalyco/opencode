@@ -110,6 +110,11 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Pro
   projectID: ProjectID,
 }) {}
 
+export class CloneError extends Schema.TaggedErrorClass<CloneError>()("Project.CloneError", {
+  url: Schema.String,
+  message: Schema.String,
+}) {}
+
 // ---------------------------------------------------------------------------
 // Effect service
 // ---------------------------------------------------------------------------
@@ -127,6 +132,7 @@ export interface Interface {
   readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
+  readonly clone: (input: { url: string; destination: string }) => Effect.Effect<string, CloneError>
   readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
   readonly addSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
@@ -136,6 +142,18 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
 
 type GitResult = { code: number; text: string; stderr: string }
+
+function deriveRepoName(url: string): string | undefined {
+  const withoutParams = url.replace(/[?#].*$/, "")
+  const trimmed = withoutParams.replace(/\/+$/, "").replace(/\.git$/, "")
+  const lastSegment = trimmed.split("/").pop()
+  if (!lastSegment) return undefined
+  if (lastSegment.includes(":")) {
+    const afterColon = lastSegment.split(":").pop()
+    return afterColon || undefined
+  }
+  return lastSegment
+}
 
 export const layer = Layer.effect(
   Service,
@@ -394,6 +412,29 @@ export const layer = Layer.effect(
       return project
     })
 
+    const clone = Effect.fn("Project.clone")(function* (input: { url: string; destination: string }) {
+      if (!(yield* Effect.sync(() => which("git")))) {
+        return yield* new CloneError({ url: input.url, message: "Git is not installed" })
+      }
+      const repoName = deriveRepoName(input.url)
+      const cloneTarget = repoName
+        ? input.destination.replace(/\/+$/, "") + "/" + repoName
+        : input.destination
+      const cloneExists = yield* fs.exists(cloneTarget).pipe(Effect.orDie)
+      if (cloneExists) {
+        return yield* new CloneError({
+          url: input.url,
+          message: `Target already exists: ${cloneTarget}`,
+        })
+      }
+      const result = yield* git(["clone", input.url, cloneTarget])
+      if (result.code !== 0) {
+        const msg = result.stderr.trim() || result.text.trim() || "Failed to clone repository"
+        return yield* new CloneError({ url: input.url, message: msg })
+      }
+      return cloneTarget
+    })
+
     const setInitialized = Effect.fn("Project.setInitialized")(function* (id: ProjectID) {
       yield* db((d) =>
         d.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
@@ -471,6 +512,7 @@ export const layer = Layer.effect(
       get,
       update,
       initGit,
+      clone,
       setInitialized,
       sandboxes,
       addSandbox,

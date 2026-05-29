@@ -350,6 +350,22 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Запускается после создания нового рабочего пространства (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "например, bun install",
+
+  "dialog.newProject.title": "Новый проект",
+  "dialog.newProject.tab.github": "Импортировать из GitHub",
+  "dialog.newProject.tab.folder": "Импортировать из папки",
+  "dialog.newProject.url.label": "URL репозитория",
+  "dialog.newProject.destination.label": "Место клонирования",
+  "dialog.newProject.destination.placeholder": "Выберите целевую папку",
+  "dialog.newProject.destination.browse": "Обзор",
+  "dialog.newProject.destination.pick": "Выберите место клонирования",
+  "dialog.newProject.clone": "Клонировать репозиторий",
+  "dialog.newProject.cloning": "Клонирование...",
+  "dialog.newProject.error.cloneFailed": "Не удалось клонировать репозиторий",
+  "dialog.newProject.folder.title": "Открыть существующий проект",
+  "dialog.newProject.folder.description": "Выберите локальную папку, чтобы добавить её как проект в OpenCode.",
+  "dialog.newProject.folder.action": "Выбрать папку",
+
   "context.breakdown.title": "Разбивка контекста",
   "context.breakdown.note":
     'Приблизительная разбивка входных токенов. "Другое" включает определения инструментов и накладные расходы.',

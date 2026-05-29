@@ -4,7 +4,7 @@ import { ProjectID } from "@/project/schema"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ProjectNotFoundError } from "../errors"
+import { InvalidRequestError, ProjectNotFoundError } from "../errors"
 import { markInstanceForReload } from "../lifecycle"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
@@ -32,6 +32,17 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       return next
     })
 
+    const clone = Effect.fn("ProjectHttpApi.clone")(function* (ctx: {
+      payload: { url: string; destination: string }
+    }) {
+      const directory = yield* svc.clone({ url: ctx.payload.url, destination: ctx.payload.destination }).pipe(
+        Effect.catchTag("Project.CloneError", (error) =>
+          Effect.fail(new InvalidRequestError({ message: error.message })),
+        ),
+      )
+      return { directory }
+    })
+
     const update = Effect.fn("ProjectHttpApi.update")(function* (ctx: {
       params: { projectID: ProjectID }
       payload: Project.UpdatePayload
@@ -48,6 +59,11 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       )
     })
 
-    return handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update)
+    return handlers
+      .handle("list", list)
+      .handle("current", current)
+      .handle("initGit", initGit)
+      .handle("clone", clone)
+      .handle("update", update)
   }),
 )

@@ -327,6 +327,22 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Wird nach dem Erstellen eines neuen Arbeitsbereichs (Worktree) ausgeführt.",
   "dialog.project.edit.worktree.startup.placeholder": "z. B. bun install",
+
+  "dialog.newProject.title": "Neues Projekt",
+  "dialog.newProject.tab.github": "Von GitHub importieren",
+  "dialog.newProject.tab.folder": "Aus Ordner importieren",
+  "dialog.newProject.url.label": "Repository-URL",
+  "dialog.newProject.destination.label": "Klon-Ziel",
+  "dialog.newProject.destination.placeholder": "Zielordner auswählen",
+  "dialog.newProject.destination.browse": "Durchsuchen",
+  "dialog.newProject.destination.pick": "Klon-Ziel auswählen",
+  "dialog.newProject.clone": "Repository klonen",
+  "dialog.newProject.cloning": "Klone...",
+  "dialog.newProject.error.cloneFailed": "Repository konnte nicht geklont werden",
+  "dialog.newProject.folder.title": "Bestehendes Projekt öffnen",
+  "dialog.newProject.folder.description": "Wähle einen lokalen Ordner, um ihn als Projekt in OpenCode hinzuzufügen.",
+  "dialog.newProject.folder.action": "Ordner auswählen",
+
   "context.breakdown.title": "Kontext-Aufschlüsselung",
   "context.breakdown.note":
     'Ungefähre Aufschlüsselung der Eingabe-Token. "Andere" beinhaltet Werkzeugdefinitionen und Overhead.',

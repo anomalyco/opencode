@@ -322,6 +322,22 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "S'exécute après la création d'un nouvel espace de travail (arbre de travail).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ex. bun install",
+
+  "dialog.newProject.title": "Nouveau projet",
+  "dialog.newProject.tab.github": "Importer depuis GitHub",
+  "dialog.newProject.tab.folder": "Importer depuis un dossier",
+  "dialog.newProject.url.label": "URL du dépôt",
+  "dialog.newProject.destination.label": "Destination du clone",
+  "dialog.newProject.destination.placeholder": "Sélectionner un dossier de destination",
+  "dialog.newProject.destination.browse": "Parcourir",
+  "dialog.newProject.destination.pick": "Choisir la destination du clone",
+  "dialog.newProject.clone": "Cloner le dépôt",
+  "dialog.newProject.cloning": "Clonage en cours...",
+  "dialog.newProject.error.cloneFailed": "Échec du clonage du dépôt",
+  "dialog.newProject.folder.title": "Ouvrir un projet existant",
+  "dialog.newProject.folder.description": "Choisissez un dossier local à ajouter comme projet dans OpenCode.",
+  "dialog.newProject.folder.action": "Choisir un dossier",
+
   "context.breakdown.title": "Répartition du contexte",
   "context.breakdown.note":
     "Répartition approximative des jetons d'entrée. \"Autre\" inclut les définitions d'outils et les frais généraux.",

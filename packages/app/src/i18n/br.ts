@@ -320,6 +320,22 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Script de inicialização do espaço de trabalho",
   "dialog.project.edit.worktree.startup.description": "Executa após criar um novo espaço de trabalho (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "ex: bun install",
+
+  "dialog.newProject.title": "Novo projeto",
+  "dialog.newProject.tab.github": "Importar do GitHub",
+  "dialog.newProject.tab.folder": "Importar de uma pasta",
+  "dialog.newProject.url.label": "URL do repositório",
+  "dialog.newProject.destination.label": "Destino do clone",
+  "dialog.newProject.destination.placeholder": "Selecione uma pasta de destino",
+  "dialog.newProject.destination.browse": "Procurar",
+  "dialog.newProject.destination.pick": "Escolher destino do clone",
+  "dialog.newProject.clone": "Clonar repositório",
+  "dialog.newProject.cloning": "Clonando...",
+  "dialog.newProject.error.cloneFailed": "Falha ao clonar o repositório",
+  "dialog.newProject.folder.title": "Abrir um projeto existente",
+  "dialog.newProject.folder.description": "Escolha uma pasta local para adicionar como projeto no OpenCode.",
+  "dialog.newProject.folder.action": "Escolher pasta",
+
   "context.breakdown.title": "Detalhamento do Contexto",
   "context.breakdown.note":
     'Detalhamento aproximado dos tokens de entrada. "Outros" inclui definições de ferramentas e overhead.',

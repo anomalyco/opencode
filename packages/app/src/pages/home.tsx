@@ -18,6 +18,7 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { DialogNewProject } from "@/components/dialog-new-project"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
@@ -129,6 +130,18 @@ function HomeDesign() {
     setState("project", directory)
   }
 
+  function showNewProjectDialog() {
+    dialog.show(
+      () => (
+        <DialogNewProject
+          onOpenSession={openProjectNewSession}
+          onSelectDirectory={() => void chooseProject()}
+        />
+      ),
+      () => {},
+    )
+  }
+
   function openNewSession() {
     const project = selectedProject()
     if (!project) {
@@ -205,6 +218,7 @@ function HomeDesign() {
         selectProject={selectProject}
         openNewSession={openProjectNewSession}
         chooseProject={() => void chooseProject()}
+        showNewProjectDialog={showNewProjectDialog}
         editProject={showEditProjectDialog}
         closeProject={(directory) => {
           layout.projects.close(directory)
@@ -229,7 +243,7 @@ function HomeDesign() {
               title={language.t("home.empty.title")}
               description={language.t("home.empty.description")}
               action={language.t("home.project.add")}
-              onAction={() => void chooseProject()}
+              onAction={showNewProjectDialog}
             />
           }
         >
@@ -288,6 +302,7 @@ function HomeProjectColumn(props: {
   selectProject: (directory: string) => void
   openNewSession: (directory: string) => void
   chooseProject: () => void
+  showNewProjectDialog: () => void
   editProject: (project: LocalProject) => void
   closeProject: (directory: string) => void
   clearNotifications: (project: LocalProject) => void
@@ -309,7 +324,7 @@ function HomeProjectColumn(props: {
           size="large"
           class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
           icon={<IconV2 name="folder-add-left" />}
-          onClick={props.chooseProject}
+          onClick={props.showNewProjectDialog}
           aria-label={props.language.t("home.project.add")}
         />
       </div>
