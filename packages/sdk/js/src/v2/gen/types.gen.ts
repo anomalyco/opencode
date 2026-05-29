@@ -1049,11 +1049,15 @@ export type ProviderConfig = {
     enterpriseUrl?: string
     setCacheKey?: boolean
     /**
-     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     * Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.
      */
     timeout?: number | false
+    /**
+     * Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.
+     */
+    headerTimeout?: number | false
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
+    [key: string]: unknown | string | boolean | number | false | number | false | number | undefined
   }
   models?: {
     [key: string]: {
@@ -1088,8 +1092,8 @@ export type ProviderConfig = {
         output: number
       }
       modalities?: {
-        input: Array<"text" | "audio" | "image" | "video" | "pdf">
-        output: Array<"text" | "audio" | "image" | "video" | "pdf">
+        input?: Array<"text" | "audio" | "image" | "video" | "pdf">
+        output?: Array<"text" | "audio" | "image" | "video" | "pdf">
       }
       experimental?: boolean
       status?: "alpha" | "beta" | "deprecated" | "active"
@@ -8196,6 +8200,8 @@ export type PtyConnectData = {
   query?: {
     directory?: string
     workspace?: string
+    cursor?: string
+    ticket?: string
   }
   url: "/pty/{ptyID}/connect"
 }

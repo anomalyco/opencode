@@ -512,7 +512,10 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({
             value,
             renderer,
-            cwd: project.instance.path().worktree || project.instance.directory() || process.cwd(),
+            cwd:
+              (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+              project.instance.directory() ||
+              process.cwd(),
           })
           if (!content) return
 
@@ -1464,11 +1467,13 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
+  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
 
   return (
     <>
-      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
+          width="100%"
           border={["left"]}
           borderColor={borderHighlight()}
           customBorderChars={{
@@ -1483,14 +1488,16 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
+            width="100%"
           >
             <textarea
+              width="100%"
               placeholder={placeholderText()}
               placeholderColor={theme.textMuted}
               textColor={leader() ? theme.textMuted : theme.text}
               focusedTextColor={leader() ? theme.textMuted : theme.text}
               minHeight={1}
-              maxHeight={6}
+              maxHeight={maxHeight()}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
