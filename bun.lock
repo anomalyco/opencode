@@ -477,6 +477,7 @@
         "glob": "13.0.5",
         "google-auth-library": "10.5.0",
         "gray-matter": "4.0.3",
+        "hono": "catalog:",
         "htmlparser2": "8.0.2",
         "ignore": "7.0.5",
         "immer": "11.1.4",
