@@ -63,9 +63,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Rewrite ssh-form GitHub URLs to HTTPS at the system level.  Every flavour
 # pnpm / npm / yarn could produce gets normalised to `https://github.com/`:
 #
-#   git@github.com:owner/repo        → https://github.com/owner/repo
-#   ssh://git@github.com/owner/repo  → https://github.com/owner/repo
-#   git+ssh://git@github.com/...     → https://github.com/...
+#   git@github.com:owner/repo              → https://github.com/owner/repo
+#   ssh://git@github.com/owner/repo        → https://github.com/owner/repo
+#   git+ssh://git@github.com/...           → https://github.com/...
+#   https://git@github.com:owner/repo      → https://github.com/owner/repo
+#   git+https://git@github.com:owner/repo  → https://github.com/owner/repo
+#
+# The trailing two forms look malformed (`https://` followed by an SSH-style
+# colon path) but they're what pnpm's lockfile actually writes for git deps
+# in some configurations.  Observed in unleashlive/frontend's pnpm-lock.yaml:
+#   version: git+https://git@github.com:unleashlive/ua-gltf-viewer.git#…
 #
 # Public repos clone unauthenticated; for private repos (e.g. unleashlive
 # internal forks declared as deps in the frontend's package.json) the
@@ -73,9 +80,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # git's credential prompt.  Writing to /etc/gitconfig (--system) means the
 # rule applies to every UID inside the container — preview launches run as
 # uid 10001, not root, so --global wouldn't reach the right HOME.
-RUN git config --system url."https://github.com/".insteadOf "git@github.com:" && \
-    git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" && \
-    git config --system url."https://github.com/".insteadOf "git+ssh://git@github.com/"
+#
+# CRITICAL: we use `--add` for EACH rule because url.<base>.insteadOf is a
+# multi-valued key.  Plain `git config key value` (without --add) REPLACES;
+# a chain of plain calls leaves only the last entry in /etc/gitconfig.  Bug
+# observed in the wild on 2026-05-28: only `git+ssh://git@github.com/` was
+# active until the Dockerfile got this fix, so plain `git@github.com:` URLs
+# (the form pnpm-lock.yaml resolution.repo uses) weren't being rewritten and
+# pnpm install died with "Please make sure you have the correct access
+# rights and the repository exists."
+RUN git config --system --add url."https://github.com/".insteadOf "git@github.com:" && \
+    git config --system --add url."https://github.com/".insteadOf "ssh://git@github.com/" && \
+    git config --system --add url."https://github.com/".insteadOf "git+ssh://git@github.com/" && \
+    git config --system --add url."https://github.com/".insteadOf "https://git@github.com:" && \
+    git config --system --add url."https://github.com/".insteadOf "git+https://git@github.com:"
 
 # Credential helper for authenticated HTTPS git fetches.  When git needs
 # creds (e.g. cloning a private dep over the URL the rewrite above produced),
