@@ -7,6 +7,9 @@ import { toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
 import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
+const MAX_DIFF_RENDER_CHARS = 512 * 1024
+const MAX_DIFF_RENDER_LINES = 5_000
+
 function todoText(item: { status: string; content: string }): string {
   if (item.status === "completed") {
     return `[✓] ${item.content}`
@@ -25,6 +28,17 @@ function todoText(item: { status: string; content: string }): string {
 
 function todoColor(theme: RunTheme, status: string) {
   return status === "in_progress" ? theme.footer.warning : theme.block.muted
+}
+
+function tooLargeDiff(diff: string) {
+  if (diff.length > MAX_DIFF_RENDER_CHARS) return true
+  let lines = 1
+  for (let i = 0; i < diff.length; i++) {
+    if (diff.charCodeAt(i) !== 10) continue
+    lines++
+    if (lines > MAX_DIFF_RENDER_LINES) return true
+  }
+  return false
 }
 
 export function entryGroupKey(commit: StreamCommit): string | undefined {
@@ -193,27 +207,33 @@ export function RunEntryContent(props: {
                 {item.title}
               </text>
               {item.diff.trim() ? (
-                <box width="100%" paddingLeft={1}>
-                  <diff
-                    diff={item.diff}
-                    view="unified"
-                    filetype={toolFiletype(item.file)}
-                    syntaxStyle={syntax()}
-                    showLineNumbers={true}
-                    width="100%"
-                    wrapMode="word"
-                    fg={theme().block.text}
-                    addedBg={diffBg(theme().block.diffAddedBg)}
-                    removedBg={diffBg(theme().block.diffRemovedBg)}
-                    contextBg={diffBg(theme().block.diffContextBg)}
-                    addedSignColor={theme().block.diffHighlightAdded}
-                    removedSignColor={theme().block.diffHighlightRemoved}
-                    lineNumberFg={theme().block.diffLineNumber}
-                    lineNumberBg={diffBg(theme().block.diffContextBg)}
-                    addedLineNumberBg={diffBg(theme().block.diffAddedLineNumberBg)}
-                    removedLineNumberBg={diffBg(theme().block.diffRemovedLineNumberBg)}
-                  />
-                </box>
+                tooLargeDiff(item.diff) ? (
+                  <text width="100%" wrapMode="word" fg={theme().block.muted}>
+                    Diff too large to render safely; open the file or inspect the patch from disk.
+                  </text>
+                ) : (
+                  <box width="100%" paddingLeft={1}>
+                    <diff
+                      diff={item.diff}
+                      view="unified"
+                      filetype={toolFiletype(item.file)}
+                      syntaxStyle={syntax()}
+                      showLineNumbers={true}
+                      width="100%"
+                      wrapMode="word"
+                      fg={theme().block.text}
+                      addedBg={diffBg(theme().block.diffAddedBg)}
+                      removedBg={diffBg(theme().block.diffRemovedBg)}
+                      contextBg={diffBg(theme().block.diffContextBg)}
+                      addedSignColor={theme().block.diffHighlightAdded}
+                      removedSignColor={theme().block.diffHighlightRemoved}
+                      lineNumberFg={theme().block.diffLineNumber}
+                      lineNumberBg={diffBg(theme().block.diffContextBg)}
+                      addedLineNumberBg={diffBg(theme().block.diffAddedLineNumberBg)}
+                      removedLineNumberBg={diffBg(theme().block.diffRemovedLineNumberBg)}
+                    />
+                  </box>
+                )
               ) : (
                 <text width="100%" wrapMode="word" fg={theme().block.diffRemoved}>
                   -{item.deletions ?? 0} line{item.deletions === 1 ? "" : "s"}

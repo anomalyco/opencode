@@ -459,8 +459,8 @@ export function SessionTurn(
                     >
                       <For each={visible()}>
                         {(diff) => {
-                          const view = normalize(diff)
                           const active = createMemo(() => expanded().includes(diff.file))
+                          const view = createMemo(() => normalize(diff))
                           const [shown, setShown] = createSignal(false)
 
                           createEffect(
@@ -508,7 +508,7 @@ export function SessionTurn(
                               <Accordion.Content>
                                 <Show when={shown()}>
                                   <div data-slot="session-turn-diff-view" data-scrollable>
-                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
+                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view().fileDiff} />
                                   </div>
                                 </Show>
                               </Accordion.Content>

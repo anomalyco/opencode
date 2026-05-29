@@ -885,6 +885,25 @@ it.instance(
 )
 
 it.instance(
+  "diffFull omits patches that are too large to render safely",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      const lines = Array.from({ length: 1_200 }, (_, i) => `line-${i}`).join("\n")
+      yield* write(`${tmp.path}/large.txt`, lines)
+      const after = yield* snapshot.track()
+      expect(after).toBeTruthy()
+      const diffs = yield* snapshot.diffFull(before, after!)
+      const diff = diffs.find((item) => item.file === "large.txt")
+      expect(diff).toBeDefined()
+      expect(diff!.additions).toBe(1_200)
+      expect(diff!.deletions).toBe(0)
+      expect(diff!.patch).toBeUndefined()
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
   "diffFull with file modifications",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
     Effect.gen(function* () {
