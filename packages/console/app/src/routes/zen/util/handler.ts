@@ -478,35 +478,29 @@ export async function handler(
     stickyId: string,
     trialProviders: string[] | undefined,
     retry: RetryOptions,
-    stickyProvider: string | undefined,
+    stickyProviderId: string | undefined,
     modelTpmLimits: Record<string, number> | undefined,
-    modelTpsLimits: Record<string, boolean> | undefined,
+    modelTpsLimits: Record<string, { qualify: number; unqualify: number }> | undefined,
   ) {
     const modelProvider = (() => {
-      const allProviders = modelInfo.providers.filter((provider) => !provider.disabled)
-
       // Byok is top priority b/c if user set their own API key, we should use it
       // instead of using the sticky provider for the same session
       if (authInfo?.provider?.credentials) {
-        return allProviders.find((provider) => provider.id === modelInfo.byokProvider)
+        return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
-      // Always use the same provider for the same session
-      if (stickyProvider) {
-        const provider = allProviders.find((provider) => provider.id === stickyProvider)
-        if (provider) return provider
-      }
-
+      // Prioritize trial providers
+      let allProviders = modelInfo.providers.filter((provider) => !provider.disabled)
       if (trialProviders) {
-        const trialProvider = trialProviders[Math.floor(Math.random() * trialProviders.length)]
-        const provider = allProviders.find((provider) => provider.id === trialProvider)
-        if (provider) return provider
+        allProviders = allProviders.map((provider) => ({
+          ...provider,
+          priority: trialProviders.includes(provider.id) ? 0 : provider.priority,
+        }))
       }
 
       if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
         let topPriority = Infinity
         const providers = allProviders
-          .filter((provider) => !provider.disabled)
           .filter((provider) => provider.weight !== 0)
           .filter((provider) => !retry.excludeProviders.includes(provider.id))
           .filter((provider) => {
@@ -516,7 +510,11 @@ export async function handler(
           })
           .filter((provider) => {
             if (!provider.tpsGoal) return true
-            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? false
+            const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
+              qualify: 0,
+              unqualify: 0,
+            }
+            const isLowTps = tps.qualify + tps.unqualify > 10 && tps.qualify < tps.unqualify
             return !isLowTps
           })
           .map((provider) => {
@@ -534,7 +532,23 @@ export async function handler(
         }
         const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
         const provider = providers[index || 0]
-        if (provider) return provider
+
+        // sticky provider does not exist => use selected provider
+        if (!stickyProviderId) return provider
+        const stickProvider = allProviders.find((provider) => provider.id === stickyProviderId)
+        if (!stickProvider) return provider
+
+        // stick provider exists + selected provider is API type => use sticky provider
+        if (!provider.tpsGoal) return stickProvider
+
+        // stick provier exists + selected provider is GPU type + GPU not idle => use selected provider
+        const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
+          qualify: 0,
+          unqualify: 0,
+        }
+        if (tps.qualify <= tps.unqualify * 3) return stickProvider
+
+        return provider
       }
 
       // fallback provider
@@ -990,10 +1004,6 @@ export async function handler(
             return undefined
           })(),
         }),
-        db
-          .update(KeyTable)
-          .set({ timeUsed: sql`now()` })
-          .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
         ...(() => {
           if (billingSource === "subscription") {
             const plan = authInfo.billing.subscription!.plan

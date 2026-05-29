@@ -1,4 +1,5 @@
 import { lakeAthenaWorkgroup, lakeCatalog, lakeCluster, lakeQueryPermissions, lakeRegion, tableBucket } from "./lake"
+import { EMAILOCTOPUS_API_KEY } from "./app"
 
 const domain = (() => {
   if ($app.stage === "production") return "stats.opencode.ai"
@@ -163,15 +164,15 @@ new sst.x.DevCommand("StatsStudio", {
 // APP
 ////////////////
 
-// export const app = new sst.cloudflare.x.SolidStart("Stats", {
-//   path: "packages/stats/app",
-//   buildCommand: "bun run build",
-//   domain,
-//   link: [database],
-//   environment: {
-//     PUBLIC_URL: `https://${domain}`,
-//   },
-// })
+export const app = new sst.cloudflare.x.SolidStart("Stats", {
+  path: "packages/stats/app",
+  buildCommand: "bun run build",
+  domain,
+  link: [database, EMAILOCTOPUS_API_KEY],
+  environment: {
+    PUBLIC_URL: `https://${domain}/stats`,
+  },
+})
 
 ////////////////
 // SERVICES
