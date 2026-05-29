@@ -107,8 +107,26 @@ jobs:
           # frontend live-preview work, not here.  Until that lands, the
           # preview proxy may not resolve the alias inside the dev server, but
           # the rest of the app deploys cleanly.
+          # Re-assert task-level memory + cpu on every deploy.  Same
+          # self-heal idea as the deploymentConfiguration update-service
+          # call below: even if an operator dials these down in the AWS
+          # Console (or a previous task-def revision had different
+          # values), the next deploy puts them back to the canonical
+          # values we know work for the workload.
+          #
+          # 8 GB / 2 vCPU sized for Angular `ng serve` of unleashlive/frontend
+          # — that dev server peaks ~4-5 GB of resident memory during compile
+          # on a real-sized app, plus opencode's ~500 MB baseline, plus pnpm
+          # install peaks.  Anything below 8 GB risks the kernel OOM-killer
+          # taking down the whole task (which manifests as ALL collab
+          # sessions disconnecting at once — much worse than the dev server
+          # alone dying).  Fargate per-task minimums require cpu and memory
+          # to be quantised in supported pairs; 2048 CPU / 8192 MB is a
+          # valid pair (see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html#task_size).
           jq --arg img "${{ steps.img.outputs.sha_image }}" '
             .containerDefinitions[0].image = $img
+            | .cpu = "2048"
+            | .memory = "8192"
             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                   .compatibilities, .registeredAt, .registeredBy)
           ' current.json > new.json

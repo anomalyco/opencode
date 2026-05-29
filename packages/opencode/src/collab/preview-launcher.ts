@@ -355,8 +355,26 @@ export function launchPreview(
     ...process.env,
     OPENCODE_PREVIEW: "1",
     PORT: String(config.port),
-    // Cap dev-server heap so a Vite explosion doesn't OOM the whole container.
-    NODE_OPTIONS: `${process.env["NODE_OPTIONS"] ?? ""} --max-old-space-size=2048`.trim(),
+    // Inherit the container's NODE_OPTIONS (if any) unchanged and let the dev
+    // server's own start script manage its V8 heap.
+    //
+    // We used to cap with `--max-old-space-size=2048` here as a defensive
+    // measure against a Vite explosion eating the container.  That cap
+    // bit unleashlive/frontend hard: their `ng:highmem` alias deliberately
+    // bumps Node's heap to compile a real-sized Angular app, and our
+    // appended 2048 was either winning the merge race (Angular OOM-killed
+    // mid-compile) or losing it (container OOM-killed with no warning).
+    // Either way: crashes.
+    //
+    // Safety net is now at the ECS task level — the deploy workflow's
+    // jq-patch pins `memory: "8192"` / `cpu: "2048"` on every register
+    // (see .github/workflows/deploy-collab.yml).  A runaway dev server
+    // will still hit the 8 GB ceiling and the kernel OOM-killer will
+    // drop the WHOLE task (single-replica per ADR-0009 — we'd rather
+    // crash cleanly than corrupt SQLite), but well-behaved dev servers
+    // peak below it.  Per-repo opt-in to a tighter cap can live in
+    // `.opencode-preview.json` later if needed; for now, no launcher-side
+    // policy.
   }
   // Per-launch GitHub OAuth token for the install's git fetches.  Picked up
   // by the container's GIT_ASKPASS helper (Dockerfile) as `Password` against
