@@ -1,5 +1,10 @@
 import { describe, expect } from "bun:test"
-import type { CloseSessionResponse, LoadSessionResponse, ResumeSessionResponse } from "@agentclientprotocol/sdk"
+import type {
+  CloseSessionResponse,
+  ListSessionsResponse,
+  LoadSessionResponse,
+  ResumeSessionResponse,
+} from "@agentclientprotocol/sdk"
 import { Duration, Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 import { expectOk, selectConfigOption } from "../acp/acp-test-client"
@@ -56,6 +61,23 @@ describe("opencode acp-next lifecycle subprocess", () => {
         )
 
         expect(selectConfigOption(loaded.configOptions, "model")?.category).toBe("model")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "list request includes a live ACP-created session",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const acp = yield* createAcpNextClient(
+          { opencode },
+          { OPENCODE_CONFIG_CONTENT: JSON.stringify(verifierConfig(llm.url)) },
+        )
+        yield* initialize(acp)
+        const session = yield* newSession(acp, home)
+        const listed = expectOk(yield* acp.request<ListSessionsResponse>("session/list", { cwd: home }))
+
+        expect(listed.sessions.some((item) => item.sessionId === session.sessionId)).toBe(true)
       }),
     60_000,
   )

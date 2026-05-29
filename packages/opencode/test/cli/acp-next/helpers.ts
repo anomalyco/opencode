@@ -11,14 +11,6 @@ import {
   type AcpClient,
 } from "../acp/acp-test-client"
 
-export const diagnosticFirstSessionThresholdMs = 5_000
-export const diagnosticFastPathThresholdMs = 15_000
-
-// TODO: tighten to the public verifier target of 500ms once acp-next startup is optimized.
-export const finalFirstSessionThresholdMs = 500
-// TODO: tighten warm session/config/skill fast paths to the public verifier target of 100ms.
-export const finalFastPathThresholdMs = 100
-
 export function createAcpNextClient(input: Pick<CliFixture, "opencode">, env?: Record<string, string>) {
   return Effect.gen(function* () {
     return createAcpClient(

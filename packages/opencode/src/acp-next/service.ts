@@ -83,6 +83,7 @@ export function make(input: {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
+  const sessionSnapshots = new Map<string, Directory.Snapshot>()
   const events = input.connection
     ? ACPNextEvent.start({ sdk: input.sdk, connection: input.connection, session })
     : undefined
@@ -149,6 +150,14 @@ export function make(input: {
     return snapshot
   })
 
+  const configSnapshot = Effect.fn("ACPNext.configSnapshot")(function* (state: ACPNextSession.Info) {
+    const snapshot = sessionSnapshots.get(state.id)
+    if (snapshot) return snapshot
+    const loaded = yield* directorySnapshot(state.cwd)
+    sessionSnapshots.set(state.id, loaded)
+    return loaded
+  })
+
   const newSession = Effect.fn("ACPNext.newSession")(function* (params: NewSessionRequest) {
     const started = performance.now()
     const snapshot = yield* directorySnapshot(params.cwd)
@@ -180,6 +189,7 @@ export function make(input: {
       variant,
       modeId,
     })
+    sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
@@ -220,6 +230,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
@@ -248,21 +259,35 @@ export function make(input: {
         ),
       "session",
     )
-    const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+    const serverEntries = sessions.map(
+      (item): SessionInfo => ({
+        sessionId: item.id,
+        cwd: item.directory,
+        title: item.title,
+        updatedAt: new Date(item.time.updated).toISOString(),
+      }),
+    )
+    const liveEntries = (yield* session.list(params.cwd ?? undefined))
+      .filter((item) => !serverEntries.some((entry) => entry.sessionId === item.id))
+      .map(
+        (item): SessionInfo => ({
+          sessionId: item.id,
+          cwd: item.cwd,
+          updatedAt: item.createdAt.toISOString(),
+        }),
+      )
+    const sorted = [...liveEntries, ...serverEntries].toSorted(
+      (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
+    )
     const filtered =
-      cursor === undefined || !Number.isFinite(cursor) ? sorted : sorted.filter((item) => item.time.updated < cursor)
+      cursor === undefined || !Number.isFinite(cursor)
+        ? sorted
+        : sorted.filter((item) => new Date(item.updatedAt ?? 0).getTime() < cursor)
     const page = filtered.slice(0, limit)
     const last = page.at(-1)
     return {
-      sessions: page.map(
-        (item): SessionInfo => ({
-          sessionId: item.id,
-          cwd: item.directory,
-          title: item.title,
-          updatedAt: new Date(item.time.updated).toISOString(),
-        }),
-      ),
-      ...(filtered.length > limit && last ? { nextCursor: String(last.time.updated) } : {}),
+      sessions: page,
+      ...(filtered.length > limit && last ? { nextCursor: String(new Date(last.updatedAt ?? 0).getTime()) } : {}),
     }
   })
 
@@ -290,6 +315,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
@@ -307,6 +333,7 @@ export function make(input: {
   const closeSession = Effect.fn("ACPNext.closeSession")(function* (params: CloseSessionRequest) {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
+    sessionSnapshots.delete(params.sessionId)
     if (!removed) return {}
 
     yield* request(
@@ -350,6 +377,7 @@ export function make(input: {
       variant: restored.variant ?? selectVariant(snapshot, model),
       modeId: restored.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined),
     })
+    sessionSnapshots.set(state.id, snapshot)
 
     yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
@@ -369,7 +397,7 @@ export function make(input: {
     params: SetSessionConfigOptionRequest,
   ) {
     const current = yield* session.get(params.sessionId)
-    const snapshot = yield* directorySnapshot(current.cwd)
+    const snapshot = yield* configSnapshot(current)
     if (typeof params.value !== "string") {
       return yield* new ACPNextError.InvalidConfigOptionError({ configId: params.configId })
     }
@@ -424,7 +452,7 @@ export function make(input: {
 
   const setSessionMode = Effect.fn("ACPNext.setSessionMode")(function* (params: SetSessionModeRequest) {
     const current = yield* session.get(params.sessionId)
-    const snapshot = yield* directorySnapshot(current.cwd)
+    const snapshot = yield* configSnapshot(current)
     if (!snapshot.availableModes.some((mode) => mode.id === params.modeId)) {
       return yield* new ACPNextError.InvalidModeError({ mode: params.modeId })
     }
@@ -434,7 +462,7 @@ export function make(input: {
 
   const setSessionModel = Effect.fn("ACPNext.setSessionModel")(function* (params: SetSessionModelRequest) {
     const current = yield* session.get(params.sessionId)
-    const snapshot = yield* directorySnapshot(current.cwd)
+    const snapshot = yield* configSnapshot(current)
     const selected = yield* parseSelectedModel(snapshot, params.modelId)
     yield* session
       .setVariant(

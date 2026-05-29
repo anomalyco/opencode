@@ -63,11 +63,11 @@ function decodeCredential(input: string) {
     Effect.match({
       onFailure: emptyCredential,
       onSuccess: (header) => {
-        const parts = header.split(":")
-        if (parts.length !== 2) return emptyCredential()
+        const separator = header.indexOf(":")
+        if (separator === -1) return emptyCredential()
         return {
-          username: parts[0],
-          password: Redacted.make(parts[1]),
+          username: header.slice(0, separator),
+          password: Redacted.make(header.slice(separator + 1)),
         }
       },
     }),
