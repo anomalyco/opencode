@@ -679,7 +679,9 @@ export const layer = Layer.effect(
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
             }
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* session.updatePart(ctx.currentText)
+            if (ctx.currentText.text.length > 0) {
+              yield* session.updatePart(ctx.currentText)
+            }
             ctx.currentText = undefined
             return
 

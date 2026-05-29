@@ -920,3 +920,223 @@ it.live("session.processor effect tests mark interruptions aborted without manua
     { config: (url) => providerCfg(url) },
   ),
 )
+
+it.live("session.processor effect tests do not persist empty text when model goes straight to tool call", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        // Model emits text-start immediately followed by tool call, no text-delta in between
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+            ],
+            tail: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call_1",
+                          type: "function",
+                          function: { name: "lookup", arguments: "" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        { index: 0, function: { arguments: '{"query":"weather"}' } },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "tool_calls" }],
+              },
+            ],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "tool" }],
+          tools: {
+            lookup: tool({
+              description: "Look up information",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (input) => ({ title: "Weather lookup", output: `result:${input.query}` }),
+            }),
+          },
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const textParts = parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+        const toolParts = parts.filter((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        // No empty text part should be persisted
+        expect(textParts.length).toBe(0)
+        // Tool call should be persisted
+        expect(toolParts.length).toBe(1)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests persist normal text when text-delta is emitted", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.text("hello world")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "text")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "text" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const textParts = parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(textParts.length).toBe(1)
+        expect(textParts[0]?.text).toBe("hello world")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests persist whitespace-only text when model emits no actual content", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        // Model sends text-start, then a single space via text-delta, then text-end
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { content: " " } }],
+              },
+            ],
+            tail: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "stop" }],
+              },
+            ],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "space")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "space" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const textParts = parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        // Whitespace-only text should be persisted (length > 0 even if just a space)
+        expect(textParts.length).toBe(1)
+        expect(textParts[0]?.text).toBe(" ")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
