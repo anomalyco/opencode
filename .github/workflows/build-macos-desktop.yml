@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build-macos-x64:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     env:
       APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
       OPENCODE_CHANNEL: prod
@@ -69,7 +69,7 @@ jobs:
 
   build-macos-arm64:
     needs: build-macos-x64
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
       OPENCODE_CHANNEL: prod
