@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { formatPatch, structuredPatch } from "diff"
 import { normalize, resolveFileDiff, text } from "./session-diff"
 
 describe("session diff", () => {
@@ -44,6 +45,60 @@ describe("session diff", () => {
     expect(fileDiff.isPartial).toBe(true)
     expect(fileDiff.hunks).toHaveLength(2)
     expect(fileDiff.hunks[1]?.collapsedBefore).toBeGreaterThan(0)
+  })
+
+  test("renders full-context generated patches as concise complete diffs", () => {
+    const before = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n") + "\n"
+    const after = before.replace("line 15", "changed line 15")
+    const view = normalize({
+      file: "big.txt",
+      patch: formatPatch(
+        structuredPatch("big.txt", "big.txt", before, after, "", "", { context: Number.MAX_SAFE_INTEGER }),
+      ),
+      additions: 1,
+      deletions: 1,
+      status: "modified" as const,
+    })
+
+    expect(view.fileDiff.isPartial).toBe(false)
+    expect(view.fileDiff.hunks).toHaveLength(1)
+    expect(view.fileDiff.hunks[0]?.collapsedBefore).toBeGreaterThan(0)
+    expect(view.fileDiff.hunks[0]?.splitLineCount).toBeLessThan(30)
+    expect(text(view, "deletions")).toBe(before)
+    expect(text(view, "additions")).toBe(after)
+  })
+
+  test("renders generated patches with edge changes as concise complete diffs", () => {
+    const before = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n") + "\n"
+    const after = before.replace("line 4", "changed line 4").replace("line 27", "changed line 27")
+    const view = normalize({
+      file: "big.txt",
+      patch: formatPatch(
+        structuredPatch("big.txt", "big.txt", before, after, "", "", { context: Number.MAX_SAFE_INTEGER }),
+      ),
+      additions: 2,
+      deletions: 2,
+      status: "modified" as const,
+    })
+
+    expect(view.fileDiff.isPartial).toBe(false)
+    expect(view.fileDiff.hunks).toHaveLength(2)
+    expect(view.fileDiff.hunks[0]?.splitLineCount).toBeLessThan(30)
+    expect(text(view, "deletions")).toBe(before)
+    expect(text(view, "additions")).toBe(after)
+  })
+
+  test("keeps top-of-file patches with standard context partial", () => {
+    const fileDiff = resolveFileDiff({
+      file: "a.ts",
+      patch:
+        "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,4 +1,4 @@\n-old\n+new\n line 2\n line 3\n line 4\n",
+    })
+    const view = { file: "a.ts", additions: 1, deletions: 1, fileDiff }
+
+    expect(fileDiff.isPartial).toBe(true)
+    expect(text(view, "deletions")).toBe("old\nline 2\nline 3\nline 4\n")
+    expect(text(view, "additions")).toBe("new\nline 2\nline 3\nline 4\n")
   })
 
   test("renders headerless persisted patches", () => {
