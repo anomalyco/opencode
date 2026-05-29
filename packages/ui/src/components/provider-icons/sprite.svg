@@ -1131,14 +1131,8 @@
         d="M 554.228 729.711 C 659.104 725.931 747.227 807.802 751.164 912.672 C 755.1 1017.54 673.362 1105.79 568.498 1109.88 C 463.411 1113.98 374.937 1032.03 370.992 926.942 C 367.047 821.849 449.129 733.498 554.228 729.711 z"
       ></path>
     </symbol>
-    <symbol viewBox="0 0 24 24" fill="none" id="litellm">
-      <path d="M4 15.5C4 10.5 7 4 12 4s8 6.5 8 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
-      <path d="M4 15.5h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
-      <path d="M6 15.5V18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
-      <path d="M18 15.5V18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
-      <path d="M3 18h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
-      <circle cx="12" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"></circle>
-      <path d="M9 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+    <symbol viewBox="0 0 24 24" id="litellm">
+      <text x="12" y="17" font-size="18" text-anchor="middle" dominant-baseline="central">🚅</text>
     </symbol>
   </defs>
 </svg>
