@@ -90,6 +90,7 @@ body {
 
 [data-page="go"] {
   background: var(--color-background);
+  overflow-x: clip;
   --padding: 5rem;
   --vertical-padding: 4rem;
 

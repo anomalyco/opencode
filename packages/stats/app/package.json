@@ -21,6 +21,7 @@
     "d3-scale": "4.0.2",
     "effect": "catalog:",
     "nitro": "3.0.1-alpha.1",
+    "sst": "catalog:",
     "solid-js": "catalog:",
     "vite": "catalog:"
   },

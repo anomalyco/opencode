@@ -151,7 +151,7 @@ function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, window: 
 
   return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
     .toSorted((a, b) => b.totalTokens - a.totalTokens)
-    .slice(0, 13)
+    .slice(0, 18)
     .map((item, index) => ({
       model: item.model,
       author: formatProvider(item.provider),
