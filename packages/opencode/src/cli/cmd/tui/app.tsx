@@ -23,6 +23,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
 import { ProjectProvider, useProject } from "@tui/context/project"
@@ -727,7 +728,76 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           local.agent.move(-1)
         },
       },
-      // IMECODE closed-network lock: external provider connect flow removed.
+      {
+        // IMECODE closed-network: configure the internal vLLM endpoint (replaces external connect).
+        name: "provider.endpoint",
+        title: "Configure vLLM endpoint",
+        slashName: "endpoint",
+        slashAliases: ["connect", "vllm"],
+        category: "Provider",
+        run: async () => {
+          const opts = sync.data.config?.provider?.["vllm"]?.options ?? {}
+          const currentURL = typeof opts.baseURL === "string" ? opts.baseURL : ""
+          const currentKey = typeof opts.apiKey === "string" && opts.apiKey !== "sk-no-auth" ? opts.apiKey : ""
+          const currentModel = (sync.data.config?.model ?? "").replace(/^vllm\//, "")
+
+          const baseURL = await DialogPrompt.show(dialog, "vLLM endpoint URL", {
+            value: currentURL,
+            placeholder: "http://host:8000/v1",
+          })
+          if (baseURL === null) return
+          const model = await DialogPrompt.show(dialog, "Model (served-model-name)", {
+            value: currentModel,
+            placeholder: "e.g. Qwen2.5-Coder-32B-Instruct",
+          })
+          if (model === null) return
+          const apiKey = await DialogPrompt.show(dialog, "API key (leave blank if none)", {
+            value: currentKey,
+            placeholder: "optional",
+          })
+          if (apiKey === null) return
+
+          const url = baseURL.trim()
+          const id = model.trim()
+          if (!url || !id) {
+            toast.show({ variant: "error", message: "Endpoint URL and model name are required" })
+            return
+          }
+          try {
+            await sdk.client.config.update(
+              {
+                workspace: project.workspace.current() ?? undefined,
+                config: {
+                  model: `vllm/${id}`,
+                  small_model: `vllm/${id}`,
+                  provider: {
+                    vllm: {
+                      options: { baseURL: url, apiKey: apiKey.trim() || "sk-no-auth" },
+                      models: {
+                        [id]: {
+                          id,
+                          name: id,
+                          tool_call: true,
+                          reasoning: false,
+                          attachment: false,
+                          temperature: true,
+                          limit: { context: 32768, output: 8192 },
+                          cost: { input: 0, output: 0 },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              { throwOnError: true },
+            )
+            toast.show({ variant: "success", message: `vLLM endpoint saved: ${url} (${id})` })
+            dialog.clear()
+          } catch {
+            toast.show({ variant: "error", message: "Failed to save vLLM endpoint config" })
+          }
+        },
+      },
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
             {
