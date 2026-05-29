@@ -37,8 +37,9 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   const meta = path.join(dist, dir.name, "package.json")
   if (!(await exists(meta))) continue
 
-  const win = dir.name.includes("windows")
-  const src = await bin(path.join(dist, dir.name, "bin"), win)
+  if (dir.name.includes("windows")) continue
+
+  const src = await bin(path.join(dist, dir.name, "bin"))
   if (!src) continue
 
   // Archive / dir / binary names are kept lowercase to match the CLI's
@@ -47,13 +48,13 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   // command-not-found on case-sensitive (Linux) filesystems when users
   // followed the README.txt instructions verbatim.
   const name = dir.name.replace(/^opencode-/, "securecode-")
-  const ext = win || dir.name.includes("darwin") ? "zip" : "tar.gz"
+  const ext = dir.name.includes("darwin") ? "zip" : "tar.gz"
   const tmp = path.join(out, name)
   // securecode = supervisor (bun compile 単独バイナリ)、securecode-bin = opencode 本体。
   // ユーザが `securecode` を叩くと supervisor が同じディレクトリの securecode-bin を
   // sandbox 内で spawn する (詳細は .specs/20260526_securecode-sandbox-phase0.md 参照)。
-  const supervisorBin = path.join(tmp, `securecode${win ? ".exe" : ""}`)
-  const innerBin = path.join(tmp, `securecode-bin${win ? ".exe" : ""}`)
+  const supervisorBin = path.join(tmp, "securecode")
+  const innerBin = path.join(tmp, "securecode-bin")
   const arc = path.join(out, `${name}.${ext}`)
 
   await fs.rm(tmp, { recursive: true, force: true })
@@ -61,20 +62,20 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
 
   // 1) opencode 本体を securecode-bin として配置
   await fs.copyFile(src, innerBin)
-  if (!win) await fs.chmod(innerBin, 0o755)
+  await fs.chmod(innerBin, 0o755)
 
   // 2) supervisor を securecode として bun compile (platform クロスコンパイル)
   const platformSuffix = dir.name.replace(/^opencode-/, "")
   const bunTarget = `bun-${platformSuffix}`
   await $`bun build --compile --target=${bunTarget} script/securecode-supervisor.ts --outfile ${supervisorBin}`.cwd(root)
-  if (!win) await fs.chmod(supervisorBin, 0o755)
+  await fs.chmod(supervisorBin, 0o755)
 
   await fs.copyFile(path.join(root, "LICENSE"), path.join(tmp, "LICENSE"))
   if (await exists(thirdPartyLicensesSrc)) {
     await fs.copyFile(thirdPartyLicensesSrc, path.join(tmp, "THIRD-PARTY-LICENSES.txt"))
   }
-  await Bun.write(path.join(tmp, "README.txt"), note(name, win))
-  await copySetup(setupSrc, path.join(tmp, "setup"), win)
+  await Bun.write(path.join(tmp, "README.txt"), note(name))
+  await copySetup(setupSrc, path.join(tmp, "setup"))
 
   if (ext === "zip") {
     await $`zip -rq ${arc} .`.cwd(tmp)
@@ -141,22 +142,15 @@ async function exists(file: string) {
     .catch(() => false)
 }
 
-async function bin(dir: string, win: boolean) {
-  const list = win ? ["opencode.exe", "opencode"] : ["opencode"]
-  for (const file of list) {
-    const full = path.join(dir, file)
-    if (await exists(full)) return full
-  }
+async function bin(dir: string) {
+  const full = path.join(dir, "opencode")
+  if (await exists(full)) return full
 }
 
-async function copySetup(src: string, dst: string, win: boolean) {
+async function copySetup(src: string, dst: string) {
   if (!(await exists(src))) return
   await fs.cp(src, dst, { recursive: true })
   const installer = path.join(dst, "install.sh")
-  if (win) {
-    if (await exists(installer)) await fs.rm(installer)
-    return
-  }
   if (await exists(installer)) await fs.chmod(installer, 0o755)
 }
 
@@ -164,29 +158,21 @@ function sum(buf: Uint8Array) {
   return createHash("sha256").update(buf).digest("hex")
 }
 
-function note(name: string, win: boolean) {
-  const cmd = win ? "securecode.exe" : "./securecode"
-  const installer = win ? "see setup\\install.ps1 or setup\\install.bat (or copy setup/* manually)" : "bash setup/install.sh"
+function note(name: string) {
   return [
     "Acompany SecureCode CLI",
     "",
     `Asset: ${name}`,
     "",
     "Quick start:",
-    `  1. ${installer}`,
+    "  1. bash setup/install.sh",
     "  2. export SECURECODE_QWEN3_API_KEY=<Qwen3.6 API key issued by Acompany>",
-    `  3. Run ${cmd} run \"Hello\"`,
+    "  3. Run ./securecode run \"Hello\"",
     "",
-    win ? "What setup does:" : "What setup/install.sh does:",
-    win
-      ? "  - seeds %APPDATA%\\securecode\\securecode.json (Acompany Qwen3.6 endpoint template)"
-      : "  - seeds ~/.config/securecode/securecode.json (Acompany Qwen3.6 endpoint template)",
-    win
-      ? "  - seeds %APPDATA%\\securecode\\tui.json (selects the bundled `securecode` theme)"
-      : "  - seeds ~/.config/securecode/tui.json (selects the bundled `securecode` theme)",
-    win
-      ? "  - seeds %APPDATA%\\securecode\\themes\\securecode.json (Acompany-branded TUI colors)"
-      : "  - seeds ~/.config/securecode/themes/securecode.json (Acompany-branded TUI colors)",
+    "What setup/install.sh does:",
+    "  - seeds ~/.config/securecode/securecode.json (Acompany Qwen3.6 endpoint template)",
+    "  - seeds ~/.config/securecode/tui.json (selects the bundled `securecode` theme)",
+    "  - seeds ~/.config/securecode/themes/securecode.json (Acompany-branded TUI colors)",
     "  Existing files are preserved.",
     "",
     "Notes:",
