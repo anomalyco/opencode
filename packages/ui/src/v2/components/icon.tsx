@@ -57,6 +57,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor"/><path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor"/><path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor"/>`,
   },
+  copy: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M11 2H4C3.44772 2 3 2.44772 3 3V12H4V3H11V2Z" fill="currentColor"/><path d="M6 5V14H13V5H6ZM6 4H13C13.5523 4 14 4.44772 14 5V14C14 14.5523 13.5523 15 13 15H6C5.44772 15 5 14.5523 5 14V5C5 4.44772 5.44772 4 6 4Z" fill="currentColor"/>`,
+  },
 }
 
 const spriteID = "opencode-v2-icon-sprite"
