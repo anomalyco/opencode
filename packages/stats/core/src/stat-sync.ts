@@ -6,8 +6,11 @@ import { GeoStatRepo, rowsFromAggregates as geoRowsFromAggregates } from "./doma
 import { buildStatsQuery, toGeoAggregate, toModelAggregate, toProviderAggregate } from "./domain/inference"
 import { ModelStatRepo, rowsFromAggregates as modelRowsFromAggregates } from "./domain/model"
 import { ProviderStatRepo, rowsFromAggregates as providerRowsFromAggregates } from "./domain/provider"
+import { startOfIsoWeek } from "./domain/stat"
 
 const DATALAKE_INGESTION_LAG_MS = 5 * 60_000
+const STATS_DATA_START_MS = new Date("2026-05-28T00:00:00.000Z").getTime()
+const WEEK_MS = 7 * 86_400_000
 
 export type SyncStatsResult = { ok: true; rows: number; startedAt: string; periodStart: string; periodEnd: string }
 export type SyncStatsError = AthenaQueryError | AthenaQueryTimeoutError | DatabaseError
@@ -19,9 +22,8 @@ export const syncStats: () => Effect.Effect<
 > = Effect.fn("StatSync.sync")(function* () {
   const startedAt = yield* DateTime.nowAsDate
   const periodEnd = new Date(Math.floor((startedAt.getTime() - DATALAKE_INGESTION_LAG_MS) / 60_000) * 60_000)
-  const periodStart = new Date(
-    Date.UTC(periodEnd.getUTCFullYear(), periodEnd.getUTCMonth(), periodEnd.getUTCDate() - 6),
-  )
+  // May 27 was partial, so keep Athena stats anchored at the first complete day.
+  const periodStart = new Date(Math.max(startOfIsoWeek(periodEnd).getTime() - WEEK_MS, STATS_DATA_START_MS))
   const athena = yield* Athena
   const modelStats = yield* ModelStatRepo
   const providerStats = yield* ProviderStatRepo
@@ -29,7 +31,7 @@ export const syncStats: () => Effect.Effect<
 
   yield* logRuntimeCheck()
 
-  const [modelAggregates, providerAggregates, geoAggregates] = yield* Effect.all(
+  const [modelAggregates, providerAggregates, geoAggregates, geoModelAggregates] = yield* Effect.all(
     [
       athena
         .query(buildStatsQuery(periodStart, periodEnd, "model"))
@@ -40,12 +42,15 @@ export const syncStats: () => Effect.Effect<
       athena
         .query(buildStatsQuery(periodStart, periodEnd, "geo"))
         .pipe(Effect.map((rows) => rows.flatMap(toGeoAggregate))),
+      athena
+        .query(buildStatsQuery(periodStart, periodEnd, "geo_model"))
+        .pipe(Effect.map((rows) => rows.flatMap(toGeoAggregate))),
     ],
     { concurrency: "unbounded" },
   )
   const modelRows = modelRowsFromAggregates(modelAggregates)
   const providerRows = providerRowsFromAggregates(providerAggregates)
-  const geoRows = geoRowsFromAggregates(geoAggregates)
+  const geoRows = geoRowsFromAggregates([...geoAggregates, ...geoModelAggregates])
 
   yield* Effect.all([modelStats.upsert(modelRows), providerStats.upsert(providerRows), geoStats.upsert(geoRows)], {
     concurrency: "unbounded",

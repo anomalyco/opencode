@@ -17,8 +17,8 @@ import {
 export type ProviderStatRow = typeof providerStat.$inferInsert
 export type ProviderStatAggregate = StatBaseAggregate & { provider: string }
 export type ProviderStatMetric = {
-  periodStart: Date
-  periodEnd: Date
+  periodKey: string
+  updatedAt: Date
   tier: string
   provider: string
   totalTokens: number
@@ -29,7 +29,7 @@ export declare namespace ProviderStatRepo {
     readonly listDaily: () => Effect.Effect<ProviderStatMetric[], DatabaseError>
     readonly listByPeriod: (opts: {
       readonly grain: string
-      readonly periodStart: Date
+      readonly periodKey: string
       readonly dataset?: string
       readonly tier?: string
       readonly client?: string
@@ -52,22 +52,22 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
           try: () =>
             db
               .select({
-                periodStart: providerStat.period_start,
-                periodEnd: providerStat.period_end,
+                periodKey: providerStat.period_key,
+                updatedAt: providerStat.updated_at,
                 tier: providerStat.tier,
                 provider: providerStat.provider,
                 totalTokens: providerStat.total_tokens,
               })
               .from(providerStat)
               .where(and(eq(providerStat.grain, "day"), eq(providerStat.client, "all"), eq(providerStat.source, "all")))
-              .orderBy(asc(providerStat.period_start)),
+              .orderBy(asc(providerStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })
       })
 
       const listByPeriod = Effect.fn("ProviderStatRepo.listByPeriod")(function* (opts: {
         readonly grain: string
-        readonly periodStart: Date
+        readonly periodKey: string
         readonly dataset?: string
         readonly tier?: string
         readonly client?: string
@@ -81,7 +81,7 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
               .where(
                 and(
                   eq(providerStat.grain, opts.grain),
-                  eq(providerStat.period_start, opts.periodStart),
+                  eq(providerStat.period_key, opts.periodKey),
                   eq(providerStat.dataset, opts.dataset ?? "zen"),
                   eq(providerStat.tier, opts.tier ?? "all"),
                   eq(providerStat.client, opts.client ?? "all"),
@@ -103,7 +103,6 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
                   .values(chunk)
                   .onDuplicateKeyUpdate({
                     set: {
-                      period_end: inserted("period_end"),
                       sessions: inserted("sessions"),
                       requests: inserted("requests"),
                       input_tokens: inserted("input_tokens"),

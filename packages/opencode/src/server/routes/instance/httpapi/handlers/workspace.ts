@@ -2,12 +2,12 @@ import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Vcs } from "@/project/vcs"
-import { Effect } from "effect"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { Cause, Effect } from "effect"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { notFound } from "../errors"
 import { ApiVcsApplyError } from "../groups/instance"
-import { ApiWorkspaceWarpError, CreatePayload, WarpPayload } from "../groups/workspace"
+import { ApiWorkspaceCreateError, ApiWorkspaceWarpError, CreatePayload, WarpPayload } from "../groups/workspace"
 
 export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspace", (handlers) =>
   Effect.gen(function* () {
@@ -30,7 +30,22 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
           extra: ctx.payload.extra ?? null,
           projectID: instance.project.id,
         })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+        .pipe(
+          Effect.catchCause((cause) => {
+            // Plugin throws surface as defects (because EffectBridge.fromPromise uses Effect.promise),
+            // bypassing Effect.mapError. Walk the cause to surface the real error to the client.
+            const die = cause.reasons.find(Cause.isDieReason)
+            const fail = cause.reasons.find(Cause.isFailReason)
+            const reason: unknown = die?.defect ?? fail?.error
+            const message = reason instanceof Error ? reason.message : "Workspace creation failed"
+            return Effect.fail(
+              new ApiWorkspaceCreateError({
+                name: "WorkspaceCreateError",
+                data: { message },
+              }),
+            )
+          }),
+        )
     })
 
     const syncList = Effect.fn("WorkspaceHttpApi.syncList")(function* () {

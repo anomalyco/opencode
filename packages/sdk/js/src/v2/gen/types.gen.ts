@@ -1049,11 +1049,15 @@ export type ProviderConfig = {
     enterpriseUrl?: string
     setCacheKey?: boolean
     /**
-     * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
+     * Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.
      */
     timeout?: number | false
+    /**
+     * Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.
+     */
+    headerTimeout?: number | false
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | undefined
+    [key: string]: unknown | string | boolean | number | false | number | false | number | undefined
   }
   models?: {
     [key: string]: {
@@ -1954,6 +1958,13 @@ export type Workspace = {
   extra?: unknown | null
   projectID: string
   timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type WorkspaceCreateError = {
+  name: "WorkspaceCreateError"
+  data: {
+    message: string
+  }
 }
 
 export type WorkspaceWarpError = {
@@ -8038,9 +8049,9 @@ export type ExperimentalWorkspaceCreateData = {
 
 export type ExperimentalWorkspaceCreateErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * WorkspaceCreateError | BadRequest | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: WorkspaceCreateError | EffectHttpApiErrorBadRequest | InvalidRequestError
 }
 
 export type ExperimentalWorkspaceCreateError =
@@ -8196,6 +8207,8 @@ export type PtyConnectData = {
   query?: {
     directory?: string
     workspace?: string
+    cursor?: string
+    ticket?: string
   }
   url: "/pty/{ptyID}/connect"
 }

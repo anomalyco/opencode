@@ -6,7 +6,7 @@ import { ProviderStatRepo, type ProviderStatMetric } from "./provider"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
 export type TokenProduct = "Zen" | "Go" | "Enterprise"
-export type UsageRange = "1D" | "1W" | "1M" | "3M" | "YTD" | "ALL"
+export type UsageRange = "1D" | "1W" | "2W" | "1M" | "2M" | "3M" | "YTD" | "ALL"
 export type UsagePoint = { date: string; segments: { model: string; value: number }[] }
 export type MarketDay = { date: string; total: number; authors: { author: string; share: number; tokens: number }[] }
 export type LeaderboardEntry = { model: string; author: string; tokens: number; change: number; rank: number }
@@ -28,17 +28,17 @@ const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
-type StatMetricRow = Omit<ModelStatMetric, "periodStart" | "periodEnd"> & {
+type StatMetricRow = Omit<ModelStatMetric, "updatedAt"> & {
   periodStart: number
-  periodEnd: number
+  updatedAt: number
 }
-type ProviderMetricRow = Omit<ProviderStatMetric, "periodStart" | "periodEnd"> & {
+type ProviderMetricRow = Omit<ProviderStatMetric, "updatedAt"> & {
   periodStart: number
-  periodEnd: number
+  updatedAt: number
 }
-type GeoMetricRow = Omit<GeoStatMetric, "periodStart" | "periodEnd"> & {
+type GeoMetricRow = Omit<GeoStatMetric, "updatedAt"> & {
   periodStart: number
-  periodEnd: number
+  updatedAt: number
 }
 
 type DateWindow = { start: number; end: number; previousStart: number; previousEnd: number }
@@ -85,10 +85,10 @@ function buildStatsHomeData(
 
   const earliest = Math.min(...periods.map((row) => row.periodStart))
   const latest = Math.max(...periods.map((row) => row.periodStart))
-  const latestEnd = Math.max(...periods.map((row) => row.periodEnd))
+  const latestUpdate = Math.max(...periods.map((row) => row.updatedAt))
 
   return {
-    updatedAt: new Date(latestEnd).toISOString(),
+    updatedAt: new Date(latestUpdate).toISOString(),
     usage: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildUsagePoints(normalized, product, range, getWindow(range, earliest, latest))),
     ),
@@ -134,9 +134,9 @@ function buildUsagePoints(rows: StatMetricRow[], product: UsageProduct, range: U
     return {
       date: bucket.label,
       segments: [
-        ...segmentTokens.map((item) => ({ model: item.model, value: round(item.tokens / 1_000_000_000_000, 2) })),
-        { model: "Other", value: round(Math.max(totalTokens - knownTokens, 0) / 1_000_000_000_000, 2) },
-      ].filter((item) => item.value > 0),
+        ...segmentTokens.map((item) => ({ model: item.model, value: round(item.tokens / 1_000_000_000_000, 4) })),
+        { model: "Other", value: round(Math.max(totalTokens - knownTokens, 0) / 1_000_000_000_000, 4) },
+      ],
     }
   })
 }
@@ -151,7 +151,7 @@ function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, window: 
 
   return aggregateByModel(rowsForProduct(rows, product, window.start, window.end))
     .toSorted((a, b) => b.totalTokens - a.totalTokens)
-    .slice(0, 13)
+    .slice(0, 18)
     .map((item, index) => ({
       model: item.model,
       author: formatProvider(item.provider),
@@ -309,13 +309,17 @@ function getWindow(range: UsageRange, earliest: number, latest: number): DateWin
       ? latest
       : range === "1W"
         ? latest - 6 * DAY_MS
-        : range === "1M"
-          ? latest - 29 * DAY_MS
-          : range === "3M"
-            ? latest - 89 * DAY_MS
-            : range === "YTD"
-              ? Date.UTC(new Date(latest).getUTCFullYear(), 0, 1)
-              : earliest,
+        : range === "2W"
+          ? latest - 13 * DAY_MS
+          : range === "1M"
+            ? latest - 27 * DAY_MS
+            : range === "2M"
+              ? latest - 55 * DAY_MS
+              : range === "3M"
+                ? latest - 89 * DAY_MS
+                : range === "YTD"
+                  ? Date.UTC(new Date(latest).getUTCFullYear(), 0, 1)
+                  : earliest,
   )
   const duration = end - start
   return { start, end, previousStart: start - duration, previousEnd: start }
@@ -323,12 +327,17 @@ function getWindow(range: UsageRange, earliest: number, latest: number): DateWin
 
 function createBuckets(window: DateWindow, range: UsageRange): Bucket[] {
   const span = Math.max(window.end - window.start, DAY_MS)
-  const count = Math.max(1, Math.min(7, Math.ceil(span / DAY_MS)))
+  const count =
+    range === "1D"
+      ? 1
+      : range === "1W" || range === "2W" || range === "1M" || range === "2M" || range === "3M"
+        ? Math.ceil(span / DAY_MS)
+        : Math.max(1, Math.min(7, Math.ceil(span / DAY_MS)))
   const size = span / count
   return Array.from({ length: count }, (_, index) => {
     const start = window.start + index * size
     const end = index === count - 1 ? window.end : window.start + (index + 1) * size
-    return { start, end, label: formatBucketLabel(start, range) }
+    return { start, end, label: formatBucketLabel(start, end, range) }
   })
 }
 
@@ -353,7 +362,9 @@ function createRangeRecord<T>(value: (range: UsageRange) => T): Record<UsageRang
   return {
     "1D": value("1D"),
     "1W": value("1W"),
+    "2W": value("2W"),
     "1M": value("1M"),
+    "2M": value("2M"),
     "3M": value("3M"),
     YTD: value("YTD"),
     ALL: value("ALL"),
@@ -361,14 +372,14 @@ function createRangeRecord<T>(value: (range: UsageRange) => T): Record<UsageRang
 }
 
 function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
-  const periodStart = dateTime(row.periodStart)
-  const periodEnd = dateTime(row.periodEnd)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return []
+  const periodStart = periodKeyTime(row.periodKey)
+  const updatedAt = dateTime(row.updatedAt)
+  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
   return [
     {
       ...row,
       periodStart,
-      periodEnd,
+      updatedAt,
       tier: normalizeTier(row.tier),
       provider: row.provider || "unknown",
       model: row.model || "unknown",
@@ -377,14 +388,14 @@ function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
 }
 
 function normalizeProviderRow(row: ProviderStatMetric): ProviderMetricRow[] {
-  const periodStart = dateTime(row.periodStart)
-  const periodEnd = dateTime(row.periodEnd)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return []
+  const periodStart = periodKeyTime(row.periodKey)
+  const updatedAt = dateTime(row.updatedAt)
+  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
   return [
     {
       ...row,
       periodStart,
-      periodEnd,
+      updatedAt,
       tier: normalizeTier(row.tier),
       provider: row.provider || "unknown",
     },
@@ -392,15 +403,17 @@ function normalizeProviderRow(row: ProviderStatMetric): ProviderMetricRow[] {
 }
 
 function normalizeGeoRow(row: GeoStatMetric): GeoMetricRow[] {
-  const periodStart = dateTime(row.periodStart)
-  const periodEnd = dateTime(row.periodEnd)
-  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return []
+  const periodStart = periodKeyTime(row.periodKey)
+  const updatedAt = dateTime(row.updatedAt)
+  if (!Number.isFinite(periodStart) || !Number.isFinite(updatedAt)) return []
   return [
     {
       ...row,
       periodStart,
-      periodEnd,
+      updatedAt,
       tier: normalizeTier(row.tier),
+      provider: row.provider || "all",
+      model: row.model || "all",
       country: row.country || "ZZ",
       continent: row.continent || "",
     },
@@ -420,24 +433,43 @@ function dateTime(value: Date | string) {
   return (value instanceof Date ? value : new Date(value)).getTime()
 }
 
-function formatBucketLabel(value: number, range: UsageRange) {
-  const date = new Date(value)
+function periodKeyTime(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return Number.NaN
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+}
+
+function formatBucketLabel(start: number, _end: number, range: UsageRange) {
+  const date = new Date(start)
   if (range === "YTD") return months[date.getUTCMonth()]
   if (range === "ALL")
     return date.getUTCFullYear() === new Date().getUTCFullYear()
       ? months[date.getUTCMonth()]
       : String(date.getUTCFullYear())
+  return formatDay(start)
+}
+
+function formatDay(value: number) {
+  const date = new Date(value)
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
 }
 
 function formatProvider(provider: string) {
   const known: Record<string, string> = {
     anthropic: "Anthropic",
+    deepseek: "DeepSeek",
     google: "Google",
     minimax: "MiniMax",
+    moonshot: "Moonshot",
     moonshotai: "Moonshot",
-    nvidia: "Nvidia",
+    nvidia: "NVIDIA",
+    opencode: "opencode",
     openai: "OpenAI",
+    qwen: "Qwen",
+    tencent: "Tencent",
+    xai: "xAI",
+    xiaomi: "Xiaomi",
+    zhipu: "Zhipu",
     zhipuai: "Zhipu",
   }
   const normalized = provider.toLowerCase().replace(/[^a-z0-9]/g, "")

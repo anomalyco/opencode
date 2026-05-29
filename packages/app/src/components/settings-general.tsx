@@ -399,6 +399,18 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.newLayoutDesigns.title")}
+          description={language.t("settings.general.row.newLayoutDesigns.description")}
+        >
+          <div data-action="settings-new-layout-designs">
+            <Switch
+              checked={settings.general.newLayoutDesigns()}
+              onChange={(checked) => settings.general.setNewLayoutDesigns(checked)}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )
@@ -802,7 +814,7 @@ export const SettingsGeneral: Component = () => {
 
         <DisplaySection />
 
-        <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+        <Show when={desktop()}>
           <AdvancedSection />
         </Show>
       </div>
