@@ -46,6 +46,44 @@ import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const log = Log.create({ service: "config" })
 
+// IMECODE closed-network default: lock the agent to a single internal vLLM
+// (OpenAI-compatible) endpoint and disable every other provider. This is seeded
+// as the lowest-priority config layer, so a user's imecode.json / project config
+// can still override any of these fields. Endpoint/model/key are env-overridable.
+function imecodeDefaults(): Info {
+  const env = process.env
+  const baseURL = env["IMECODE_VLLM_BASE_URL"] || "http://localhost:8000/v1"
+  const modelID = env["IMECODE_VLLM_MODEL"] || "default"
+  const apiKey = env["IMECODE_VLLM_API_KEY"] || env["OPENAI_API_KEY"] || "sk-no-auth"
+  const name = env["IMECODE_VLLM_NAME"] || "Internal vLLM"
+  const context = Number(env["IMECODE_VLLM_CONTEXT"]) || 32768
+  const output = Number(env["IMECODE_VLLM_MAX_OUTPUT"]) || 8192
+  return {
+    enabled_providers: ["vllm"],
+    model: `vllm/${modelID}`,
+    small_model: `vllm/${modelID}`,
+    provider: {
+      vllm: {
+        name,
+        npm: "@ai-sdk/openai-compatible",
+        options: { baseURL, apiKey },
+        models: {
+          [modelID]: {
+            id: modelID,
+            name: modelID,
+            tool_call: true,
+            reasoning: false,
+            attachment: false,
+            temperature: true,
+            limit: { context, output },
+            cost: { input: 0, output: 0 },
+          },
+        },
+      },
+    },
+  }
+}
+
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
 function mergeConfig(target: Info, source: Info): Info {
@@ -441,7 +479,7 @@ export const layer = Layer.effect(
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
-      let result: Info = {}
+      let result: Info = imecodeDefaults()
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
       if (!Flag.IMECODE_CONFIG && !Flag.IMECODE_CONFIG_DIR && !Flag.IMECODE_CONFIG_CONTENT) {
@@ -600,7 +638,7 @@ export const layer = Layer.effect(
         }
 
         if (!Flag.IMECODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+          for (const file of yield* ConfigPaths.files("imecode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
             yield* merge(file, yield* loadFile(file, authEnv), "local")
           }
         }

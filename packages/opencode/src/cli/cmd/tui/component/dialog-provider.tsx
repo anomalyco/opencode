@@ -63,13 +63,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
     ),
-    {
-      type: "custom",
-      title: "Other",
-      value: CUSTOM_PROVIDER_OPTION_VALUE,
-      description: "Custom provider",
-      category: "Providers",
-    },
+    // IMECODE closed-network lock: no "Other"/custom external provider option.
   ]
 }
 

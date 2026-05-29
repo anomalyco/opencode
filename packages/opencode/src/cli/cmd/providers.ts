@@ -317,6 +317,18 @@ export const ProvidersLoginCommand = effectCmd({
   handler: Effect.fn("Cli.providers.login")(function* (args) {
     const authSvc = yield* Auth.Service
 
+    // IMECODE closed-network lock: external provider authentication is disabled.
+    // The internal vLLM provider authenticates via config/env (IMECODE_VLLM_API_KEY),
+    // not this flow. An admin can re-enable with IMECODE_ALLOW_EXTERNAL_AUTH=1.
+    if (!process.env["IMECODE_ALLOW_EXTERNAL_AUTH"]) {
+      UI.empty()
+      yield* Prompt.log.error(
+        "This build is locked to the internal vLLM provider. External provider authentication is disabled. " +
+          "(set IMECODE_ALLOW_EXTERNAL_AUTH=1 to override)",
+      )
+      return
+    }
+
     UI.empty()
     yield* Prompt.intro("Add credential")
     if (args.url) {

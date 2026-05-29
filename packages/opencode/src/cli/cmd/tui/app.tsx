@@ -727,16 +727,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           local.agent.move(-1)
         },
       },
-      {
-        name: "provider.connect",
-        title: "Connect provider",
-        suggested: !connected(),
-        slashName: "connect",
-        run: () => {
-          dialog.replace(() => <DialogProviderList />)
-        },
-        category: "Provider",
-      },
+      // IMECODE closed-network lock: external provider connect flow removed.
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
             {
