@@ -8,5 +8,11 @@ firestore_collection = "waitlist"
 allowed_origins      = "" # stage-1 は空(=*)。stage-2 で LP オリジンに絞る
 image                = "asia-northeast1-docker.pkg.dev/noted-gizmo-337508/waitlist-api/waitlist-api:latest"
 
+# Slack 通知を使う場合のみ設定（任意）。Secret Manager のシークレット「名」を指定する。
+# 事前に URL を gcloud で登録しておくこと（値そのものは書かない・tfstate に残らない）:
+#   printf '%s' "$WEBHOOK_URL" | gcloud secrets create waitlist-slack-webhook --data-file=- --project <PROJECT>
+# SA への secretAccessor 付与は Terraform 側で行う。
+# slack_webhook_secret = "waitlist-slack-webhook"
+
 # 既に Firestore Native DB がある場合は false にする
 # create_firestore_database = false

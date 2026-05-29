@@ -24,6 +24,7 @@ locals {
     "firestore.googleapis.com",
     "cloudbuild.googleapis.com",
     "artifactregistry.googleapis.com",
+    "secretmanager.googleapis.com",
   ]
 }
 
@@ -58,6 +59,16 @@ resource "google_project_iam_member" "firestore_user" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.waitlist_api.email}"
+}
+
+# Slack webhook シークレットの読み取り権限（slack_webhook_secret 指定時のみ）。
+# シークレット自体は Terraform 管理外（gcloud で事前作成）のため、名前参照で付与する。
+resource "google_secret_manager_secret_iam_member" "slack_webhook_accessor" {
+  count     = var.slack_webhook_secret != "" ? 1 : 0
+  project   = var.project_id
+  secret_id = var.slack_webhook_secret
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.waitlist_api.email}"
 }
 
 resource "google_cloud_run_v2_service" "waitlist_api" {
@@ -101,6 +112,21 @@ resource "google_cloud_run_v2_service" "waitlist_api" {
         value = var.allowed_origins
       }
 
+      # Slack Incoming Webhook（任意）。Secret Manager 参照で注入する。
+      # URL の実体は tfstate に残らない。slack_webhook_secret が空なら付与しない。
+      dynamic "env" {
+        for_each = var.slack_webhook_secret != "" ? [1] : []
+        content {
+          name = "SLACK_WEBHOOK_URL"
+          value_source {
+            secret_key_ref {
+              secret  = var.slack_webhook_secret
+              version = "latest"
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1"
@@ -122,6 +148,7 @@ resource "google_cloud_run_v2_service" "waitlist_api" {
   depends_on = [
     google_project_service.apis,
     google_project_iam_member.firestore_user,
+    google_secret_manager_secret_iam_member.slack_webhook_accessor,
   ]
 }
 

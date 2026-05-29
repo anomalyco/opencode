@@ -10,6 +10,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
   .map((s) => s.trim())
   .filter(Boolean)
 const PORT = Number(process.env.PORT) || 8080
+// Slack Incoming Webhook（任意）。未設定なら通知しない。
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL ?? ""
 
 if (!GCP_PROJECT) throw new Error("GCP_PROJECT is required")
 
@@ -82,6 +84,32 @@ async function createWaitlistDoc(
   return "created"
 }
 
+// Slack Incoming Webhook へ登録通知を送る。失敗しても登録処理はブロックしない。
+async function notifySlack(
+  email: string,
+  source: string,
+  result: "created" | "duplicate",
+): Promise<void> {
+  if (!SLACK_WEBHOOK_URL) return
+
+  const head = result === "duplicate" ? ":recycle: 既登録の再送信" : ":tada: 新規 waitlist 登録"
+  const sourceText = source ? ` （source: ${source}）` : ""
+  const text = `${head}: ${email}${sourceText}`
+
+  try {
+    const res = await fetch(SLACK_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+    if (!res.ok) {
+      console.error(`slack notify failed: ${res.status} ${await res.text().catch(() => "")}`)
+    }
+  } catch (err) {
+    console.error("slack notify error", err)
+  }
+}
+
 const app = new Hono()
 
 app.use(
@@ -120,6 +148,7 @@ app.post("/waitlist", async (c) => {
 
   try {
     const result = await createWaitlistDoc(email, source)
+    await notifySlack(email, source, result)
     return c.json({ ok: true, duplicate: result === "duplicate" })
   } catch (err) {
     console.error("waitlist 登録に失敗", err)
