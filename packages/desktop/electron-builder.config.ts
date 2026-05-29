@@ -76,6 +76,9 @@ const getBase = (): Configuration => ({
     category: "Development",
     target: ["AppImage", "deb", "rpm"],
   },
+  deb: {
+    fpm: ["--conflicts", "open-code", "--replaces", "open-code"],
+  },
 })
 
 function getConfig() {
