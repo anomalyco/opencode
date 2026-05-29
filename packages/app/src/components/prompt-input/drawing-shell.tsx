@@ -114,7 +114,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
           <IconButton
             data-action="prompt-submit"
             type="submit"
-            icon={props.working() ? "stop" : "arrow-up"}
+            icon={props.working() ? "stop" : "arrow-up-bold"}
             variant="primary"
             class="size-7.5"
             aria-label={props.working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}

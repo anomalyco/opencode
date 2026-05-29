@@ -558,7 +558,76 @@
     width: 30px;
     height: 30px;
     padding: 0;
+    box-sizing: border-box;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-attach"] {
     border-radius: var(--app-pill);
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"] {
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #ffce2b;
+    border-radius: var(--radius-sm);
+    background: #14130f;
+    color: #ffce2b;
+    box-shadow: none;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 35%, rgba(255, 206, 43, 0.55) 50%, transparent 65%);
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    background-position: 130% 0;
+    animation: jt-btn-shine 2.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes jt-btn-shine {
+    0% {
+      background-position: 130% 0;
+    }
+
+    55% {
+      background-position: -30% 0;
+    }
+
+    100% {
+      background-position: -30% 0;
+    }
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:hover:not(:disabled) {
+    background: #000;
+    color: #ffce2b;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:disabled {
+    background: color-mix(in srgb, #14130f 62%, var(--background-base) 38%);
+    border-color: color-mix(in srgb, #ffce2b 42%, transparent);
+    color: color-mix(in srgb, #ffce2b 42%, transparent);
+    opacity: 1;
+    box-shadow: none;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:disabled::after {
+    animation: none;
+    opacity: 0;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"] [data-component="icon"],
+  [data-component="codle-session"] [data-action="prompt-submit"] [data-slot="icon-svg"] {
+    position: relative;
+    z-index: 1;
+    color: #ffce2b;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:disabled [data-slot="icon-svg"] {
+    color: color-mix(in srgb, #ffce2b 42%, transparent);
   }
 
   [data-component="codle-session"] [data-action="prompt-attach"] {
@@ -860,6 +929,16 @@
       opacity: 0.55;
       transform: none;
     }
+
+    [data-component="codle-session"] [data-action="prompt-submit"] {
+      box-shadow: 0 0 12px 2px rgba(255, 206, 43, 0.35);
+    }
+
+    [data-component="codle-session"] [data-action="prompt-submit"]::after {
+      animation: none;
+      background-position: 50% 0;
+      opacity: 0.35;
+    }
   }
 
   @media (prefers-color-scheme: dark) {
@@ -912,29 +991,6 @@
 
     [data-component="codle-session"] [data-slot="icon-svg"] {
       color: currentColor;
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"] {
-      background: var(--button-primary-base);
-      color: var(--text-strong);
-      box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.12) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.18) inset,
-        0 1px 2px rgba(0, 0, 0, 0.22);
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"]:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--button-primary-base) 88%, white 12%);
-      color: var(--text-strong);
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"]:disabled {
-      background: color-mix(in srgb, var(--button-primary-base) 74%, var(--background-base) 26%);
-      color: var(--text-weaker);
-      opacity: 1;
-      box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.08) inset,
-        0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
     }
 
     [data-component="codle-session"] [data-action="prompt-attach"] {

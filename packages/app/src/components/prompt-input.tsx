@@ -1981,7 +1981,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       (store.mode === "normal" && !prompt.dirty() && !working() && commentCount() === 0)
                     }
                     tabIndex={store.mode === "shell" ? -1 : undefined}
-                    icon={working() ? "stop" : "arrow-up"}
+                    icon={working() ? "stop" : "arrow-up-bold"}
                     variant="primary"
                     class="size-7.5"
                     style={submitStyle()}
