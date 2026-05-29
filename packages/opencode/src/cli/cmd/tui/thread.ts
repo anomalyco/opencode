@@ -21,6 +21,8 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "./validate-session"
+import { Provider } from "@/provider/provider"
+import { bootstrap } from "@/cli/bootstrap"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -111,6 +113,10 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("variant", {
+        type: "string",
+        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -138,6 +144,12 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+      // TUI handler runs outside effectCmd, so the Instance ALS context that
+      // Provider.Service.list needs isn't established. Provide it here. The
+      // worker spawned below sets up its own.
+      const pick = await bootstrap(cwd, (ctx) => Provider.resolveSelection(args.model, args.variant, ctx))
+      const model = pick.model
+      const variant = pick.variant
       const env = sanitizedProcessEnv({
         [OPENCODE_PROCESS_ROLE]: "worker",
         [OPENCODE_RUN_ID]: ensureRunID(),
@@ -246,7 +258,8 @@ export const TuiThreadCommand = cmd({
             continue: args.continue,
             sessionID: args.session,
             agent: args.agent,
-            model: args.model,
+            model,
+            variant,
             prompt,
             fork: args.fork,
           },

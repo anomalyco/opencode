@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
@@ -75,6 +75,43 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 }
 
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
+
+function free(model: { cost: { input: number; output: number; cache: { read: number; write: number } } }) {
+  return (
+    model.cost.input === 0 && model.cost.output === 0 && model.cost.cache.read === 0 && model.cost.cache.write === 0
+  )
+}
+
+afterEach(() => {
+  mock.restore()
+})
+
+const freeConfig = {
+  provider: {
+    opencode: {
+      whitelist: ["alpha-free", "plain-free"],
+      options: { apiKey: "test-api-key" },
+      models: {
+        "alpha-free": {
+          name: "Alpha Free",
+          reasoning: true,
+          cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+          limit: { context: 128000, output: 4096 },
+          variants: {
+            low: { effort: "low" },
+            high: { effort: "high" },
+          },
+        },
+        "plain-free": {
+          name: "Plain Free",
+          reasoning: false,
+          cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+          limit: { context: 128000, output: 4096 },
+        },
+      },
+    },
+  },
+}
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
@@ -342,6 +379,225 @@ it.instance("defaultModel returns first available model when no config set", () 
     expect(model.providerID).toBeDefined()
     expect(model.modelID).toBeDefined()
   }),
+)
+
+it.instance(
+  "resolveSelection picks only zero-cost opencode models, not other providers",
+  Effect.gen(function* () {
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.opencode]).toBeDefined()
+    expect(providers[ProviderV2.ID.openrouter]).toBeDefined()
+
+    spyOn(Math, "random").mockReturnValue(0)
+
+    const result = yield* Effect.promise(() => Provider.resolveSelection("free"))
+    const parsed = Provider.parseModel(result.model!)
+
+    // Must pick from opencode only, not openrouter.
+    expect(String(parsed.providerID)).toBe("opencode")
+    // Must be a zero-cost model (not the paid one).
+    const model = providers[ProviderV2.ID.opencode].models[String(parsed.modelID)]
+    expect(model).toBeDefined()
+    expect(model.cost.input).toBe(0)
+    expect(model.cost.output).toBe(0)
+    expect(String(parsed.modelID)).not.toBe("free-router")
+  }),
+  {
+    config: {
+      provider: {
+        opencode: {
+          options: { apiKey: "test-api-key" },
+          models: {
+            "my-zero-cost-free": {
+              name: "My Zero Cost",
+              cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+              limit: { context: 128000, output: 4096 },
+            },
+            "my-paid": {
+              name: "My Paid",
+              cost: { input: 1, output: 2, cache_read: 0, cache_write: 0 },
+              limit: { context: 128000, output: 4096 },
+            },
+          },
+        },
+        openrouter: {
+          options: { apiKey: "test-api-key" },
+          models: {
+            "free-router": {
+              name: "Free Router",
+              cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+              tool_call: true,
+              limit: { context: 128000, output: 4096 },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "resolveSelection picks a variant from the chosen free model",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.opencode]
+    const models = Provider.sort(Object.values(provider.models).filter(free))
+    const index = models.findIndex((item) => String(item.id) === "alpha-free")
+    const choices = Object.keys(provider.models["alpha-free"].variants ?? {}).toSorted()
+
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(choices.length).toBeGreaterThan(0)
+
+    let count = 0
+    spyOn(Math, "random").mockImplementation(() => {
+      count += 1
+      if (count === 1) return (index + 0.1) / models.length
+      return (choices.length - 1 + 0.1) / choices.length
+    })
+
+    const result = yield* Effect.promise(() => Provider.resolveSelection("free", "any"))
+
+    expect(result.model).toBe("opencode/alpha-free")
+    expect(result.variant).toBe(choices.at(-1))
+  }),
+  { config: freeConfig },
+)
+
+it.instance(
+  "resolveSelection keeps explicit variants unchanged",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.opencode]
+    const models = Provider.sort(Object.values(provider.models).filter(free))
+    const index = models.findIndex((item) => String(item.id) === "alpha-free")
+
+    expect(index).toBeGreaterThanOrEqual(0)
+
+    spyOn(Math, "random").mockReturnValue((index + 0.1) / models.length)
+
+    const result = yield* Effect.promise(() => Provider.resolveSelection("free", "max"))
+
+    expect(result.model).toBe("opencode/alpha-free")
+    expect(result.variant).toBe("max")
+  }),
+  { config: freeConfig },
+)
+
+it.instance(
+  "resolveSelection falls back to no variant when the chosen free model has none",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.opencode]
+    const models = Provider.sort(Object.values(provider.models).filter(free))
+    const index = models.findIndex((item) => String(item.id) === "plain-free")
+
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(provider.models["plain-free"].variants ?? {}).toEqual({})
+
+    spyOn(Math, "random").mockReturnValue((index + 0.1) / models.length)
+
+    const result = yield* Effect.promise(() => Provider.resolveSelection("free", "any"))
+
+    expect(result.model).toBe("opencode/plain-free")
+    expect(result.variant).toBeUndefined()
+  }),
+  { config: freeConfig },
+)
+
+test("resolveSelection passes through when model is undefined", async () => {
+  const result = await Provider.resolveSelection(undefined, "any")
+  expect(result.model).toBeUndefined()
+  expect(result.variant).toBe("any")
+})
+
+test("resolveSelection short-circuits with an explicit non-free model", async () => {
+  const result = await Provider.resolveSelection("opencode/big-pickle", "any")
+  expect(result.model).toBe("opencode/big-pickle")
+  expect(result.variant).toBe("any")
+})
+
+it.instance(
+  "resolveSelection throws with actionable message when no free models are available",
+  Effect.gen(function* () {
+    const result = yield* Effect.tryPromise(() => Provider.resolveSelection("free")).pipe(Effect.exit)
+    expect(result._tag).toBe("Failure")
+    if (result._tag === "Failure") {
+      const message = String((result.cause as { error?: Error }).error ?? result.cause)
+      expect(message).toContain("OPENCODE_API_KEY")
+    }
+  }),
+  {
+    config: {
+      provider: {
+        opencode: {
+          whitelist: ["paid-only"],
+          options: { apiKey: "test-api-key" },
+          models: {
+            "paid-only": {
+              name: "Paid Only",
+              cost: { input: 1, output: 2, cache_read: 0, cache_write: 0 },
+              limit: { context: 128000, output: 4096 },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "resolveSelection skips zero-cost opencode models that lack the -free suffix (promo guard)",
+  Effect.gen(function* () {
+    spyOn(Math, "random").mockReturnValue(0)
+    const result = yield* Effect.tryPromise(() => Provider.resolveSelection("free")).pipe(Effect.exit)
+    // Only model in catalog is zero-cost but unsuffixed — should be treated as a promo and rejected.
+    expect(result._tag).toBe("Failure")
+    if (result._tag === "Failure") {
+      const message = String((result.cause as { error?: Error }).error ?? result.cause)
+      expect(message).toContain("OPENCODE_API_KEY")
+    }
+  }),
+  {
+    config: {
+      provider: {
+        opencode: {
+          whitelist: ["big-pickle-clone"],
+          options: { apiKey: "test-api-key" },
+          models: {
+            "big-pickle-clone": {
+              name: "Big Pickle Clone",
+              cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+              limit: { context: 128000, output: 4096 },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "build catalog exposes at least one opencode free model and resolveSelection picks one",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const opencode = providers[ProviderV2.ID.opencode]
+    expect(opencode).toBeDefined()
+
+    const freeModels = Object.values(opencode.models).filter(Provider.isFree)
+    // Surface the count in test output so catalog drift is visible at a glance.
+    console.log(
+      `[free-model-resolution] catalog has ${freeModels.length} free opencode model(s): ${freeModels.map((m) => String(m.id)).join(", ")}`,
+    )
+    expect(freeModels.length).toBeGreaterThan(0)
+
+    const result = yield* Effect.promise(() => Provider.resolveSelection("free"))
+    expect(result.model).toBeDefined()
+    const parsed = Provider.parseModel(result.model!)
+    expect(String(parsed.providerID)).toBe("opencode")
+    const ids = new Set(freeModels.map((m) => String(m.id)))
+    expect(ids.has(String(parsed.modelID))).toBe(true)
+  }),
+  { config: { provider: { opencode: { options: { apiKey: "test-api-key" } } } } },
 )
 
 it.instance(

@@ -21,6 +21,7 @@ import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -29,6 +30,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { InstanceRef } from "@/effect/instance-ref"
+import type { InstanceContext } from "@/project/instance-context"
 
 const log = Log.create({ service: "provider" })
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
@@ -1890,6 +1893,65 @@ export function sort<T extends { id: string }>(models: T[]) {
     [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
     [(model) => model.id, "desc"],
   )
+}
+
+const FREE = "free"
+export const ANY = "any"
+
+export function isFree(model: Model) {
+  // Catalog includes zero-cost promotional models (e.g. "big-pickle") that
+  // aren't part of the OpenCode Zen free tier. The only catalog signal is the
+  // "-free" id suffix, so guard on it in addition to cost.
+  if (!model.id.endsWith("-free")) return false
+  const extra = model.cost.experimentalOver200K
+  return (
+    model.providerID === ProviderV2.ID.opencode &&
+    model.cost.input === 0 &&
+    model.cost.output === 0 &&
+    model.cost.cache.read === 0 &&
+    model.cost.cache.write === 0 &&
+    (!extra || (extra.input === 0 && extra.output === 0 && extra.cache.read === 0 && extra.cache.write === 0))
+  )
+}
+
+function freeVariants(model: Model) {
+  return Object.keys(model.variants ?? {})
+    .toSorted()
+    .filter((item) => item !== "default")
+}
+
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export async function resolveSelection(model?: string, variant?: string, instance?: InstanceContext) {
+  if (!model) return { model, variant }
+  if (model !== FREE) return { model, variant }
+  // Service.list() requires InstanceRef in the Effect fiber. Callers from plain
+  // async code (run.ts handler post-await, thread.ts bootstrap callback) have no
+  // current fiber, so we provide it explicitly when given. Tests run inside an
+  // Effect fiber that already has InstanceRef set up, so the arg is optional.
+  const providers = await runPromise((svc) =>
+    instance ? svc.list().pipe(Effect.provideService(InstanceRef, instance)) : svc.list(),
+  )
+  const provider = providers[ProviderV2.ID.opencode]
+  const models = sort(Object.values(provider?.models ?? {}).filter(isFree))
+  // Unseeded by design: the same `--model free` in two terminals picks
+  // different models.
+  const pick = models[Math.floor(Math.random() * models.length)]
+  if (!pick)
+    throw new Error(
+      `No free opencode models found. The opencode provider must be configured (set OPENCODE_API_KEY) and at least one model in its catalog must have all costs set to 0.`,
+    )
+  const value =
+    variant === ANY
+      ? (() => {
+          const choices = freeVariants(pick)
+          return choices[Math.floor(Math.random() * choices.length)]
+        })()
+      : variant
+  return {
+    model: `${pick.providerID}/${pick.id}`,
+    variant: value,
+  }
 }
 
 export function parseModel(model: string) {
