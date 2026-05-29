@@ -17,7 +17,8 @@
       "diffDelete": "#FFE0CF"
     },
     "overrides": {
-      "background-base": "#F4F2EC",
+      "c-paper": "#F4F2EC",
+      "background-base": "var(--c-paper)",
       "background-weak": "#E9E6DD",
       "background-strong": "#FFFFFF",
       "background-stronger": "#FFFFFF",
@@ -118,7 +119,8 @@
       "diffDelete": "#FFE0CF"
     },
     "overrides": {
-      "background-base": "#14130F",
+      "c-paper": "#14130F",
+      "background-base": "var(--c-paper)",
       "background-weak": "#2A2823",
       "background-strong": "#14130F",
       "background-stronger": "#2A2823",

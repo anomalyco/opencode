@@ -448,6 +448,8 @@ function useAnnotationRerender<A>(opts: {
     opts.viewer.rendered()
     const active = opts.current()
     if (!active) return
+    const root = opts.viewer.getRoot()
+    if (!root?.querySelector("[data-line]")) return
     active.setLineAnnotations(opts.annotations())
     active.rerender()
     requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
@@ -487,7 +489,6 @@ function renderViewer<I extends RenderTarget>(opts: {
   opts.draw(next)
 
   applyViewerScheme(opts.viewer.getHost())
-  opts.viewer.setRendered((value) => value + 1)
   opts.onReady()
 }
 
@@ -829,6 +830,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
         return root.querySelectorAll("[data-line]").length >= lineCount()
       },
       onReady: () => {
+        viewer.setRendered((value) => value + 1)
         applySelection(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
@@ -1019,6 +1021,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       isReady: (root) => root.querySelector("[data-line]") != null,
       settleFrames: 1,
       onReady: () => {
+        viewer.setRendered((value) => value + 1)
         done?.()
         setSelectedLines(viewer.lastSelection)
         viewer.find.refresh({ reset: true })

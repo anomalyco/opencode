@@ -23,7 +23,10 @@ const unsafeCSS = `
   --diffs-bg-context: var(--diffs-bg-context-override, light-dark( color-mix(in lab, var(--diffs-bg) 98.5%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 92.5%, var(--diffs-mixer))));
   --diffs-bg-separator: var(--diffs-bg-separator-override, light-dark( color-mix(in lab, var(--diffs-bg) 96%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 85%, var(--diffs-mixer))));
   --diffs-fg: light-dark(var(--diffs-light), var(--diffs-dark));
+  --diffs-fg-number-override: var(--text-weaker);
   --diffs-fg-number: var(--diffs-fg-number-override, light-dark(color-mix(in lab, var(--diffs-fg) 65%, var(--diffs-bg)), color-mix(in lab, var(--diffs-fg) 65%, var(--diffs-bg))));
+  /* Paper share for line-number gutter (light). Do not wrap in light-dark() — var() + light-dark() picks the dark branch. */
+  --diffs-gutter-paper-pct: 30%;
   --diffs-deletion-base: var(--syntax-diff-delete);
   --diffs-addition-base: var(--syntax-diff-add);
   --diffs-modified-base: var(--syntax-diff-unknown);
@@ -131,6 +134,22 @@ const unsafeCSS = `
   );
 }
 
+:host([data-color-scheme='light']) [data-diff-header] [data-column-number],
+:host([data-color-scheme='light']) [data-diff] [data-column-number],
+:host([data-color-scheme='light']) [data-file] [data-column-number] {
+  background-color: color-mix(
+    in srgb,
+    #ffffff calc(100% - var(--diffs-gutter-paper-pct)),
+    var(--c-paper) var(--diffs-gutter-paper-pct)
+  );
+}
+
+:host([data-color-scheme='dark']) [data-diff-header] [data-column-number],
+:host([data-color-scheme='dark']) [data-diff] [data-column-number],
+:host([data-color-scheme='dark']) [data-file] [data-column-number] {
+  background-color: var(--surface-raised-base-hover);
+}
+
 [data-diff-header],
 [data-diff],
 [data-file] {
@@ -138,6 +157,7 @@ const unsafeCSS = `
     height: 24px;
   }
   [data-column-number] {
+    color: var(--diffs-fg-number);
     background-color: var(--background-stronger);
     cursor: default !important;
   }
@@ -188,4 +208,5 @@ export const styleVariables = {
   "--diffs-header-font-family": "var(--font-family-sans)",
   "--diffs-gap-block": 0,
   "--diffs-min-number-column-width": "4ch",
+  "--diffs-fg-number-override": "var(--text-weaker)",
 }

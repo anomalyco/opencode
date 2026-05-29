@@ -1620,7 +1620,7 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = createMemo(() => (env.productionLayout() ? {} : { revert }))
 
   createEffect(() => {
     const sessionID = params.id
@@ -1724,7 +1724,8 @@ export default function Page() {
                   loadingClass: "px-4 py-4 text-text-weak",
                   emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
                 })}
-                actions={actions}
+                actions={actions()}
+                hideUserMeta={env.productionLayout()}
                 scroll={ui.scroll}
                 onResumeScroll={resumeScroll}
                 setScrollRef={setScrollRef}

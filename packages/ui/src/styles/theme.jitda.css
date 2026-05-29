@@ -3,7 +3,7 @@
  * 팔레트 원본은 packages/ui/src/theme/themes/jitda.json 이다.
  */
 :root {
-  --background-base: #F4F2EC;
+  --background-base: var(--c-paper);
     --background-weak: #E9E6DD;
     --background-strong: #FFFFFF;
     --background-stronger: #FFFFFF;
@@ -51,11 +51,11 @@
     --surface-info-strong: #1F3A52;
     --surface-diff-unchanged-base: #ffffff00;
     --surface-diff-skip-base: #efeee8;
-    --surface-diff-hidden-base: #dfdeda;
-    --surface-diff-hidden-weak: #e6e5e0;
-    --surface-diff-hidden-weaker: #d8d8d5;
-    --surface-diff-hidden-strong: #c9cbc9;
-    --surface-diff-hidden-stronger: #b4b7b7;
+    --surface-diff-hidden-base: rgba(66, 78, 90, 0.12);
+    --surface-diff-hidden-weak: rgba(66, 78, 90, 0.08);
+    --surface-diff-hidden-weaker: rgba(66, 78, 90, 0.16);
+    --surface-diff-hidden-strong: rgba(66, 78, 90, 0.24);
+    --surface-diff-hidden-stronger: rgba(66, 78, 90, 0.36);
     --surface-diff-add-base: #eaf6ed;
     --surface-diff-add-weak: #f5fbf7;
     --surface-diff-add-weaker: #fafefb;
@@ -109,23 +109,23 @@
     --button-ghost-hover: #E9E6DD;
     --button-ghost-hover2: #DDD9CD;
     --border-base: #D9D5C9;
-    --border-hover: #b0aea9;
-    --border-active: #a2a19c;
+    --border-hover: rgba(20, 19, 15, 0.30400000000000005);
+    --border-active: rgba(20, 19, 15, 0.36400000000000005);
     --border-selected: #FFCE2B;
-    --border-disabled: #c6c5bf;
+    --border-disabled: rgba(20, 19, 15, 0.204);
     --border-focus: #14130F;
     --border-weak-base: #D9D5C9;
     --border-strong-base: #B8B4A6;
-    --border-strong-hover: #95938e;
-    --border-strong-active: #888681;
+    --border-strong-hover: rgba(20, 19, 15, 0.42400000000000004);
+    --border-strong-active: rgba(20, 19, 15, 0.48400000000000004);
     --border-strong-selected: rgba(184, 215, 244, 0.6);
-    --border-strong-disabled: #cfcdc8;
-    --border-strong-focus: #888681;
-    --border-weak-hover: #cbc9c3;
-    --border-weak-active: #bdbcb6;
+    --border-strong-disabled: rgba(20, 19, 15, 0.164);
+    --border-strong-focus: rgba(20, 19, 15, 0.48400000000000004);
+    --border-weak-hover: rgba(20, 19, 15, 0.184);
+    --border-weak-active: rgba(20, 19, 15, 0.244);
     --border-weak-selected: rgba(201, 228, 253, 0.5);
-    --border-weak-disabled: #dddbd5;
-    --border-weak-focus: #bdbcb6;
+    --border-weak-disabled: rgba(20, 19, 15, 0.10400000000000001);
+    --border-weak-focus: rgba(20, 19, 15, 0.244);
     --border-weaker-base: #E9E6DD;
     --border-interactive-base: #a4c6e5;
     --border-interactive-hover: #8bafd1;
@@ -250,12 +250,13 @@
     --avatar-text-purple: #8445bc;
     --avatar-text-cyan: #0894b3;
     --avatar-text-lime: #5d770d;
+    --c-paper: #F4F2EC;
     --text-stronger: #14130F;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-  --background-base: #14130F;
+  --background-base: var(--c-paper);
     --background-weak: #2A2823;
     --background-strong: #14130F;
     --background-stronger: #2A2823;
@@ -303,11 +304,11 @@
     --surface-info-strong: #DDE4EC;
     --surface-diff-unchanged-base: #0b0a07;
     --surface-diff-skip-base: #141310;
-    --surface-diff-hidden-base: #31302d;
-    --surface-diff-hidden-weak: #242420;
-    --surface-diff-hidden-weaker: #393936;
-    --surface-diff-hidden-strong: #494947;
-    --surface-diff-hidden-stronger: #6a6b6a;
+    --surface-diff-hidden-base: rgba(224, 228, 232, 0.14);
+    --surface-diff-hidden-weak: rgba(224, 228, 232, 0.08);
+    --surface-diff-hidden-weaker: rgba(224, 228, 232, 0.18);
+    --surface-diff-hidden-strong: rgba(224, 228, 232, 0.26);
+    --surface-diff-hidden-stronger: rgba(224, 228, 232, 0.42);
     --surface-diff-add-base: #031308;
     --surface-diff-add-weak: #061c0e;
     --surface-diff-add-weaker: #031308;
@@ -361,23 +362,23 @@
     --button-ghost-hover: #2A2823;
     --button-ghost-hover2: #4A473E;
     --border-base: #69675C;
-    --border-hover: #585752;
-    --border-active: #61605b;
+    --border-hover: rgba(244, 242, 236, 0.304);
+    --border-active: rgba(244, 242, 236, 0.34400000000000003);
     --border-selected: #FFCE2B;
-    --border-disabled: #464541;
+    --border-disabled: rgba(244, 242, 236, 0.22399999999999998);
     --border-focus: #F4F2EC;
     --border-weak-base: #4A473E;
     --border-strong-base: #8A8779;
-    --border-strong-hover: #6a6964;
-    --border-strong-active: #73726d;
+    --border-strong-hover: rgba(244, 242, 236, 0.38400000000000006);
+    --border-strong-active: rgba(244, 242, 236, 0.42400000000000004);
     --border-strong-selected: rgba(41, 48, 55, 0.6);
-    --border-strong-disabled: #42403c;
-    --border-strong-focus: #73726d;
-    --border-weak-hover: #464541;
-    --border-weak-active: #4f4e49;
+    --border-strong-disabled: rgba(244, 242, 236, 0.20400000000000001);
+    --border-strong-focus: rgba(244, 242, 236, 0.42400000000000004);
+    --border-weak-hover: rgba(244, 242, 236, 0.22399999999999998);
+    --border-weak-active: rgba(244, 242, 236, 0.264);
     --border-weak-selected: rgba(27, 33, 40, 0.6);
-    --border-weak-disabled: #393833;
-    --border-weak-focus: #4f4e49;
+    --border-weak-disabled: rgba(244, 242, 236, 0.16399999999999998);
+    --border-weak-focus: rgba(244, 242, 236, 0.264);
     --border-weaker-base: #2A2823;
     --border-interactive-base: #3b434b;
     --border-interactive-hover: #525b65;
@@ -502,6 +503,7 @@
     --avatar-text-purple: #9d5bd2;
     --avatar-text-cyan: #369eff;
     --avatar-text-lime: #c4f042;
+    --c-paper: #14130F;
     --text-stronger: #F4F2EC;
   }
 }

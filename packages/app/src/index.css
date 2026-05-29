@@ -3,7 +3,7 @@
 @layer base {
   :root {
     /* App shell aliases over Codle theme tokens. */
-    --app-canvas: var(--background-base);
+    --app-canvas: var(--c-paper, var(--background-base));
     --app-paper: var(--surface-raised-base);
     --app-paper-strong: var(--surface-raised-stronger-non-alpha);
     --app-ink: var(--text-strong);
@@ -25,6 +25,11 @@
     --app-user-bubble: var(--surface-base);
     --app-user-bubble-hover: var(--surface-base-hover);
     --app-user-bubble-text: var(--text-strong);
+    --app-user-paper: #f6eed9;
+    --app-user-paper-hover: #faf4e4;
+    --app-user-paper-shadow: rgba(45, 35, 20, 0.14);
+    --app-user-paper-shadow-soft: rgba(45, 35, 20, 0.07);
+    --app-user-paper-shadow-lift: 3px 7px 16px rgba(45, 35, 20, 0.13);
     --app-menu-shadow:
       0 0 0 0.5px white inset,
       0 0 0 0.5px var(--app-menu-line),
@@ -34,6 +39,38 @@
       0 6px 6px -3px rgba(0, 0, 0, 0.04),
       0 12px 12px -6px rgba(0, 0, 0, 0.04),
       0 24px 24px -12px rgba(0, 0, 0, 0.04);
+  }
+
+  :root[data-theme="jitda"] {
+    --app-canvas-grid-size: 24px;
+    --app-canvas-grid-image:
+      linear-gradient(color-mix(in srgb, var(--text-strong) 4%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--text-strong) 4%, transparent) 1px, transparent 1px);
+  }
+
+  :root[data-theme="jitda"][data-color-scheme="dark"] {
+    --app-canvas-grid-image:
+      linear-gradient(color-mix(in srgb, var(--text-strong) 6%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--text-strong) 6%, transparent) 1px, transparent 1px);
+    --app-user-paper: #3a3628;
+    --app-user-paper-hover: #423d2e;
+    --app-user-paper-shadow: rgba(0, 0, 0, 0.28);
+    --app-user-paper-shadow-soft: rgba(0, 0, 0, 0.14);
+    --app-user-paper-shadow-lift: 3px 7px 16px rgba(0, 0, 0, 0.24);
+  }
+
+  :root[data-theme="jitda"] html,
+  :root[data-theme="jitda"] body,
+  :root[data-theme="jitda"] #root {
+    background-color: var(--c-paper, var(--background-base));
+    background-image: var(--app-canvas-grid-image);
+    background-size: var(--app-canvas-grid-size);
+  }
+
+  html,
+  body,
+  #root {
+    background-color: var(--c-paper, var(--background-base));
   }
 
   @media (prefers-color-scheme: dark) {
@@ -56,8 +93,14 @@
 
 @layer components {
   [data-app-surface="canvas"] {
-    background: var(--app-canvas);
+    background-color: var(--app-canvas);
     color: var(--app-ink);
+  }
+
+  :root[data-theme="jitda"] [data-app-surface="canvas"],
+  :root[data-theme="jitda"] [data-component="codle-home"] {
+    background-image: var(--app-canvas-grid-image);
+    background-size: var(--app-canvas-grid-size);
   }
 
   [data-app-surface="paper"] {
@@ -68,7 +111,7 @@
 
   [data-component="codle-home"] {
     min-height: 100%;
-    background: var(--app-canvas);
+    background-color: var(--app-canvas);
     color: var(--app-ink);
   }
 
@@ -140,7 +183,12 @@
   }
 
   [data-component="codle-session"] {
-    background: var(--app-canvas);
+    background-color: var(--app-canvas);
+  }
+
+  :root[data-theme="jitda"] [data-component="codle-session"] {
+    background-image: var(--app-canvas-grid-image);
+    background-size: var(--app-canvas-grid-size);
   }
 
   [data-component="codle-session-panel"] {
@@ -210,10 +258,20 @@
 
   [data-component="codle-session"] [data-component="user-message"] {
     color: var(--app-user-bubble-text);
+    overflow: visible;
   }
 
   [data-component="codle-session"] [data-slot="user-message-body"] {
+    --paper-edge: polygon(1% 2%, 99% 2%, 99% 98%, 1% 98%);
+    position: relative;
+    display: inline-block;
     max-width: min(78%, 58ch);
+    margin: 4px 6px 7px 0;
+    overflow: visible;
+    filter:
+      drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.1))
+      drop-shadow(2px 3px 2px rgba(45, 35, 20, 0.05));
+    transition: filter 160ms ease;
   }
 
   [data-component="codle-session"] [data-slot="user-message-body"][data-doc="true"] {
@@ -221,14 +279,51 @@
     max-width: min(82%, 760px);
   }
 
+  [data-component="codle-session"] [data-slot="user-message-body"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    clip-path: var(--paper-edge);
+    pointer-events: none;
+    background: var(--app-user-paper);
+    transition: background 160ms ease;
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-body"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    clip-path: var(--paper-edge);
+    pointer-events: none;
+    background:
+      linear-gradient(104deg, transparent 17%, rgba(70, 55, 30, 0.09) 18%, transparent 21%),
+      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.38) 43%, transparent 46%),
+      linear-gradient(154deg, transparent 62%, rgba(80, 60, 35, 0.08) 63%, transparent 66%);
+    mix-blend-mode: multiply;
+    opacity: 0.75;
+  }
+
   [data-component="codle-session"] [data-slot="user-message-text"] {
-    background: var(--app-user-bubble);
+    position: relative;
+    z-index: 2;
+    display: inline-block;
+    max-width: 100%;
+    background: transparent;
     border: 0;
-    border-radius: var(--radius-lg);
+    border-radius: 0;
     color: var(--app-user-bubble-text);
-    padding: 10px 16px;
+    padding: 14px 20px;
     line-height: 1.45;
-    box-shadow: 0 1px 0 color-mix(in srgb, white 42%, transparent) inset;
+    box-shadow: none;
+    overflow: visible !important;
+    clip-path: var(--paper-edge);
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-text"] > * {
+    position: relative;
+    z-index: 1;
   }
 
   [data-component="codle-session"] [data-slot="user-message-text"][data-doc="true"] {
@@ -236,8 +331,37 @@
     width: 100%;
   }
 
-  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-text"] {
-    background: var(--app-user-bubble-hover);
+  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"] {
+    filter:
+      drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.11))
+      drop-shadow(2px 3px 2px rgba(45, 35, 20, 0.06));
+  }
+
+  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"]::after {
+    background: var(--app-user-paper-hover);
+  }
+
+  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"]::before {
+    opacity: 0.82;
+  }
+
+  :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"] {
+    filter:
+      drop-shadow(2px 4px 3px rgba(0, 0, 0, 0.14))
+      drop-shadow(2px 3px 2px rgba(0, 0, 0, 0.08));
+  }
+
+  :root[data-color-scheme="dark"] [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"] {
+    filter:
+      drop-shadow(3px 5px 4px rgba(0, 0, 0, 0.17))
+      drop-shadow(2px 3px 2px rgba(0, 0, 0, 0.09));
+  }
+
+  :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"]::before {
+    background:
+      linear-gradient(104deg, transparent 17%, rgba(0, 0, 0, 0.14) 18%, transparent 21%),
+      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.08) 43%, transparent 46%),
+      linear-gradient(154deg, transparent 62%, rgba(0, 0, 0, 0.12) 63%, transparent 66%);
   }
 
   [data-component="codle-session"] [data-slot="user-message-text"] [data-highlight="file"],
@@ -601,7 +725,7 @@
   [data-component="codle-side-panel"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
   }
 

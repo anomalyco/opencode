@@ -2374,7 +2374,7 @@ export default function Layout(props: ParentProps) {
 
   if (env.productionLayout()) {
     return (
-      <div class="h-dvh w-screen overflow-hidden bg-background-base">
+      <div class="h-dvh w-screen overflow-hidden" data-app-surface="canvas">
         <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
           {props.children}
         </Show>
@@ -2384,7 +2384,7 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div class="relative flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text" data-app-surface="canvas">
       <Titlebar />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
