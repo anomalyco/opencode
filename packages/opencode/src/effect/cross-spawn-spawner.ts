@@ -335,7 +335,7 @@ export const make = Effect.gen(function* () {
       if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
       return Effect.timeoutOrElse(f(command, proc, signal), {
         duration: opts.forceKillAfter,
-        onTimeout: () => f(command, proc, "SIGKILL"),
+        orElse: () => f(command, proc, "SIGKILL"),
       })
     }
 
@@ -393,6 +393,7 @@ export const make = Effect.gen(function* () {
 
           const fd = yield* setupFds(command, proc, extra)
           const out = setupOutput(command, proc, sout, serr)
+          let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
             stdin: yield* setupStdin(command, proc, sin),
@@ -420,6 +421,18 @@ export const make = Effect.gen(function* () {
               )((command, proc, signal) =>
                 Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal)),
               ).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+            unref: Effect.sync(() => {
+              if (ref) {
+                proc.unref()
+                ref = false
+              }
+              return Effect.sync(() => {
+                if (!ref) {
+                  proc.ref()
+                  ref = true
+                }
+              })
+            }),
           })
         }
         case "PipedCommand": {

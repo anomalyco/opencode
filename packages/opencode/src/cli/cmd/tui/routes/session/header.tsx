@@ -9,6 +9,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Flag } from "@/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
+import { useProject } from "@tui/context/project"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -44,6 +45,7 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
+  const project = useProject()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
@@ -97,7 +99,7 @@ export function Header() {
   const workspace = createMemo(() => {
     const id = session()?.workspaceID
     if (!id) return "Workspace local"
-    const info = sync.workspace.get(id)
+    const info = project.workspace.get(id)
     if (!info) return `Workspace ${id}`
     return `Workspace ${id} (${info.type})`
   })

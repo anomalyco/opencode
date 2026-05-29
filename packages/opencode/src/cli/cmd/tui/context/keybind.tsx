@@ -1,6 +1,5 @@
 import { createMemo } from "solid-js"
 import { Keybind } from "@/util/keybind"
-import { pipe, mapValues } from "remeda"
 import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import type { ParsedKey, Renderable } from "@opentui/core"
 import { createStore } from "solid-js/store"
@@ -14,12 +13,15 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
   name: "Keybind",
   init: () => {
     const config = useTuiConfig()
-    const keybinds = createMemo<Record<string, Keybind.Info[]>>(() => {
-      return pipe(
-        (config.keybinds ?? {}) as Record<string, string>,
-        mapValues((value) => Keybind.parse(value)),
-      )
-    })
+    const keybinds = createMemo<Record<string, Keybind.Info[]>>(() =>
+      Object.fromEntries(
+        config.keybinds.bindings.flatMap((binding) => {
+          if (typeof binding.cmd !== "string") return []
+          if (typeof binding.key !== "string") return []
+          return [[binding.cmd, Keybind.parse(binding.key)]]
+        }),
+      ),
+    )
     const [store, setStore] = createStore({
       leader: false,
     })
@@ -94,7 +96,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         const first = keybinds()[key]?.at(0)
         if (!first) return ""
         const result = Keybind.toString(first)
-        return result.replace("<leader>", Keybind.toString(keybinds().leader![0]!))
+        return result.replace("<leader>", Keybind.toString(keybinds()["leader"]?.[0]))
       },
     }
     return result

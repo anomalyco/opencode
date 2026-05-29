@@ -6,6 +6,7 @@ import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
+import { InstanceRuntime } from "./instance-runtime"
 
 export interface Shape {
   directory: string
@@ -42,9 +43,9 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
             worktree: input.worktree,
             project: input.project,
           }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
+        : await InstanceRuntime.load({ directory: input.directory }).then(({ project, worktree }) => ({
             directory: input.directory,
-            worktree: sandbox,
+            worktree,
             project,
           }))
     log.info("instance.boot", {

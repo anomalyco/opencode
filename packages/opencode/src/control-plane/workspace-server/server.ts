@@ -1,10 +1,12 @@
 import { Hono } from "hono"
-import { Instance } from "../../project/instance"
-import { InstanceBootstrap } from "../../project/bootstrap"
 import { HttpApiApp } from "../../server/routes/instance/httpapi/server"
 import { WorkspaceServerRoutes } from "./routes"
 import { WorkspaceContext } from "../workspace-context"
 import { WorkspaceID } from "../schema"
+import { InstanceRuntime } from "@/project/instance-runtime"
+import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceRef } from "@/effect/instance-ref"
+import { Effect } from "effect"
 
 export namespace WorkspaceServer {
   export function App() {
@@ -33,13 +35,8 @@ export namespace WorkspaceServer {
         return WorkspaceContext.provide({
           workspaceID: WorkspaceID.make(rawWorkspaceID),
           async fn() {
-            return Instance.provide({
-              directory,
-              init: InstanceBootstrap,
-              async fn() {
-                return next()
-              },
-            })
+            const ctx = await InstanceRuntime.load({ directory })
+            return AppRuntime.runPromise(Effect.promise(() => next()).pipe(Effect.provideService(InstanceRef, ctx)))
           },
         })
       })

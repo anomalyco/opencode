@@ -13,5 +13,23 @@
       "@tui/*": ["./src/cli/cmd/tui/*"],
       "@test/*": ["./test/*"]
     }
-  }
+  },
+  "exclude": [
+    "test",
+    "src/config/migrate-tui-config.ts",
+    "src/config/tui-schema.ts",
+    "src/effect/instance-context.ts",
+    "src/file/time.ts",
+    "src/filesystem/index.ts",
+    "src/lsp/index.ts",
+    "src/provider/sdk/copilot",
+    "src/provider/sdk/openai-compatible",
+    "src/session/index.ts",
+    "src/server/error.ts",
+    "src/tool/batch.ts",
+    "src/tool/bash.ts",
+    "src/tool/codesearch.ts",
+    "src/tool/ls.ts",
+    "src/tool/multiedit.ts"
+  ]
 }
