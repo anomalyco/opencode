@@ -113,6 +113,16 @@ export async function read(): Promise<Content | undefined> {
     if (x11.stdout.byteLength > 0) {
       return { data: Buffer.from(x11.stdout).toString("base64"), mime: "image/png" }
     }
+
+    // Wayland text read — wl-paste without -t returns text content.
+    // This must come before the clipboardy fallback because clipboardy
+    // uses xsel on Linux, which is not available on Wayland systems.
+    if (process.env["WAYLAND_DISPLAY"]) {
+      const waylandText = await Process.text(["wl-paste", "-n", "--no-newline"], { nothrow: true })
+      if (waylandText.text) {
+        return { data: waylandText.text, mime: "text/plain" }
+      }
+    }
   }
 
   const clipboardy = await getClipboardy()
