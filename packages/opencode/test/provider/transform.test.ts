@@ -3298,6 +3298,30 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
+  describe("@ai-sdk/google-vertex/anthropic", () => {
+    test("opus 4.8 uses adaptive reasoning for Vertex model IDs", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "google-vertex-anthropic/claude-opus-4-8@default",
+          providerID: "google-vertex-anthropic",
+          api: {
+            id: "claude-opus-4-8@default",
+            url: "https://us-central1-aiplatform.googleapis.com",
+            npm: "@ai-sdk/google-vertex/anthropic",
+          },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "high",
+      })
+    })
+  })
+
   describe("@ai-sdk/amazon-bedrock", () => {
     test("anthropic sonnet 4.6 returns adaptive reasoning options", () => {
       const model = createMockModel({
