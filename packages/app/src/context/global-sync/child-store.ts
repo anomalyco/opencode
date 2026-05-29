@@ -1,4 +1,4 @@
-import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
+import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
@@ -24,6 +24,7 @@ export function createChildStoreManager(input: {
   isBooting: (directory: string) => boolean
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
+  onMcp: (directory: string, setStore: SetStoreFunction<State>) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   queryOptions: QueryOptionsApi
@@ -39,6 +40,8 @@ export function createChildStoreManager(input: {
   const pins = new Map<string, number>()
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
+  const mcpDirectories = new Set<string>()
+  const mcpToggles = new Map<string, (enabled: boolean) => void>()
 
   const markKey = (key: DirectoryKey) => {
     if (!key) return
@@ -110,6 +113,8 @@ export function createChildStoreManager(input: {
     metaCache.delete(key)
     iconCache.delete(key)
     lifecycle.delete(key)
+    mcpDirectories.delete(key)
+    mcpToggles.delete(key)
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -173,11 +178,12 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
+          const [mcpEnabled, setMcpEnabled] = createSignal(false)
 
           const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
             queries: [
               input.queryOptions.path(key),
-              input.queryOptions.mcp(key),
+              { ...input.queryOptions.mcp(key), enabled: mcpEnabled() },
               input.queryOptions.lsp(key),
               input.queryOptions.providers(key),
             ],
@@ -236,6 +242,7 @@ export function createChildStoreManager(input: {
           })
           children[key] = child
           disposers.set(key, dispose)
+          mcpToggles.set(key, setMcpEnabled)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -274,6 +281,7 @@ export function createChildStoreManager(input: {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
     pinForOwner(key)
+    if (options.mcp) enableMcp(directory, key, childStore)
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
@@ -284,11 +292,25 @@ export function createChildStoreManager(input: {
   function peek(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
+    if (options.mcp) enableMcp(directory, key, childStore)
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
     }
     return childStore
+  }
+
+  function enableMcp(directory: string, key: DirectoryKey, childStore: [Store<State>, SetStoreFunction<State>]) {
+    if (mcpDirectories.has(key)) return
+    mcpDirectories.add(key)
+    mcpToggles.get(key)?.(true)
+    if (childStore[0].status !== "loading") input.onMcp(directory, childStore[1])
+  }
+
+  function disableMcp(directory: string) {
+    const key = directoryKey(directory)
+    if (!mcpDirectories.delete(key)) return
+    mcpToggles.get(key)?.(false)
   }
 
   function projectMeta(directory: string, patch: ProjectMeta) {
@@ -330,6 +352,8 @@ export function createChildStoreManager(input: {
     pin,
     unpin,
     pinned,
+    mcp: (directory: string) => mcpDirectories.has(directoryKey(directory)),
+    disableMcp,
     disposeDirectory,
     runEviction,
     vcsCache,
