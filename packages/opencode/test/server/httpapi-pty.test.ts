@@ -147,6 +147,14 @@ describe("pty HttpApi bridge", () => {
     expect(response.status).toBe(404)
   })
 
+  test("returns 404 for missing PTY websocket before decoding cursor query", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const response = await app().request(`${PtyPaths.connect.replace(":ptyID", PtyID.ascending())}?cursor=a&cursor=b`, {
+      headers: { "x-opencode-directory": tmp.path },
+    })
+    expect(response.status).toBe(404)
+  })
+
   test("returns typed not found errors for missing PTY HTTP resources", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path }

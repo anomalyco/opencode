@@ -16,6 +16,7 @@ function AppMeta() {
 export default function App() {
   return (
     <Router
+      base={import.meta.env.BASE_URL.replace(/\/$/, "")}
       explicitLinks={true}
       root={(props) => (
         <MetaProvider>

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.15.11",
+  "version": "1.15.12",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -122,6 +122,7 @@
     "@solid-primitives/event-bus": "1.1.2",
     "@solid-primitives/scheduled": "1.5.2",
     "@standard-schema/spec": "1.0.0",
+    "@types/ws": "8.18.1",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "ai-gateway-provider": "3.1.2",
@@ -135,7 +136,7 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.7.0",
+    "gitlab-ai-provider": "6.8.0",
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
@@ -163,6 +164,7 @@
     "vscode-jsonrpc": "8.2.1",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
+    "ws": "8.21.0",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
     "zod": "catalog:"

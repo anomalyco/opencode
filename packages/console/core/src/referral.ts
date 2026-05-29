@@ -1,8 +1,8 @@
 import { z } from "zod"
-import { and, asc, eq, isNull, sql, Database } from "./drizzle"
+import { and, asc, eq, inArray, isNull, sql, Database } from "./drizzle"
 import { Actor } from "./actor"
 import { Identifier } from "./identifier"
-import { LiteTable } from "./schema/billing.sql"
+import { LiteTable, PaymentTable } from "./schema/billing.sql"
 import { ReferralCodeTable, ReferralRewardTable, ReferralTable } from "./schema/referral.sql"
 import { AuthTable } from "./schema/auth.sql"
 import { UserTable } from "./schema/user.sql"
@@ -318,6 +318,26 @@ export namespace Referral {
         .then((rows) => rows[0])
       if (selfReferral) throw new Error("Self-referral is not allowed")
 
+      const workspaceIDs = await tx
+        .select({ workspaceID: UserTable.workspaceID })
+        .from(UserTable)
+        .where(and(eq(UserTable.accountID, input.accountID), isNull(UserTable.timeDeleted)))
+        .then((rows) => rows.map((row) => row.workspaceID))
+      if (workspaceIDs.length === 0) return
+
+      const litePayment = await tx
+        .select({ id: PaymentTable.id })
+        .from(PaymentTable)
+        .where(
+          and(
+            inArray(PaymentTable.workspaceID, workspaceIDs),
+            isNull(PaymentTable.timeDeleted),
+            sql`JSON_UNQUOTE(JSON_EXTRACT(${PaymentTable.enrichment}, '$.type')) = 'lite'`,
+          ),
+        )
+        .then((rows) => rows[0])
+      if (litePayment) return
+
       const referralID = Identifier.create("referral")
       await tx.insert(ReferralTable).ignore().values({
         workspaceID: code.workspaceID,
@@ -355,7 +375,7 @@ export namespace Referral {
         .from(ReferralTable)
         .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
-      if (!referral) throw new Error("Referral not found")
+      if (!referral) return
 
       const result = await tx
         .insert(ReferralRewardTable)
@@ -373,7 +393,7 @@ export namespace Referral {
           },
         ])
 
-      if (result.rowsAffected === 0) throw new Error("Referral already completed")
+      if (result.rowsAffected === 0) return
     })
   }
 

@@ -11,6 +11,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
 import { ACPNextSession } from "./session"
+import { ACPNextPermission } from "./permission"
 import {
   duplicateRunningToolUpdate,
   errorToolUpdate,
@@ -22,7 +23,8 @@ import {
 
 const log = Log.create({ service: "acp-next-event" })
 
-type Connection = Pick<AgentSideConnection, "sessionUpdate">
+type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 type GlobalEventEnvelope = {
   payload?: Event
 }
@@ -40,6 +42,7 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly permission: ACPNextPermission.Handler
   private started = false
 
   constructor(
@@ -48,7 +51,9 @@ export class Subscription {
       connection: Connection
       session: ACPNextSession.Interface
     },
-  ) {}
+  ) {
+    this.permission = new ACPNextPermission.Handler(input)
+  }
 
   start() {
     if (this.started) return
@@ -65,6 +70,9 @@ export class Subscription {
 
   async handle(event: Event) {
     switch (event.type) {
+      case "permission.asked":
+        this.permission.handle(event)
+        return
       case "message.part.updated":
         return this.handlePartUpdated(event)
       case "message.part.delta":

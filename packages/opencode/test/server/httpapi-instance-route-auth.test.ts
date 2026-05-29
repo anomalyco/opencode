@@ -4,6 +4,7 @@ import { HttpRouter } from "effect/unstable/http"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
+import { ServerAuth } from "../../src/server/auth"
 import { PtyID } from "../../src/pty/schema"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -35,7 +36,7 @@ function app(input: { password?: string; username?: string }) {
 }
 
 function basic(username: string, password: string) {
-  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+  return ServerAuth.header({ username, password }) ?? ""
 }
 
 async function cancelBody(response: Response) {
@@ -47,8 +48,8 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-describe("HttpApi raw route authorization", () => {
-  test("requires configured auth before opening the raw instance event stream", async () => {
+describe("HttpApi instance route authorization", () => {
+  test("requires configured auth before opening the instance event stream", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const server = app({ password: "secret" })
     const headers = { "x-opencode-directory": tmp.path }
@@ -64,7 +65,7 @@ describe("HttpApi raw route authorization", () => {
     expect(authed.status).toBe(200)
   })
 
-  test("requires configured auth before resolving the raw PTY websocket route", async () => {
+  test("requires configured auth before resolving the PTY websocket route", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const server = app({ password: "secret" })
     const route = PtyPaths.connect.replace(":ptyID", PtyID.ascending())
