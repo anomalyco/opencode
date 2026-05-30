@@ -1,0 +1,4 @@
+title: OpenCode
+description: The open source AI coding agent
+sdk: docker
+app_port: 5173
