@@ -276,6 +276,14 @@ export const layer = Layer.effect(
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
 
+      if (projectID !== ProjectID.global) {
+        const worktreeExists = yield* fs.exists(result.worktree).pipe(Effect.orDie)
+        if (!worktreeExists) {
+          result.worktree = data.directory
+          result.sandboxes = result.sandboxes.filter((s) => s !== data.directory)
+        }
+      }
+
       yield* db((d) =>
         d
           .insert(ProjectTable)
