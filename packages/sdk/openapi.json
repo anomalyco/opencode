@@ -10038,11 +10038,14 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "WorkspaceCreateError | BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkspaceCreateError"
+                    },
                     {
                       "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
                     },
@@ -10403,20 +10406,32 @@
             "required": true
           },
           {
-            "name": "directory",
             "in": "query",
+            "name": "directory",
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
-            "name": "workspace",
             "in": "query",
+            "name": "workspace",
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ticket",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10682,6 +10697,9 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventPluginAdded"
           },
           {
             "$ref": "#/components/schemas/EventCatalogModelUpdated"
@@ -11580,7 +11598,7 @@
           },
           "pid": {
             "type": "integer",
-            "exclusiveMinimum": 0
+            "minimum": 0
           }
         },
         "required": ["id", "title", "command", "args", "cwd", "status", "pid"],
@@ -13110,6 +13128,9 @@
                 "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
               },
               {
+                "$ref": "#/components/schemas/EventPluginAdded"
+              },
+              {
                 "$ref": "#/components/schemas/EventCatalogModelUpdated"
               },
               {
@@ -14315,6 +14336,12 @@
               "mcp_timeout": {
                 "type": "integer",
                 "exclusiveMinimum": 0
+              },
+              "policies": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ConfigV2ExperimentalPolicy"
+                }
               }
             },
             "additionalProperties": false
@@ -16225,6 +16252,27 @@
         "required": ["id", "type", "name", "projectID", "timeUsed"],
         "additionalProperties": false
       },
+      "WorkspaceCreateError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["WorkspaceCreateError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "WorkspaceWarpError": {
         "type": "object",
         "properties": {
@@ -16933,7 +16981,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               }
             },
@@ -17165,7 +17213,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -19271,7 +19319,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               }
             },
@@ -19534,7 +19582,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -20350,6 +20398,30 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventPluginAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["plugin.added"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "ModelV2Info": {
         "type": "object",
         "properties": {
@@ -20864,6 +20936,27 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "PolicyEffect": {
+        "type": "string",
+        "enum": ["allow", "deny"]
+      },
+      "ConfigV2ExperimentalPolicy": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["provider.use"]
+          },
+          "effect": {
+            "$ref": "#/components/schemas/PolicyEffect"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": ["action", "effect", "resource"],
+        "additionalProperties": false
+      },
       "SessionInfo": {
         "type": "object",
         "properties": {
@@ -20901,7 +20994,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID", "variant"],
+            "required": ["id", "providerID"],
             "additionalProperties": false
           },
           "cost": {
@@ -21029,7 +21122,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID", "variant"],
+            "required": ["id", "providerID"],
             "additionalProperties": false
           }
         },
@@ -21408,7 +21501,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID", "variant"],
+            "required": ["id", "providerID"],
             "additionalProperties": false
           },
           "content": {

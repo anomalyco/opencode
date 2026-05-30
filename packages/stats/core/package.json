@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/stats-core",
-  "version": "1.15.11",
+  "version": "1.15.12",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -20,6 +20,7 @@
     "db:migrate": "bun src/migrate.ts",
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
+    "honeycomb:backfill": "bun src/honeycomb-backfill.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

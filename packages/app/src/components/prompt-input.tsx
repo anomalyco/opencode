@@ -79,8 +79,6 @@ import { pathKey } from "@/utils/path-key"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
 
-const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
-
 interface PromptInputProps {
   class?: string
   variant?: "dock" | "new-session"
@@ -1456,7 +1454,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <Switch>
-        <Match when={USE_V2_INPUT}>
+        <Match when={settings.general.newLayoutDesigns()}>
           <div class="flex flex-col gap-3">
             <DockShellForm
               data-component={newSession() ? "session-new-composer" : "session-composer"}
@@ -1528,7 +1526,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onKeyDown={handleKeyDown}
                     classList={{
                       "select-text": true,
-                      "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]": true,
+                      "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-base": true,
                       "[&_[data-type=file]]:text-syntax-property": true,
                       "[&_[data-type=agent]]:text-syntax-type": true,
                       "font-mono!": store.mode === "shell",

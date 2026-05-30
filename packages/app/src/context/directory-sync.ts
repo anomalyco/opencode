@@ -178,7 +178,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
   type Child = ReturnType<(typeof serverSync)["child"]>
   type Setter = Child[1]
 
-  const current = createMemo(() => serverSync.child(directory))
+  const current = createMemo(() => serverSync.child(directory, { mcp: true }))
   const target = (directory?: string) => {
     if (!directory || directory === directory) return current()
     return serverSync.child(directory)

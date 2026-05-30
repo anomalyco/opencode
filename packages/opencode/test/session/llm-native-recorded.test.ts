@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
@@ -276,6 +277,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(LocationServiceMap.layer),
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
   const recordedClient = LLMClient.layer.pipe(

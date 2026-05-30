@@ -32,7 +32,7 @@ export default {
   },
 }
 
-const frame = { width: "346px", "font-family": "var(--font-family-sans)", "font-size": "13px" } as const
+const frame = { width: "346px", "font-family": "var(--v2-font-family-sans)", "font-size": "13px" } as const
 
 export const Basic = {
   render: () => (
