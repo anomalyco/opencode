@@ -276,6 +276,7 @@ export const layer = Layer.effect(
       // small title-generation pass. Users wanting title fallback configure
       // it explicitly on the title agent.
       const titleFallbacks = ag.fallbacks?.length ? ag.fallbacks : undefined
+      const FALLBACK_IDS = new Set(["fallback-notice", "fallback-resume", "fallback-using"])
       const text = yield* llm
         .stream({
           agent: ag,
@@ -290,7 +291,9 @@ export const layer = Layer.effect(
           messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
         })
         .pipe(
-          Stream.filter(LLMEvent.is.textDelta),
+          Stream.filter((e): e is Extract<typeof e, { type: "text-delta" }> =>
+            LLMEvent.is.textDelta(e) && !FALLBACK_IDS.has(e.id),
+          ),
           Stream.map((e) => e.text),
           Stream.mkString,
           Effect.orDie,
