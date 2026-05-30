@@ -9,10 +9,6 @@ export const email = `mailto:${config.email}`
 
 OpenCode Go is a low cost subscription — **$5 for your first month**, then **$10/month** — that gives you reliable access to popular open coding models.
 
-:::note
-OpenCode Go is currently in beta.
-:::
-
 Go works like any other provider in OpenCode. You subscribe to OpenCode Go and
 get your API key. It's **completely optional** and you don't need to use it to
 use OpenCode.
@@ -71,8 +67,8 @@ The current list of models includes:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -88,24 +84,24 @@ OpenCode Go includes the following limits:
 - **Weekly limit** — $30 of usage
 - **Monthly limit** — $60 of usage
 
-Limits are defined in dollar value. This means your actual request count depends on the model you use. Cheaper models like Qwen3.5 Plus allow for more requests, while higher-cost models like GLM-5.1 allow for fewer.
+Limits are defined in dollar value. This means your actual request count depends on the model you use. Cheaper models like DeepSeek V4 Flash allow for more requests, while higher-cost models like GLM-5.1 allow for fewer.
 
 The table below provides an estimated request count based on typical Go usage patterns:
 
-| Model              | requests per 5 hour | requests per week | requests per month |
-| ------------------ | ------------------- | ----------------- | ------------------ |
-| GLM-5.1            | 880                 | 2,150             | 4,300              |
-| GLM-5              | 1,150               | 2,880             | 5,750              |
-| Kimi K2.5          | 1,850               | 4,630             | 9,250              |
-| Kimi K2.6          | 1,150               | 2,880             | 5,750              |
-| MiMo-V2.5 (≤ 256K) | 2,150               | 5,450             | 10,900             |
-| MiMo-V2.5-Pro      | 1,290               | 3,225             | 6,450              |
-| MiniMax M2.7       | 3,400               | 8,500             | 17,000             |
-| MiniMax M2.5       | 6,300               | 15,900            | 31,800             |
-| Qwen3.6 Plus       | 3,300               | 8,200             | 16,300             |
-| Qwen3.5 Plus       | 10,200              | 25,200            | 50,500             |
-| DeepSeek V4 Pro    | 3,450               | 8,550             | 17,150             |
-| DeepSeek V4 Flash  | 31,650              | 79,050            | 158,150            |
+| Model             | requests per 5 hour | requests per week | requests per month |
+| ----------------- | ------------------- | ----------------- | ------------------ |
+| GLM-5.1           | 880                 | 2,150             | 4,300              |
+| GLM-5             | 1,150               | 2,880             | 5,750              |
+| Kimi K2.5         | 1,850               | 4,630             | 9,250              |
+| Kimi K2.6         | 1,150               | 2,880             | 5,750              |
+| MiMo-V2.5         | 30,100              | 75,200            | 150,400            |
+| MiMo-V2.5-Pro     | 3,250               | 8,150             | 16,300             |
+| MiniMax M2.7      | 3,400               | 8,500             | 17,000             |
+| MiniMax M2.5      | 6,300               | 15,900            | 31,800             |
+| Qwen3.7 Max       | 950                 | 2,390             | 4,770              |
+| Qwen3.6 Plus      | 3,300               | 8,200             | 16,300             |
+| DeepSeek V4 Pro   | 3,450               | 8,550             | 17,150             |
+| DeepSeek V4 Flash | 31,650              | 79,050            | 158,150            |
 
 Estimates are based on observed average request patterns:
 
@@ -114,9 +110,9 @@ Estimates are based on observed average request patterns:
 - DeepSeek V4 Pro — 750 input, 82,000 cached, 290 output tokens per request
 - DeepSeek V4 Flash — 790 input, 68,000 cached, 280 output tokens per request
 - MiniMax M2.7/M2.5 — 300 input, 55,000 cached, 125 output tokens per request
-- MiMo-V2.5 — 1000 input, 60,000 cached, 140 output tokens per request
-- MiMo-V2.5-Pro — 350 input, 41,000 cached, 250 output tokens per request
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
+- MiMo-V2.5 — 830 input, 71,500 cached, 295 output tokens per request
+- MiMo-V2.5-Pro — 790 input, 86,000 cached, 305 output tokens per request
+- Qwen3.7 Max — 420 input, 66,000 cached, 200 output tokens per request
 - Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
 
 You can track your current usage in the **<a href={console}>console</a>**.
@@ -153,8 +149,8 @@ You can also access Go models through the following API endpoints.
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode-go/<model-id>`. For example, for Kimi K2.6, you would

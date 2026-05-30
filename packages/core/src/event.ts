@@ -1,3 +1,5 @@
+export * as EventV2 from "./event"
+
 import { Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Location } from "./location"
 import { withStatics } from "./schema"
@@ -126,7 +128,7 @@ export const layer = Layer.effect(
           ...(options?.metadata ? { metadata: options.metadata } : {}),
           type: definition.type,
           ...(definition.version === undefined ? {} : { version: definition.version }),
-          ...(location ? { location } : {}),
+          ...(location ? { location: { directory: location.directory, workspaceID: location.workspaceID } } : {}),
           data,
         } as Payload<D>
         return yield* publishEvent(event)
@@ -153,5 +155,3 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer
-
-export * as EventV2 from "./event"

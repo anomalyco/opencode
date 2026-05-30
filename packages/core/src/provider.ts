@@ -86,7 +86,7 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
       name: Schema.String,
     }),
     Schema.Struct({
-      via: Schema.Literal("auth"),
+      via: Schema.Literal("account"),
       service: Schema.String,
     }),
     Schema.Struct({

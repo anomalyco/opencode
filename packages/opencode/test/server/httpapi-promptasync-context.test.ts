@@ -9,10 +9,11 @@
 
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Layer, Scope } from "effect"
+import { Deferred, Effect, Layer, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 import { mkdir } from "node:fs/promises"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -20,8 +21,16 @@ import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
 import { InstanceLayer } from "../../src/project/instance-layer"
 import { Project } from "../../src/project/project"
-import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
-import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+import { Session } from "../../src/session/session"
+import {
+  InstanceContextMiddleware,
+  instanceContextLayer,
+} from "../../src/server/routes/instance/httpapi/middleware/instance-context"
+import {
+  WorkspaceRoutingMiddleware,
+  WorkspaceRoutingQuery,
+  workspaceRoutingLayer,
+} from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
@@ -52,9 +61,10 @@ const it = testEffect(
   ),
 )
 
-const instanceContextTestLayer = instanceRouterMiddleware
-  .combine(workspaceRouterMiddleware)
-  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+const instanceContextTestLayer = Layer.mergeAll(
+  instanceContextLayer,
+  workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+)
 
 const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
@@ -87,6 +97,46 @@ const captureInstance = Effect.gen(function* () {
   return { directory: instance?.directory, workspaceID } satisfies Capture
 })
 
+const ProbeApi = HttpApi.make("handler-context-probe").add(
+  HttpApiGroup.make("probe")
+    .add(
+      HttpApiEndpoint.post("fork", "/fork-probe", { query: WorkspaceRoutingQuery, success: Schema.Boolean }),
+      HttpApiEndpoint.post("streamWithout", "/stream-probe-without", {
+        query: WorkspaceRoutingQuery,
+        success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "application/json" })),
+      }),
+      HttpApiEndpoint.post("streamWith", "/stream-probe-with", {
+        query: WorkspaceRoutingQuery,
+        success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "application/json" })),
+      }),
+    )
+    .middleware(InstanceContextMiddleware)
+    .middleware(WorkspaceRoutingMiddleware),
+)
+
+const serveProbes = (input: {
+  fork?: Effect.Effect<boolean, never, Scope.Scope>
+  streamWithout?: Effect.Effect<HttpServerResponse.HttpServerResponse>
+  streamWith?: Effect.Effect<HttpServerResponse.HttpServerResponse>
+}) =>
+  HttpApiBuilder.layer(ProbeApi).pipe(
+    Layer.provide(
+      HttpApiBuilder.group(ProbeApi, "probe", (handlers) =>
+        handlers
+          .handle("fork", () => input.fork ?? Effect.succeed(false))
+          .handleRaw(
+            "streamWithout",
+            () => input.streamWithout ?? Effect.succeed(HttpServerResponse.empty({ status: 404 })),
+          )
+          .handleRaw("streamWith", () => input.streamWith ?? Effect.succeed(HttpServerResponse.empty({ status: 404 }))),
+      ),
+    ),
+    Layer.provide(instanceContextTestLayer),
+    Layer.provide(Layer.mock(Session.Service)({})),
+    HttpRouter.serve,
+    Layer.build,
+  )
+
 describe("HttpApi handler context inheritance", () => {
   // Mirrors handlers/session.ts:281 promptAsync. The forked fiber inherits
   // the request's Context — including InstanceRef and WorkspaceRef provided
@@ -96,22 +146,20 @@ describe("HttpApi handler context inheritance", () => {
       const { dir, workspace } = yield* setupWorkspace("local-fork")
       const capture = yield* Deferred.make<Capture>()
 
-      yield* HttpRouter.add(
-        "POST",
-        "/fork-probe",
-        Effect.gen(function* () {
+      yield* serveProbes({
+        fork: Effect.gen(function* () {
           const scope = yield* Scope.Scope
           yield* Effect.gen(function* () {
             yield* Deferred.succeed(capture, yield* captureInstance)
           }).pipe(Effect.forkIn(scope, { startImmediately: true }))
-          return HttpServerResponse.empty({ status: 204 })
+          return true
         }),
-      ).pipe(Layer.provide(instanceContextTestLayer), HttpRouter.serve, Layer.build)
+      })
 
       const response = yield* HttpClient.post(
         `/fork-probe?directory=${encodeURIComponent(dir)}&workspace=${encodeURIComponent(workspace.id)}`,
       )
-      expect(response.status).toBe(204)
+      expect(response.status).toBe(200)
 
       const observed = yield* Deferred.await(capture).pipe(Effect.timeout("2 seconds"))
       expect(observed.directory).toBe(dir)
@@ -129,10 +177,8 @@ describe("HttpApi handler context inheritance", () => {
       const withoutCapture = yield* Deferred.make<Capture>()
       const withCapture = yield* Deferred.make<Capture>()
 
-      yield* HttpRouter.add(
-        "POST",
-        "/stream-probe-without",
-        Effect.gen(function* () {
+      yield* serveProbes({
+        streamWithout: Effect.gen(function* () {
           return HttpServerResponse.stream(
             Stream.fromEffect(
               Effect.gen(function* () {
@@ -143,12 +189,7 @@ describe("HttpApi handler context inheritance", () => {
             { contentType: "application/json" },
           )
         }),
-      ).pipe(Layer.provide(instanceContextTestLayer), HttpRouter.serve, Layer.build)
-
-      yield* HttpRouter.add(
-        "POST",
-        "/stream-probe-with",
-        Effect.gen(function* () {
+        streamWith: Effect.gen(function* () {
           const instance = yield* InstanceRef
           const workspaceID = yield* WorkspaceRef
           return HttpServerResponse.stream(
@@ -161,7 +202,7 @@ describe("HttpApi handler context inheritance", () => {
             { contentType: "application/json" },
           )
         }),
-      ).pipe(Layer.provide(instanceContextTestLayer), HttpRouter.serve, Layer.build)
+      })
 
       const queryString = `directory=${encodeURIComponent(dir)}&workspace=${encodeURIComponent(workspace.id)}`
       const responseWithout = yield* HttpClient.post(`/stream-probe-without?${queryString}`)

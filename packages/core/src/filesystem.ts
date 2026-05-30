@@ -3,9 +3,10 @@ import { dirname, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
-import { Effect, FileSystem, Layer, Schema, Context } from "effect"
+import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./util/glob"
+import { serviceUse } from "./effect/service-use"
 
 export namespace AppFileSystem {
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
@@ -38,6 +39,8 @@ export namespace AppFileSystem {
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
+
+  export const use = serviceUse(Service)
 
   export const layer = Layer.effect(
     Service,

@@ -1,3 +1,5 @@
+import { FormatError } from "@/cli/error"
+
 /**
  * Aggregate Promise.allSettled results into a single Error that names every
  * failed endpoint, or return null when all fulfilled. Used at TUI bootstrap
@@ -15,7 +17,19 @@ export function aggregateFailures(labeled: LabeledSettled[]): Error | null {
   )
   if (failed.length === 0) return null
 
-  const reasons = failed.map((f) => `${f.name}: ${reasonMessage(f.result.reason)}`).join("; ")
+  const reasons = Array.from(
+    failed
+      .map((f) => ({ name: f.name, message: reasonMessage(f.result.reason) }))
+      .reduce((grouped, failure) => {
+        grouped.set(failure.message, [...(grouped.get(failure.message) ?? []), failure.name])
+        return grouped
+      }, new Map<string, string[]>())
+      .entries(),
+  )
+    .map(([message, names]) =>
+      names.length === 1 ? `${names[0]}: ${message}` : `${message}\nAffected startup requests: ${names.join(", ")}`,
+    )
+    .join("; ")
   const summary = `${failed.length} of ${labeled.length} requests failed: ${reasons}`
   const err = new Error(summary)
   err.cause = { failures: failed.map((f) => ({ name: f.name, reason: f.result.reason })) }
@@ -23,6 +37,9 @@ export function aggregateFailures(labeled: LabeledSettled[]): Error | null {
 }
 
 function reasonMessage(reason: unknown): string {
+  const formatted = FormatError(reason)
+  if (formatted) return formatted
+
   if (reason instanceof Error) return reason.message
   if (typeof reason === "string") return reason
   if (reason && typeof reason === "object") {

@@ -1180,7 +1180,52 @@ export default {
     ),
   )
 
-  it.live("retries file plugins when finish returns undefined", () =>
+  it.live("does not retry permanent file plugin entry errors", () =>
+    withTmp(
+      async (dir) => {
+        const mod = path.join(dir, "bad-entry")
+        const spec = pathToFileURL(mod).href
+        await fs.mkdir(mod, { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify({ exports: { "./tui": "../outside.js" } }, null, 2),
+        )
+        return { spec }
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          let wait = 0
+          const errors: Array<[string, boolean]> = []
+
+          const loaded = yield* Effect.promise(() =>
+            PluginLoader.loadExternal({
+              items: [
+                {
+                  spec: tmp.extra.spec,
+                  scope: "local" as const,
+                  source: tmp.path,
+                },
+              ],
+              kind: "tui",
+              wait: async () => {
+                wait += 1
+              },
+              report: {
+                error(_candidate, retry, stage) {
+                  errors.push([stage, retry])
+                },
+              },
+            }),
+          )
+
+          expect(loaded).toEqual([])
+          expect(wait).toBe(0)
+          expect(errors).toEqual([["entry", false]])
+        }),
+    ),
+  )
+
+  it.live("does not retry file plugins when finish returns undefined", () =>
     withTmp(
       async (dir) => {
         const file = path.join(dir, "plugin.ts")
@@ -1206,20 +1251,15 @@ export default {
               wait: async () => {
                 wait += 1
               },
-              finish: async (load, _item, retry) => {
+              finish: async () => {
                 count += 1
-                if (!retry) return
-                return {
-                  retry,
-                  spec: load.spec,
-                }
               },
             }),
           )
 
-          expect(wait).toBe(1)
-          expect(count).toBe(2)
-          expect(loaded).toEqual([{ retry: true, spec: tmp.extra.spec }])
+          expect(wait).toBe(0)
+          expect(count).toBe(1)
+          expect(loaded).toEqual([])
         }),
     ),
   )

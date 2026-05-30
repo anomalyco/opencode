@@ -70,10 +70,53 @@ Endpoint definitions declare which public errors can be emitted. Public
 HTTP error schemas carry their response status with `httpApiStatus` or the
 equivalent HttpApi schema annotation.
 
+Effect's own HttpApi examples follow this pattern:
+
+```ts
+export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
+  "Unauthorized",
+  { message: Schema.String },
+  { httpApiStatus: 401 },
+) {}
+
+export class Authorization extends HttpApiMiddleware.Service<
+  Authorization,
+  {
+    provides: CurrentUser
+  }
+>()("app/Authorization", {
+  security: { bearer: HttpApiSecurity.bearer },
+  error: Unauthorized,
+}) {}
+```
+
+Endpoint-level errors use the same idea:
+
+```ts
+export class ConfigApiError extends Schema.ErrorClass<ConfigApiError>("ConfigApiError")(
+  {
+    name: Schema.Union(Schema.Literal("ConfigInvalidError"), Schema.Literal("ConfigJsonError")),
+    data: Schema.Struct({ message: Schema.optional(Schema.String), path: Schema.String }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
+HttpApiEndpoint.get("get", "/config", {
+  success: Config.Info,
+  error: ConfigApiError,
+})
+```
+
 The service error and HTTP error may be the same class only when the wire
 shape is intentionally public. Use separate HTTP error schemas when the
 service error contains internals, low-level causes, retry hints, or data
 that should not be exposed to API clients.
+
+Do not map every domain error into one universal HTTP error class. Prefer a
+small public error vocabulary by route group: shared shapes like
+`ApiNotFoundError`, route-specific shapes like `ConfigApiError`, and built-in
+empty `HttpApiError.*` only when an empty/no-content body is the intended SDK
+contract.
 
 ## Mapping Guidance
 
@@ -86,6 +129,35 @@ that should not be exposed to API clients.
   breaking API change.
 - Use built-in `HttpApiError.*` only when its generated body and SDK
   surface are intentionally the public contract.
+- Prefer `Schema.ErrorClass` for public HTTP error bodies whose wire shape is
+  not the same as the internal domain error shape.
+- Prefer `Schema.TaggedErrorClass` for service/domain errors and middleware
+  errors that are naturally tagged by `_tag`.
+- If preserving a legacy `{ name, data }` body, model that shape explicitly in
+  the public API error schema instead of relying on `NamedError.toObject()` in
+  generic middleware.
+
+## User-Facing Rendering
+
+HTTP serialization and user rendering are separate boundaries. The server
+should send structured public errors; CLI and TUI code should format those
+structures through one shared formatter.
+
+For SDK calls using `{ throwOnError: true }`, the generated client may wrap the
+decoded response body in an `Error`. The original body should remain available
+under `error.cause.body`; `FormatError` is the right place to unwrap and render
+that body. TUI aggregation helpers should call `FormatError` first, then fall
+back to generic `Error.message` / string rendering.
+
+When several parallel startup requests fail from the same underlying issue,
+group identical rendered messages and list the affected request names once.
+For example:
+
+```text
+Configuration is invalid at /path/to/opencode.json
+↳ Expected object, got "not-object" provider.bad.options
+Affected startup requests: config.providers, provider.list, app.agents, config.get
+```
 
 ## Middleware Guidance
 
@@ -98,6 +170,15 @@ middleware should shrink. It should not gain new name checks.
 
 Unknown `500` responses should log full details server-side with
 `Cause.pretty(cause)` and return a safe public body.
+
+The config startup regression in #27056 is the failure mode this rule is meant
+to avoid: a user-authored invalid `opencode.json` crossed the HttpApi boundary
+as a defect, so middleware replaced a useful `ConfigInvalidError` with a safe
+generic `UnknownError`. The compatibility fix is to preserve config parse and
+validation errors as client-visible `400`s. The target architecture is better:
+config loading should fail on the typed error channel, config HTTP handlers
+should map those errors to declared `ConfigApiError` responses, and the generic
+middleware should never see them.
 
 ## Migration Order
 
@@ -112,6 +193,9 @@ Prefer small vertical slices:
 
 Good early domains are storage not-found, worktree errors, and provider
 auth validation errors because they currently drive HTTP behavior.
+
+Config parse and validation errors are also a good early slice because they
+are startup-blocking and must be rendered clearly in both CLI and TUI flows.
 
 ## Checklist For A PR
 

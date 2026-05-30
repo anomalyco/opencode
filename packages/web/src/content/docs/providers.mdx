@@ -727,7 +727,7 @@ DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inferen
 
 OpenCode supports two authentication methods:
 
-- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode auto-creates a Model Access Key and discovers your available Models & Inference Routers.
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
 - **Model Access Key** — Paste an existing key from the DigitalOcean console.
 
 #### OAuth (Recommended)
@@ -751,7 +751,11 @@ OpenCode supports two authentication methods:
 3. Your browser opens to authorize OpenCode. Sign in and approve.
 
    :::note
-   OpenCode creates a Model Access Key named `opencode-oauth-<timestamp>` in your DigitalOcean account. You can rotate or revoke it from the **Model Access Keys** page in the "Manage" section of the DigitalOcean console under Inference.
+   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
+   :::
+
+   :::note
+   Inference Routers only appear in the model picker after OAuth. Pasting a Model Access Key manually does not discover routers.
    :::
 
 4. Run the `/models` command. Your Inference Routers appear as the format `router:` in the model selection.
@@ -2048,6 +2052,46 @@ Some useful routing options:
 
 ### xAI
 
+Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same SuperGrok subscription via a headless device-code flow (for VPS / SSH / Docker), or a pay-as-you-go API key from the xAI console.
+
+#### Option A — SuperGrok OAuth (browser login)
+
+1. Run the `/connect` command and search for **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **xAI Grok OAuth (SuperGrok Subscription)**. OpenCode opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
+
+3. Run the `/models` command to select a Grok model.
+
+   ```txt
+   /models
+   ```
+
+OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
+
+#### Option B — SuperGrok device-code (headless / remote server / VPS)
+
+Use this when OpenCode is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running OpenCode — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
+
+1. Run the `/connect` command on the remote host and search for **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. OpenCode prints a verification URL and a short user code.
+
+   ```txt
+   Open https://x.ai/device on any device and enter code: ABCD-1234
+   ```
+
+3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
+
+#### Option C — API key
+
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
 2. Run the `/connect` command and search for **xAI**.
@@ -2056,7 +2100,7 @@ Some useful routing options:
    /connect
    ```
 
-3. Enter your xAI API key.
+3. Select **Manually enter API Key** and paste your xAI API key.
 
    ```txt
    ┌ API key

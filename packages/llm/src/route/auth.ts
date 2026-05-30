@@ -12,6 +12,7 @@ export class MissingCredentialError extends Error {
 
 export type CredentialError = MissingCredentialError | Config.ConfigError
 export type AuthError = CredentialError | LLMError
+type Secret = string | Redacted.Redacted | Config.Config<string | Redacted.Redacted>
 
 export interface AuthInput {
   readonly request: LLMRequest
@@ -22,7 +23,7 @@ export interface AuthInput {
 }
 
 export interface Credential {
-  readonly load: Effect.Effect<Redacted.Redacted<string>, CredentialError>
+  readonly load: Effect.Effect<Redacted.Redacted, CredentialError>
   readonly orElse: (that: Credential) => Credential
   readonly bearer: () => Auth
   readonly header: (name: string) => Auth
@@ -39,7 +40,7 @@ export interface Auth {
 export const isAuth = (input: unknown): input is Auth =>
   typeof input === "object" && input !== null && "apply" in input && typeof input.apply === "function"
 
-const credential = (load: Effect.Effect<Redacted.Redacted<string>, CredentialError>): Credential => {
+const credential = (load: Effect.Effect<Redacted.Redacted, CredentialError>): Credential => {
   const self: Credential = {
     load,
     orElse: (that) => credential(load.pipe(Effect.catch(() => that.load))),
@@ -66,16 +67,13 @@ const fromCredential = (source: Credential, render: (secret: string) => Headers.
     source.load.pipe(Effect.map((secret) => Headers.setAll(input.headers, render(Redacted.value(secret))))),
   )
 
-const secretEffect = (secret: string | Redacted.Redacted<string>, source: string) => {
+const secretEffect = (secret: string | Redacted.Redacted, source: string) => {
   const redacted = typeof secret === "string" ? Redacted.make(secret) : secret
   if (Redacted.value(redacted) === "") return Effect.fail(new MissingCredentialError(source))
   return Effect.succeed(redacted)
 }
 
-const credentialFromSecret = (
-  secret: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>>,
-  source: string,
-) => {
+const credentialFromSecret = (secret: Secret, source: string) => {
   if (typeof secret === "string" || Redacted.isRedacted(secret)) return credential(secretEffect(secret, source))
   return credential(
     Effect.gen(function* () {
@@ -86,17 +84,14 @@ const credentialFromSecret = (
 
 export const value = (secret: string, source = "value") => credentialFromSecret(secret, source)
 
-export const optional = (
-  secret: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | undefined,
-  source = "optional value",
-) =>
+export const optional = (secret: Secret | undefined, source = "optional value") =>
   secret === undefined
     ? credential(Effect.fail(new MissingCredentialError(source)))
     : credentialFromSecret(secret, source)
 
 export const config = (name: string) => credentialFromSecret(Config.redacted(name), name)
 
-export const effect = (load: Effect.Effect<Redacted.Redacted<string>, CredentialError>) => credential(load)
+export const effect = (load: Effect.Effect<Redacted.Redacted, CredentialError>) => credential(load)
 
 export const none = auth((input) => Effect.succeed(input.headers))
 
@@ -109,68 +104,32 @@ export const custom = (apply: (input: AuthInput) => Effect.Effect<Headers.Header
 
 export const passthrough = none
 
-const fromModelApiKey = (from: (apiKey: string) => Headers.Input) =>
-  auth(({ request, headers }) => {
-    const key = request.model.apiKey
-    if (!key) return Effect.succeed(headers)
-    return Effect.succeed(Headers.setAll(headers, from(key)))
-  })
-
-const credentialInput = (
-  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-) =>
+const credentialInput = (source: Secret | Credential) =>
   typeof source === "string" || Redacted.isRedacted(source) || Config.isConfig(source)
     ? credentialFromSecret(source, "value")
     : source
 
-export function bearer(): Auth
-export function bearer(
-  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-): Auth
-export function bearer(
-  source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-) {
-  if (source === undefined) return fromModelApiKey((key) => ({ authorization: `Bearer ${key}` }))
+export function bearer(source: Secret | Credential): Auth
+export function bearer(source: Secret | Credential) {
   return credentialInput(source).bearer()
 }
 
 export const apiKey = bearer
 
-export const apiKeyHeader = (name: string) => fromModelApiKey((key) => ({ [name]: key }))
-
-export function header(
-  name: string,
-): (source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) => Auth
-export function header(
-  name: string,
-  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-): Auth
-export function header(
-  name: string,
-  source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-) {
+export function header(name: string): (source: Secret | Credential) => Auth
+export function header(name: string, source: Secret | Credential): Auth
+export function header(name: string, source?: Secret | Credential) {
   if (source === undefined) {
-    return (
-      next: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-    ) => credentialInput(next).header(name)
+    return (next: Secret | Credential) => credentialInput(next).header(name)
   }
   return credentialInput(source).header(name)
 }
 
-export function bearerHeader(
-  name: string,
-): (source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential) => Auth
-export function bearerHeader(
-  name: string,
-  source: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-): Auth
-export function bearerHeader(
-  name: string,
-  source?: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-) {
-  const render = (
-    input: string | Redacted.Redacted<string> | Config.Config<string | Redacted.Redacted<string>> | Credential,
-  ) => fromCredential(credentialInput(input), (secret) => ({ [name]: `Bearer ${secret}` }))
+export function bearerHeader(name: string): (source: Secret | Credential) => Auth
+export function bearerHeader(name: string, source: Secret | Credential): Auth
+export function bearerHeader(name: string, source?: Secret | Credential) {
+  const render = (input: Secret | Credential) =>
+    fromCredential(credentialInput(input), (secret) => ({ [name]: `Bearer ${secret}` }))
   if (source === undefined) return render
   return render(source)
 }

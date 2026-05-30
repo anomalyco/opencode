@@ -14,10 +14,12 @@ import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
+import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
+import { createReferralFromCookie } from "~/lib/referral-invite"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
 
-const queryLiteSubscription = query(async (workspaceID: string) => {
+export const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const row = await Database.use((tx) =>
@@ -67,34 +69,20 @@ const queryLiteSubscription = query(async (workspaceID: string) => {
   }, workspaceID)
 }, "lite.subscription.get")
 
-function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
-  const days = Math.floor(seconds / 86400)
-  if (days >= 1) {
-    const hours = Math.floor((seconds % 86400) / 3600)
-    return `${days} ${days === 1 ? i18n.t("workspace.lite.time.day") : i18n.t("workspace.lite.time.days")} ${hours} ${hours === 1 ? i18n.t("workspace.lite.time.hour") : i18n.t("workspace.lite.time.hours")}`
-  }
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  if (hours >= 1)
-    return `${hours} ${hours === 1 ? i18n.t("workspace.lite.time.hour") : i18n.t("workspace.lite.time.hours")} ${minutes} ${minutes === 1 ? i18n.t("workspace.lite.time.minute") : i18n.t("workspace.lite.time.minutes")}`
-  if (minutes === 0) return i18n.t("workspace.lite.time.fewSeconds")
-  return `${minutes} ${minutes === 1 ? i18n.t("workspace.lite.time.minute") : i18n.t("workspace.lite.time.minutes")}`
-}
+type LiteSubscription = Awaited<ReturnType<typeof queryLiteSubscription>>
 
 const createLiteCheckoutUrl = action(
   async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
     "use server"
     return json(
-      await withActor(
-        () =>
-          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
-            .then((data) => ({ error: undefined, data }))
-            .catch((e) => ({
-              error: e.message as string,
-              data: undefined,
-            })),
-        workspaceID,
-      ),
+      await withActor(async () => {
+        const data = await Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
+        await createReferralFromCookie()
+        return { error: undefined, data }
+      }, workspaceID).catch((e) => ({
+        error: e.message as string,
+        data: undefined,
+      })),
       { revalidate: [queryBillingInfo.key, queryLiteSubscription.key] },
     )
   },
@@ -140,13 +128,32 @@ const setLiteUseBalance = action(async (form: FormData) => {
   )
 }, "setLiteUseBalance")
 
-export function LiteSection() {
+function LiteUsageItem(props: { label: string; usage: { usagePercent: number; resetInSec: number } }) {
+  const i18n = useI18n()
+
+  return (
+    <div data-slot="usage-item">
+      <div data-slot="usage-header">
+        <span data-slot="usage-label">{props.label}</span>
+        <span data-slot="usage-value">{props.usage.usagePercent}%</span>
+      </div>
+      <div data-slot="progress">
+        <div data-slot="progress-bar" style={{ width: `${props.usage.usagePercent}%` }} />
+      </div>
+      <span data-slot="reset-time">
+        {i18n.t("workspace.lite.subscription.resetsIn")}{" "}
+        {formatResetTime(props.usage.resetInSec, i18n, liteResetTimeKeys)}
+      </span>
+    </div>
+  )
+}
+
+export function LiteSection(props: { lite: LiteSubscription | undefined }) {
   const params = useParams()
   const i18n = useI18n()
   const language = useLanguage()
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const isBlack = createMemo(() => billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked)
-  const lite = createAsync(() => queryLiteSubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
   const checkoutAction = useAction(createLiteCheckoutUrl)
@@ -186,7 +193,7 @@ export function LiteSection() {
           <p data-slot="other-message">{i18n.t("workspace.lite.black.message")}</p>
         </section>
       </Show>
-      <Show when={!isBlack() && lite() && lite()!.mine && lite()!}>
+      <Show when={!isBlack() && props.lite && props.lite.mine && props.lite}>
         {(sub) => (
           <section class={styles.root}>
             <div data-slot="section-title">
@@ -207,44 +214,9 @@ export function LiteSection() {
               .
             </div>
             <div data-slot="usage">
-              <div data-slot="usage-item">
-                <div data-slot="usage-header">
-                  <span data-slot="usage-label">{i18n.t("workspace.lite.subscription.rollingUsage")}</span>
-                  <span data-slot="usage-value">{sub().rollingUsage.usagePercent}%</span>
-                </div>
-                <div data-slot="progress">
-                  <div data-slot="progress-bar" style={{ width: `${sub().rollingUsage.usagePercent}%` }} />
-                </div>
-                <span data-slot="reset-time">
-                  {i18n.t("workspace.lite.subscription.resetsIn")}{" "}
-                  {formatResetTime(sub().rollingUsage.resetInSec, i18n)}
-                </span>
-              </div>
-              <div data-slot="usage-item">
-                <div data-slot="usage-header">
-                  <span data-slot="usage-label">{i18n.t("workspace.lite.subscription.weeklyUsage")}</span>
-                  <span data-slot="usage-value">{sub().weeklyUsage.usagePercent}%</span>
-                </div>
-                <div data-slot="progress">
-                  <div data-slot="progress-bar" style={{ width: `${sub().weeklyUsage.usagePercent}%` }} />
-                </div>
-                <span data-slot="reset-time">
-                  {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(sub().weeklyUsage.resetInSec, i18n)}
-                </span>
-              </div>
-              <div data-slot="usage-item">
-                <div data-slot="usage-header">
-                  <span data-slot="usage-label">{i18n.t("workspace.lite.subscription.monthlyUsage")}</span>
-                  <span data-slot="usage-value">{sub().monthlyUsage.usagePercent}%</span>
-                </div>
-                <div data-slot="progress">
-                  <div data-slot="progress-bar" style={{ width: `${sub().monthlyUsage.usagePercent}%` }} />
-                </div>
-                <span data-slot="reset-time">
-                  {i18n.t("workspace.lite.subscription.resetsIn")}{" "}
-                  {formatResetTime(sub().monthlyUsage.resetInSec, i18n)}
-                </span>
-              </div>
+              <LiteUsageItem label={i18n.t("workspace.lite.subscription.rollingUsage")} usage={sub().rollingUsage} />
+              <LiteUsageItem label={i18n.t("workspace.lite.subscription.weeklyUsage")} usage={sub().weeklyUsage} />
+              <LiteUsageItem label={i18n.t("workspace.lite.subscription.monthlyUsage")} usage={sub().monthlyUsage} />
             </div>
             <form action={setLiteUseBalance} method="post" data-slot="setting-row">
               <p>{i18n.t("workspace.lite.subscription.useBalance")}</p>
@@ -263,12 +235,12 @@ export function LiteSection() {
           </section>
         )}
       </Show>
-      <Show when={!isBlack() && lite() && !lite()!.mine}>
+      <Show when={!isBlack() && props.lite && !props.lite.mine}>
         <section class={styles.root}>
           <p data-slot="other-message">{i18n.t("workspace.lite.other.message")}</p>
         </section>
       </Show>
-      <Show when={!isBlack() && lite() === null}>
+      <Show when={!isBlack() && props.lite === null}>
         <section class={styles.root}>
           <p data-slot="promo-description">
             <For
@@ -293,8 +265,8 @@ export function LiteSection() {
             <li>MiMo-V2.5</li>
             <li>MiniMax M2.5</li>
             <li>MiniMax M2.7</li>
-            <li>Qwen3.5 Plus</li>
             <li>Qwen3.6 Plus</li>
+            <li>Qwen3.7 Max</li>
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>
           </ul>
@@ -330,31 +302,33 @@ export function LiteSection() {
             onClose={() => setStore("showModal", false)}
             title={i18n.t("workspace.lite.promo.selectMethod")}
           >
-            <div data-slot="modal-actions">
-              <button
-                type="button"
-                data-slot="method-button"
-                data-color="ghost"
-                disabled={checkoutSubmission.pending || busy()}
-                onClick={() => onClickSubscribe("alipay")}
-              >
-                <Show when={store.loading !== "alipay"}>
-                  <IconAlipay style={{ width: "24px", height: "24px" }} />
-                </Show>
-                {store.loading === "alipay" ? i18n.t("workspace.lite.promo.subscribing") : "Alipay"}
-              </button>
-              <button
-                type="button"
-                data-slot="method-button"
-                data-color="ghost"
-                disabled={checkoutSubmission.pending || busy()}
-                onClick={() => onClickSubscribe("upi")}
-              >
-                <Show when={store.loading !== "upi"}>
-                  <IconUpi style={{ width: "auto", height: "16px" }} />
-                </Show>
-                {store.loading === "upi" ? i18n.t("workspace.lite.promo.subscribing") : "UPI"}
-              </button>
+            <div class={styles.paymentMethodModal}>
+              <div data-slot="modal-actions">
+                <button
+                  type="button"
+                  data-slot="method-button"
+                  data-color="ghost"
+                  disabled={checkoutSubmission.pending || busy()}
+                  onClick={() => onClickSubscribe("alipay")}
+                >
+                  <Show when={store.loading !== "alipay"}>
+                    <IconAlipay style={{ width: "24px", height: "24px" }} />
+                  </Show>
+                  {store.loading === "alipay" ? i18n.t("workspace.lite.promo.subscribing") : "Alipay"}
+                </button>
+                <button
+                  type="button"
+                  data-slot="method-button"
+                  data-color="ghost"
+                  disabled={checkoutSubmission.pending || busy()}
+                  onClick={() => onClickSubscribe("upi")}
+                >
+                  <Show when={store.loading !== "upi"}>
+                    <IconUpi style={{ width: "auto", height: "16px" }} />
+                  </Show>
+                  {store.loading === "upi" ? i18n.t("workspace.lite.promo.subscribing") : "UPI"}
+                </button>
+              </div>
             </div>
           </Modal>
         </section>

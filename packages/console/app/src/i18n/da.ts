@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
   "go.meta.description":
-    "Go starter ved $5 for den første måned, derefter $10/måned, med generøse 5-timers anmodningsgrænser for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash.",
+    "Go starter ved $5 for den første måned, derefter $10/måned, med generøse 5-timers anmodningsgrænser for GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
@@ -300,7 +300,7 @@ export const dict = {
   "go.problem.item2": "Generøse grænser og pålidelig adgang",
   "go.problem.item3": "Bygget til så mange programmører som muligt",
   "go.problem.item4":
-    "Inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash",
+    "Inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash",
   "go.how.title": "Hvordan Go virker",
   "go.how.body":
     "Go starter ved $5 for den første måned, derefter $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
@@ -326,7 +326,7 @@ export const dict = {
   "go.faq.a2": "Go inkluderer modellerne nedenfor med generøse grænser og pålidelig adgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nej. Zen er pay-as-you-go, mens Go starter ved $5 for den første måned, derefter $10/måned, med generøse grænser og pålidelig adgang til open source-modellerne GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash.",
+    "Nej. Zen er pay-as-you-go, mens Go starter ved $5 for den første måned, derefter $10/måned, med generøse grænser og pålidelig adgang til open source-modellerne GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash.",
   "go.faq.q4": "Hvad koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
   "go.faq.a4.p1.pricingLink": "$5 første måned",
@@ -349,7 +349,7 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus salgsfremmende modeller tilgængelige på det tidspunkt, med en kvote på 200 forespørgsler/dag. Go inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash med højere anmodningskvoter håndhævet over rullende vinduer (5-timers, ugentlig og månedlig), nogenlunde svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (faktiske anmodningstal varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus salgsfremmende modeller tilgængelige på det tidspunkt, med en kvote på 200 forespørgsler/dag. Go inkluderer GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro og DeepSeek V4 Flash med højere anmodningskvoter håndhævet over rullende vinduer (5-timers, ugentlig og månedlig), nogenlunde svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (faktiske anmodningstal varierer efter model og brug).",
 
   "zen.api.error.rateLimitExceeded": "Hastighedsgrænse overskredet. Prøv venligst igen senere.",
   "zen.api.error.modelNotSupported": "Model {{model}} understøttes ikke",
@@ -665,6 +665,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "Omdirigerer...",
   "workspace.lite.promo.otherMethods": "Andre betalingsmetoder",
   "workspace.lite.promo.selectMethod": "Vælg betalingsmetode",
+
+  "workspace.referral.copyLink": "Kopiér link",
+  "workspace.referral.copied": "Kopieret",
+  "workspace.referral.overview.title": "Inviter venner",
+  "workspace.referral.overview.subtitle": "Få $5, når en ven abonnerer. De får også $5.",
+  "workspace.referral.instructions.share": "Del dit henvisningslink",
+  "workspace.referral.instructions.subscribe": "Din ven tilmelder sig og abonnerer på Go",
+  "workspace.referral.instructions.claim": "I får begge $5 i forbrugskredit til at bruge på jeres Go-forbrugsgrænser",
+  "workspace.referral.rewards.title": "Henvisningsbelønninger",
+  "workspace.referral.rewards.description": "Brug tilgængelige henvisningskreditter på dit Go-forbrug.",
+  "workspace.referral.rewards.subtitle": "{{applied}} / {{total}} belønninger brugt.",
+  "workspace.referral.rewards.empty": "Ingen henvisningsbelønninger endnu.",
+  "workspace.referral.table.reward": "Belønning",
+  "workspace.referral.table.referral": "Beskrivelse",
+  "workspace.referral.table.date": "Dato",
+  "workspace.referral.reward.description.inviter": "Inviterede {{email}}",
+  "workspace.referral.reward.description.invitee": "Inviteret af {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "Abonner for at låse op",
+  "workspace.referral.reward.action.view": "Vis belønning",
+  "workspace.referral.reward.action.applied": "Belønning brugt",
+  "workspace.referral.reward.source.pendingInviter": "Venter på, at de abonnerer",
+  "workspace.referral.reward.source.pendingInvitee": "Abonner for at låse belønningen op",
+  "workspace.referral.reward.source.available": "Belønning klar til brug",
+  "workspace.referral.reward.source.applied": "Belønning brugt",
+  "workspace.referral.reward.status.applied": "Belønning brugt",
+  "workspace.referral.reward.status.pendingInviter": "Abonner for at låse op",
+  "workspace.referral.reward.status.pendingInvitee": "Abonner for at låse op",
+  "workspace.referral.apply.noGo": "Abonner for at låse op",
+  "workspace.referral.apply.preview": "Vis belønning",
+  "workspace.referral.apply.action": "Brug",
+  "workspace.referral.apply.confirmTitle": "Brug belønning",
+  "workspace.referral.apply.confirmBody": "Brug {{amount}} til at reducere dette workspaces nuværende forbrug.",
+  "workspace.referral.apply.confirmAction": "Brug",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode til macOS, Windows og Linux",

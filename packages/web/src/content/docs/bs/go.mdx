@@ -9,10 +9,6 @@ export const email = `mailto:${config.email}`
 
 OpenCode Go je povoljna pretplata — **$5 za vaš prvi mjesec**, a zatim **$10/mjesečno** — koja vam pruža pouzdan pristup popularnim otvorenim modelima za programiranje.
 
-:::note
-OpenCode Go je trenutno u beta fazi.
-:::
-
 Go radi kao bilo koji drugi provajder u OpenCode-u. Pretplatite se na OpenCode Go i
 dobijete svoj API ključ. On je **potpuno opcionalan** i ne morate ga koristiti da
 biste koristili OpenCode.
@@ -70,9 +66,9 @@ Trenutna lista modela uključuje:
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
-- **Qwen3.5 Plus**
-- **Qwen3.6 Plus**
 - **MiniMax M2.7**
+- **Qwen3.6 Plus**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -88,24 +84,24 @@ OpenCode Go uključuje sljedeća ograničenja:
 - **Sedmično ograničenje** — $30 potrošnje
 - **Mjesečno ograničenje** — $60 potrošnje
 
-Ograničenja su definisana u dolarskoj vrijednosti. To znači da vaš stvarni broj zahtjeva zavisi od modela koji koristite. Jeftiniji modeli poput MiniMax M2.5 omogućavaju više zahtjeva, dok skuplji modeli poput GLM-5.1 omogućavaju manje.
+Ograničenja su definisana u dolarskoj vrijednosti. To znači da vaš stvarni broj zahtjeva zavisi od modela koji koristite. Jeftiniji modeli poput DeepSeek V4 Flash omogućavaju više zahtjeva, dok skuplji modeli poput GLM-5.1 omogućavaju manje.
 
 Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca korištenja Go pretplate:
 
-| Model              | zahtjeva na 5 sati | zahtjeva sedmično | zahtjeva mjesečno |
-| ------------------ | ------------------ | ----------------- | ----------------- |
-| GLM-5.1            | 880                | 2,150             | 4,300             |
-| GLM-5              | 1,150              | 2,880             | 5,750             |
-| Kimi K2.5          | 1,850              | 4,630             | 9,250             |
-| Kimi K2.6          | 1,150              | 2,880             | 5,750             |
-| MiMo-V2.5 (≤ 256K) | 2,150              | 5,450             | 10,900            |
-| MiMo-V2.5-Pro      | 1,290              | 3,225             | 6,450             |
-| MiniMax M2.7       | 3,400              | 8,500             | 17,000            |
-| MiniMax M2.5       | 6,300              | 15,900            | 31,800            |
-| Qwen3.6 Plus       | 3,300              | 8,200             | 16,300            |
-| Qwen3.5 Plus       | 10,200             | 25,200            | 50,500            |
-| DeepSeek V4 Pro    | 3,450              | 8,550             | 17,150            |
-| DeepSeek V4 Flash  | 31,650             | 79,050            | 158,150           |
+| Model             | zahtjeva na 5 sati | zahtjeva sedmično | zahtjeva mjesečno |
+| ----------------- | ------------------ | ----------------- | ----------------- |
+| GLM-5.1           | 880                | 2,150             | 4,300             |
+| GLM-5             | 1,150              | 2,880             | 5,750             |
+| Kimi K2.5         | 1,850              | 4,630             | 9,250             |
+| Kimi K2.6         | 1,150              | 2,880             | 5,750             |
+| MiMo-V2.5         | 30,100             | 75,200            | 150,400           |
+| MiMo-V2.5-Pro     | 3,250              | 8,150             | 16,300            |
+| MiniMax M2.7      | 3,400              | 8,500             | 17,000            |
+| MiniMax M2.5      | 6,300              | 15,900            | 31,800            |
+| Qwen3.7 Max       | 950                | 2,390             | 4,770             |
+| Qwen3.6 Plus      | 3,300              | 8,200             | 16,300            |
+| DeepSeek V4 Pro   | 3,450              | 8,550             | 17,150            |
+| DeepSeek V4 Flash | 31,650             | 79,050            | 158,150           |
 
 Procjene se zasnivaju na zapaženim prosječnim obrascima zahtjeva:
 
@@ -114,10 +110,10 @@ Procjene se zasnivaju na zapaženim prosječnim obrascima zahtjeva:
 - DeepSeek V4 Pro — 750 ulaznih, 82,000 keširanih, 290 izlaznih tokena po zahtjevu
 - DeepSeek V4 Flash — 790 ulaznih, 68,000 keširanih, 280 izlaznih tokena po zahtjevu
 - MiniMax M2.7/M2.5 — 300 ulaznih, 55,000 keširanih, 125 izlaznih tokena po zahtjevu
-- Qwen3.5 Plus — 410 ulaznih, 47,000 keširanih, 140 izlaznih tokena po zahtjevu
+- Qwen3.7 Max — 420 ulaznih, 66,000 keširanih, 200 izlaznih tokena po zahtjevu
 - Qwen3.6 Plus — 500 ulaznih, 57,000 keširanih, 190 izlaznih tokena po zahtjevu
-- MiMo-V2.5 — 1000 ulaznih, 60,000 keširanih, 140 izlaznih tokena po zahtjevu
-- MiMo-V2.5-Pro — 350 ulaznih, 41,000 keširanih, 250 izlaznih tokena po zahtjevu
+- MiMo-V2.5 — 830 ulaznih, 71,500 keširanih, 295 izlaznih tokena po zahtjevu
+- MiMo-V2.5-Pro — 790 ulaznih, 86,000 keširanih, 305 izlaznih tokena po zahtjevu
 
 Svoju trenutnu potrošnju možete pratiti u **<a href={console}>konzoli</a>**.
 
@@ -153,8 +149,8 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 [Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
 koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K2.6, koristili biste
