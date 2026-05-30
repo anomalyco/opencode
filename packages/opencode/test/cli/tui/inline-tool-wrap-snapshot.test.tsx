@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
-import { testRender } from "@opentui/solid"
+import { testRender, type JSX } from "@opentui/solid"
 import { InlineToolRow } from "../../../src/cli/cmd/tui/routes/session/index"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
@@ -50,11 +50,22 @@ function ShellOutput() {
   )
 }
 
-function Fixture(props: { errorExpanded?: boolean; shellOutput?: boolean }) {
+function UserMessage() {
+  return (
+    <box id="message-user">
+      <box paddingTop={1} paddingBottom={1} paddingLeft={2}>
+        <text>Check whether the next tool remains separated.</text>
+      </box>
+    </box>
+  )
+}
+
+function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) {
   return (
     <box flexDirection="column" width={72}>
       <box flexDirection="column">
-        {props.shellOutput && <ShellOutput />}
+        {props.before === "shell" && <ShellOutput />}
+        {props.before === "user" && <UserMessage />}
         <For each={tools}>
           {(item) => (
             <InlineToolRow
@@ -64,6 +75,7 @@ function Fixture(props: { errorExpanded?: boolean; shellOutput?: boolean }) {
               failed={Boolean(item.error)}
               error={item.error}
               errorExpanded={props.errorExpanded}
+              separateAfter={(id) => id === "message-user"}
             >
               {item.label}
             </InlineToolRow>
@@ -74,49 +86,34 @@ function Fixture(props: { errorExpanded?: boolean; shellOutput?: boolean }) {
   )
 }
 
+async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
+  testSetup = await testRender(component, options)
+  await testSetup.renderOnce()
+  await Bun.sleep(25)
+  await testSetup.renderOnce()
+
+  return testSetup
+    .captureCharFrame()
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trimEnd()
+}
+
 describe("TUI inline tool wrapping", () => {
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {
-    testSetup = await testRender(() => <Fixture />, { width: 72, height: 12 })
-    await testSetup.renderOnce()
-    await testSetup.renderOnce()
-
-    expect(
-      testSetup
-        .captureCharFrame()
-        .split("\n")
-        .map((line) => line.trimEnd())
-        .join("\n")
-        .trimEnd(),
-    ).toMatchSnapshot()
+    expect(await renderFrame(() => <Fixture />, { width: 72, height: 12 })).toMatchSnapshot()
   })
 
   test("snapshots expanded tool errors under the tool text", async () => {
-    testSetup = await testRender(() => <Fixture errorExpanded />, { width: 72, height: 12 })
-    await testSetup.renderOnce()
-    await testSetup.renderOnce()
-
-    expect(
-      testSetup
-        .captureCharFrame()
-        .split("\n")
-        .map((line) => line.trimEnd())
-        .join("\n")
-        .trimEnd(),
-    ).toMatchSnapshot()
+    expect(await renderFrame(() => <Fixture errorExpanded />, { width: 72, height: 12 })).toMatchSnapshot()
   })
 
   test("keeps separation after a shell output block", async () => {
-    testSetup = await testRender(() => <Fixture shellOutput />, { width: 72, height: 16 })
-    await testSetup.renderOnce()
-    await testSetup.renderOnce()
+    expect(await renderFrame(() => <Fixture before="shell" />, { width: 72, height: 16 })).toMatchSnapshot()
+  })
 
-    expect(
-      testSetup
-        .captureCharFrame()
-        .split("\n")
-        .map((line) => line.trimEnd())
-        .join("\n")
-        .trimEnd(),
-    ).toMatchSnapshot()
+  test("keeps separation after a padded user message", async () => {
+    expect(await renderFrame(() => <Fixture before="user" />, { width: 72, height: 14 })).toMatchSnapshot()
   })
 })

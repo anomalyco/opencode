@@ -1838,6 +1838,9 @@ function InlineTool(props: {
       complete={props.complete}
       pending={props.pending}
       spinner={props.spinner}
+      separateAfter={(id) =>
+        sync.data.message[ctx.sessionID]?.some((message) => message.role === "user" && message.id === id) ?? false
+      }
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1867,6 +1870,7 @@ export function InlineToolRow(props: {
   pending: string
   spinner?: boolean
   children: JSX.Element
+  separateAfter?: (id: string | undefined) => boolean
   onMouseOver?: () => void
   onMouseOut?: () => void
   onMouseUp?: () => void
@@ -1889,7 +1893,13 @@ export function InlineToolRow(props: {
         const children = parent.getChildren()
         const index = children.indexOf(el)
         const previous = children[index - 1]
-        setMargin(previous?.id.startsWith("text-") || previous?.id.startsWith("tool-block-") ? 1 : 0)
+        setMargin(
+          previous?.id.startsWith("text-") ||
+            previous?.id.startsWith("tool-block-") ||
+            props.separateAfter?.(previous?.id)
+            ? 1
+            : 0,
+        )
       }}
     >
       <Switch>
