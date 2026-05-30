@@ -15,7 +15,6 @@ async function setup() {
     directory: "/workspace",
     ...(parentID && { parentID }),
     version: "0.0.0-test",
-    metadata: {},
     time: { created: 0, updated: 0 },
   })
   const sessions: Record<string, Session> = {

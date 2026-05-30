@@ -56,7 +56,9 @@ describe("session action routes", () => {
         expect(next.metadata).toEqual({ source: "sdk", trace: { id: "def" }, tags: ["one"] })
 
         const fetched = yield* Effect.promise(() =>
-          Promise.resolve(app.request(`/session/${session.id}`, { headers: { "x-opencode-directory": test.directory } })),
+          Promise.resolve(
+            app.request(`/session/${session.id}`, { headers: { "x-opencode-directory": test.directory } }),
+          ),
         )
         expect(fetched.status).toBe(200)
         expect(((yield* Effect.promise(() => fetched.json())) as SessionNs.Info).metadata).toEqual(next.metadata)
@@ -85,7 +87,7 @@ describe("session action routes", () => {
           ),
         )
         expect(cleared.status).toBe(200)
-        expect(((yield* Effect.promise(() => cleared.json())) as SessionNs.Info).metadata).toEqual({})
+        expect(((yield* Effect.promise(() => cleared.json())) as SessionNs.Info).metadata).toBeUndefined()
 
         yield* SessionNs.Service.use((svc) => svc.remove(fork.id).pipe(Effect.ignore))
         yield* SessionNs.Service.use((svc) => svc.remove(session.id).pipe(Effect.ignore))

@@ -170,7 +170,6 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
 
   const info = Schema.decodeUnknownSync(Session.Info)({
     ...exportData.info,
-    metadata: exportData.info.metadata ?? {},
     projectID: ctx.project.id,
     directory: ctx.directory,
     path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),

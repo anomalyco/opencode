@@ -100,7 +100,7 @@ export function fromRow(row: SessionRow): Info {
       },
     },
     share,
-    metadata: row.metadata ?? {},
+    metadata: row.metadata ?? undefined,
     revert,
     permission: row.permission ? [...row.permission] : undefined,
     time: {
@@ -207,7 +207,7 @@ const Model = Schema.Struct({
   variant: optionalOmitUndefined(Schema.String),
 })
 
-const Metadata = Schema.Record(Schema.String, Schema.Any)
+export const Metadata = Schema.Record(Schema.String, Schema.Any)
 
 export const Info = Schema.Struct({
   id: SessionID,
@@ -225,7 +225,7 @@ export const Info = Schema.Struct({
   agent: optionalOmitUndefined(Schema.String),
   model: optionalOmitUndefined(Model),
   version: Schema.String,
-  metadata: Metadata,
+  metadata: optionalOmitUndefined(Metadata),
   time: Time,
   permission: optionalOmitUndefined(Permission.Ruleset),
   revert: optionalOmitUndefined(Revert),
@@ -558,7 +558,7 @@ export const layer: Layer.Layer<
         title: input.title ?? createDefaultTitle(!!input.parentID),
         agent: input.agent,
         model: input.model,
-        metadata: input.metadata ?? {},
+        metadata: input.metadata,
         permission: input.permission ? [...input.permission] : undefined,
         cost: 0,
         tokens: EmptyTokens,
@@ -751,7 +751,7 @@ export const layer: Layer.Layer<
     })
 
     const setMetadata = Effect.fn("Session.setMetadata")(function* (input: typeof SetMetadataInput.Type) {
-      yield* patch(input.sessionID, { metadata: input.metadata ?? {}, time: { updated: Date.now() } })
+      yield* patch(input.sessionID, { metadata: input.metadata, time: { updated: Date.now() } })
     })
 
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {

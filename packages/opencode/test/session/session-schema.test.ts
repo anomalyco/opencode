@@ -17,7 +17,6 @@ const info = {
   share: undefined,
   title: "Test session",
   version: "1.0.0",
-  metadata: {},
   time: {
     created: 1,
     updated: 2,
