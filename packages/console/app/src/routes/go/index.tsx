@@ -31,7 +31,6 @@ const models = [
   { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
   { name: "Qwen3.7 Max", provider: "Alibaba Cloud Model Studio" },
   { name: "Qwen3.6 Plus", provider: "Alibaba Cloud Model Studio" },
-  { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "MiniMax M2.7", provider: "MiniMax" },
   { name: "MiniMax M2.5", provider: "MiniMax" },
   { name: "DeepSeek V4 Pro", provider: "DeepSeek" },
@@ -68,7 +67,6 @@ function LimitsGraph(props: { href: string }) {
     { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "300ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "200ms" },
-    { id: "qwen3.5-plus", name: "Qwen3.5 Plus", req: 10200, d: "360ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]

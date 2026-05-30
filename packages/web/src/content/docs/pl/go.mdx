@@ -61,7 +61,6 @@ Obecna lista modeli obejmuje:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -79,7 +78,7 @@ OpenCode Go zawiera następujące limity:
 - **Limit tygodniowy** — użycie o wartości 30 $
 - **Limit miesięczny** — użycie o wartości 60 $
 
-Limity są zdefiniowane w wartości w dolarach. Oznacza to, że rzeczywista liczba żądań zależy od używanego modelu. Tańsze modele, takie jak MiniMax M2.5, pozwalają na więcej żądań, podczas gdy modele o wyższym koszcie, takie jak GLM-5.1, pozwalają na mniej.
+Limity są zdefiniowane w wartości w dolarach. Oznacza to, że rzeczywista liczba żądań zależy od używanego modelu. Tańsze modele, takie jak DeepSeek V4 Flash, pozwalają na więcej żądań, podczas gdy modele o wyższym koszcie, takie jak GLM-5.1, pozwalają na mniej.
 
 Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych wzorców korzystania z Go:
 
@@ -95,7 +94,6 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | MiniMax M2.5      | 6,300               | 15,900             | 31,800             |
 | Qwen3.7 Max       | 950                 | 2,390              | 4,770              |
 | Qwen3.6 Plus      | 3,300               | 8,200              | 16,300             |
-| Qwen3.5 Plus      | 10,200              | 25,200             | 50,500             |
 | DeepSeek V4 Pro   | 3,450               | 8,550              | 17,150             |
 | DeepSeek V4 Flash | 31,650              | 79,050             | 158,150            |
 
@@ -108,7 +106,6 @@ Szacunki opierają się na zaobserwowanych średnich wzorcach żądań:
 - MiniMax M2.7/M2.5 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
 - Qwen3.7 Max — 420 tokenów wejściowych, 66 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - Qwen3.6 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
-- Qwen3.5 Plus — 410 tokenów wejściowych, 47 000 w pamięci podręcznej, 140 tokenów wyjściowych na żądanie
 - MiMo-V2.5 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - MiMo-V2.5-Pro — 790 tokenów wejściowych, 86 000 w pamięci podręcznej, 305 tokenów wyjściowych na żądanie
 
@@ -146,7 +143,6 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 [ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
 używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K2.6 należy użyć
