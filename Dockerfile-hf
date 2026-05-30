@@ -1,0 +1,25 @@
+FROM node:22-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl build-essential python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install bun
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:$PATH"
+
+# Clone and setup OpenCode
+RUN git clone https://github.com/anomalyco/opencode.git . && \
+    git checkout dev && \
+    bun install
+
+# Build console app
+WORKDIR /app/packages/console/app
+RUN bun run build
+
+EXPOSE 5173
+
+CMD ["bun", "run", "dev"]
