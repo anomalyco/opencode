@@ -3245,7 +3245,7 @@ export class Session2 extends HeyApiClient {
       title?: string
       metadata?: {
         [key: string]: unknown
-      } | null
+      }
       permission?: PermissionRuleset
       time?: {
         archived?: number

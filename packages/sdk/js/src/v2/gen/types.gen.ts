@@ -779,7 +779,7 @@ export type Session = {
     variant?: string
   }
   version: string
-  metadata: {
+  metadata?: {
     [key: string]: unknown
   }
   time: {
@@ -1516,7 +1516,7 @@ export type GlobalSession = {
     variant?: string
   }
   version: string
-  metadata: {
+  metadata?: {
     [key: string]: unknown
   }
   time: {
@@ -6218,7 +6218,7 @@ export type SessionUpdateData = {
     title?: string
     metadata?: {
       [key: string]: unknown
-    } | null
+    }
     permission?: PermissionRuleset
     time?: {
       archived?: number
