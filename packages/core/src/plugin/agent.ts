@@ -103,58 +103,54 @@ export const Plugin = PluginV2.define({
     const location = yield* Location.Service
     const worktree = location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
-    const readonlyExternalDirectory = rules({
-      external_directory: {
-        "*": "ask",
-        ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-      },
-    })
-    const defaults = rules({
-      "*": "allow",
-      doom_loop: "ask",
-      external_directory: {
-        "*": "ask",
-        ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-      },
-      question: "deny",
-      plan_enter: "deny",
-      plan_exit: "deny",
-      repo_clone: "deny",
-      repo_overview: "deny",
-      read: {
-        "*": "allow",
-        "*.env": "ask",
-        "*.env.*": "ask",
-        "*.env.example": "allow",
-      },
-    })
+    const readonlyExternalDirectory: PermissionV2.Ruleset = [
+      { permission: "external_directory", pattern: "*", action: "ask" },
+      ...whitelistedDirs.map(
+        (pattern): PermissionV2.Rule => ({ permission: "external_directory", pattern, action: "allow" }),
+      ),
+    ]
+    const defaults: PermissionV2.Ruleset = [
+      { permission: "*", pattern: "*", action: "allow" },
+      ...readonlyExternalDirectory,
+      { permission: "question", pattern: "*", action: "deny" },
+      { permission: "plan_enter", pattern: "*", action: "deny" },
+      { permission: "plan_exit", pattern: "*", action: "deny" },
+      { permission: "repo_clone", pattern: "*", action: "deny" },
+      { permission: "repo_overview", pattern: "*", action: "deny" },
+      { permission: "read", pattern: "*", action: "allow" },
+      { permission: "read", pattern: "*.env", action: "ask" },
+      { permission: "read", pattern: "*.env.*", action: "ask" },
+      { permission: "read", pattern: "*.env.example", action: "allow" },
+    ]
 
     yield* agent.update((editor) => {
       editor.update(AgentV2.ID.make("build"), (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ question: "allow", plan_enter: "allow" })))
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { permission: "question", pattern: "*", action: "allow" },
+            { permission: "plan_enter", pattern: "*", action: "allow" },
+          ]),
+        )
       })
 
       editor.update(AgentV2.ID.make("plan"), (item) => {
         item.description = "Plan mode. Disallows all edit tools."
         item.mode = "primary"
         item.permissions.push(
-          ...PermissionV2.merge(
-            defaults,
-            rules({
-              question: "allow",
-              plan_exit: "allow",
-              external_directory: {
-                [path.join(Global.Path.data, "plans", "*")]: "allow",
-              },
-              edit: {
-                "*": "deny",
-                [path.join(".opencode", "plans", "*.md")]: "allow",
-                [path.relative(worktree, path.join(Global.Path.data, "plans", "*.md"))]: "allow",
-              },
-            }),
-          ),
+          ...PermissionV2.merge(defaults, [
+            { permission: "question", pattern: "*", action: "allow" },
+            { permission: "plan_exit", pattern: "*", action: "allow" },
+            { permission: "external_directory", pattern: path.join(Global.Path.data, "plans", "*"), action: "allow" },
+            { permission: "edit", pattern: "*", action: "deny" },
+            { permission: "edit", pattern: path.join(".opencode", "plans", "*.md"), action: "allow" },
+            {
+              permission: "edit",
+              pattern: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
+              action: "allow",
+            },
+          ]),
         )
       })
 
@@ -162,7 +158,9 @@ export const Plugin = PluginV2.define({
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ todowrite: "deny" })))
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [{ permission: "todowrite", pattern: "*", action: "deny" }]),
+        )
       })
 
       editor.update(AgentV2.ID.make("explore"), (item) => {
@@ -173,16 +171,16 @@ export const Plugin = PluginV2.define({
         item.permissions.push(
           ...PermissionV2.merge(
             defaults,
-            rules({
-              "*": "deny",
-              grep: "allow",
-              glob: "allow",
-              list: "allow",
-              bash: "allow",
-              webfetch: "allow",
-              websearch: "allow",
-              read: "allow",
-            }),
+            [
+              { permission: "*", pattern: "*", action: "deny" },
+              { permission: "grep", pattern: "*", action: "allow" },
+              { permission: "glob", pattern: "*", action: "allow" },
+              { permission: "list", pattern: "*", action: "allow" },
+              { permission: "bash", pattern: "*", action: "allow" },
+              { permission: "webfetch", pattern: "*", action: "allow" },
+              { permission: "websearch", pattern: "*", action: "allow" },
+              { permission: "read", pattern: "*", action: "allow" },
+            ],
             readonlyExternalDirectory,
           ),
         )
@@ -192,29 +190,22 @@ export const Plugin = PluginV2.define({
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_COMPACTION
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ "*": "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ permission: "*", pattern: "*", action: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("title"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ "*": "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ permission: "*", pattern: "*", action: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("summary"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ "*": "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ permission: "*", pattern: "*", action: "deny" }]))
       })
     })
   }),
 })
-
-function rules(input: Record<string, PermissionV2.Action | Record<string, PermissionV2.Action>>) {
-  return Object.entries(input).flatMap(([permission, value]) => {
-    if (typeof value === "string") return [{ permission, pattern: "*", action: value }]
-    return Object.entries(value).map(([pattern, action]) => ({ permission, pattern, action }))
-  })
-}

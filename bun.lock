@@ -91,6 +91,7 @@
       },
       "dependencies": {
         "@effect/platform-node": "catalog:",
+        "@opencode-ai/core": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {

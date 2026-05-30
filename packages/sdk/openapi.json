@@ -5185,6 +5185,9 @@
                     "required": ["id", "providerID"],
                     "additionalProperties": false
                   },
+                  "metadata": {
+                    "type": "object"
+                  },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionRuleset"
                   },
@@ -5508,6 +5511,9 @@
                 "properties": {
                   "title": {
                     "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
                   },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionRuleset"
@@ -12819,6 +12825,9 @@
           "version": {
             "type": "string"
           },
+          "metadata": {
+            "type": "object"
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -14912,6 +14921,9 @@
           "version": {
             "type": "string"
           },
+          "metadata": {
+            "type": "object"
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -16752,6 +16764,16 @@
                     "anyOf": [
                       {
                         "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "type": "object"
                       },
                       {
                         "type": "null"

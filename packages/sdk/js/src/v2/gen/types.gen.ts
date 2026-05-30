@@ -780,6 +780,9 @@ export type Session = {
     variant?: string
   }
   version: string
+  metadata?: {
+    [key: string]: unknown
+  }
   time: {
     created: number
     updated: number
@@ -1516,6 +1519,9 @@ export type GlobalSession = {
     variant?: string
   }
   version: string
+  metadata?: {
+    [key: string]: unknown
+  }
   time: {
     created: number
     updated: number
@@ -2086,6 +2092,9 @@ export type SyncEventSessionUpdated = {
         variant?: string
       } | null
       version?: string | null
+      metadata?: {
+        [key: string]: unknown
+      } | null
       time?: {
         created?: number | null
         updated?: number | null
@@ -6093,6 +6102,9 @@ export type SessionCreateData = {
       providerID: string
       variant?: string
     }
+    metadata?: {
+      [key: string]: unknown
+    }
     permission?: PermissionRuleset
     workspaceID?: string
   }
@@ -6223,6 +6235,9 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    metadata?: {
+      [key: string]: unknown
+    }
     permission?: PermissionRuleset
     time?: {
       archived?: number
