@@ -192,6 +192,9 @@ export const layer = Layer.effect(
       try {
         return JSON.parse(text) as Record<string, Provider>
       } catch {
+        yield* Effect.logError(
+          `Failed to parse JSON from ${source}/api.json — response may be blocked by network/firewall`,
+        )
         return {}
       }
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
