@@ -49,7 +49,7 @@ describe("ProjectV2.resolve", () => {
       const result = yield* project.resolve(abs(tmp.path))
 
       expect(result.id).toBe(Project.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.resolve(tmp.path))
+      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
     }),

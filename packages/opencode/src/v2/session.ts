@@ -166,7 +166,7 @@ export const layer = Layer.effect(
           ? {
               id: ModelV2.ID.make(row.model.id),
               providerID: ProviderV2.ID.make(row.model.providerID),
-              variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
+              variant: row.model.variant ? ModelV2.VariantID.make(row.model.variant) : undefined,
             }
           : undefined,
         cost: row.cost,

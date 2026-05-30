@@ -2,11 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const locationLayer = Layer.succeed(
   Location.Service,
-  Location.Service.of({ directory: "project", workspaceID: "workspace" }),
+  Location.Service.of(location({ directory: AbsolutePath.make("project"), workspaceID: "workspace" })),
 )
 const it = testEffect(EventV2.layer.pipe(Layer.provideMerge(locationLayer)))
 const itWithoutLocation = testEffect(EventV2.layer)
@@ -46,7 +48,7 @@ describe("EventV2", () => {
       expect(event.type).toBe("test.message")
       expect(event).not.toHaveProperty("version")
       expect(event.data).toEqual({ text: "hello" })
-      expect(event.location).toEqual({ directory: "project", workspaceID: "workspace" })
+      expect(event.location).toEqual({ directory: AbsolutePath.make("project"), workspaceID: "workspace" })
     }),
   )
 
