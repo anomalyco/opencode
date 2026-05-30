@@ -97,35 +97,6 @@ export interface PreviewConfig {
    * secure-context APIs).
    */
   readonly upstreamScheme?: "http" | "https"
-
-  /**
-   * URL prefix the dev server expects to receive on incoming requests.
-   *
-   * Default (undefined): preview-router STRIPS `/preview/<port>/` or
-   * `/preview/` from the URL before forwarding, so the dev server sees
-   * paths starting at `/`.  Matches the common Vite/webpack-dev-server
-   * + Next dev contract where the app runs at the URL root.
-   *
-   * Set to e.g. `"/preview/"` for dev servers that align their internal
-   * routing with the public base path — notably Angular's
-   * `@angular-devkit/build-angular:dev-server` builder, which derives
-   * its `servePath` from the build target's `baseHref`.  In that mode
-   * ng serve refuses requests whose path doesn't start with `/preview/`
-   * ("The server is configured with a public base URL of /preview").
-   * Setting `servePath: "/preview/"` here tells the proxy to forward
-   * the prefix verbatim, satisfying ng serve's expectation.
-   *
-   * Should match `<base href>` in the served index.html so client-side
-   * navigation + asset URLs all resolve against the same prefix.  For
-   * Angular: define a build configuration with `baseHref: "/preview/"`
-   * and a matching serve configuration with `servePath: "/preview/"`,
-   * then set this field to `"/preview/"` so the proxy stops stripping.
-   *
-   * Format: leading slash required, trailing slash recommended for
-   * clarity.  Invalid values trigger the same warn-and-default pattern
-   * as readyPattern.
-   */
-  readonly servePath?: string
 }
 
 export type PreviewStatus = "installing" | "running" | "stopped" | "failed"
@@ -170,12 +141,6 @@ interface ActiveState extends PreviewStateSnapshot {
    *  for the running process (the file is re-read on the next Restart).
    *  NEVER surfaced via `getPreviewState()` — `_`-prefixed convention. */
   _upstreamScheme: "http" | "https"
-  /** URL prefix the dev server expects on incoming requests, or null
-   *  to strip `/preview/`.  Read by preview-router.ts via
-   *  `getActiveServePath(port)` to decide whether the forwarded path
-   *  is `<rest>` (default, strip) or `<servePath><rest>` (keep prefix).
-   *  See PreviewConfig.servePath docstring for the Angular use-case. */
-  _servePath: string | null
 }
 
 // ── Module state (singleton — "first-launch wins") ─────────────────────────
@@ -260,24 +225,6 @@ export function previewConfigForRepo(
         )
       }
     }
-
-    // Validate servePath — must be a string starting with "/".  Anything
-    // else (number, missing-leading-slash, empty) WARN + falls back to
-    // undefined (= proxy strips /preview/ as it has always done).  Empty
-    // string treated like undefined since "no prefix" is what stripping
-    // already provides.
-    let servePath: string | undefined = undefined
-    if (raw.servePath !== undefined) {
-      if (typeof raw.servePath === "string" && raw.servePath.startsWith("/") && raw.servePath !== "/") {
-        servePath = raw.servePath
-      } else if (raw.servePath !== "" && raw.servePath !== "/") {
-        console.warn(
-          `[collab.preview] ${path} servePath=${JSON.stringify(raw.servePath)} ` +
-            `must be a string starting with "/" (e.g. "/preview/"); ignoring`,
-        )
-      }
-    }
-
     return {
       command: raw.command,
       port: raw.port,
@@ -286,7 +233,6 @@ export function previewConfigForRepo(
         typeof raw.installCommand === "string" ? raw.installCommand : FRONTEND_DEFAULTS.installCommand,
       readyPattern,
       upstreamScheme,
-      servePath,
     }
   } catch (err) {
     console.warn(`[collab.preview] ${path} parse failed; using defaults:`, err)
@@ -375,31 +321,6 @@ export function getActiveUpstreamScheme(port: number): "http" | "https" {
  */
 export function getActivePreviewPort(): number | null {
   return active ? active.port : null
-}
-
-/**
- * Return the servePath the currently-active preview is configured for, or
- * null when the proxy should use the default strip-`/preview/` behavior.
- *
- * Called by `preview-router.ts` once per HTTP request and once per WS
- * upgrade — decides between forwarding the stripped path (default) and
- * forwarding the path with `servePath` prepended (keep-prefix mode for
- * dev servers like Angular CLI that derive their servePath from
- * `baseHref`).
- *
- * Returns null when:
- *   - No preview is currently active (defensive).
- *   - A preview IS active but its port doesn't match the requested one.
- *   - The active preview's PreviewConfig.servePath is undefined (= the
- *     dev server expects to receive root-relative paths, so strip).
- *
- * Returns a string (e.g. "/preview/") when the active preview was launched
- * with a configured `servePath` that the proxy should preserve verbatim
- * in the forwarded URL.
- */
-export function getActiveServePath(port: number): string | null {
-  if (active && active.port === port) return active._servePath
-  return null
 }
 
 export type LaunchResult =
@@ -544,11 +465,6 @@ export function launchPreview(
     // to "http" when the resolved config omits it (legacy .opencode-preview.json
     // files predate this field).
     _upstreamScheme: config.upstreamScheme ?? "http",
-    // Read by preview-router.ts via getActiveServePath(port).  Null when
-    // not set (= legacy strip-prefix behavior); string when the dev
-    // server expects the prefix kept (e.g. Angular CLI's dev-server with
-    // baseHref-derived servePath).
-    _servePath: config.servePath ?? null,
   }
   active = state
 
