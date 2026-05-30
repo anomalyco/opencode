@@ -93,6 +93,14 @@ export namespace PluginLoader {
     return row.pkg?.dir ?? path.dirname(pathFromSpec(row.target))
   }
 
+  const FILE_PLUGIN_COPY_SKIP_DIRS = new Set([".git", ".hg", ".svn"])
+
+  function shouldCopyFilePluginPath(source: string, nodeModules: string) {
+    const basename = path.basename(source)
+    if (FILE_PLUGIN_COPY_SKIP_DIRS.has(basename)) return false
+    return Filesystem.resolve(source) !== Filesystem.resolve(nodeModules)
+  }
+
   async function copyScopedPlugin(row: Resolved, root: string, scoped: string) {
     await rm(scoped, { recursive: true, force: true })
     await mkdir(path.dirname(scoped), { recursive: true })
@@ -106,7 +114,7 @@ export namespace PluginLoader {
     await cp(root, scoped, {
       recursive: true,
       dereference: true,
-      filter: (source) => Filesystem.resolve(source) !== Filesystem.resolve(nodeModules),
+      filter: (source) => shouldCopyFilePluginPath(source, nodeModules),
     })
     if (hasNodeModules) {
       await symlink(nodeModules, path.join(scoped, "node_modules"), "dir")

@@ -237,6 +237,31 @@ export default { id: "demo.auto-origin", tui: async () => {}, value }
   expect(loaded).toEqual(["from-auto-discovered-origin"])
 })
 
+test.skipIf(process.platform === "win32")("skips git runtime files while copying scoped file plugin sources", async () => {
+  const dir = await fs.realpath(await fs.mkdtemp("/tmp/oc-plugin-socket-"))
+  const config = path.join(dir, "tui.json")
+  const root = path.join(dir, "plugin-package")
+  const plugin = path.join(root, "tui.ts")
+  const fifo = path.join(root, ".git", "fsmonitor--daemon.ipc")
+  await Bun.write(path.join(root, "package.json"), JSON.stringify({ exports: { "./tui": "./tui.ts" } }, null, 2))
+  await Bun.write(plugin, `export default { id: "demo.git-socket", tui: async () => {}, value: "loaded" }\n`)
+  await fs.mkdir(path.dirname(fifo), { recursive: true })
+  await Bun.$`mkfifo ${fifo}`.quiet()
+
+  try {
+    const loaded = await PluginLoader.loadExternal({
+      items: [{ spec: pathToFileURL(root).href, scope: "local" as const, source: config }],
+      kind: "tui",
+      importScope: "project-with-git-socket",
+      finish: async (item) => (item.mod.default as { value: string }).value,
+    })
+
+    expect(loaded).toEqual(["loaded"])
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 type Data = {
   local: Row
   global: Row
