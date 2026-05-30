@@ -13,7 +13,7 @@ import { NpmConfig } from "@opencode-ai/core/npm-config"
 
 const log = Log.create({ service: "installation" })
 
-export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
+export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "winget" | "unknown"
 
 export type ReleaseType = "patch" | "minor" | "major"
 
@@ -164,6 +164,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
         const exec = process.execPath.toLowerCase()
+        if (exec.replaceAll("\\", "/").includes("/microsoft/winget/links/")) return "winget" as Method
 
         const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
           { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
@@ -173,6 +174,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
           { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
           { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
           { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
+          { name: "winget", command: () => text(["winget", "list", "--id", "SST.opencode", "--exact"]) },
         ]
 
         checks.sort((a, b) => {
@@ -186,7 +188,11 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         for (const check of checks) {
           const output = yield* check.command()
           const installedName =
-            check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+            check.name === "winget"
+              ? "SST.opencode"
+              : check.name === "brew" || check.name === "choco" || check.name === "scoop"
+                ? "opencode"
+                : "opencode-ai"
           if (output.includes(installedName)) {
             return check.name
           }
@@ -293,6 +299,17 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             break
           case "scoop":
             upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
+            break
+          case "winget":
+            upgradeResult = yield* run([
+              "winget",
+              "upgrade",
+              "--id",
+              "SST.opencode",
+              "--exact",
+              "--accept-package-agreements",
+              "--accept-source-agreements",
+            ])
             break
           default:
             return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })

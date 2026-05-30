@@ -53,6 +53,23 @@ function testLayer(
 }
 
 describe("installation", () => {
+  describe("method", () => {
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          if (cmd === "winget" && args.join(" ") === "list --id SST.opencode --exact") return "SST.opencode 1.2.3"
+          return ""
+        },
+      ),
+    ).effect("detects winget installs from package list", () =>
+      Effect.gen(function* () {
+        const result = yield* Installation.Service.use((svc) => svc.method())
+        expect(result).toBe("winget")
+      }),
+    )
+  })
+
   describe("latest", () => {
     testEffect(testLayer(() => jsonResponse({ tag_name: "v1.2.3" }))).effect(
       "reads release version from GitHub releases",
@@ -163,6 +180,40 @@ describe("installation", () => {
       Effect.gen(function* () {
         const result = yield* Installation.Service.use((svc) => svc.latest("brew"))
         expect(result).toBe("2.1.0")
+      }),
+    )
+
+    const wingetCalls: string[] = []
+    testEffect(
+      testLayer((request) => {
+        wingetCalls.push(request.url)
+        return jsonResponse({ tag_name: "v5.0.0" })
+      }),
+    ).effect("reads winget versions from GitHub releases", () =>
+      Effect.gen(function* () {
+        const result = yield* Installation.Service.use((svc) => svc.latest("winget"))
+        expect(result).toBe("5.0.0")
+        expect(wingetCalls).toContain("https://api.github.com/repos/anomalyco/opencode/releases/latest")
+      }),
+    )
+  })
+
+  describe("upgrade", () => {
+    const commands: string[] = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          commands.push([cmd, ...args].join(" "))
+          return ""
+        },
+      ),
+    ).effect("runs winget upgrade by package id", () =>
+      Effect.gen(function* () {
+        yield* Installation.Service.use((svc) => svc.upgrade("winget", "9.9.9"))
+        expect(commands).toContain(
+          "winget upgrade --id SST.opencode --exact --accept-package-agreements --accept-source-agreements",
+        )
       }),
     )
   })
