@@ -166,15 +166,23 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         const exec = process.execPath.toLowerCase()
         if (exec.replaceAll("\\", "/").includes("/microsoft/winget/links/")) return "winget" as Method
 
-        const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
-          { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
-          { name: "yarn", command: () => text(["yarn", "global", "list"]) },
-          { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]) },
-          { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]) },
-          { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
-          { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
-          { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
-          { name: "winget", command: () => text(["winget", "list", "--id", "SST.opencode", "--exact"]) },
+        const checks: Array<{ name: Method; command: () => Effect.Effect<string>; installed: string }> = [
+          { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]), installed: "opencode-ai" },
+          { name: "yarn", command: () => text(["yarn", "global", "list"]), installed: "opencode-ai" },
+          { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]), installed: "opencode-ai" },
+          { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]), installed: "opencode-ai" },
+          { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]), installed: "opencode" },
+          { name: "scoop", command: () => text(["scoop", "list", "opencode"]), installed: "opencode" },
+          {
+            name: "choco",
+            command: () => text(["choco", "list", "--limit-output", "opencode"]),
+            installed: "opencode",
+          },
+          {
+            name: "winget",
+            command: () => text(["winget", "list", "--id", "SST.opencode", "--exact"]),
+            installed: "SST.opencode",
+          },
         ]
 
         checks.sort((a, b) => {
@@ -187,13 +195,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
 
         for (const check of checks) {
           const output = yield* check.command()
-          const installedName =
-            check.name === "winget"
-              ? "SST.opencode"
-              : check.name === "brew" || check.name === "choco" || check.name === "scoop"
-                ? "opencode"
-                : "opencode-ai"
-          if (output.includes(installedName)) {
+          if (output.includes(check.installed)) {
             return check.name
           }
         }
@@ -307,6 +309,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
               "--id",
               "SST.opencode",
               "--exact",
+              "--disable-interactivity",
               "--accept-package-agreements",
               "--accept-source-agreements",
             ])

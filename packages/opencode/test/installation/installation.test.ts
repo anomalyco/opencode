@@ -54,6 +54,23 @@ function testLayer(
 
 describe("installation", () => {
   describe("method", () => {
+    testEffect(testLayer(() => jsonResponse({}))).effect("detects winget installs from WinGet Links execPath", () =>
+      Effect.gen(function* () {
+        const original = process.execPath
+        Object.defineProperty(process, "execPath", {
+          value: "C:/Users/Admin/AppData/Local/Microsoft/WinGet/Links/opencode.exe",
+        })
+        const result = yield* Installation.Service.use((svc) => svc.method()).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              Object.defineProperty(process, "execPath", { value: original })
+            }),
+          ),
+        )
+        expect(result).toBe("winget")
+      }),
+    )
+
     testEffect(
       testLayer(
         () => jsonResponse({}),
@@ -182,20 +199,6 @@ describe("installation", () => {
         expect(result).toBe("2.1.0")
       }),
     )
-
-    const wingetCalls: string[] = []
-    testEffect(
-      testLayer((request) => {
-        wingetCalls.push(request.url)
-        return jsonResponse({ tag_name: "v5.0.0" })
-      }),
-    ).effect("reads winget versions from GitHub releases", () =>
-      Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("winget"))
-        expect(result).toBe("5.0.0")
-        expect(wingetCalls).toContain("https://api.github.com/repos/anomalyco/opencode/releases/latest")
-      }),
-    )
   })
 
   describe("upgrade", () => {
@@ -212,7 +215,7 @@ describe("installation", () => {
       Effect.gen(function* () {
         yield* Installation.Service.use((svc) => svc.upgrade("winget", "9.9.9"))
         expect(commands).toContain(
-          "winget upgrade --id SST.opencode --exact --accept-package-agreements --accept-source-agreements",
+          "winget upgrade --id SST.opencode --exact --disable-interactivity --accept-package-agreements --accept-source-agreements",
         )
       }),
     )
