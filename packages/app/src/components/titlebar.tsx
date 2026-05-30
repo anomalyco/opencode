@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, onMount, Show, untrack } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, Show, untrack, type ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -6,6 +6,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme"
+import { Popover } from "@opencode-ai/ui/popover"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -196,8 +197,13 @@ export function Titlebar() {
 
   return (
     <header
-      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
-      style={{ "min-height": minHeight() }}
+      class="h-10 shrink-0 relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
+      style={{
+        "min-height": minHeight(),
+        "background-color": "color-mix(in srgb, var(--background-base) 75%, transparent)",
+        "backdrop-filter": "blur(24px)",
+        "border-bottom": "1px solid var(--border-weak-base)",
+      }}
       data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
@@ -234,6 +240,16 @@ export function Titlebar() {
           </div>
         </Show>
         <div class="flex items-center gap-1 shrink-0">
+          <Show when={params.dir}>
+            <button
+              onClick={() => navigate("/")}
+              class="titlebar-pill-button active shrink-0 mr-1"
+            >
+              <Icon name="arrow-left" size="small" />
+              Projects
+            </button>
+          </Show>
+
           <TooltipKeybind
             class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
             placement="bottom"
@@ -262,23 +278,9 @@ export function Titlebar() {
               </div>
             </Button>
           </TooltipKeybind>
+
+
           <div class="hidden xl:flex items-center shrink-0">
-            <Show when={params.dir}>
-              <TooltipKeybind
-                placement="bottom"
-                title={language.t("command.session.new")}
-                keybind={command.keybind("session.new")}
-                openDelay={2000}
-              >
-                <Button
-                  variant="ghost"
-                  icon="new-session"
-                  class="titlebar-icon w-8 h-6 p-0 box-border"
-                  onClick={startNewSession}
-                  aria-label={language.t("command.session.new")}
-                />
-              </TooltipKeybind>
-            </Show>
             <div class="flex items-center gap-0" classList={{ "ml-1": !!params.dir }}>
               <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
                 <Button
@@ -318,15 +320,62 @@ export function Titlebar() {
         data-tauri-drag-region
         onMouseDown={drag}
       >
+        <Show when={params.dir}>
+          <TooltipKeybind
+            placement="bottom"
+            title="Toggle AI Copilot"
+            keybind={command.keybind("session.toggle")}
+          >
+            <button
+              onClick={() => layout.session.toggle()}
+              class="titlebar-pill-button shrink-0 mr-2"
+              classList={{ active: layout.session.opened() }}
+            >
+              <Icon name="models" size="small" />
+              AI Copilot
+            </button>
+          </TooltipKeybind>
+        </Show>
         <Show when={!user.loggedIn}>
           <Button variant="ghost" class="titlebar-icon h-6 px-2 box-border text-12-regular" onClick={handleAuth}>
             Login
           </Button>
         </Show>
         <Show when={user.loggedIn}>
-          <Button variant="ghost" class="titlebar-icon h-6 px-2 box-border text-12-regular" onClick={handleAuth}>
-            {user.email?.split("@")[0] ?? "Logout"}
-          </Button>
+          <Popover
+            title={user.email ?? "Account"}
+            gutter={4}
+            placement="bottom-end"
+            class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
+            triggerAs="button"
+            triggerProps={{
+              type: "button",
+              "data-component": "button",
+              "data-size": "normal",
+              "data-variant": "ghost",
+              class: "titlebar-icon h-6 px-2 box-border text-12-regular flex items-center gap-1.5 cursor-pointer outline-none",
+            } as unknown as ComponentProps<"button">}
+            trigger={
+              <>
+                <svg class="size-3.5 text-icon-weak" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 17v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1" />
+                  <circle cx="10" cy="7" r="4" />
+                </svg>
+                {user.email?.split("@")[0] ?? "pelegreenall"}
+              </>
+            }
+          >
+            <div class="flex flex-col p-1 min-w-[120px]">
+              <Button
+                size="small"
+                variant="ghost"
+                class="w-full justify-start text-text-strong hover:bg-surface-base-hover rounded-md px-2 py-1.5 text-12-regular cursor-pointer"
+                onClick={handleAuth}
+              >
+                Logout
+              </Button>
+            </div>
+          </Popover>
         </Show>
         <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
         <Show when={windows()}>

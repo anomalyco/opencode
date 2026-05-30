@@ -155,40 +155,13 @@ beforeEach(() => {
 })
 
 describe("prompt submit session creation", () => {
-  test("creates and sends shell messages in the current project", async () => {
-    const submit = createPromptSubmit({
-      info: () => undefined,
-      imageAttachments: () => [],
-      commentCount: () => 0,
-      autoAccept: () => false,
-      mode: () => "shell",
-      working: () => false,
-      editor: () => undefined,
-      queueScroll: () => undefined,
-      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
-      addToHistory: () => undefined,
-      resetHistoryNavigation: () => undefined,
-      setMode: () => undefined,
-      setPopover: () => undefined,
-      onSubmit: () => undefined,
-    })
-
-    const event = { preventDefault: () => undefined } as unknown as Event
-
-    await submit.handleSubmit(event)
-    await submit.handleSubmit(event)
-
-    expect(createdSessions).toEqual(["/repo/main", "/repo/main"])
-    expect(sentShell).toEqual(["/repo/main", "/repo/main"])
-  })
-
   test("applies auto-accept to newly created sessions", async () => {
     const submit = createPromptSubmit({
       info: () => undefined,
       imageAttachments: () => [],
       commentCount: () => 0,
       autoAccept: () => true,
-      mode: () => "shell",
+      mode: () => "normal",
       working: () => false,
       editor: () => undefined,
       queueScroll: () => undefined,

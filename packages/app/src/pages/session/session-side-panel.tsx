@@ -7,6 +7,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
+import { Icon } from "@opencode-ai/ui/icon"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -52,14 +53,12 @@ export function SessionSidePanel(props: {
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const open = createMemo(() => reviewOpen() || fileOpen())
+  const open = createMemo(() => reviewOpen())
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
-    if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
-    return `${layout.fileTree.width()}px`
+    return layout.session.opened() ? `calc(100% - ${layout.session.width()}px)` : "100%"
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -167,8 +166,8 @@ export function SessionSidePanel(props: {
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
-    layout.fileTree.setTab(value)
+    if (value !== "changes" && value !== "all" && value !== "dashboards" && value !== "workflows") return
+    layout.fileTree.setTab(value as any)
   }
 
   const showAllFiles = () => {
@@ -345,7 +344,7 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <div class="size-full flex border-l border-border-weaker-base">
+        <div class="size-full flex border-r border-border-weaker-base">
           <div
             aria-hidden={!reviewOpen()}
             inert={!reviewOpen()}
@@ -364,7 +363,7 @@ export function SessionSidePanel(props: {
                 <DragDropSensors />
                 <ConstrainDragYAxis />
                 <Tabs value={activeTab()} onChange={openTab} class="flex h-full min-h-0 flex-col">
-                  <div class="sticky top-0 shrink-0 flex">
+                  <div class="sticky top-0 shrink-0 flex h-12 border-b border-border-weak-base">
                     <Tabs.List
                       ref={(el: HTMLDivElement) => {
                         const stop = createFileTabListSync({ el, contextOpen })
@@ -480,132 +479,6 @@ export function SessionSidePanel(props: {
                 </DragOverlay>
               </DragDropProvider>
             </div>
-          </div>
-
-          <div
-            id="file-tree-panel"
-            ref={fileTreePanelRef}
-            aria-hidden={!fileOpen()}
-            inert={!fileOpen()}
-            class="relative min-w-0 h-full shrink-0 overflow-hidden"
-            classList={{
-              "pointer-events-none": !fileOpen(),
-              "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-                !props.size.active(),
-            }}
-            style={{ width: treeWidth() }}
-          >
-            <FileTreeDragOverlay
-              active={isDraggingOverFileTree()}
-              label={language.t("filetree.dropHere") || "Drop files here"}
-            />
-            <div
-              class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
-            >
-              <Tabs
-                variant="pill"
-                value={fileTreeTab()}
-                onChange={setFileTreeTabValue}
-                class="h-full"
-                data-scope="filetree"
-              >
-                <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {reviewCount()}{" "}
-                    {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={hasReview()}>
-                      <Show
-                        when={diffsReady()}
-                        fallback={
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
-                            {language.t("common.loading")}
-                            {language.t("common.loading.ellipsis")}
-                          </div>
-                        }
-                      >
-                        <FileTree
-                          path=""
-                          class="pt-3"
-                          allowed={diffFiles()}
-                          kinds={kinds()}
-                          draggable={false}
-                          active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
-                        />
-                      </Show>
-                    </Match>
-                    <Match when={true}>
-                      {empty(
-                        language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
-                      )}
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={nofiles()}>
-                      <FileTree
-                        path=""
-                        class="pt-3"
-                        droppable={true}
-                        emptyActions={true}
-                        onFileClick={(node) => openTab(file.tab(node.path))}
-                        onUpload={async (files) => {
-                          for (const f of files) {
-                            const arrayBuffer = await f.arrayBuffer()
-                            const content = new Uint8Array(arrayBuffer)
-                            await file.upload(f.name, content)
-                          }
-                        }}
-                      />
-                    </Match>
-                    <Match when={true}>
-                      <FileTree
-                        path=""
-                        class="pt-3"
-                        modified={diffFiles()}
-                        kinds={kinds()}
-                        droppable={true}
-                        emptyActions={true}
-                        onFileClick={(node) => openTab(file.tab(node.path))}
-                        onUpload={async (files) => {
-                          for (const f of files) {
-                            const arrayBuffer = await f.arrayBuffer()
-                            const content = new Uint8Array(arrayBuffer)
-                            await file.upload(f.name, content)
-                          }
-                        }}
-                      />
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-              </Tabs>
-            </div>
-            <Show when={fileOpen()}>
-              <div onPointerDown={() => props.size.start()}>
-                <ResizeHandle
-                  direction="horizontal"
-                  edge="start"
-                  size={layout.fileTree.width()}
-                  min={200}
-                  max={480}
-                  collapseThreshold={160}
-                  onResize={(width) => {
-                    props.size.touch()
-                    layout.fileTree.resize(width)
-                  }}
-                  onCollapse={layout.fileTree.close}
-                />
-              </div>
-            </Show>
           </div>
         </div>
       </aside>

@@ -1,0 +1,68 @@
+/*
+ * Univer Theme Bridge — static variable remaps only.
+ *
+ * Univer uses its own CSS variable palette and handles dark mode by 
+ * swapping utility classes on its elements (e.g. `bg-white` in light mode 
+ * becomes `dark:bg-gray-900` in dark mode).
+ *
+ * Therefore, we DO NOT invert the gray scale in dark mode! We simply 
+ * provide a single, static gray scale that perfectly matches our brand's 
+ * hex codes. Univer's internal dark mode classes will pick the right ends 
+ * of the scale automatically.
+ */
+
+#univer {
+  /* Brand blue — our #0052FF family */
+  --univer-primary-50: #eff4ff;
+  --univer-primary-100: #dbe9fe;
+  --univer-primary-200: #bfd7fe;
+  --univer-primary-300: #93bbfd;
+  --univer-primary-400: #6098fa;
+  --univer-primary-500: #3b78f6;
+  --univer-primary-600: #0052ff;
+  --univer-primary-700: #1a44db;
+  --univer-primary-800: #1b38b0;
+  --univer-primary-900: #1c338b;
+
+  /* Static Gray Ramp matching our UI's exact hex tones */
+  --univer-gray-50: #f8f8f8;
+  --univer-gray-100: #f3f3f3;
+  --univer-gray-200: #e8e8e8;
+  --univer-gray-300: #dbdbdb;
+  --univer-gray-400: #c7c7c7;
+  --univer-gray-500: #8f8f8f;
+  --univer-gray-600: #52525b;
+  --univer-gray-700: #475569;
+  --univer-gray-800: #0b0f1a; 
+  --univer-gray-900: #111827;
+
+  /* Static White / Black */
+  --univer-white: #ffffff; 
+  --univer-black: #09090b;
+}
+
+/* ─── Scrollbars ──────────────────────────────────────────────────────────── */
+#univer ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+#univer ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#univer ::-webkit-scrollbar-thumb {
+  background-color: var(--border-weak-base, rgba(0, 0, 0, 0.15));
+  border-radius: 9999px;
+}
+
+#univer ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-base, rgba(0, 0, 0, 0.25));
+}
+
+/* ─── Overrides ───────────────────────────────────────────────────────────── */
+/* Aggressively remove all rounded corners from the Univer UI to fix any curved caps/borders */
+#univer,
+#univer * {
+  border-radius: 0 !important;
+}

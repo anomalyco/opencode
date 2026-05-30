@@ -1,5 +1,5 @@
-import { Show, createEffect, createSignal, on, onCleanup } from "solid-js"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js"
+import { useTheme, resolveThemeVariant } from "@opencode-ai/ui/theme"
 import { createUniver, defaultTheme, LocaleType, LogLevel, mergeLocales } from "@univerjs/presets"
 import { UniverSheetsCorePreset } from "@univerjs/presets/preset-sheets-core"
 import sheetsCoreEnUs from "@univerjs/presets/preset-sheets-core/locales/en-US"
@@ -7,6 +7,9 @@ import "@univerjs/presets/lib/styles/preset-sheets-core.css"
 import { UniverSheetsDrawingPreset } from "@univerjs/presets/preset-sheets-drawing"
 import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
+import "../styles/univer-theme.css"
+import { ThemeService } from "@univerjs/core"
+import { IRenderManagerService } from "@univerjs/engine-render"
 import type { FUniver } from "@univerjs/core/facade"
 import type { IFUniverUIMixin } from "@univerjs/ui/facade"
 import {
@@ -73,6 +76,33 @@ function base64ToFile(base64: string, name: string, mimeType?: string): File {
   return new File([bytes], name, { type: mimeType || "application/octet-stream" })
 }
 
+/** Build the setCustomHeader config for row/column headers.
+ *
+ * getRenderColor() behaviour differs by mode:
+ *  - dark:  theme key strings ("gray.800") are resolved via ThemeService — no inversion applied.
+ *  - light: the color value is returned as-is, so "gray.800" would reach canvas.fillStyle
+ *           as a literal string → invalid CSS → black. Pass real hex values instead.
+ */
+function buildHeaderCfg(isDark: boolean, themeService: InstanceType<typeof ThemeService>) {
+  if (isDark) {
+    return {
+      headerStyle: {
+        backgroundColor: "gray.800",
+        fontColor: "white",
+        borderColor: "gray.700",
+      },
+    }
+  }
+  const gray = themeService.getCurrentTheme().gray as Record<string, string>
+  return {
+    headerStyle: {
+      backgroundColor: gray["100"] ?? "#f3f3f3",
+      fontColor: gray["500"] ?? "#8f8f8f",
+      borderColor: gray["200"] ?? "#e8e8e8",
+    },
+  }
+}
+
 export function SpreadsheetViewer(props: Props) {
   const theme = useTheme()
   const [host, setHost] = createSignal<HTMLDivElement | undefined>()
@@ -90,13 +120,66 @@ export function SpreadsheetViewer(props: Props) {
     // No `UniverSheetsCollaborationPreset`: `@univerjs/presets/preset-sheets-collaboration` re-exports Univer Pro
     // (`@univerjs-pro/collaboration`, edit-history, …). Multiplayer / universer comb must be built as Veritly-owned
     // primitives against `@opencode-ai/univer-compat` (or similar), not this preset.
+
+    const getVeritlyTheme = (themeId: string) => {
+      const activeTheme = theme.themes()[themeId]
+      const lightTokens = activeTheme ? resolveThemeVariant(activeTheme.light, false) : null
+      const darkTokens = activeTheme ? resolveThemeVariant(activeTheme.dark, true) : null
+
+      const getLight = (v: string, fb: string) => (lightTokens?.[v as keyof typeof lightTokens] as string) || fb
+      const getDark = (v: string, fb: string) => (darkTokens?.[v as keyof typeof darkTokens] as string) || fb
+
+      const buildRamp = (baseKey: string, fallback: Record<string, string>) => {
+        return {
+          50: getLight(`surface-${baseKey}-weak`, fallback["50"]),
+          100: getLight(`surface-${baseKey}-weak`, fallback["100"]),
+          200: getLight(`surface-${baseKey}-base`, fallback["200"]),
+          300: getLight(`border-${baseKey}-base`, fallback["300"]),
+          400: getLight(`border-${baseKey}-base`, fallback["400"]),
+          500: getLight(`surface-${baseKey}-strong`, fallback["500"]),
+          600: getDark(`surface-${baseKey}-strong`, fallback["600"]),
+          700: getDark(`border-${baseKey}-base`, fallback["700"]),
+          800: getDark(`surface-${baseKey}-base`, fallback["800"]),
+          900: getDark(`surface-${baseKey}-weak`, fallback["900"]),
+        }
+      }
+
+      return {
+        ...defaultTheme,
+        primary: buildRamp('brand', defaultTheme.primary),
+        gray: {
+          50: getLight('background-weak', '#f8f8f8'),
+          100: getLight('background-base', '#f3f3f3'),
+          200: getLight('border-weaker-base', '#e8e8e8'),
+          300: getLight('border-weak-base', '#dbdbdb'),
+          400: getLight('border-base', '#c7c7c7'),
+          500: getLight('icon-base', '#8f8f8f'),
+          600: getDark('icon-base', '#52525b'),
+          700: getDark('border-base', '#475569'),
+          800: getDark('surface-raised-stronger-non-alpha', '#1E293B'),
+          900: getDark('background-base', '#0b0f1a'),
+        },
+        white: getLight('background-stronger', '#ffffff'),
+        black: getDark('background-strong', '#111827'),
+        green: buildRamp('success', defaultTheme.green),
+        red: buildRamp('critical', defaultTheme.red),
+        yellow: buildRamp('warning', defaultTheme.yellow),
+        orange: buildRamp('warning', defaultTheme.orange),
+        blue: buildRamp('interactive', defaultTheme.blue),
+        indigo: buildRamp('interactive', defaultTheme.indigo),
+        jiqing: buildRamp('interactive', defaultTheme.jiqing),
+        purple: buildRamp('info', defaultTheme.purple),
+        pink: buildRamp('info', defaultTheme.pink),
+      }
+    }
+
     const instance = createUniver({
       locale: LocaleType.EN_US,
       locales: {
         [LocaleType.EN_US]: mergeLocales(sheetsCoreEnUs, sheetsDrawingEnUs),
       },
       logLevel: LogLevel.WARN,
-      theme: defaultTheme,
+      theme: getVeritlyTheme(untrack(() => theme.themeId())),
       presets: [
         UniverSheetsCorePreset({
           container: el,
@@ -176,12 +259,136 @@ export function SpreadsheetViewer(props: Props) {
       delete w.__veritlyUniverSdk
       instance.univer.dispose()
     })
+    
+    // Apply initial dark mode immediately
+    const initialDark = untrack(() => theme.mode()) === "dark"
+    veritlySdk(instance).toggleDarkMode(initialDark)
+
+    // Apply header theme when each workbook render unit is created. getRenderAll() is empty
+    // at this point (no workbook loaded yet), so we subscribe to created$ instead.
+    // Render controllers subscribe during createUniver() and run before us, so components
+    // (__SpreadsheetRowHeader__ / __SpreadsheetColumnHeader__) are already registered by the
+    // time our callback fires.
+    const initInjector = instance.univer.__getInjector()
+    const renderManager = initInjector.get(IRenderManagerService)
+    const createdSub = renderManager.created$.subscribe((render) => {
+      const isDark = untrack(() => theme.mode()) === "dark"
+      const cfg = buildHeaderCfg(isDark, initInjector.get(ThemeService))
+      ;(render.components.get("__SpreadsheetRowHeader__") as any)?.setCustomHeader?.(cfg)
+      ;(render.components.get("__SpreadsheetColumnHeader__") as any)?.setCustomHeader?.(cfg)
+    })
+    onCleanup(() => createdSub.unsubscribe())
+  })
+
+  // Reactively inject HTML UI colors when theme changes
+  createEffect(() => {
+    const themeId = theme.themeId() // tracks themeId changes
+    
+    // We duplicate getVeritlyTheme here since it depends on the reactive theme object
+    const activeTheme = theme.themes()[themeId]
+    if (!activeTheme) return
+
+    const lightTokens = resolveThemeVariant(activeTheme.light, false)
+    const darkTokens = resolveThemeVariant(activeTheme.dark, true)
+
+    const getLight = (v: string, fb: string) => (lightTokens?.[v as keyof typeof lightTokens] as string) || fb
+    const getDark = (v: string, fb: string) => (darkTokens?.[v as keyof typeof darkTokens] as string) || fb
+
+    const buildRamp = (baseKey: string, fallback: Record<string, string>) => {
+      return {
+        50: getLight(`surface-${baseKey}-weak`, fallback["50"]),
+        100: getLight(`surface-${baseKey}-weak`, fallback["100"]),
+        200: getLight(`surface-${baseKey}-base`, fallback["200"]),
+        300: getLight(`border-${baseKey}-base`, fallback["300"]),
+        400: getLight(`border-${baseKey}-base`, fallback["400"]),
+        500: getLight(`surface-${baseKey}-strong`, fallback["500"]),
+        600: getDark(`surface-${baseKey}-strong`, fallback["600"]),
+        700: getDark(`border-${baseKey}-base`, fallback["700"]),
+        800: getDark(`surface-${baseKey}-base`, fallback["800"]),
+        900: getDark(`surface-${baseKey}-weak`, fallback["900"]),
+      }
+    }
+
+    const currentTheme = {
+      ...defaultTheme,
+      primary: buildRamp('brand', defaultTheme.primary),
+      gray: {
+        50: getLight('background-weak', '#f8f8f8'),
+        100: getLight('background-base', '#f3f3f3'),
+        200: getLight('border-weaker-base', '#e8e8e8'),
+        300: getLight('border-weak-base', '#dbdbdb'),
+        400: getLight('border-base', '#c7c7c7'),
+        500: getLight('icon-base', '#8f8f8f'),
+        600: getDark('icon-base', '#52525b'),
+        700: getDark('border-base', '#475569'),
+        800: getDark('surface-raised-stronger-non-alpha', '#1E293B'),
+        900: getDark('background-base', '#0b0f1a'),
+      },
+      white: getLight('background-stronger', '#ffffff'),
+      black: getDark('background-strong', '#111827'),
+      green: buildRamp('success', defaultTheme.green),
+      red: buildRamp('critical', defaultTheme.red),
+      yellow: buildRamp('warning', defaultTheme.yellow),
+      orange: buildRamp('warning', defaultTheme.orange),
+      blue: buildRamp('interactive', defaultTheme.blue),
+      indigo: buildRamp('interactive', defaultTheme.indigo),
+      jiqing: buildRamp('interactive', defaultTheme.jiqing),
+      purple: buildRamp('info', defaultTheme.purple),
+      pink: buildRamp('info', defaultTheme.pink),
+    }
+
+    let style = document.getElementById('veritly-univer-theme')
+    if (!style) {
+      style = document.createElement('style')
+      style.id = 'veritly-univer-theme'
+      document.head.appendChild(style)
+    }
+
+    const cssVars = Object.entries(currentTheme).flatMap(([colorName, scale]) => {
+      if (typeof scale === 'string') {
+        return [`--univer-${colorName}: ${scale};`]
+      }
+      return Object.entries(scale).map(([shade, hex]) => {
+        return `--univer-${colorName}-${shade}: ${hex};`
+      })
+    })
+
+    style.innerHTML = `
+      #univer {
+        ${cssVars.join('\n        ')}
+      }
+    `
+
+    if (runtime) {
+      const injector = runtime.univer.__getInjector()
+      injector.get(ThemeService).setTheme(currentTheme)
+
+      const themeService = injector.get(ThemeService)
+      const isDark = untrack(() => theme.mode()) === "dark"
+      const cfg = buildHeaderCfg(isDark, themeService)
+      injector.get(IRenderManagerService).getRenderAll().forEach((render) => {
+        const rowHeader = render.components.get("__SpreadsheetRowHeader__") as any
+        const colHeader = render.components.get("__SpreadsheetColumnHeader__") as any
+        rowHeader?.setCustomHeader?.(cfg)
+        colHeader?.setCustomHeader?.(cfg)
+      })
+    }
   })
 
   createEffect(() => {
     const cur = runtime
     if (!cur) return
-    veritlySdk(cur).toggleDarkMode(theme.mode() === "dark")
+    const isDark = theme.mode() === "dark"
+    veritlySdk(cur).toggleDarkMode(isDark)
+
+    const injector = cur.univer.__getInjector()
+    const headerCfg = buildHeaderCfg(isDark, injector.get(ThemeService))
+    injector.get(IRenderManagerService).getRenderAll().forEach((render) => {
+      const rowHeader = render.components.get("__SpreadsheetRowHeader__") as any
+      const colHeader = render.components.get("__SpreadsheetColumnHeader__") as any
+      rowHeader?.setCustomHeader?.(headerCfg)
+      colHeader?.setCustomHeader?.(headerCfg)
+    })
   })
 
   createEffect(() => {

@@ -1,23 +1,25 @@
 [data-dock-surface="shell"] {
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background-color: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 75%, transparent);
+  backdrop-filter: blur(24px);
   box-shadow: var(--shadow-xs-border);
   position: relative;
   z-index: 10;
-  border-radius: 12px;
+  border-radius: 24px;
   overflow: clip;
 }
 
 [data-dock-surface="tray"] {
-  background-color: var(--background-base);
+  background-color: color-mix(in srgb, var(--background-base) 75%, transparent);
+  backdrop-filter: blur(24px);
   border: 1px solid var(--border-weak-base);
   position: relative;
   z-index: 0;
-  border-radius: 12px;
+  border-radius: 24px;
   overflow: clip;
 }
 
 [data-dock-surface="tray"][data-dock-attach="top"] {
-  margin-top: -0.875rem;
+  margin-top: -1.25rem;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }

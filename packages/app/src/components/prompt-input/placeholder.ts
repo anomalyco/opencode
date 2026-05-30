@@ -1,5 +1,4 @@
 type PromptPlaceholderInput = {
-  mode: "normal" | "shell"
   commentCount: number
   example: string
   suggest: boolean
@@ -7,7 +6,6 @@ type PromptPlaceholderInput = {
 }
 
 export function promptPlaceholder(input: PromptPlaceholderInput) {
-  if (input.mode === "shell") return input.t("prompt.placeholder.shell")
   if (input.commentCount > 1) return input.t("prompt.placeholder.summarizeComments")
   if (input.commentCount === 1) return input.t("prompt.placeholder.summarizeComment")
   if (!input.suggest) return input.t("prompt.placeholder.simple")
