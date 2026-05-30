@@ -5,6 +5,7 @@ import { Vcs } from "@/project/vcs"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { notFound } from "../errors"
 import { ApiVcsApplyError } from "../groups/instance"
 import { ApiWorkspaceWarpError, CreatePayload, WarpPayload } from "../groups/workspace"
 
@@ -54,6 +55,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
         })
         .pipe(
           Effect.mapError((error) => {
+            if (error instanceof Workspace.WorkspaceNotFoundError) return notFound(error.message)
             if (error instanceof Vcs.PatchApplyError) {
               return new ApiVcsApplyError({
                 name: "VcsApplyError",

@@ -15,6 +15,9 @@ const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, AppFileSystem.defaul
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+const SNAPSHOT_BATCH_BOUNDARY = 100
+const OVER_BATCH_COUNT = SNAPSHOT_BATCH_BOUNDARY + 1
+const MIXED_BATCH_GROUP_COUNT = Math.ceil(OVER_BATCH_COUNT / 4)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -41,8 +44,6 @@ const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) 
   const bContent = `B${unique}`
   yield* write(`${dir}/a.txt`, aContent)
   yield* write(`${dir}/b.txt`, bContent)
-  yield* exec(dir, ["git", "add", "."])
-  yield* exec(dir, ["git", "commit", "-m", "init"])
   return { aContent, bContent }
 })
 
@@ -802,7 +803,7 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const ids = Array.from({ length: 60 }, (_, i) => i.toString().padStart(3, "0"))
+    const ids = Array.from({ length: MIXED_BATCH_GROUP_COUNT }, (_, i) => i.toString().padStart(3, "0"))
     const mod = ids.map((id) => fwd(tmp.path, "mix", `${id}-mod.txt`))
     const del = ids.map((id) => fwd(tmp.path, "mix", `${id}-del.txt`))
     const add = ids.map((id) => fwd(tmp.path, "mix", `${id}-add.txt`))
@@ -862,7 +863,7 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const ids = Array.from({ length: 140 }, (_, i) => i.toString().padStart(3, "0"))
+    const ids = Array.from({ length: OVER_BATCH_COUNT }, (_, i) => i.toString().padStart(3, "0"))
     yield* mkdirp(`${tmp.path}/order`)
     yield* Effect.all(
       ids.map((id) => write(`${tmp.path}/order/${id}.txt`, `before-${id}`)),
@@ -1090,8 +1091,8 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
-    const fresh = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "fresh", `${i}.txt`))
+    const base = Array.from({ length: OVER_BATCH_COUNT }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
+    const fresh = [fwd(tmp.path, "fresh", "0.txt")]
     yield* mkdirp(`${tmp.path}/batch`)
     yield* mkdirp(`${tmp.path}/fresh`)
     yield* Effect.all(

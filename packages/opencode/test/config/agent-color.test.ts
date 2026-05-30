@@ -11,7 +11,7 @@ it.instance(
   "agent color parsed from project config",
   () =>
     Effect.gen(function* () {
-      const cfg = yield* Config.Service.use((svc) => svc.get())
+      const cfg = yield* Config.use.get()
       expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
       expect(cfg.agent?.["plan"]?.color).toBe("primary")
     }),
@@ -30,9 +30,9 @@ it.instance(
   "Agent.get includes color from config",
   () =>
     Effect.gen(function* () {
-      const plan = yield* AgentSvc.Service.use((svc) => svc.get("plan"))
+      const plan = yield* AgentSvc.use.get("plan")
       expect(plan?.color).toBe("#A855F7")
-      const build = yield* AgentSvc.Service.use((svc) => svc.get("build"))
+      const build = yield* AgentSvc.use.get("build")
       expect(build?.color).toBe("accent")
     }),
   {

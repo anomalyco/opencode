@@ -320,7 +320,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "background": {
-      "description": "When true, launch the subagent in the background and return immediately",
+      "description": "Run the agent in the background. You will be notified when it completes.",
       "type": "boolean",
     },
     "command": {

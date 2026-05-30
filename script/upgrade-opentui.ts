@@ -34,6 +34,7 @@ if (snapshotArg === "--snapshot=") {
 
 const ver = raw.replace(/^v/, "")
 const root = path.resolve(import.meta.dir, "..")
+const lockfile = path.join(root, "bun.lock")
 const skip = new Set([".git", ".opencode", ".turbo", "dist", "node_modules"])
 const keys = ["@opentui/core", "@opentui/keymap", "@opentui/solid"] as const
 
@@ -115,11 +116,77 @@ const out = (
 ).filter((item): item is string => item !== null)
 
 if (out.length === 0) {
-  console.log("No opentui deps found")
-  process.exit(0)
+  console.log(`No opentui manifest updates needed for ${ver}`)
 }
 
-console.log(`Updated opentui${snapshot ? " snapshot" : ""} to ${ver} in:`)
-for (const file of out) {
-  console.log(`- ${file}`)
+if (out.length > 0) {
+  console.log(`Updated opentui${snapshot ? " snapshot" : ""} to ${ver} in:`)
+  for (const file of out) {
+    console.log(`- ${file}`)
+  }
+}
+
+console.log("Running bun install to update bun.lock...")
+const install = Bun.spawn([process.execPath, "install"], {
+  cwd: root,
+  stdout: "inherit",
+  stderr: "inherit",
+})
+const installCode = await install.exited
+if (installCode !== 0) process.exit(installCode)
+
+const fixed = await fixKnownLockfileIssues()
+if (fixed.length > 0) {
+  console.log("Removed stale opentui-spinner peer lockfile entries:")
+  for (const item of fixed) {
+    console.log(`- ${item}`)
+  }
+}
+
+const stale = await findStaleLockfileEntries()
+if (stale.length > 0) {
+  console.error(`bun.lock still contains stale opentui versions after upgrading to ${ver}:`)
+  for (const item of stale) {
+    console.error(`- ${item.entry}: ${item.pkg}@${item.version}`)
+  }
+  process.exit(1)
+}
+
+console.log("bun.lock opentui versions are consistent")
+
+async function fixKnownLockfileIssues() {
+  const txt = await Bun.file(lockfile).text()
+  const stale = findStaleLockfileEntriesInText(txt)
+  if (stale.length === 0) return []
+  if (stale.some((item) => !item.entry.startsWith("opentui-spinner/@opentui/"))) return []
+
+  const removed = txt
+    .split("\n")
+    .map((line) => line.match(/^    "(opentui-spinner\/@opentui\/[^\"]+)": /)?.[1])
+    .filter((item): item is string => item !== undefined)
+
+  if (removed.length === 0) return []
+
+  await Bun.write(
+    lockfile,
+    txt
+      .split("\n")
+      .filter((line) => !line.match(/^    "opentui-spinner\/@opentui\//))
+      .join("\n"),
+  )
+  return removed
+}
+
+async function findStaleLockfileEntries() {
+  return findStaleLockfileEntriesInText(await Bun.file(lockfile).text())
+}
+
+function findStaleLockfileEntriesInText(txt: string) {
+  return Array.from(txt.matchAll(/^    "([^"]+)": \["(@opentui\/(?:core(?:-[^@"]+)?|keymap|solid))@([^"]+)"/gm))
+    .map((match) => ({
+      entry: match[1]!,
+      pkg: match[2]!,
+      version: match[3]!,
+    }))
+    .filter((item) => item.version !== ver)
 }

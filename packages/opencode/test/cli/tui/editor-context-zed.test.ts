@@ -2,9 +2,24 @@ import { Database } from "bun:sqlite"
 import { mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { expect, spyOn, test } from "bun:test"
-import { offsetToPosition, resolveZedDbPath, resolveZedSelection } from "../../../src/cli/cmd/tui/context/editor-zed"
+import { afterEach, expect, spyOn, test } from "bun:test"
+import {
+  isZedTerminal,
+  offsetToPosition,
+  resolveZedDbPath,
+  resolveZedSelection,
+} from "../../../src/cli/cmd/tui/context/editor-zed"
 import { tmpdir } from "../../fixture/fixture"
+
+const originalZedTerm = process.env.ZED_TERM
+const originalTermProgram = process.env.TERM_PROGRAM
+
+afterEach(() => {
+  if (originalZedTerm === undefined) delete process.env.ZED_TERM
+  else process.env.ZED_TERM = originalZedTerm
+  if (originalTermProgram === undefined) delete process.env.TERM_PROGRAM
+  else process.env.TERM_PROGRAM = originalTermProgram
+})
 
 type ZedFixtureOptions = {
   workspacePaths?: string | null
@@ -83,6 +98,19 @@ test("resolveZedDbPath skips candidates that cannot be stated", async () => {
     else process.env.OPENCODE_ZED_DB = previous
     home.mockRestore()
   }
+})
+
+test("isZedTerminal only returns true for Zed terminal environments", () => {
+  delete process.env.ZED_TERM
+  delete process.env.TERM_PROGRAM
+  expect(isZedTerminal()).toBeFalse()
+
+  process.env.ZED_TERM = "true"
+  expect(isZedTerminal()).toBeTrue()
+
+  process.env.ZED_TERM = "false"
+  process.env.TERM_PROGRAM = "zed"
+  expect(isZedTerminal()).toBeTrue()
 })
 
 test("resolveZedSelection returns active editor selection", async () => {

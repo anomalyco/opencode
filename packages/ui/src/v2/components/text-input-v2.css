@@ -1,0 +1,145 @@
+[data-component="text-input-v2"] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 0 8px 0 0;
+  gap: 8px;
+  width: 280px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  background: linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
+  box-shadow: var(--elevation-button-neutral);
+  flex: none;
+  align-self: stretch;
+  transition:
+    background 85ms ease-out,
+    outline-color 85ms ease-out,
+    box-shadow 85ms ease-out;
+}
+
+[data-component="text-input-v2"][data-appearance="large"] {
+  height: 32px;
+}
+
+[data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
+  background:
+    linear-gradient(0deg, var(--overlay-simple-overlay-hover), var(--overlay-simple-overlay-hover)),
+    linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
+}
+
+[data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
+  outline-color: var(--border-border-focus);
+  box-shadow: none;
+}
+
+[data-component="text-input-v2"]:where([data-invalid]):not([data-disabled]) {
+  outline-color: var(--state-fg-danger);
+  box-shadow: none;
+}
+
+[data-component="text-input-v2"]:where([data-disabled]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-value"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  align-self: stretch;
+  padding: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-input"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 8px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: var(--v2-font-family-sans);
+  font-style: normal;
+  font-weight: 440;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -0.04px;
+  color: var(--text-text-base);
+  font-variation-settings: "slnt" 0;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-input"]::placeholder {
+  color: var(--text-text-faint);
+}
+
+[data-component="text-input-v2"][data-numeric] [data-slot="text-input-v2-input"] {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"] {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  gap: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--icon-icon-muted);
+  cursor: pointer;
+  outline: none;
+}
+
+[data-component="text-input-v2"]
+  [data-slot="text-input-v2-icon-button"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-color: var(--overlay-simple-overlay-hover);
+}
+
+[data-component="text-input-v2"]
+  [data-slot="text-input-v2-icon-button"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--overlay-simple-overlay-pressed);
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"]:focus {
+  outline: none;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"]:focus-visible {
+  outline: 2px solid var(--border-border-focus);
+  outline-offset: 1px;
+}
+
+[data-component="text-input-v2"]:where([data-disabled]) [data-slot="text-input-v2-icon-button"] {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"] [data-slot="icon-svg"] {
+  display: block;
+  flex: none;
+  color: currentColor;
+}
+
+[data-component="text-input-v2"][data-invalid]:not([data-disabled]) [data-slot="text-input-v2-input"] {
+  color: var(--state-fg-danger);
+  caret-color: var(--state-fg-danger);
+}
+
+[data-component="text-input-v2"][data-invalid]:not([data-disabled]) [data-slot="text-input-v2-input"]::placeholder {
+  color: var(--state-fg-danger);
+  opacity: 1;
+}
