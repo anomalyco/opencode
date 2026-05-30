@@ -283,9 +283,10 @@ it.instance(
     expect(providers[ProviderV2.ID.anthropic]).toBeDefined()
     // Config options should be merged
     expect(providers[ProviderV2.ID.anthropic].options.timeout).toBe(60000)
+    expect(providers[ProviderV2.ID.anthropic].options.headerTimeout).toBe(10000)
     expect(providers[ProviderV2.ID.anthropic].options.chunkTimeout).toBe(15000)
   }),
-  { config: { provider: { anthropic: { options: { timeout: 60000, chunkTimeout: 15000 } } } } },
+  { config: { provider: { anthropic: { options: { timeout: 60000, headerTimeout: 10000, chunkTimeout: 15000 } } } } },
 )
 
 it.instance("getModel returns model for valid provider/model", () =>

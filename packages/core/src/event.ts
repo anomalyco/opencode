@@ -37,6 +37,7 @@ export type Payload<D extends Definition = Definition> = {
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
 export type Listener = (event: Payload) => Effect.Effect<void>
+export type Sync = (event: Payload) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
 
 export type SerializedEvent = {
@@ -116,6 +117,7 @@ export interface Interface {
   ) => Effect.Effect<Payload<D>>
   readonly subscribe: <D extends Definition>(definition: D) => Stream.Stream<Payload<D>>
   readonly all: () => Stream.Stream<Payload>
+  readonly sync: (handler: Sync) => Effect.Effect<Unsubscribe>
   readonly listen: (listener: Listener) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
   readonly replay: (
@@ -139,6 +141,7 @@ export const layer = Layer.effect(
     const typed = new Map<string, PubSub.PubSub<Payload>>()
     const projectors = new Map<string, AnyProjector[]>()
     const listeners = new Array<Listener>()
+    const syncHandlers = new Array<Sync>()
     const { db } = yield* Database.Service
 
     const getOrCreate = (definition: Definition) =>
@@ -239,17 +242,11 @@ export const layer = Layer.effect(
       })
     }
 
-    function publish<D extends Definition>(definition: D, data: Data<D>, options?: PublishOptions) {
+    function publishEvent<D extends Definition>(event: Payload<D>) {
       return Effect.gen(function* () {
-        const location = options?.location ?? Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
-        const event = {
-          id: options?.id ?? ID.create(),
-          ...(options?.metadata ? { metadata: options.metadata } : {}),
-          type: definition.type,
-          ...(definition.sync === undefined ? {} : { version: definition.sync.version }),
-          ...(location ? { location } : {}),
-          data,
-        } as Payload<D>
+        for (const sync of syncHandlers) {
+          yield* sync(event as Payload)
+        }
         yield* commitSyncEvent(event as Payload)
         for (const listener of listeners) {
           yield* listener(event as Payload)
@@ -258,6 +255,20 @@ export const layer = Layer.effect(
         if (pubsub) yield* PubSub.publish(pubsub, event as Payload)
         yield* PubSub.publish(all, event as Payload)
         return event
+      })
+    }
+
+    function publish<D extends Definition>(definition: D, data: Data<D>, options?: PublishOptions) {
+      return Effect.gen(function* () {
+        const location = options?.location ?? Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+        return yield* publishEvent({
+          id: options?.id ?? ID.create(),
+          ...(options?.metadata ? { metadata: options.metadata } : {}),
+          type: definition.type,
+          ...(definition.sync === undefined ? {} : { version: definition.sync.version }),
+          ...(location ? { location } : {}),
+          data,
+        } as Payload<D>)
       })
     }
 
@@ -355,6 +366,15 @@ export const layer = Layer.effect(
         })
       })
 
+    const sync = (handler: Sync): Effect.Effect<Unsubscribe> =>
+      Effect.sync(() => {
+        syncHandlers.push(handler)
+        return Effect.sync(() => {
+          const index = syncHandlers.indexOf(handler)
+          if (index >= 0) syncHandlers.splice(index, 1)
+        })
+      })
+
     const project = <D extends Definition>(definition: D, projector: Projector<D>): Effect.Effect<void> =>
       Effect.sync(() => {
         const list = projectors.get(definition.type) ?? []
@@ -362,7 +382,7 @@ export const layer = Layer.effect(
         projectors.set(definition.type, list)
       })
 
-    return Service.of({ publish, subscribe, all: streamAll, listen, project, replay, replayAll, remove, claim })
+    return Service.of({ publish, subscribe, all: streamAll, sync, listen, project, replay, replayAll, remove, claim })
   }),
 )
 

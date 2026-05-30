@@ -55,7 +55,6 @@ const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 44
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
-const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 const makeSessionHref = (b64Dir: string, sessionId: string) => `/${b64Dir}/session/${sessionId}`
 
@@ -75,6 +74,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
+  const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -85,7 +85,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
-    const height = USE_V2_TITLEBAR ? v2TitlebarHeight : legacyTitlebarHeight
+    const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
     if (mac()) return `${height / zoom()}px`
     if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
@@ -119,7 +119,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
-  const nav = createMemo(() => (USE_V2_TITLEBAR ? settings.general.showNavigation() : true))
+  const nav = createMemo(() => (useV2Titlebar() ? settings.general.showNavigation() : true))
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
     const version = props.update?.version()
     return {
@@ -222,8 +222,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     <header
       classList={{
         "shrink-0 relative overflow-hidden flex flex-row": true,
-        "h-11 bg-v2-background-bg-deep": USE_V2_TITLEBAR,
-        "h-10 bg-background-base": !USE_V2_TITLEBAR,
+        "h-11 bg-v2-background-bg-deep": useV2Titlebar(),
+        "h-10 bg-background-base": !useV2Titlebar(),
       }}
       style={{
         "min-height": minHeight(),
@@ -239,7 +239,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       onDblClick={maximize}
     >
       <Switch>
-        <Match when={USE_V2_TITLEBAR}>
+        <Match when={useV2Titlebar()}>
           {(_) => {
             const serverSync = useServerSync()
             const navigate = useNavigate()
@@ -490,7 +490,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             project={projectForSession(tab.info, projects(), projectByID())}
                             directory={tab.dir}
                             onClose={() => tabsStoreActions.removeTab(tab.href)}
-                            hideClose={tabsEnriched().length < 2}
                           />
                         </>
                       )}
@@ -737,14 +736,13 @@ function TabNavItem(props: {
   title: string
   project?: LocalProject
   directory: string
-  hideClose?: boolean
   onClose: () => void
 }) {
   const match = useMatch(() => props.href)
   const isActive = () => !!match()
   return (
     <div
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] pl-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
     >
       <a
@@ -755,7 +753,7 @@ function TabNavItem(props: {
         <span class="text-clip leading-5">{props.title}</span>
       </a>
 
-      <div class="absolute right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
+      <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
         <div
           class="absolute inset-0 bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
           style={{
@@ -766,7 +764,7 @@ function TabNavItem(props: {
         <IconButtonV2
           size="small"
           variant="ghost-muted"
-          class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100"
+          class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100 z-10"
           onClick={props.onClose}
           icon={<IconV2 name="xmark-small" />}
         />

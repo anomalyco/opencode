@@ -64,6 +64,7 @@ describe("Session.Info", () => {
       share: { url: "https://share.example.com/s/1" },
       title: "Full session",
       version: "1.0.0",
+      metadata: { source: "test" },
       time: { created: 100, updated: 200, compacting: 150, archived: 300 },
       permission: [{ action: "allow" as const, pattern: "*", permission: "read" }],
       revert: {
@@ -157,6 +158,7 @@ describe("Session input schemas", () => {
     const populated = {
       parentID: sessionID,
       title: "child",
+      metadata: { source: "test" },
       permission: [{ action: "ask" as const, pattern: "*", permission: "bash" }],
       workspaceID,
     }

@@ -6,7 +6,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
 import { Worktree } from "../../src/worktree"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
@@ -202,6 +202,22 @@ describe("Worktree", () => {
 
             const list = yield* svc.list()
             expect(list).toContainEqual(expect.objectContaining({ name: info.name, branch: info.branch }))
+          }),
+        ),
+      { git: true },
+    )
+
+    it.instance(
+      "lists the active linked worktree but not the project checkout",
+      () =>
+        withCreatedWorktree(undefined, ({ info }) =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const svc = yield* Worktree.Service
+            const list = yield* svc.list().pipe(provideInstance(info.directory))
+
+            expect(list.map((item) => item.name)).toContain(info.name)
+            expect(list.map((item) => item.name)).not.toContain(path.basename(test.directory).toLowerCase())
           }),
         ),
       { git: true },

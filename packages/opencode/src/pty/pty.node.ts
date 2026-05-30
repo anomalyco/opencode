@@ -1,4 +1,3 @@
-/** @ts-expect-error */
 import * as pty from "@lydell/node-pty"
 import type { Opts, Proc } from "./pty"
 

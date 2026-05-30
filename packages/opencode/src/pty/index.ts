@@ -60,7 +60,11 @@ export const Info = Schema.Struct({
   args: Schema.Array(Schema.String),
   cwd: Schema.String,
   status: Schema.Literals(["running", "exited"]),
-  pid: PositiveInt,
+  // Windows ConPTY (@lydell/node-pty >= 1.2.0-beta.12) assigns the child pid
+  // asynchronously, so `proc.pid` is 0 at the synchronous spawn point and only
+  // resolves a tick later. `create` snapshots it immediately, so 0 is a valid
+  // "pid not yet assigned" value here.
+  pid: NonNegativeInt,
 }).annotate({ identifier: "Pty" })
 
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>

@@ -2,17 +2,26 @@ export * as PluginV2 from "./plugin"
 
 import { createDraft, finishDraft, type Draft } from "immer"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { Context, Effect, Exit, Layer, PubSub, Schema, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
 import type { ModelV2 } from "./model"
-import type { AgentV2 } from "./agent"
 import type { Catalog } from "./catalog"
+import { EventV2 } from "./event"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type
 
+export const Event = {
+  Added: EventV2.define({
+    type: "plugin.added",
+    schema: {
+      id: ID,
+    },
+  }),
+}
+
 type HookSpec = {
   "catalog.transform": {
-    input: Catalog.Context
+    input: Catalog.Editor
     output: {}
   }
   "account.switched": {
@@ -41,27 +50,6 @@ type HookSpec = {
     }
     output: {
       sdk?: any
-    }
-  }
-  "agent.update": {
-    input: {}
-    output: {
-      agent: AgentV2.Info
-      cancel: boolean
-    }
-  }
-  "agent.remove": {
-    input: {
-      agent: AgentV2.Info
-    }
-    output: {
-      cancel: boolean
-    }
-  }
-  "agent.default": {
-    input: {}
-    output: {
-      agent?: AgentV2.ID
     }
   }
 }
@@ -93,7 +81,6 @@ export interface Interface {
     effect: Effect.Effect<void | HookFunctions, never, Scope.Scope>
   }) => Effect.Effect<void, never, never>
   readonly remove: (id: ID) => Effect.Effect<void>
-  readonly added: () => Stream.Stream<ID>
   readonly triggerFor: <Name extends keyof Hooks>(
     id: ID,
     name: Name,
@@ -117,9 +104,7 @@ export const layer = Layer.effect(
       hooks: HookFunctions
       scope: Scope.Closeable
     }[] = []
-    const added = yield* PubSub.unbounded<ID>()
-
-    yield* Effect.addFinalizer(() => PubSub.shutdown(added))
+    const events = yield* EventV2.Service
 
     const svc = Service.of({
       add: Effect.fn("Plugin.add")(function* (input) {
@@ -135,9 +120,8 @@ export const layer = Layer.effect(
             scope,
           },
         ]
-        yield* PubSub.publish(added, input.id)
+        yield* events.publish(Event.Added, { id: input.id })
       }),
-      added: () => Stream.fromPubSub(added),
       trigger: Effect.fn("Plugin.trigger")(function* (name, input, output) {
         return yield* svc.triggerFor(ID.make("*"), name, input, output)
       }),
@@ -185,7 +169,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
 
 // opencode
 // sdcok

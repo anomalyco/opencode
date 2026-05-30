@@ -31,6 +31,7 @@ import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
 import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 import { createRefCountMap } from "@/utils/refcount"
+import { retry } from "@opencode-ai/core/util/retry"
 
 type GlobalStore = {
   ready: boolean
@@ -205,6 +206,19 @@ export function createServerSyncContext() {
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
+    onMcp: (directory, setStore) => {
+      void retry(() =>
+        sdkFor(directory)
+          .command.list()
+          .then((x) => setStore("command", x.data ?? [])),
+      ).catch((err) => {
+        showToast({
+          variant: "error",
+          title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+          description: formatServerError(err, language.t),
+        })
+      })
+    },
     onDispose: (directory) => {
       const key = directoryKey(directory)
       queue.clear(key)
@@ -311,6 +325,7 @@ export function createServerSyncContext() {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
+        mcp: children.mcp(key),
         global: {
           config: globalStore.config,
           path: globalStore.path,
@@ -437,6 +452,7 @@ export function createServerSyncContext() {
     },
     child: children.child,
     peek: children.peek,
+    disableMcp: children.disableMcp,
     queryOptions: queryOptionsApi,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
@@ -454,7 +470,11 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
 
     return {
       ...sync,
-      createDirSyncContext: createRefCountMap((dir) => createDirSyncContext(dir, sync)),
+      createDirSyncContext: createRefCountMap(
+        (dir) => createDirSyncContext(dir, sync),
+        (dir) => sync.disableMcp(dir),
+        directoryKey,
+      ),
     }
   },
 })

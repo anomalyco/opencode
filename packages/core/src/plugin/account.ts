@@ -1,7 +1,7 @@
 import { Effect, Scope, Stream } from "effect"
-import { Auth } from "../auth"
 import { EventV2 } from "../event"
 import { PluginV2 } from "../plugin"
+import { Auth } from "../auth"
 
 // Depending on what account is active, enable matching providers for that
 // service
@@ -21,7 +21,7 @@ export const AccountPlugin = PluginV2.define({
 
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           const account = yield* accounts.active(Auth.ServiceID.make(item.provider.id)).pipe(Effect.orDie)
           if (!account) continue
           evt.provider.update(item.provider.id, (provider) => {

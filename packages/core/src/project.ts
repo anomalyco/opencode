@@ -1,4 +1,5 @@
 export * as ProjectV2 from "./project"
+export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import path from "path"
@@ -25,7 +26,6 @@ export type Vcs = typeof Vcs.Type
 
 export class Info extends Schema.Class<Info>("Project.Info")({
   id: ID,
-  vcs: Schema.optional(Vcs),
 }) {}
 
 export interface Interface {
@@ -105,7 +105,7 @@ export const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.find(input)
-      if (!repo) return { id: ID.global, directory: input, vcs: undefined }
+      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
 
       const previous = yield* cached(repo.store)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))

@@ -6,11 +6,12 @@ import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { eq } from "drizzle-orm"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const locationLayer = Layer.succeed(
   Location.Service,
-  Location.Service.of({ directory: AbsolutePath.make("project"), workspaceID: "workspace" }),
+  Location.Service.of(location({ directory: AbsolutePath.make("project"), workspaceID: "workspace" })),
 )
 const eventLayer = Layer.mergeAll(EventV2.defaultLayer, Database.defaultLayer)
 const it = testEffect(eventLayer.pipe(Layer.provideMerge(locationLayer)))

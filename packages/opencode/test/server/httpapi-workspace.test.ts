@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, mock } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
+import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { Session } from "@/session/session"
 import { Database } from "@opencode-ai/core/database/database"
 import * as Log from "@opencode-ai/core/util/log"
@@ -355,6 +356,7 @@ describe("workspace HttpApi", () => {
         proxied.push(request)
         const url = new URL(request.url)
         if (url.pathname === "/base/global/event") return eventStreamResponse()
+        if (url.pathname === "/base/event") return eventStreamResponse()
         if (url.pathname === "/base/sync/history") return Response.json([])
         return new Response(
           JSON.stringify({
@@ -424,6 +426,15 @@ describe("workspace HttpApi", () => {
         ])
         expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-directory")
         expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-workspace")
+
+        const eventURL = new URL(`http://localhost${EventPaths.event}`)
+        eventURL.searchParams.set("workspace", workspace.id)
+        const eventResponse = yield* request(eventURL.toString(), dir)
+        expect(eventResponse.status).toBe(200)
+        expect(eventResponse.headers["content-type"]).toContain("text/event-stream")
+        const event = Array.from(yield* eventResponse.stream.pipe(Stream.take(1), Stream.runCollect))[0]
+        expect(new TextDecoder().decode(event)).toContain("server.connected")
+        expect(proxied.some((item) => new URL(item.url).pathname === "/base/event")).toBe(true)
       } finally {
         void remote.stop(true)
         yield* requestDefault(WorkspacePaths.remove.replace(":id", workspace.id), dir, { method: "DELETE" })
@@ -479,6 +490,16 @@ describe("workspace HttpApi", () => {
           expect.objectContaining({
             url: `http://127.0.0.1:${remote.port}/base/session/${session.id}/message`,
             method: "POST",
+          }),
+        ])
+
+        const aborted = yield* request(`http://localhost/session/${session.id}/abort`, dir, { method: "POST" })
+        expect(aborted.status).toBe(200)
+        expect(proxied.filter((item) => new URL(item.url).pathname === `/base/session/${session.id}/abort`)).toEqual([
+          expect.objectContaining({
+            url: `http://127.0.0.1:${remote.port}/base/session/${session.id}/abort`,
+            method: "POST",
+            body: "",
           }),
         ])
       } finally {
