@@ -19,7 +19,7 @@ export const AccountPlugin = PluginV2.define({
 
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           const account = yield* accounts.active(AccountV2.ServiceID.make(item.provider.id)).pipe(Effect.orDie)
           if (!account) continue
           evt.provider.update(item.provider.id, (provider) => {

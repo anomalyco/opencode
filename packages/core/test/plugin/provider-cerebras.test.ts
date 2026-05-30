@@ -24,8 +24,8 @@ describe("CerebrasPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(CerebrasPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         catalog.provider.update(ProviderV2.ID.make("cerebras"), (item) => {
           item.endpoint = { type: "aisdk", package: "@ai-sdk/cerebras" }
           item.options.headers.Existing = "1"
@@ -43,8 +43,8 @@ describe("CerebrasPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(CerebrasPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => catalog.provider.update(ProviderV2.ID.make("groq"), () => {}))
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => catalog.provider.update(ProviderV2.ID.make("groq"), () => {}))
       expect((yield* catalog.provider.get(ProviderV2.ID.make("groq"))).options.headers).toEqual({})
     }),
   )

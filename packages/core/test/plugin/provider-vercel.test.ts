@@ -12,8 +12,8 @@ describe("VercelPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(VercelPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         const item = provider("vercel", {
           endpoint: { type: "aisdk", package: "@ai-sdk/vercel" },
           options: { headers: { Existing: "1" }, body: {}, aisdk: { provider: {}, request: {} } },
@@ -36,8 +36,8 @@ describe("VercelPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(VercelPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         const item = provider("vercel", { endpoint: { type: "aisdk", package: "@ai-sdk/vercel" } })
         catalog.provider.update(item.id, (draft) => {
           draft.endpoint = item.endpoint
@@ -69,8 +69,8 @@ describe("VercelPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(VercelPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => catalog.provider.update(provider("gateway").id, () => {}))
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => catalog.provider.update(provider("gateway").id, () => {}))
       expect((yield* catalog.provider.get(ProviderV2.ID.make("gateway"))).options.headers).toEqual({})
     }),
   )
