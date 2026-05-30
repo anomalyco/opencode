@@ -393,6 +393,29 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ---
 
+### Policies
+
+Use the `experimental.policies` option to allow or deny OpenCode actions on configured resources. Currently, policies can control which providers OpenCode may use.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+[Learn more about policies here](/docs/policies).
+
+---
+
 ### Image attachments
 
 OpenCode normalizes image attachments before sending them to the model. By default, images are resized when they exceed `2000x2000` pixels or `5242880` base64 bytes.

@@ -13,8 +13,8 @@ describe("AzureCognitiveServicesPlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzureCognitiveServicesPlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.make("azure-cognitive-services"), (item) => {
             item.endpoint = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
           })
@@ -37,8 +37,8 @@ describe("AzureCognitiveServicesPlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzureCognitiveServicesPlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure-cognitive-services", {
             endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible" },
           })
