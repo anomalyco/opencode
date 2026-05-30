@@ -1304,6 +1304,27 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("models.dev normalization marks omitted cost as unknown", () => {
+  const provider = {
+    id: "snowflake-cortex",
+    name: "Snowflake Cortex",
+    env: [],
+    models: {
+      "claude-sonnet-4-5": {
+        id: "claude-sonnet-4-5",
+        name: "Claude Sonnet 4.5",
+        family: "claude",
+        limit: { context: 200_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["claude-sonnet-4-5"]
+  expect(model.cost.input).toBe(0)
+  expect(model.cost.output).toBe(0)
+  expect(model.costKnown).toBe(false)
+})
+
 it.instance("model variants are generated for reasoning models", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")

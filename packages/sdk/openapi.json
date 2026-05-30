@@ -14556,6 +14556,9 @@
             "required": ["input", "output", "cache"],
             "additionalProperties": false
           },
+          "costKnown": {
+            "type": "boolean"
+          },
           "limit": {
             "type": "object",
             "properties": {

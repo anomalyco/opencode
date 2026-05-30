@@ -188,7 +188,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       if (!ok) {
         for (const [key, value] of Object.entries(input.models)) {
-          if (value.cost.input === 0) continue
+          if (value.costKnown !== false && value.cost.input === 0) continue
           delete input.models[key]
         }
       }
@@ -935,6 +935,7 @@ export const Model = Schema.Struct({
   family: optionalOmitUndefined(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
+  costKnown: optionalOmitUndefined(Schema.Boolean),
   limit: ProviderLimit,
   status: ModelStatus,
   options: Schema.Record(Schema.String, Schema.Any),
@@ -1095,6 +1096,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     headers: {},
     options: {},
     cost: cost(model.cost),
+    costKnown: model.cost !== undefined,
     limit: {
       context: model.limit.context,
       input: model.limit.input,
@@ -1143,6 +1145,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
         id: ModelID.make(id),
         name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
+        costKnown: opts.cost ? true : base.costKnown,
         options: opts.provider?.body
           ? Object.fromEntries(
               Object.entries(opts.provider.body).map(([k, v]) => [
@@ -1365,6 +1368,7 @@ export const layer = Layer.effect(
                   write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
                 },
               },
+              costKnown: model.cost !== undefined ? true : (existingModel?.costKnown ?? false),
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
               limit: {
                 context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
