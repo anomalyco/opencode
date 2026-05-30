@@ -332,6 +332,15 @@ export function Prompt(props: PromptProps) {
     const result = await sdk.client.app.skills()
     return result.data ?? []
   })
+
+  async function skillNames() {
+    const loaded = skills()
+    if (loaded) return new Set(loaded.map((skill) => skill.name))
+    const result = await sdk.client.app.skills().catch(() => undefined)
+    if (!result || result.error || !result.data) return new Set<string>()
+    return new Set(result.data.map((skill) => skill.name))
+  }
+
   let promptPartTypeId = 0
   const event = useEvent()
 
@@ -1231,16 +1240,26 @@ export function Prompt(props: PromptProps) {
       // Ensure every $skillname reference has a structured SkillPartInput
       const refNames = new Set(references(inputText).map((ref) => ref.name))
       if (refNames.size > 0) {
+        const validSkillNames = await skillNames()
         const existingNames = new Set(
           nonTextParts.filter((p): p is { type: "skill"; name: string } => p.type === "skill" && "name" in p).map((p) => p.name),
         )
         for (const name of refNames) {
           if (existingNames.has(name)) continue
-          if (!skills()?.find((s) => s.name === name)) continue
+          if (!validSkillNames.has(name)) continue
           nonTextParts.push({ type: "skill", name })
           existingNames.add(name)
         }
       }
+
+      // Deduplicate skill parts to avoid duplicate SKILL pills and injections
+      const seenSendingSkillNames = new Set<string>()
+      const sendingParts = nonTextParts.filter((p) => {
+        if (p.type !== "skill") return true
+        if (seenSendingSkillNames.has(p.name)) return false
+        seenSendingSkillNames.add(p.name)
+        return true
+      })
 
       sdk.client.session
         .prompt({
@@ -1257,7 +1276,7 @@ export function Prompt(props: PromptProps) {
               type: "text",
               text: inputText,
             },
-            ...nonTextParts.map(assign),
+            ...sendingParts.map(assign),
           ],
         })
         .catch(() => {})
@@ -1379,8 +1398,14 @@ export function Prompt(props: PromptProps) {
     const pasteStartOffset = input.visualCursor.offset
     input.insertText(normalizedText)
 
-    const validSkillNames = new Set((skills() ?? []).map((s) => s.name))
-    const skillRefs = references(normalizedText).filter((r) => validSkillNames.has(r.name))
+    const validSkillNames = await skillNames()
+    const seenSkillNames = new Set<string>()
+    const skillRefs = references(normalizedText).filter((r) => {
+      if (!validSkillNames.has(r.name)) return false
+      if (seenSkillNames.has(r.name)) return false
+      seenSkillNames.add(r.name)
+      return true
+    })
     for (const ref of skillRefs) {
       const extmarkStart = pasteStartOffset + ref.start
       const extmarkEnd = pasteStartOffset + ref.end

@@ -765,12 +765,6 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             text: "The following tool was executed by the user",
           })
         }
-        if (part.type === "skill") {
-          userMessage.parts.push({
-            type: "text",
-            text: `$${part.name}`,
-          })
-        }
       }
       if (userMessage.parts.length > 0) result.push(userMessage)
     }

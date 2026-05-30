@@ -558,6 +558,7 @@ export function Autocomplete(props: {
     })
 
     props.setPrompt((draft) => {
+      if (draft.parts.some((p) => p.type === "skill" && p.name === name)) return
       const partIndex = draft.parts.length
       draft.parts.push({
         type: "skill",
@@ -870,7 +871,8 @@ export function Autocomplete(props: {
         if (idx === -1) return
         if (skillIdx !== undefined && skillIdx === idx) {
           const query = props.input().getTextRange(skillIdx, offset)
-          if (/^\$[A-Z_][A-Z0-9_]*$/.test(query)) return
+          if (/^\$[A-Z_][A-Z0-9_]*$/.test(query) && !(props.skills() ?? []).some((skill) => `$${skill.name}` === query))
+            return
         }
         show(skillIdx !== undefined && skillIdx === idx ? "$" : "@")
         setStore("index", idx)
