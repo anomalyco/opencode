@@ -135,10 +135,36 @@ jobs:
           # Cost: ~$290/mo running 24/7 on Fargate ap-southeast-2 — roughly
           # 2x the previous 2vCPU/8GB tier ($145/mo).  Acceptable given the
           # cross-session correlated-crash failure mode we were seeing.
+          # Re-assert the SQLite EFS mount point on every deploy.  The EFS
+          # access point is mounted into the container; legacy task-def
+          # revisions had it at `/root/.local/share/opencode` (the
+          # pre-ADR-0003 root-user layout), but opencode now runs as uid
+          # 10001 with HOME=/home/opencode and writes its SQLite DB at
+          # `/home/opencode/.local/share/opencode/opencode-local.db`.
+          # With the EFS mount at the OLD path, the runtime path falls
+          # back to overlayfs and every deploy wipes the collab_session
+          # table.
+          #
+          # The map() form is idempotent — already-correct paths pass
+          # through unchanged; only the legacy `/root/...` form gets
+          # rewritten.  Caveat: the EFS access point itself ALSO needs
+          # to permit uid 10001 writes (POSIX user 10001/10001) — the
+          # mount path fix alone isn't sufficient if the access point
+          # is still uid 0/0.  That's a one-time AWS Console action
+          # outside the task-def shape.  After this jq patch lands and
+          # the next deploy runs, the entrypoint's "EFS path is
+          # writable" log line confirms whether the access point uid
+          # also needs fixing.
           jq --arg img "${{ steps.img.outputs.sha_image }}" '
             .containerDefinitions[0].image = $img
             | .cpu = "4096"
             | .memory = "16384"
+            | .containerDefinitions[0].mountPoints |= map(
+                if .containerPath == "/root/.local/share/opencode"
+                then .containerPath = "/home/opencode/.local/share/opencode"
+                else .
+                end
+              )
             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                   .compatibilities, .registeredAt, .registeredBy)
           ' current.json > new.json
