@@ -159,14 +159,14 @@ function planWorkspaceRequest(
 
 function planRequest(
   request: HttpServerRequest.HttpServerRequest,
-  sessionWorkspaceID?: WorkspaceID,
+  session?: Session.Info,
 ): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, sessionWorkspaceID)
-      : selectedWorkspaceID(url, sessionWorkspaceID)
+      ? selectedV2WorkspaceID(url, session?.workspaceID)
+      : selectedWorkspaceID(url, session?.workspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
@@ -178,7 +178,10 @@ function planRequest(
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
-    return RequestPlan.Local({ directory: defaultDirectory(request, url), workspaceID: envWorkspaceID ?? workspaceID })
+    return RequestPlan.Local({
+      directory: session?.directory || defaultDirectory(request, url),
+      workspaceID: envWorkspaceID ?? workspaceID,
+    })
   })
 }
 
@@ -226,7 +229,7 @@ function routeHttpApiWorkspace<E>(
           Effect.catchDefect(() => Effect.succeed(undefined)),
         )
       : undefined
-    const plan = yield* planRequest(request, session?.workspaceID)
+    const plan = yield* planRequest(request, session)
     return yield* routeWorkspace(client, effect, plan)
   })
 }

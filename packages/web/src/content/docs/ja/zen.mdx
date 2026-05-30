@@ -68,6 +68,7 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | GPT 5                  | gpt-5                  | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Codex            | gpt-5-codex            | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
 | GPT 5 Nano             | gpt-5-nano             | `https://opencode.ai/zen/v1/responses`               | `@ai-sdk/openai`            |
+| Claude Opus 4.8        | claude-opus-4-8        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.7        | claude-opus-4-7        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6        | claude-opus-4-6        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Claude Opus 4.5        | claude-opus-4-5        | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
@@ -91,6 +92,7 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
 OpenCode 設定で使う [model id](/docs/config/#models) は `opencode/<model-id>` 形式です。たとえば、GPT 5.5 では設定に `opencode/gpt-5.5` を使用します。
@@ -115,6 +117,7 @@ https://opencode.ai/zen/v1/models
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | DeepSeek V4 Flash Free            | Free   | Free    | Free        | -            |
+| MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
 | Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
@@ -125,7 +128,8 @@ https://opencode.ai/zen/v1/models
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50       | $3.125       |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
-| Grok Build 0.1                    | 1.00   | $2.00   | $0.20       | -            |
+| Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
+| Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.6                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.5                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -169,6 +173,7 @@ https://opencode.ai/zen/v1/models
 無料モデル:
 
 - DeepSeek V4 Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
+- MiMo-V2.5 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Nemotron 3 Super Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Big Pickle はステルスモデルで、期間限定で OpenCode で無料提供されています。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 
@@ -220,6 +225,7 @@ https://opencode.ai/zen/v1/models
 
 - Big Pickle: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - DeepSeek V4 Flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
+- MiMo-V2.5 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - Nemotron 3 Super Free（NVIDIA の無料エンドポイント）: [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) に基づいて提供されます。試用専用であり、本番環境や機密性の高いデータには使用しないでください。プロンプトと出力は、NVIDIA が自社のモデルとサービスを改善するために記録します。個人情報や機密データは送信しないでください。
 - OpenAI APIs: リクエストは [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) に従って 30 日間保持されます。
 - Anthropic APIs: リクエストは [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) に従って 30 日間保持されます。
