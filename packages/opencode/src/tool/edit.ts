@@ -559,10 +559,6 @@ export const TrimmedBoundaryReplacer: Replacer = function* (content, find) {
     return
   }
 
-  // Try to find the trimmed version
-  if (content.includes(trimmedFind)) {
-    yield trimmedFind
-  }
 
   // Also try finding blocks where trimmed content matches
   const lines = content.split("\n")
