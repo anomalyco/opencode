@@ -1,17 +1,23 @@
 name: Sync to Hugging Face Hub
+
 on:
   push:
-    branches: [ dev, main ] # يشتغل على أي فرع تقوم بالحفظ فيه
+    branches:
+      - dev
+      - main
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           lfs: true
-      - name: Push to HF
+
+      - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/Ejdjdososs/opencode HEAD:refs/heads/main
+        run: |
+          git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/Ejdjdososs/opencode main
