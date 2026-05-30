@@ -81,4 +81,28 @@ describe("opencode run (non-interactive subprocess)", () => {
       }),
     60_000,
   )
+
+  // Regression for #29997: the user's prompt must surface in --format json as a
+  // `user` event. Previously the stream began at step_start and the prompt was
+  // only retrievable via `opencode export`, so anything rebuilding a transcript
+  // from the stream lost the user turn entirely.
+  cliIt.concurrent(
+    "--format json emits a user event carrying the prompt (regression for #29997)",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("ok")
+        const result = yield* opencode.run("marco", { format: "json" })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        const user = events.find((e) => e.type === "user")
+        expect(user).toBeDefined()
+        expect(JSON.stringify(user!.parts)).toContain("marco")
+
+        // The user turn must precede the assistant's reply in the stream.
+        const types = events.map((e) => e.type)
+        expect(types.indexOf("user")).toBeLessThan(types.indexOf("text"))
+      }),
+    60_000,
+  )
 })

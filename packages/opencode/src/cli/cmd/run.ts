@@ -789,12 +789,18 @@ export const RunCommand = effectCmd({
           }
 
           const model = pick(args.model)
+          const parts = [...files, { type: "text" as const, text: message }]
+          // Mirror the prompt to --format json consumers. The streamed
+          // message.part events only cover the assistant reply, so without this
+          // the user turn never appears in the stream (it lives only in
+          // `opencode export`).
+          emit("user", { parts })
           const result = await client.session.prompt({
             sessionID,
             agent,
             model,
             variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
+            parts,
           })
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
