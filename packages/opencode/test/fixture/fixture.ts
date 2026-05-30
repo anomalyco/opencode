@@ -119,7 +119,10 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
 }
 
 /** Effectful scoped tmpdir. Cleaned up when the scope closes. Make sure these stay in sync */
-export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
+export function tmpdirScoped(options?: {
+  git?: boolean
+  config?: Partial<Config.Info> | (() => Partial<Config.Info>)
+}) {
   return Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
@@ -146,10 +149,11 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     }
 
     if (options?.config) {
+      const resolved = typeof options.config === "function" ? options.config() : options.config
       yield* Effect.promise(() =>
         fs.writeFile(
           path.join(dir, "opencode.json"),
-          JSON.stringify({ $schema: "https://opencode.ai/config.json", ...options.config }),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", ...resolved }),
         ),
       )
     }
@@ -180,7 +184,7 @@ export const disposeAllInstancesEffect = InstanceStore.Service.use((store) => st
 
 export function provideTmpdirInstance<A, E, R>(
   self: (path: string) => Effect.Effect<A, E, R>,
-  options?: { git?: boolean; config?: Partial<Config.Info> },
+  options?: { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) },
 ) {
   return Effect.gen(function* () {
     const path = yield* tmpdirScoped(options)
@@ -203,8 +207,14 @@ export function provideTmpdirInstance<A, E, R>(
 
 export class TestInstance extends Context.Service<TestInstance, { readonly directory: string }>()("@test/Instance") {}
 
+export const requireInstance = Effect.gen(function* () {
+  const instance = yield* InstanceRef
+  if (!instance) return yield* Effect.die(new Error("missing test instance"))
+  return instance
+})
+
 export const withTmpdirInstance =
-  (options?: { git?: boolean; config?: Partial<Config.Info> }) =>
+  (options?: { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) }) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)

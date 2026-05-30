@@ -22,6 +22,7 @@ export function SessionComposerRegion(props: {
   state: SessionComposerState
   ready: boolean
   centered: boolean
+  placement?: "dock" | "inline"
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
@@ -142,11 +143,15 @@ export function SessionComposerRegion(props: {
     <div
       ref={props.setPromptDockRef}
       data-component="session-prompt-dock"
-      class="shrink-0 w-full pb-3 flex flex-col justify-center items-center bg-background-stronger pointer-events-none"
+      classList={{
+        "w-full flex flex-col justify-center items-center pointer-events-none": true,
+        "shrink-0 pb-3 bg-background-stronger": props.placement !== "inline",
+      }}
     >
       <div
         classList={{
           "w-full px-3 pointer-events-auto": true,
+          "max-w-[720px] px-0": props.placement === "inline",
           "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
         }}
       >
@@ -256,6 +261,7 @@ export function SessionComposerRegion(props: {
                 fallback={
                   <Show when={!props.state.blocked()}>
                     <PromptInput
+                      variant={props.placement === "inline" ? "new-session" : undefined}
                       ref={props.inputRef}
                       newSessionWorktree={props.newSessionWorktree}
                       onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
