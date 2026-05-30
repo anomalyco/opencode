@@ -26,7 +26,7 @@ import { connect as tlsConnect } from "node:tls"
 import type { IncomingMessage } from "node:http"
 import type { Socket } from "node:net"
 import { lookupCookieIdentityFromHeaders } from "./cookie-auth"
-import { getActiveUpstreamScheme, getActivePreviewPort } from "./preview-launcher"
+import { getActiveUpstreamScheme, getActivePreviewPort, getActiveServePath } from "./preview-launcher"
 
 const PREVIEW_PREFIX = "/preview/"
 
@@ -136,7 +136,19 @@ function upstreamHostHeader(port: number): string {
 export async function handlePreviewHttp(req: Request, port: number, rest: string): Promise<Response> {
   const url = new URL(req.url)
   const scheme = getActiveUpstreamScheme(port)
-  const target = `${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest}${url.search}`
+  // Path to send to the upstream dev server.
+  //
+  //   - servePath is null (default)  → forward the stripped `rest` (legacy
+  //     behavior; dev server listens at "/" and sees /main.js, /chunk-X.js).
+  //   - servePath is a string        → prepend it to `rest`, so the dev
+  //     server receives e.g. /preview/main.js (matches an Angular CLI
+  //     dev-server whose baseHref-derived servePath is "/preview/").
+  //
+  // `rest` always starts with "/" (parsePreviewPath guarantees) so the
+  // simple concat works without double-slashing.
+  const servePath = getActiveServePath(port)
+  const upstreamPath = servePath ? servePath.replace(/\/$/, "") + rest : rest
+  const target = `${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${upstreamPath}${url.search}`
 
   // Log every request so CloudWatch shows the full proxy attempt history.
   // Volume is bounded by `/preview/<port>/*` traffic, which is itself idle-
@@ -317,8 +329,17 @@ export function attachPreviewUpgrade(server: {
     // anyway.  See `handlePreviewHttp`'s tls option for the matching
     // rationale on the HTTP path.
     const upstreamScheme = getActiveUpstreamScheme(parsed.port)
+    // Mirror the HTTP path's keep-prefix logic: when the active preview
+    // declared a `servePath`, the dev server's WS endpoint also lives
+    // under that prefix (Angular's @vite/client connects to
+    // /preview/@vite/client, not /@vite/client).  Prepend servePath to
+    // the stripped `rest` to satisfy the dev server's routing.
+    const upstreamServePath = getActiveServePath(parsed.port)
+    const wsUpstreamPath = upstreamServePath
+      ? upstreamServePath.replace(/\/$/, "") + (parsed.rest || "/")
+      : (parsed.rest || "/")
     console.log(
-      `[collab.preview-proxy] WS upgrade ${pathname} → ${upstreamScheme}://127.0.0.1:${parsed.port}${parsed.rest}`,
+      `[collab.preview-proxy] WS upgrade ${pathname} → ${upstreamScheme}://127.0.0.1:${parsed.port}${wsUpstreamPath}`,
     )
     const upstreamSocket: Socket =
       upstreamScheme === "https"
@@ -354,10 +375,12 @@ export function attachPreviewUpgrade(server: {
     // accident but is brittle).  One handler, picked once.
     const upstreamReady = upstreamScheme === "https" ? "secureConnect" : "connect"
     upstreamSocket.once(upstreamReady, () => {
-      // Build the rewritten request line + headers.  Rewrite the URL by
-      // stripping the /preview/<port> prefix; everything else (Sec-WebSocket-*
-      // headers, Upgrade, Connection, Origin, etc.) passes through.
-      const newUrl = (parsed.rest || "/") + (url.includes("?") ? url.slice(url.indexOf("?")) : "")
+      // Build the rewritten request line + headers.  Path was already
+      // resolved above (wsUpstreamPath) — strip-prefix by default, keep-
+      // prefix when the active preview declared a servePath.  Everything
+      // else (Sec-WebSocket-* headers, Upgrade, Connection, Origin, etc.)
+      // passes through.
+      const newUrl = wsUpstreamPath + (url.includes("?") ? url.slice(url.indexOf("?")) : "")
       const lines: string[] = [`${req.method ?? "GET"} ${newUrl} HTTP/1.1`]
       const raw = req.rawHeaders
       for (let i = 0; i < raw.length; i += 2) {
