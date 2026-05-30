@@ -59,7 +59,6 @@ Die aktuelle Liste der Modelle umfasst:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -77,7 +76,7 @@ OpenCode Go beinhaltet die folgenden Limits:
 - **Wöchentliches Limit** — 30 $ Nutzung
 - **Monatliches Limit** — 60 $ Nutzung
 
-Limits sind in Dollarwerten definiert. Das bedeutet, dass die tatsächliche Anzahl deiner Anfragen von dem von dir genutzten Modell abhängt. Günstigere Modelle wie MiniMax M2.5 erlauben mehr Anfragen, während teurere Modelle wie GLM-5.1 weniger erlauben.
+Limits sind in Dollarwerten definiert. Das bedeutet, dass die tatsächliche Anzahl deiner Anfragen von dem von dir genutzten Modell abhängt. Günstigere Modelle wie DeepSeek V4 Flash erlauben mehr Anfragen, während teurere Modelle wie GLM-5.1 weniger erlauben.
 
 Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf typischen Go-Nutzungsmustern:
 
@@ -93,7 +92,6 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 | MiniMax M2.5      | 6,300                  | 15,900             | 31,800             |
 | Qwen3.7 Max       | 950                    | 2,390              | 4,770              |
 | Qwen3.6 Plus      | 3,300                  | 8,200              | 16,300             |
-| Qwen3.5 Plus      | 10,200                 | 25,200             | 50,500             |
 | DeepSeek V4 Pro   | 3,450                  | 8,550              | 17,150             |
 | DeepSeek V4 Flash | 31,650                 | 79,050             | 158,150            |
 
@@ -106,7 +104,6 @@ Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
 - MiniMax M2.7/M2.5 — 300 Input-, 55.000 Cached-, 125 Output-Tokens pro Anfrage
 - Qwen3.7 Max — 420 Input-, 66.000 Cached-, 200 Output-Tokens pro Anfrage
 - Qwen3.6 Plus — 500 Input-, 57.000 Cached-, 190 Output-Tokens pro Anfrage
-- Qwen3.5 Plus — 410 Input-, 47.000 Cached-, 140 Output-Tokens pro Anfrage
 - MiMo-V2.5 — 830 Input-, 71.500 Cached-, 295 Output-Tokens pro Anfrage
 - MiMo-V2.5-Pro — 790 Input-, 86.000 Cached-, 305 Output-Tokens pro Anfrage
 
@@ -144,7 +141,6 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K2.6 würdest du beispielsweise `opencode-go/kimi-k2.6` in deiner Config verwenden.
 

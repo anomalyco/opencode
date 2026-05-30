@@ -10038,11 +10038,14 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "WorkspaceCreateError | BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkspaceCreateError"
+                    },
                     {
                       "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
                     },
@@ -16235,6 +16238,27 @@
           }
         },
         "required": ["id", "type", "name", "projectID", "timeUsed"],
+        "additionalProperties": false
+      },
+      "WorkspaceCreateError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["WorkspaceCreateError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "WorkspaceWarpError": {

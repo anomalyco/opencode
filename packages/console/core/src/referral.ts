@@ -377,23 +377,30 @@ export namespace Referral {
         .then((rows) => rows[0])
       if (!referral) return
 
-      const result = await tx
-        .insert(ReferralRewardTable)
-        .ignore()
-        .values([
-          {
-            workspaceID: referral.workspaceID,
-            referralID: referral.id,
-            amount: REWARD_AMOUNT,
-          },
-          {
-            workspaceID: input.workspaceID,
-            referralID: referral.id,
-            amount: REWARD_AMOUNT,
-          },
-        ])
+      await tx.insert(ReferralRewardTable).ignore().values({
+        workspaceID: referral.workspaceID,
+        referralID: referral.id,
+        amount: REWARD_AMOUNT,
+      })
 
-      if (result.rowsAffected === 0) return
+      const existingInviteeReward = await tx
+        .select({ workspaceID: ReferralRewardTable.workspaceID })
+        .from(ReferralRewardTable)
+        .where(
+          and(
+            eq(ReferralRewardTable.referralID, referral.id),
+            sql`${ReferralRewardTable.workspaceID} <> ${referral.workspaceID}`,
+            isNull(ReferralRewardTable.timeDeleted),
+          ),
+        )
+        .then((rows) => rows[0])
+      if (existingInviteeReward) return
+
+      await tx.insert(ReferralRewardTable).ignore().values({
+        workspaceID: input.workspaceID,
+        referralID: referral.id,
+        amount: REWARD_AMOUNT,
+      })
     })
   }
 
