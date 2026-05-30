@@ -128,7 +128,7 @@ export const layer = Layer.effect(
           ...(options?.metadata ? { metadata: options.metadata } : {}),
           type: definition.type,
           ...(definition.version === undefined ? {} : { version: definition.version }),
-          ...(location ? { location } : {}),
+          ...(location ? { location: { directory: location.directory, workspaceID: location.workspaceID } } : {}),
           data,
         } as Payload<D>
         return yield* publishEvent(event)
