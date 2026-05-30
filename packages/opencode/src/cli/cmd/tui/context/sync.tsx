@@ -130,6 +130,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    sdk.event.on("reconnect", () => {
+      const workspace = project.workspace.current()
+      void sdk.client.session
+        .status({ workspace })
+        .then((x) => setStore("session_status", reconcile(x.data ?? {})))
+        .catch(() => {})
+    })
+
     event.subscribe((event, { workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":

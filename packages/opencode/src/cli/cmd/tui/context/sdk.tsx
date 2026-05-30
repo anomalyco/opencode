@@ -35,6 +35,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
 
     const emitter = createGlobalEmitter<{
       event: GlobalEvent
+      reconnect: void
     }>()
 
     let queue: GlobalEvent[] = []
@@ -84,6 +85,11 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             signal: ctrl.signal,
             sseMaxRetryAttempts: 0,
           })
+
+          // A re-opened stream (attempt > 0) means we dropped and came back.
+          // Status events emitted while we were gone are lost (SSE has no
+          // replay), so signal a reconnect to re-sync state.
+          if (attempt > 0) emitter.emit("reconnect")
 
           if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
             // Start syncing workspaces, it's important to do this after

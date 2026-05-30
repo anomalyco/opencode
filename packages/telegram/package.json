@@ -1,19 +1,19 @@
 {
-  "name": "@opencode-ai/slack",
-  "version": "1.15.12",
+  "name": "@opencode-ai/telegram",
+  "version": "1.15.7",
   "type": "module",
-  "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
     "./integration": "./src/integration.ts"
   },
+  "license": "MIT",
   "scripts": {
     "dev": "bun run src/index.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
-    "@slack/bolt": "^3.17.1"
+    "grammy": "^1.26.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",

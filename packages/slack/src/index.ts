@@ -143,3 +143,6 @@ app.command("/test", async ({ command, ack, say }) => {
 
 await app.start()
 console.log("⚡️ Slack bot is running!")
+
+export { createSlackIntegration } from "./integration.js"
+export type { Integration as SlackIntegration, IntegrationConfig as SlackIntegrationConfig } from "./integration.js"
