@@ -19,12 +19,11 @@ const it = testEffect(PluginV2.defaultLayer)
 function context(
   records: { provider: ProviderV2.Info; models: Map<ModelV2.ID, ModelV2.Info> }[],
   updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }>,
-): Catalog.Context {
+): Catalog.Editor {
   return {
-    data: records,
-    updateProvider: (providerID, fn) => context(records, updates).provider.update(providerID, fn),
-    updateModel: (providerID, modelID, fn) => context(records, updates).model.update(providerID, modelID, fn),
     provider: {
+      list: () => records,
+      get: (providerID) => records.find((item) => item.provider.id === providerID),
       update: (providerID, fn) => {
         const record = records.find((item) => item.provider.id === providerID)
         const provider = produce(record?.provider ?? ProviderV2.Info.empty(providerID), fn)
@@ -45,8 +44,13 @@ function context(
       },
     },
     model: {
+      get: () => undefined,
       update: () => {},
       remove: () => {},
+      default: {
+        get: () => undefined,
+        set: () => {},
+      },
     },
   }
 }
@@ -192,7 +196,7 @@ describe("AccountV2", () => {
           ]
           const updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }> = []
           const catalog = Catalog.Service.of({
-            loader: () => Effect.die("unexpected catalog.loader"),
+            transform: () => Effect.die("unexpected catalog.transform"),
             provider: {
               get: () => Effect.die("unexpected provider.get"),
               all: () => Effect.succeed([]),
@@ -203,7 +207,6 @@ describe("AccountV2", () => {
               all: () => Effect.succeed([]),
               available: () => Effect.succeed([]),
               default: () => Effect.succeed(Option.none<ModelV2.Info>()),
-              setDefault: () => Effect.die("unexpected model.setDefault"),
               small: () => Effect.succeed(Option.none<ModelV2.Info>()),
             },
           })

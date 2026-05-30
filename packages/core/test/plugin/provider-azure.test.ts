@@ -5,9 +5,12 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Policy } from "@opencode-ai/core/policy"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
@@ -16,7 +19,10 @@ const itWithAccount = testEffect(
     Layer.provideMerge(PluginV2.defaultLayer),
     Layer.provideMerge(AccountV2.defaultLayer),
     Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))),
+    Layer.provide(Policy.defaultLayer),
+    Layer.provideMerge(
+      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
+    ),
     Layer.provideMerge(npmLayer),
   ),
 )
@@ -28,8 +34,8 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.azure, (item) => {
             item.endpoint = { type: "aisdk", package: "@ai-sdk/azure" }
           })
@@ -45,8 +51,8 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure", {
             endpoint: { type: "aisdk", package: "@ai-sdk/azure" },
             options: { headers: {}, body: {}, aisdk: { provider: { resourceName: "from-config" }, request: {} } },
@@ -94,8 +100,8 @@ describe("AzurePlugin", () => {
             ),
           })
           yield* plugin.add(AzurePlugin)
-          const load = yield* catalog.loader()
-          yield* load((catalog) => {
+          const transform = yield* catalog.transform()
+          yield* transform((catalog) => {
             catalog.provider.update(ProviderV2.ID.azure, (item) => {
               item.endpoint = { type: "aisdk", package: "@ai-sdk/azure" }
             })
@@ -113,8 +119,8 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure", {
             endpoint: { type: "aisdk", package: "@ai-sdk/azure" },
             options: { headers: {}, body: {}, aisdk: { provider: { resourceName: "" }, request: {} } },
@@ -135,8 +141,8 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure", {
             endpoint: { type: "aisdk", package: "@ai-sdk/azure" },
             options: { headers: {}, body: {}, aisdk: { provider: { resourceName: "   " }, request: {} } },

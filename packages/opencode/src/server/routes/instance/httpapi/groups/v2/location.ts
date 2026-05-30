@@ -1,6 +1,7 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
@@ -40,7 +41,9 @@ export class V2LocationMiddleware extends HttpApiMiddleware.Service<
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   return {
-    directory: query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    directory: AbsolutePath.make(
+      query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    ),
     workspaceID: query.get("location[workspace]") || request.headers["x-opencode-workspace"],
   }
 }

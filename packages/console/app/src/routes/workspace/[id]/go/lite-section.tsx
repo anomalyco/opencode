@@ -15,6 +15,7 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
 import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
+import { createReferralFromCookie } from "~/lib/referral-invite"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
 
@@ -74,16 +75,14 @@ const createLiteCheckoutUrl = action(
   async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
     "use server"
     return json(
-      await withActor(
-        () =>
-          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
-            .then((data) => ({ error: undefined, data }))
-            .catch((e) => ({
-              error: e.message as string,
-              data: undefined,
-            })),
-        workspaceID,
-      ),
+      await withActor(async () => {
+        const data = await Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
+        await createReferralFromCookie()
+        return { error: undefined, data }
+      }, workspaceID).catch((e) => ({
+        error: e.message as string,
+        data: undefined,
+      })),
       { revalidate: [queryBillingInfo.key, queryLiteSubscription.key] },
     )
   },
