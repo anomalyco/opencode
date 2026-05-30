@@ -77,17 +77,17 @@ describe("session action routes", () => {
         const fork = (yield* Effect.promise(() => forked.json())) as SessionNs.Info
         expect(fork.metadata).toEqual(next.metadata)
 
-        const cleared = yield* Effect.promise(() =>
+        const reset = yield* Effect.promise(() =>
           Promise.resolve(
             app.request(`/session/${session.id}`, {
               method: "PATCH",
               headers,
-              body: JSON.stringify({ metadata: null }),
+              body: JSON.stringify({ metadata: {} }),
             }),
           ),
         )
-        expect(cleared.status).toBe(200)
-        expect(((yield* Effect.promise(() => cleared.json())) as SessionNs.Info).metadata).toBeUndefined()
+        expect(reset.status).toBe(200)
+        expect(((yield* Effect.promise(() => reset.json())) as SessionNs.Info).metadata).toEqual({})
 
         yield* SessionNs.Service.use((svc) => svc.remove(fork.id).pipe(Effect.ignore))
         yield* SessionNs.Service.use((svc) => svc.remove(session.id).pipe(Effect.ignore))
