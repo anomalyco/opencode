@@ -1,8 +1,8 @@
-import { and } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@/storage/db"
-import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
-import { SessionTable } from "../session/session.sql"
+import { PermissionTable, SessionTable } from "../session/session.sql"
+import { WorkspaceTable } from "../control-plane/workspace.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
@@ -12,13 +12,14 @@ import { ProjectID } from "./schema"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
-import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effect"
+import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppProcess } from "@opencode-ai/core/process"
+import { Project as ProjectV2 } from "@opencode-ai/core/project"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
-import { serviceUse } from "@/effect/service-use"
+import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "project" })
@@ -86,6 +87,10 @@ export function fromRow(row: Row): Info {
   }
 }
 
+function mergePermissionRules<T extends readonly unknown[]>(oldRules: T, newRules: T): T {
+  return [...new Map([...oldRules, ...newRules].map((rule) => [JSON.stringify(rule), rule])).values()] as unknown as T
+}
+
 export const UpdateInput = Schema.Struct({
   projectID: ProjectID,
   name: Schema.optional(Schema.String),
@@ -100,6 +105,10 @@ export const UpdatePayload = Schema.Struct({
   commands: Schema.optional(ProjectCommands),
 }).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
+  projectID: ProjectID,
+}) {}
 
 // ---------------------------------------------------------------------------
 // Effect service
@@ -116,7 +125,7 @@ export interface Interface {
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
-  readonly update: (input: UpdateInput) => Effect.Effect<Info>
+  readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
   readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
@@ -128,16 +137,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 
 type GitResult = { code: number; text: string; stderr: string }
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service | RuntimeFlags.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    const pathSvc = yield* Path.Path
+    const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const projectV2 = yield* ProjectV2.Service
     const bus = yield* Bus.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -171,115 +177,77 @@ export const layer: Layer.Layer<
 
     const fakeVcs = Schema.decodeUnknownSync(Schema.optional(ProjectVcs))(Flag.OPENCODE_FAKE_VCS)
 
-    const resolveGitPath = (cwd: string, name: string) => {
-      if (!name) return cwd
-      name = name.replace(/[\r\n]+$/, "")
-      if (!name) return cwd
-      name = AppFileSystem.windowsPath(name)
-      if (pathSvc.isAbsolute(name)) return pathSvc.normalize(name)
-      return pathSvc.resolve(cwd, name)
-    }
-
     const scope = yield* Scope.Scope
 
-    const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
-      return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
-        Effect.map((x) => x.trim()),
-        Effect.map((x) => ProjectID.make(x)),
-        Effect.catch(() => Effect.void),
+    const migrateProjectId = Effect.fn("Project.migrateProjectId")(function* (
+      oldID: ProjectID | undefined,
+      newID: ProjectID,
+    ) {
+      if (!oldID) return
+      if (oldID === ProjectID.global) return
+      if (oldID === newID) return
+
+      yield* Effect.sync(() =>
+        Database.transaction(
+          (d) => {
+            const oldProject = d.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get()
+            const newProject = d.select().from(ProjectTable).where(eq(ProjectTable.id, newID)).get()
+            if (oldProject && !newProject) {
+              d.insert(ProjectTable)
+                .values({
+                  ...oldProject,
+                  id: newID,
+                  time_updated: Date.now(),
+                })
+                .run()
+            }
+
+            const oldPermission = d.select().from(PermissionTable).where(eq(PermissionTable.project_id, oldID)).get()
+            const newPermission = d.select().from(PermissionTable).where(eq(PermissionTable.project_id, newID)).get()
+            if (oldPermission && newPermission) {
+              d.update(PermissionTable)
+                .set({
+                  data: mergePermissionRules(oldPermission.data, newPermission.data),
+                  time_created: Math.min(oldPermission.time_created, newPermission.time_created),
+                  time_updated: Date.now(),
+                })
+                .where(eq(PermissionTable.project_id, newID))
+                .run()
+              d.delete(PermissionTable).where(eq(PermissionTable.project_id, oldID)).run()
+            }
+            if (oldPermission && !newPermission) {
+              d.update(PermissionTable).set({ project_id: newID }).where(eq(PermissionTable.project_id, oldID)).run()
+            }
+
+            d.update(SessionTable)
+              .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
+              .where(eq(SessionTable.project_id, oldID))
+              .run()
+            d.update(WorkspaceTable).set({ project_id: newID }).where(eq(WorkspaceTable.project_id, oldID)).run()
+
+            if (oldProject) d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()
+          },
+          { behavior: "immediate" },
+        ),
       )
     })
 
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
       log.info("fromDirectory", { directory })
 
-      // Phase 1: discover git info
-      type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
-
-      const data: DiscoveryResult = yield* Effect.gen(function* () {
-        const dotgitMatches = yield* fs.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
-        const dotgit = dotgitMatches[0]
-
-        if (!dotgit) {
-          return {
-            id: ProjectID.global,
-            worktree: "/",
-            sandbox: "/",
-            vcs: fakeVcs,
-          }
-        }
-
-        let sandbox = pathSvc.dirname(dotgit)
-        const gitBinary = yield* Effect.sync(() => which("git"))
-        let id = yield* readCachedProjectId(dotgit)
-
-        if (!gitBinary) {
-          return {
-            id: id ?? ProjectID.global,
-            worktree: sandbox,
-            sandbox,
-            vcs: fakeVcs,
-          }
-        }
-
-        const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
-        if (commonDir.code !== 0) {
-          return {
-            id: id ?? ProjectID.global,
-            worktree: sandbox,
-            sandbox,
-            vcs: fakeVcs,
-          }
-        }
-        const common = resolveGitPath(sandbox, commonDir.text.trim())
-        const bareCheck = yield* git(["config", "--bool", "core.bare"], { cwd: sandbox })
-        const isBareRepo = bareCheck.code === 0 && bareCheck.text.trim() === "true"
-        const worktree = common === sandbox ? sandbox : isBareRepo ? common : pathSvc.dirname(common)
-
-        if (id == null) {
-          id = yield* readCachedProjectId(common)
-        }
-
-        if (!id) {
-          const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
-          const roots = revList.text
-            .split("\n")
-            .filter(Boolean)
-            .map((x) => x.trim())
-            .toSorted()
-
-          id = roots[0] ? ProjectID.make(roots[0]) : undefined
-          if (id) {
-            yield* fs.writeFileString(pathSvc.join(common, "opencode"), id).pipe(Effect.ignore)
-          }
-        }
-
-        if (!id) {
-          return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
-        }
-
-        const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
-        if (topLevel.code !== 0) {
-          return {
-            id,
-            worktree: sandbox,
-            sandbox,
-            vcs: fakeVcs,
-          }
-        }
-        sandbox = resolveGitPath(sandbox, topLevel.text.trim())
-
-        return { id, sandbox, worktree, vcs: "git" as const }
-      })
+      const data = yield* projectV2.resolve(AbsolutePath.make(directory))
+      const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 
       // Phase 2: upsert
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+      const projectID = ProjectID.make(data.id)
+      yield* migrateProjectId(data.previous ? ProjectID.make(data.previous) : undefined, projectID)
+      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())
       const existing = row
         ? fromRow(row)
         : {
-            id: data.id,
-            worktree: data.worktree,
-            vcs: data.vcs,
+            id: projectID,
+            worktree,
+            vcs: data.vcs?.type ?? fakeVcs,
             sandboxes: [] as string[],
             time: { created: Date.now(), updated: Date.now() },
           }
@@ -288,12 +256,16 @@ export const layer: Layer.Layer<
 
       const result: Info = {
         ...existing,
-        worktree: data.worktree,
-        vcs: data.vcs,
+        worktree: projectID === ProjectID.global ? worktree : existing.worktree,
+        vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
-      if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-        result.sandboxes.push(data.sandbox)
+      if (
+        projectID !== ProjectID.global &&
+        data.directory !== result.worktree &&
+        !result.sandboxes.includes(data.directory)
+      )
+        result.sandboxes.push(data.directory)
       result.sandboxes = yield* Effect.forEach(
         result.sandboxes,
         (s) =>
@@ -339,18 +311,21 @@ export const layer: Layer.Layer<
           .run(),
       )
 
-      if (data.id !== ProjectID.global) {
+      if (projectID !== ProjectID.global) {
         yield* db((d) =>
           d
             .update(SessionTable)
-            .set({ project_id: data.id })
-            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+            .set({ project_id: projectID })
+            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.directory)))
             .run(),
         )
       }
 
       yield* emitUpdated(result)
-      return { project: result, sandbox: data.sandbox }
+      if (projectID !== ProjectID.global && data.vcs?.type === "git") {
+        yield* projectV2.commit({ store: data.vcs.store, id: data.id })
+      }
+      return { project: result, sandbox: data.vcs ? data.directory : worktree }
     })
 
     const discover = Effect.fn("Project.discover")(function* (input: Info) {
@@ -372,7 +347,9 @@ export const layer: Layer.Layer<
       const base64 = Buffer.from(buffer).toString("base64")
       const mime = AppFileSystem.mimeType(shortest)
       const url = `data:${mime};base64,${base64}`
-      yield* update({ projectID: input.id, icon: { url } })
+      yield* update({ projectID: input.id, icon: { url } }).pipe(
+        Effect.catchTag("Project.NotFoundError", () => Effect.void),
+      )
     })
 
     const list = Effect.fn("Project.list")(function* () {
@@ -400,7 +377,7 @@ export const layer: Layer.Layer<
           .returning()
           .get(),
       )
-      if (!result) throw new Error(`Project not found: ${input.projectID}`)
+      if (!result) return yield* new NotFoundError({ projectID: input.projectID })
       const data = fromRow(result)
       yield* emitUpdated(data)
       return data
@@ -425,7 +402,7 @@ export const layer: Layer.Layer<
 
     const initState = yield* InstanceState.make(
       Effect.fn("Project.initState")(function* (ctx) {
-        yield* bus.subscribe(Command.Event.Executed).pipe(
+        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
           Stream.runForEach((payload) =>
             payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
           ),
@@ -504,9 +481,10 @@ export const layer: Layer.Layer<
 
 export const defaultLayer = layer.pipe(
   Layer.provide(Bus.defaultLayer),
+  Layer.provide(ProjectV2.defaultLayer),
+  Layer.provide(AppProcess.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(NodePath.layer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 

@@ -31,7 +31,7 @@ function request(path: string, directory: string, init: RequestInit = {}) {
 }
 
 function createSession(input?: Session.CreateInput) {
-  return Session.Service.use((svc) => svc.create(input))
+  return Session.use.create(input)
 }
 
 function json<T>(response: Response) {

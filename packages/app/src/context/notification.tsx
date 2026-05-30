@@ -2,8 +2,8 @@ import { createStore, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useGlobalSDK } from "./global-sdk"
-import { useGlobalSync } from "./global-sync"
+import { useServerSDK } from "./server-sdk"
+import { useServerSync } from "./server-sync"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
@@ -109,8 +109,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
   name: "Notification",
   init: () => {
     const params = useParams()
-    const globalSDK = useGlobalSDK()
-    const globalSync = useGlobalSync()
+    const serverSDK = useServerSDK()
+    const serverSync = useServerSync()
     const platform = usePlatform()
     const settings = useSettings()
     const language = useLanguage()
@@ -207,10 +207,10 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const lookup = async (directory: string, sessionID?: string) => {
       if (!sessionID) return undefined
-      const [syncStore] = globalSync.child(directory, { bootstrap: false })
+      const [syncStore] = serverSync.child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
       if (match.found) return syncStore.session[match.index]
-      return globalSDK.client.session
+      return serverSDK.client.session
         .get({ directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
@@ -285,7 +285,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
-    const unsub = globalSDK.event.listen((e) => {
+    const unsub = serverSDK.event.listen((e) => {
       const event = e.details
       if (event.type !== "session.idle" && event.type !== "session.error") return
 
