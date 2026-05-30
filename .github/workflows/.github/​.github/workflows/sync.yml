@@ -1,7 +1,7 @@
 name: Sync to Hugging Face Hub
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   force_push:
 
 jobs:
@@ -15,4 +15,4 @@ jobs:
       - name: Push to HF
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/hhhh694940-create/OpenCode main
+        run: git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/hhhh694940-create/OpenCode HEAD:refs/heads/main
