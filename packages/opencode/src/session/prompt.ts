@@ -1063,6 +1063,10 @@ export const layer = Layer.effect(
           ]
         }
 
+        if (part.type === "skill") {
+          return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
+        }
+
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
@@ -1696,6 +1700,7 @@ export const PromptInput = Schema.Struct({
       MessageV2.TextPartInput,
       MessageV2.FilePartInput,
       MessageV2.AgentPartInput,
+      MessageV2.SkillPartInput,
       MessageV2.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),

@@ -868,6 +868,10 @@ export function Autocomplete(props: {
         const skillIdx = mentionTriggerIndex(value, offset, "$")
         const idx = Math.max(mentionIdx ?? -1, skillIdx ?? -1)
         if (idx === -1) return
+        if (skillIdx !== undefined && skillIdx === idx) {
+          const query = props.input().getTextRange(skillIdx, offset)
+          if (/^\$[A-Z_][A-Z0-9_]*$/.test(query)) return
+        }
         show(skillIdx !== undefined && skillIdx === idx ? "$" : "@")
         setStore("index", idx)
       },

@@ -31,29 +31,14 @@ export function references(text: string): Array<{ name: string; start: number; e
   return results
 }
 
-export function has(text: string) {
-  for (const match of text.matchAll(REGEX)) {
-    const name = match[1]
-    const start = match.index ?? 0
-    const end = start + match[0].length
-    if (!name || !gap(text, start, end)) continue
-    return true
-  }
-  return false
-}
-
 export function expand(text: string, get: (name: string) => Item | undefined): string {
   const seen = new Set<string>()
   const bodies: string[] = []
-  for (const match of text.matchAll(REGEX)) {
-    const name = match[1]
-    if (!name || seen.has(name)) continue
-    const start = match.index ?? 0
-    const end = start + match[0].length
-    if (!gap(text, start, end)) continue
-    const item = get(name)
+  for (const reference of references(text)) {
+    if (seen.has(reference.name)) continue
+    const item = get(reference.name)
     if (!item) continue
-    seen.add(name)
+    seen.add(reference.name)
     bodies.push(body(item))
   }
   if (bodies.length === 0) return text

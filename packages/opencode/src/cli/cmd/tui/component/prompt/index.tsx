@@ -40,7 +40,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign, expandPastedTextPlaceholders } from "./part"
-import { expand, has, references } from "./skill"
+import { expand, references } from "./skill"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -779,6 +779,7 @@ export function Prompt(props: PromptProps) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
+        styleId = pasteStyleId
       }
 
       if (virtualText) {
@@ -1152,7 +1153,7 @@ export function Prompt(props: PromptProps) {
     }
 
     // Filter out text parts (pasted content) since they've been expanded inline above.
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text" && part.type !== "skill")
+    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1217,9 +1218,7 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      if (has(inputText)) {
-        inputText = expand(inputText, (name) => skills()?.find((skill) => skill.name === name))
-      }
+      inputText = expand(inputText, (name) => skills()?.find((skill) => skill.name === name))
 
       sdk.client.session
         .prompt({
