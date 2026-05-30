@@ -1,8 +1,7 @@
 name: Sync to Hugging Face Hub
 on:
   push:
-    branches: [ main, dev ]
-  force_push:
+    branches: [ dev, main ] # يشتغل على أي فرع تقوم بالحفظ فيه
 
 jobs:
   deploy:
@@ -15,4 +14,4 @@ jobs:
       - name: Push to HF
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/hhhh694940-create/OpenCode HEAD:refs/heads/main
+        run: git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/Ejdjdososs/opencode HEAD:refs/heads/main
