@@ -3570,7 +3570,7 @@ describe("ProviderTransform.variants", () => {
       },
       {
         name: "opus 4.8",
-        apiIds: ["anthropic--claude-4.8-opus"],
+        apiIds: ["anthropic--claude-4.8-opus", "anthropic--claude-4-8-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       },
