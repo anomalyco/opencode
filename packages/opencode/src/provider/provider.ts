@@ -900,7 +900,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               } catch {}
             }
 
-            // Normalize streaming chunks: Snowflake returns role:"" instead of role:"assistant"
+            // Cortex returns role:"" in streaming deltas; the AI SDK schema requires "assistant"
             if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
               const reader = response.body.getReader()
               const encoder = new TextEncoder()
@@ -912,9 +912,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                     ctrl.close()
                     return
                   }
-                  const text = decoder.decode(value)
-                  const fixed = text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')
-                  ctrl.enqueue(encoder.encode(fixed))
+                  const text = decoder.decode(value, { stream: true })
+                  ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
                 },
                 cancel() {
                   reader.cancel()

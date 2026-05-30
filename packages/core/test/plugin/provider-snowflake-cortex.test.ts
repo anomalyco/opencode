@@ -169,4 +169,17 @@ describe("cortexFetch", () => {
     await cortexFetch(upstream)("https://test", { method: "POST", body: invalidBody })
     expect(captured[0].body).toBe(invalidBody)
   })
+
+  bun_it("rewrites role:'' to role:'assistant' in streaming SSE chunks", async () => {
+    const chunk = `data: {"choices":[{"delta":{"role":"","content":"Hi"},"index":0}]}\n\n`
+    const upstream: FetchLike = async () =>
+      new Response(new ReadableStream({ start: (ctrl) => { ctrl.enqueue(new TextEncoder().encode(chunk)); ctrl.close() } }), {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })
+    const response = await cortexFetch(upstream)("https://test", {})
+    const text = await response.text()
+    expect(text).toContain('"role":"assistant"')
+    expect(text).not.toContain('"role":""')
+  })
 })
