@@ -58,11 +58,9 @@ const HomeRoute = () => (
 )
 
 const SessionRoute = () => (
-  <SessionProviders>
-    <Suspense fallback={<Loading />}>
-      <Session />
-    </Suspense>
-  </SessionProviders>
+  <Suspense fallback={<Loading />}>
+    <Session />
+  </Suspense>
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />
@@ -116,7 +114,7 @@ function AppShellProviders(props: ParentProps) {
   )
 }
 
-function SessionProviders(props: ParentProps) {
+export function SessionProviders(props: ParentProps) {
   return (
     <FileProvider>
       <PromptProvider>

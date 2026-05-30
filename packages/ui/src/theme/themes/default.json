@@ -16,12 +16,15 @@
     },
     "overrides": {
       "surface-critical-base": "#FFF2F0",
-      "background-base": "#FBFBFC",
-      "background-weak": "#F3F4F6",
+      "background-base": "#F8F9FB",
+      "background-weak": "#F1F3F5",
       "background-strong": "#FFFFFF",
-      "text-strong": "#09090B",
-      "text-base": "#52525B",
-      "border-base": "#E4E4E7"
+      "surface-raised-strong": "#FFFFFF",
+      "text-strong": "#0A0A0F",
+      "text-base": "#4A4A5A",
+      "text-weak": "#8A8A9A",
+      "border-base": "#E2E4E9",
+      "border-weak-base": "#ECEEF2"
     }
   },
   "dark": {

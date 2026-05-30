@@ -53,14 +53,12 @@ export function SessionSidePanel(props: {
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
-  const open = createMemo(() => reviewOpen() || fileOpen())
+  const open = createMemo(() => reviewOpen())
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
-    if (reviewOpen()) return layout.session.opened() ? `calc(100% - ${layout.session.width()}px)` : "100%"
-    return `${layout.fileTree.width()}px`
+    return layout.session.opened() ? `calc(100% - ${layout.session.width()}px)` : "100%"
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -346,7 +344,7 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <div class="size-full flex border-l border-border-weaker-base">
+        <div class="size-full flex border-r border-border-weaker-base">
           <div
             aria-hidden={!reviewOpen()}
             inert={!reviewOpen()}
@@ -365,7 +363,7 @@ export function SessionSidePanel(props: {
                 <DragDropSensors />
                 <ConstrainDragYAxis />
                 <Tabs value={activeTab()} onChange={openTab} class="flex h-full min-h-0 flex-col">
-                  <div class="sticky top-0 shrink-0 flex border-b border-border-weak-base">
+                  <div class="sticky top-0 shrink-0 flex h-12 border-b border-border-weak-base">
                     <Tabs.List
                       ref={(el: HTMLDivElement) => {
                         const stop = createFileTabListSync({ el, contextOpen })
@@ -481,170 +479,6 @@ export function SessionSidePanel(props: {
                 </DragOverlay>
               </DragDropProvider>
             </div>
-          </div>
-
-          <div
-            id="file-tree-panel"
-            ref={fileTreePanelRef}
-            aria-hidden={!fileOpen()}
-            inert={!fileOpen()}
-            class="relative min-w-0 h-full shrink-0 overflow-hidden"
-            classList={{
-              "pointer-events-none": !fileOpen(),
-              "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-                !props.size.active(),
-            }}
-            style={{ width: treeWidth() }}
-          >
-            <FileTreeDragOverlay
-              active={isDraggingOverFileTree()}
-              label={language.t("filetree.dropHere") || "Drop files here"}
-            />
-            <div
-              class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weak-base": reviewOpen() }}
-            >
-              <Tabs
-                value={fileTreeTab()}
-                onChange={setFileTreeTabValue}
-                class="h-full"
-                data-scope="filetree"
-                style={{
-                  "--tabs-compact-pill-height": "40px",
-                  "--tabs-bar-height": "48px",
-                  "--tabs-compact-pill-padding-x": "4px",
-                }}
-              >
-                <div class="border-b border-border-weak-base">
-                  <Tabs.List class="flex w-full h-[48px]">
-                    <Tabs.Trigger value="all" class="flex-1" classes={{ button: "group w-full h-full" }}>
-                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
-                        <Icon name="code-lines" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-interactive-base group-data-[selected]:text-icon-interactive-base transition-colors" />
-                        <span class="text-[10px] leading-none">Files</span>
-                      </div>
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="dashboards" class="flex-1" classes={{ button: "group w-full h-full" }}>
-                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
-                        <Icon name="layout-bottom" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-agent-plan-base group-data-[selected]:text-icon-agent-plan-base transition-colors" />
-                        <span class="text-[10px] leading-none">Dashboards</span>
-                      </div>
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="workflows" class="flex-1" classes={{ button: "group w-full h-full" }}>
-                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
-                        <Icon name="branch" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-agent-docs-base group-data-[selected]:text-icon-agent-docs-base transition-colors" />
-                        <span class="text-[10px] leading-none">Workflows</span>
-                      </div>
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "group w-full h-full" }}>
-                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
-                        <div class="relative">
-                          <Icon name="circle-check" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-success-base group-data-[selected]:text-icon-success-base transition-colors" />
-                          <Show when={hasReview()}>
-                            <div class="absolute -top-1.5 -right-2.5 flex h-[12px] min-w-[12px] items-center justify-center rounded-full bg-border-stronger-base px-1 text-[8px] font-medium text-text-weak tabular-nums">
-                              {reviewCount()}
-                            </div>
-                          </Show>
-                        </div>
-                        <span class="text-[10px] leading-none flex items-center gap-1">
-                          Audit
-                        </span>
-                      </div>
-                    </Tabs.Trigger>
-                  </Tabs.List>
-                </div>
-                <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={hasReview()}>
-                      <Show
-                        when={diffsReady()}
-                        fallback={
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
-                            {language.t("common.loading")}
-                            {language.t("common.loading.ellipsis")}
-                          </div>
-                        }
-                      >
-                        <FileTree
-                          path=""
-                          class="pt-3"
-                          allowed={diffFiles()}
-                          kinds={kinds()}
-                          draggable={false}
-                          active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
-                        />
-                      </Show>
-                    </Match>
-                    <Match when={true}>
-                      {empty(
-                        language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
-                      )}
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
-                  <Switch>
-                    <Match when={nofiles()}>
-                      <FileTree
-                        path=""
-                        class="pt-3"
-                        droppable={true}
-                        emptyActions={true}
-                        onFileClick={(node) => openTab(file.tab(node.path))}
-                        onUpload={async (files) => {
-                          for (const f of files) {
-                            const arrayBuffer = await f.arrayBuffer()
-                            const content = new Uint8Array(arrayBuffer)
-                            await file.upload(f.name, content)
-                          }
-                        }}
-                      />
-                    </Match>
-                    <Match when={true}>
-                      <FileTree
-                        path=""
-                        class="pt-3"
-                        modified={diffFiles()}
-                        kinds={kinds()}
-                        droppable={true}
-                        emptyActions={true}
-                        onFileClick={(node) => openTab(file.tab(node.path))}
-                        onUpload={async (files) => {
-                          for (const f of files) {
-                            const arrayBuffer = await f.arrayBuffer()
-                            const content = new Uint8Array(arrayBuffer)
-                            await file.upload(f.name, content)
-                          }
-                        }}
-                      />
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-                <Tabs.Content value="dashboards" class="bg-background-stronger px-3 py-0 flex-1 flex flex-col items-center justify-center text-text-weak">
-                  <div class="text-12-regular text-center">Dashboards coming soon</div>
-                </Tabs.Content>
-                <Tabs.Content value="workflows" class="bg-background-stronger px-3 py-0 flex-1 flex flex-col items-center justify-center text-text-weak">
-                  <div class="text-12-regular text-center">Workflows coming soon</div>
-                </Tabs.Content>
-              </Tabs>
-            </div>
-            <Show when={fileOpen()}>
-              <div onPointerDown={() => props.size.start()}>
-                <ResizeHandle
-                  direction="horizontal"
-                  edge="start"
-                  size={layout.fileTree.width()}
-                  min={200}
-                  max={480}
-                  collapseThreshold={160}
-                  onResize={(width) => {
-                    props.size.touch()
-                    layout.fileTree.resize(width)
-                  }}
-                  onCollapse={layout.fileTree.close}
-                />
-              </div>
-            </Show>
           </div>
         </div>
       </aside>

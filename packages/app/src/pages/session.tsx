@@ -11,19 +11,28 @@ import {
   on,
   onMount,
   untrack,
+  For,
 } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
+import { useCommand } from "@/context/command"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { Button } from "@opencode-ai/ui/button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { Popover } from "@opencode-ai/ui/popover"
+import { DateTime } from "luxon"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { List } from "@opencode-ai/ui/list"
+import { Icon } from "@opencode-ai/ui/icon"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
@@ -265,6 +274,36 @@ export default function Page() {
   const language = useLanguage()
   const params = useParams()
   const navigate = useNavigate()
+  const command = useCommand()
+
+  const sortedSessions = createMemo(() => {
+    return sync.data.session
+      .slice()
+      .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+  })
+
+  const openHistoryDialog = () => {
+    dialog.show(() => (
+      <DialogSelectSession
+        sessions={sortedSessions}
+        onSelect={(id) => navigate(`/${params.dir}/session/${id}`)}
+      />
+    ))
+  }
+  const startNewSession = () => {
+    if (!params.dir) return
+
+    if (params.id) {
+      const source = layout.tabs(`${params.dir}/${params.id}`).tabs()
+      if (source.all.length > 0 || source.active) {
+        const target = layout.tabs(params.dir)
+        target.setAll(source.all)
+        target.setActive(source.active && source.all.includes(source.active) ? source.active : source.all[0])
+      }
+    }
+
+    navigate(`/${params.dir}/session`)
+  }
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
@@ -1285,11 +1324,19 @@ export default function Page() {
           onChanges={() => setStore("mobileTab", "changes")}
         />
 
+        <SessionSidePanel
+          reviewPanel={reviewPanel}
+          activeDiff={tree.activeDiff}
+          focusReviewDiff={focusReviewDiff}
+          reviewSnap={ui.reviewSnap}
+          size={size}
+        />
+
         {/* Session panel */}
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none overflow-hidden": true,
-            "border-r border-border-weak-base": layout.session.opened(),
+            "border-l border-border-weak-base": layout.session.opened(),
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
@@ -1297,6 +1344,44 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
+          <div class="h-[48px] shrink-0 border-b border-border-weak-base flex items-center justify-between px-4 bg-background-stronger">
+            <span class="text-[10px] leading-none uppercase tracking-wider text-text-weak font-semibold">AI Chat</span>
+            <div class="flex items-center gap-1.5">
+              <TooltipKeybind
+                placement="bottom"
+                title={language.t("command.session.new")}
+                keybind={command.keybind("session.new")}
+              >
+                <IconButton
+                  icon="new-session"
+                  variant="ghost"
+                  class="rounded-md"
+                  onClick={startNewSession}
+                  aria-label={language.t("command.session.new")}
+                />
+              </TooltipKeybind>
+
+              <Button
+                variant="ghost"
+                class="size-8 rounded-md p-0 flex items-center justify-center text-icon-weak hover:text-text-strong cursor-pointer"
+                onClick={openHistoryDialog}
+                aria-label="Previous Sessions"
+              >
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                  <path d="M12 7v5l4 2" />
+                </svg>
+              </Button>
+              <IconButton
+                icon="close-small"
+                variant="ghost"
+                class="rounded-md"
+                onClick={() => layout.session.close()}
+                aria-label="Close AI Chat"
+              />
+            </div>
+          </div>
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
@@ -1379,6 +1464,7 @@ export default function Page() {
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 direction="horizontal"
+                edge="start"
                 size={layout.session.width()}
                 min={450}
                 max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
@@ -1390,15 +1476,63 @@ export default function Page() {
             </div>
           </Show>
         </div>
-
-        <SessionSidePanel
-          reviewPanel={reviewPanel}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
-          reviewSnap={ui.reviewSnap}
-          size={size}
-        />
       </div>
     </div>
+  )
+}
+
+function DialogSelectSession(props: {
+  sessions: () => any[]
+  onSelect: (sessionID: string) => void
+}) {
+  const dialog = useDialog()
+
+  const items = (text: string) => {
+    const query = text.trim().toLowerCase()
+    const all = props.sessions().map((s) => ({
+      id: s.id,
+      title: s.title || s.id.slice(0, 8),
+      updated: s.time.updated ?? s.time.created,
+    }))
+
+    if (!query) return all
+    return all.filter((item) => item.title.toLowerCase().includes(query))
+  }
+
+  const handleSelect = (item: any) => {
+    if (!item) return
+    dialog.close()
+    props.onSelect(item.id)
+  }
+
+  return (
+    <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
+      <List
+        search={{
+          placeholder: "Search previous sessions...",
+          autofocus: true,
+          hideIcon: true,
+        }}
+        emptyMessage="No sessions found"
+        items={items}
+        key={(item) => item.id}
+        onSelect={handleSelect}
+      >
+        {(item) => {
+          const relativeTime = () => DateTime.fromMillis(Number(item.updated)).toRelative()
+          return (
+            <div class="w-full flex items-center justify-between rounded-md pl-1">
+              <div class="flex items-center gap-x-3 grow min-w-0">
+                <Icon name="bubble-5" size="small" class="shrink-0 text-icon-weak" />
+                <span class="text-14-medium text-text-strong truncate">{item.title}</span>
+              </div>
+              <span class="text-12-regular text-text-weak whitespace-nowrap ml-2">
+                {relativeTime()}
+              </span>
+            </div>
+          )
+        }}
+      </List>
+    </Dialog>
   )
 }

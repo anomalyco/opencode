@@ -186,26 +186,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    if (mode === "shell") {
-      captureVeritly("message_sent", { mode: "shell", session_id: session.id })
-      clearInput()
-      client.session
-        .shell({
-          sessionID: session.id,
-          agent,
-          model,
-          command: text,
-        })
-        .catch((err) => {
-          showToast({
-            title: language.t("prompt.toast.shellSendFailed.title"),
-            description: errorMessage(err),
-          })
-          restoreInput()
-        })
-      return
-    }
-
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)

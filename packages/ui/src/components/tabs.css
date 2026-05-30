@@ -139,14 +139,14 @@
     background-color: var(--background-stronger);
 
     [data-slot="tabs-list"] {
-      height: var(--tabs-bar-height);
+      height: 100%;
       padding-left: 12px;
       padding-right: 0;
       --tabs-review-gap: 16px;
       --tabs-review-fade: 16px;
       gap: var(--tabs-review-gap);
       background-color: var(--background-stronger);
-      border-bottom: 1px solid var(--border-weaker-base);
+      border-bottom: none;
 
       &::after {
         display: none;

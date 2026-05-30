@@ -4,6 +4,8 @@ import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 import { DataProvider } from "@opencode-ai/ui/context"
+import { SessionProviders } from "@/app"
+
 function ProjectDataProvider(props: ParentProps<{ projectID: string }>) {
   const navigate = useNavigate()
   const sync = useSync()
@@ -29,7 +31,9 @@ export default function Layout(props: ParentProps) {
       {(id) => (
         <SDKProvider directory={id}>
           <SyncProvider>
-            <ProjectDataProvider projectID={id()}>{props.children}</ProjectDataProvider>
+            <SessionProviders>
+              <ProjectDataProvider projectID={id()}>{props.children}</ProjectDataProvider>
+            </SessionProviders>
           </SyncProvider>
         </SDKProvider>
       )}
