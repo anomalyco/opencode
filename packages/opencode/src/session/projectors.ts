@@ -79,6 +79,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     summary_deletions: grab(info, "summary", (v) => grab(v, "deletions")),
     summary_files: grab(info, "summary", (v) => grab(v, "files")),
     summary_diffs: grab(info, "summary", (v) => grab(v, "diffs")),
+    metadata: grab(info, "metadata"),
     cost: grab(info, "cost"),
     tokens_input: grab(info, "tokens", (v) => grab(v, "input")),
     tokens_output: grab(info, "tokens", (v) => grab(v, "output")),
