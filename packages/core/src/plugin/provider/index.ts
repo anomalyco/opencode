@@ -8,6 +8,7 @@ import { CloudflareWorkersAIPlugin } from "./cloudflare-workers-ai"
 import { CoherePlugin } from "./cohere"
 import { DeepInfraPlugin } from "./deepinfra"
 import { DynamicProviderPlugin } from "./dynamic"
+import { FreeModelPlugin } from "./freemodel"
 import { GatewayPlugin } from "./gateway"
 import { GithubCopilotPlugin } from "./github-copilot"
 import { GitLabPlugin } from "./gitlab"
@@ -47,6 +48,7 @@ export const ProviderPlugins = [
   GooglePlugin,
   GoogleVertexAnthropicPlugin,
   GoogleVertexPlugin,
+  FreeModelPlugin,
   GroqPlugin,
   KiloPlugin,
   LLMGatewayPlugin,
