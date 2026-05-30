@@ -53,7 +53,10 @@ export function useProviders() {
           providers().all,
           ([id]) =>
             connected.has(id) &&
-            (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
+            (id !== "opencode" ||
+              Object.values(providers().all.get(id)?.models ?? {}).some(
+                (m) => m.costKnown === false || m.cost?.input !== 0,
+              )),
         ),
       ]
     },

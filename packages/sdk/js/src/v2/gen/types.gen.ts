@@ -2135,6 +2135,7 @@ export type Model = {
       }
     }
   }
+  costKnown?: boolean
   limit: {
     context: number
     input?: number
