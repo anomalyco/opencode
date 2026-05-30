@@ -1960,6 +1960,13 @@ export type Workspace = {
   timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
+export type WorkspaceCreateError = {
+  name: "WorkspaceCreateError"
+  data: {
+    message: string
+  }
+}
+
 export type WorkspaceWarpError = {
   name: "WorkspaceWarpError"
   data: {
@@ -8042,9 +8049,9 @@ export type ExperimentalWorkspaceCreateData = {
 
 export type ExperimentalWorkspaceCreateErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * WorkspaceCreateError | BadRequest | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: WorkspaceCreateError | EffectHttpApiErrorBadRequest | InvalidRequestError
 }
 
 export type ExperimentalWorkspaceCreateError =
