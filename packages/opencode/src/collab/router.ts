@@ -182,6 +182,25 @@ function registerQueueExecutor(collabSessionId: string): void {
     const cs = Session.getCollabSession(collabSessionId)
     if (!cs) return
     const workspacePath = nativeSessionDirectory(collabSessionId, cs.repos)
+
+    // Pre-flight Claude OAuth refresh.  Anthropic's access tokens are
+    // ~15 min lived; without this the first prompt after a long idle
+    // window often 401s as "Invalid authentication credentials" because
+    // the opencode-claude-auth plugin's startup-cached token has aged
+    // out.  Best-effort: failure (refresh-token revoked, network blip)
+    // doesn't block the dispatch — we let the SDK try whatever it has
+    // and surface the resulting error if it fails.  See
+    // claude-token-refresh.ts for the in-flight-dedup + retry logic.
+    try {
+      const { ensureFreshClaudeToken } = await import("./claude-token-refresh")
+      await ensureFreshClaudeToken()
+    } catch (refreshErr) {
+      console.warn(
+        `[collab.queue] claude-token refresh raised (continuing with stale token):`,
+        refreshErr,
+      )
+    }
+
     try {
       await executePromptOnNativeSession(cs, suggestion.content, workspacePath, suggestion.model, suggestion.agent, suggestion.variant)
     } catch (err) {
@@ -1438,7 +1457,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       return json({ error: "No preview-capable repo linked to this session." }, 400)
     }
 
-    const result = Preview.launchPreview(sessionId, repoFullName)
+    // Pass the clicker's GitHub OAuth token through so pnpm/npm/yarn git
+    // fetches inside the install pipeline authenticate against
+    // private unleashlive repos declared as deps in package.json.  Lives
+    // only in the spawned child's env, never on disk — see Dockerfile's
+    // GIT_ASKPASS helper for the consumption side, and preview-launcher's
+    // ActiveState._gitAccessToken comment for the in-memory caching
+    // semantics across restart.
+    const result = Preview.launchPreview(sessionId, repoFullName, sess.githubAccessToken)
     if (!result.ok) return json({ error: result.error, ...("existing" in result ? { existing: result.existing } : {}) }, result.status)
     // Persist the Driver's intent so an ECS task replacement re-spawns the
     // preview on the next boot (resumePreviewsOnBoot in serve.ts).  Stored

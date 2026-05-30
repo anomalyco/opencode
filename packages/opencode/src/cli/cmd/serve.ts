@@ -95,6 +95,26 @@ export const ServeCommand = effectCmd({
     // hook, which only runs when a /collab/* request lands).
     if (isCollabMode) runCollabMigrations()
 
+    // Refresh the Claude OAuth access token on disk BEFORE the HTTP listener
+    // comes up, so the opencode-claude-auth plugin's startup-read picks up
+    // a fresh `accessToken` rather than a 15-minute-old one inherited from
+    // the previous task instance.  Anthropic's OAuth tokens are short-lived;
+    // an idle task replacement followed by a quick prompt would otherwise
+    // 401 on the first try.  Fire-and-forget — failure (refresh-token
+    // revoked, network glitch, etc.) just means the plugin tries the stale
+    // token and either succeeds anyway (if it hasn't actually expired) or
+    // falls back to ANTHROPIC_API_KEY env.
+    if (isCollabMode) {
+      yield* Effect.promise(async () => {
+        try {
+          const { ensureFreshClaudeToken } = await import("../../collab/claude-token-refresh")
+          await ensureFreshClaudeToken()
+        } catch (err) {
+          console.warn("[collab] claude-token boot refresh skipped:", err)
+        }
+      })
+    }
+
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)

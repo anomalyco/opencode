@@ -48,6 +48,7 @@ const FRONTEND_DEFAULTS: PreviewConfig = {
   port: 8080,
   label: "Unleash live frontend",
   readyPattern: undefined,
+  upstreamScheme: "http",
 }
 
 /** Idle window — no traffic for this long → SIGTERM. */
@@ -75,6 +76,56 @@ export interface PreviewConfig {
   /** Regex on stdout; first match flips status → "running".  When undefined
    *  we treat the process as "running" 2s after spawn (best-effort). */
   readonly readyPattern?: string
+  /**
+   * Transport the dev server speaks on its local port.  Defaults to "http".
+   *
+   * Set to "https" when the dev server runs TLS in-container (e.g. Angular
+   * CLI with `--ssl`, Vite with `--https`, CRA with `HTTPS=true`).  The
+   * preview-router will then TLS-connect to 127.0.0.1:<port> instead of
+   * speaking plain HTTP, and accept the dev server's self-signed cert via
+   * `rejectUnauthorized: false` (safe over loopback — there is no MITM
+   * surface inside the same container).
+   *
+   * When `"https"`, the WS upgrade path also flips from net.connect to
+   * tls.connect — HMR / WebSocket traffic stays end-to-end encrypted from
+   * the browser's wss:// through the ALB to the dev server.
+   *
+   * Most repos shouldn't need this: terminating TLS twice in the same
+   * container adds no security (the ALB already speaks TLS to the
+   * browser).  Use only when the dev server's own code branches on
+   * `location.protocol === "https:"` (service-worker registration,
+   * secure-context APIs).
+   */
+  readonly upstreamScheme?: "http" | "https"
+
+  /**
+   * URL prefix the dev server expects to receive on incoming requests.
+   *
+   * Default (undefined): preview-router STRIPS `/preview/<port>/` or
+   * `/preview/` from the URL before forwarding, so the dev server sees
+   * paths starting at `/`.  Matches the common Vite/webpack-dev-server
+   * + Next dev contract where the app runs at the URL root.
+   *
+   * Set to e.g. `"/preview/"` for dev servers that align their internal
+   * routing with the public base path — notably Angular's
+   * `@angular-devkit/build-angular:dev-server` builder, which derives
+   * its `servePath` from the build target's `baseHref`.  In that mode
+   * ng serve refuses requests whose path doesn't start with `/preview/`
+   * ("The server is configured with a public base URL of /preview").
+   * Setting `servePath: "/preview/"` here tells the proxy to forward
+   * the prefix verbatim, satisfying ng serve's expectation.
+   *
+   * Should match `<base href>` in the served index.html so client-side
+   * navigation + asset URLs all resolve against the same prefix.  For
+   * Angular: define a build configuration with `baseHref: "/preview/"`
+   * and a matching serve configuration with `servePath: "/preview/"`,
+   * then set this field to `"/preview/"` so the proxy stops stripping.
+   *
+   * Format: leading slash required, trailing slash recommended for
+   * clarity.  Invalid values trigger the same warn-and-default pattern
+   * as readyPattern.
+   */
+  readonly servePath?: string
 }
 
 export type PreviewStatus = "installing" | "running" | "stopped" | "failed"
@@ -104,6 +155,27 @@ interface ActiveState extends PreviewStateSnapshot {
    *  trigger — e.g. a dev server with a `--build` flag that finishes
    *  building and exits naturally). */
   _stopRequested: boolean
+  /** GitHub OAuth token the original launch used for git fetches.  Cached
+   *  here so `restartPreview` (Driver button OR branch-change auto-restart)
+   *  reuses it without a fresh DB lookup.  NEVER surfaced via
+   *  `getPreviewState()` — that constructor strips this field explicitly.
+   *  May be null when launchPreview was called without a token (public-only
+   *  install) — restartPreview then also runs unauthenticated. */
+  _gitAccessToken: string | null
+  /** Transport the upstream dev server speaks on its loopback port.
+   *  Read by preview-router.ts via `getActiveUpstreamScheme(port)` to
+   *  decide between plain TCP / TLS for the proxy hop.  Materialised
+   *  from the resolved PreviewConfig at launch time so a swap of the
+   *  `.opencode-preview.json` file mid-session doesn't change behaviour
+   *  for the running process (the file is re-read on the next Restart).
+   *  NEVER surfaced via `getPreviewState()` — `_`-prefixed convention. */
+  _upstreamScheme: "http" | "https"
+  /** URL prefix the dev server expects on incoming requests, or null
+   *  to strip `/preview/`.  Read by preview-router.ts via
+   *  `getActiveServePath(port)` to decide whether the forwarded path
+   *  is `<rest>` (default, strip) or `<servePath><rest>` (keep prefix).
+   *  See PreviewConfig.servePath docstring for the Angular use-case. */
+  _servePath: string | null
 }
 
 // ── Module state (singleton — "first-launch wins") ─────────────────────────
@@ -172,6 +244,40 @@ export function previewConfigForRepo(
         console.warn(`[collab.preview] ${path} readyPattern is not a valid regex; ignoring:`, e)
       }
     }
+    // Validate upstreamScheme — only "http" and "https" are honoured.
+    // Anything else (typo, "tcp", "ssh", a number, …) WARN + falls back
+    // to the default "http".  Matches the readyPattern try/warn shape so
+    // a misconfigured .opencode-preview.json never blocks a launch — it
+    // just downgrades to the closest sensible behaviour.
+    let upstreamScheme: "http" | "https" = FRONTEND_DEFAULTS.upstreamScheme ?? "http"
+    if (raw.upstreamScheme !== undefined) {
+      if (raw.upstreamScheme === "http" || raw.upstreamScheme === "https") {
+        upstreamScheme = raw.upstreamScheme
+      } else {
+        console.warn(
+          `[collab.preview] ${path} upstreamScheme=${JSON.stringify(raw.upstreamScheme)} ` +
+            `is not "http" or "https"; falling back to "${upstreamScheme}"`,
+        )
+      }
+    }
+
+    // Validate servePath — must be a string starting with "/".  Anything
+    // else (number, missing-leading-slash, empty) WARN + falls back to
+    // undefined (= proxy strips /preview/ as it has always done).  Empty
+    // string treated like undefined since "no prefix" is what stripping
+    // already provides.
+    let servePath: string | undefined = undefined
+    if (raw.servePath !== undefined) {
+      if (typeof raw.servePath === "string" && raw.servePath.startsWith("/") && raw.servePath !== "/") {
+        servePath = raw.servePath
+      } else if (raw.servePath !== "" && raw.servePath !== "/") {
+        console.warn(
+          `[collab.preview] ${path} servePath=${JSON.stringify(raw.servePath)} ` +
+            `must be a string starting with "/" (e.g. "/preview/"); ignoring`,
+        )
+      }
+    }
+
     return {
       command: raw.command,
       port: raw.port,
@@ -179,6 +285,8 @@ export function previewConfigForRepo(
       installCommand:
         typeof raw.installCommand === "string" ? raw.installCommand : FRONTEND_DEFAULTS.installCommand,
       readyPattern,
+      upstreamScheme,
+      servePath,
     }
   } catch (err) {
     console.warn(`[collab.preview] ${path} parse failed; using defaults:`, err)
@@ -227,6 +335,73 @@ export function markPreviewTraffic(): void {
   if (active) (active as { lastTraffic: number }).lastTraffic = Date.now()
 }
 
+/**
+ * Return the upstream transport the currently-active preview speaks on
+ * the given port.  Called by `preview-router.ts` once per HTTP request
+ * and once per WS upgrade — picks between plain HTTP/TCP and HTTPS/TLS
+ * for the loopback proxy hop.
+ *
+ * Returns "http" (the safe default) when:
+ *   - No preview is currently active (defensive — the router shouldn't
+ *     reach an upstream connect in this case, but a leftover SSE event
+ *     could race).
+ *   - A preview IS active but its port doesn't match the requested one
+ *     (the URL path's `<port>` segment was made-up or for a stale
+ *     session).  In both cases the connect attempt will fail at the
+ *     TCP layer anyway; we just pick the cheaper transport.
+ *
+ * Returns the active preview's resolved `upstreamScheme` ("http" or
+ * "https") when ports match — read once at launch time from the repo's
+ * `.opencode-preview.json` so a Driver swapping the file mid-session
+ * doesn't change behaviour for the running process.
+ */
+export function getActiveUpstreamScheme(port: number): "http" | "https" {
+  if (active && active.port === port) return active._upstreamScheme
+  return "http"
+}
+
+/**
+ * Return the port the currently-running preview is bound to, or null when
+ * no preview is active.  Used by `parsePreviewPath` in preview-router.ts to
+ * route the portless `/preview/...` form: when the first path segment isn't
+ * a valid port, fall back to whatever port the running preview claimed at
+ * launch time.
+ *
+ * Single-replica + first-launch-wins (ADR-0009 + the launchPreview 409 path)
+ * means there's at most ONE active preview per container, so this returns a
+ * scalar without ambiguity.  Future multi-preview support (separate ADR)
+ * will need to take a hint — for example the cookie's collab_sid — to pick
+ * which session's preview to target.
+ */
+export function getActivePreviewPort(): number | null {
+  return active ? active.port : null
+}
+
+/**
+ * Return the servePath the currently-active preview is configured for, or
+ * null when the proxy should use the default strip-`/preview/` behavior.
+ *
+ * Called by `preview-router.ts` once per HTTP request and once per WS
+ * upgrade — decides between forwarding the stripped path (default) and
+ * forwarding the path with `servePath` prepended (keep-prefix mode for
+ * dev servers like Angular CLI that derive their servePath from
+ * `baseHref`).
+ *
+ * Returns null when:
+ *   - No preview is currently active (defensive).
+ *   - A preview IS active but its port doesn't match the requested one.
+ *   - The active preview's PreviewConfig.servePath is undefined (= the
+ *     dev server expects to receive root-relative paths, so strip).
+ *
+ * Returns a string (e.g. "/preview/") when the active preview was launched
+ * with a configured `servePath` that the proxy should preserve verbatim
+ * in the forwarded URL.
+ */
+export function getActiveServePath(port: number): string | null {
+  if (active && active.port === port) return active._servePath
+  return null
+}
+
 export type LaunchResult =
   | { ok: true; state: PreviewStateSnapshot }
   | { ok: false; status: 409; error: string; existing: PreviewStateSnapshot }
@@ -236,10 +411,20 @@ export type LaunchResult =
  * Spawn the preview.  First-launch wins; second call while another preview
  * is active returns 409 with the existing state so the caller can render a
  * "already running in session X" message.
+ *
+ * `gitAccessToken` is the GitHub OAuth token the install pipeline should
+ * present to `git` when fetching private dependencies (npm packages declared
+ * as `git+ssh://` or `git+https://` URLs in package.json / pnpm-lock.yaml).
+ * Threaded via `GITHUB_TOKEN` env into the child process, which the
+ * container's GIT_ASKPASS helper (see Dockerfile) reads to answer git's
+ * credential prompt.  The token NEVER lands on disk (no .gitconfig write,
+ * no URL embedding, no lockfile entry).  Pass null / omit for public-only
+ * installs.
  */
 export function launchPreview(
   collabSessionId: string,
   repoFullName: string,
+  gitAccessToken?: string | null,
 ): LaunchResult {
   if (active) {
     return {
@@ -262,12 +447,52 @@ export function launchPreview(
     ? `${config.installCommand} && ${config.command}`
     : config.command
 
-  const env = {
+  // Log the resolved launch parameters so CloudWatch shows exactly what
+  // we're about to spawn.  The shellCmd may include the OAuth token if
+  // someone embeds it in a custom installCommand — we deliberately do
+  // NOT log gitAccessToken itself anywhere, but the shellCmd value is
+  // operator-authored config and we treat it as safe to log.
+  console.log(
+    `[collab.preview] launching session=${collabSessionId} repo=${repoFullName} ` +
+      `port=${config.port} scheme=${config.upstreamScheme ?? "http"} ` +
+      `cwd=${cwd}\n` +
+      `[collab.preview]   shellCmd: ${shellCmd}`,
+  )
+
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     OPENCODE_PREVIEW: "1",
     PORT: String(config.port),
-    // Cap dev-server heap so a Vite explosion doesn't OOM the whole container.
-    NODE_OPTIONS: `${process.env["NODE_OPTIONS"] ?? ""} --max-old-space-size=2048`.trim(),
+    // Inherit the container's NODE_OPTIONS (if any) unchanged and let the dev
+    // server's own start script manage its V8 heap.
+    //
+    // We used to cap with `--max-old-space-size=2048` here as a defensive
+    // measure against a Vite explosion eating the container.  That cap
+    // bit unleashlive/frontend hard: their `ng:highmem` alias deliberately
+    // bumps Node's heap to compile a real-sized Angular app, and our
+    // appended 2048 was either winning the merge race (Angular OOM-killed
+    // mid-compile) or losing it (container OOM-killed with no warning).
+    // Either way: crashes.
+    //
+    // Safety net is now at the ECS task level — the deploy workflow's
+    // jq-patch pins `memory: "8192"` / `cpu: "2048"` on every register
+    // (see .github/workflows/deploy-collab.yml).  A runaway dev server
+    // will still hit the 8 GB ceiling and the kernel OOM-killer will
+    // drop the WHOLE task (single-replica per ADR-0009 — we'd rather
+    // crash cleanly than corrupt SQLite), but well-behaved dev servers
+    // peak below it.  Per-repo opt-in to a tighter cap can live in
+    // `.opencode-preview.json` later if needed; for now, no launcher-side
+    // policy.
+  }
+  // Per-launch GitHub OAuth token for the install's git fetches.  Picked up
+  // by the container's GIT_ASKPASS helper (Dockerfile) as `Password` against
+  // the static `Username: x-access-token`.  Lives only in this child's env;
+  // unset GITHUB_TOKEN globally so spawning an unauthenticated pnpm install
+  // by some other path doesn't accidentally inherit it.
+  if (gitAccessToken) {
+    env.GITHUB_TOKEN = gitAccessToken
+  } else {
+    delete env.GITHUB_TOKEN
   }
 
   let child: ChildProcess
@@ -312,6 +537,18 @@ export function launchPreview(
     child,
     config,
     _stopRequested: false,
+    // Cache for restartPreview.  Normalise undefined → null so the field is
+    // always a concrete `string | null` (avoids a third "unknown" case).
+    _gitAccessToken: gitAccessToken ?? null,
+    // Read by preview-router.ts via getActiveUpstreamScheme(port).  Default
+    // to "http" when the resolved config omits it (legacy .opencode-preview.json
+    // files predate this field).
+    _upstreamScheme: config.upstreamScheme ?? "http",
+    // Read by preview-router.ts via getActiveServePath(port).  Null when
+    // not set (= legacy strip-prefix behavior); string when the dev
+    // server expects the prefix kept (e.g. Angular CLI's dev-server with
+    // baseHref-derived servePath).
+    _servePath: config.servePath ?? null,
   }
   active = state
 
@@ -417,6 +654,11 @@ export function restartPreview(): LaunchResult {
     return { ok: false, status: 404, error: "No preview is currently running." }
   }
   const { collabSessionId, repoFullName, port, label, config } = active
+  // Snapshot the cached token BEFORE stopPreview clears `active`.  Same
+  // reason as the port/label snapshot — we need it to survive the
+  // synchronous null-out so the deferred relaunch can re-authenticate
+  // any git fetches the install pipeline kicks off again.
+  const cachedToken = active._gitAccessToken
   const installing: PreviewStateSnapshot = {
     collabSessionId,
     repoFullName,
@@ -436,7 +678,7 @@ export function restartPreview(): LaunchResult {
   // later stop / delete arrives before the relaunch fires.
   pendingRestart = setTimeout(() => {
     pendingRestart = null
-    const result = launchPreview(collabSessionId, repoFullName)
+    const result = launchPreview(collabSessionId, repoFullName, cachedToken)
     if (!result.ok) {
       console.error(`[collab.preview] restart relaunch failed: ${result.error}`)
       // Surface to the SPA so its banner doesn't stay stuck "installing".
@@ -512,6 +754,16 @@ function wireChildStreams(state: ActiveState): void {
         state._log.splice(0, state._log.length - LOG_LINES_RETAINED)
       }
 
+      // Mirror to container stdout so CloudWatch captures the dev server's
+      // output without the operator needing iframe-terminal access.  Tag
+      // with the collab session id + stream so a single log group with
+      // multiple sessions stays searchable.  Truncate to 1 KB per line so
+      // a runaway dev server can't blow up the log stream.
+      const consoleFn = stream === "stderr" ? console.error : console.log
+      consoleFn(
+        `[collab.preview/${state.collabSessionId}/${stream}] ${line.slice(0, 1024)}`,
+      )
+
       // Status transition: "installing" → "running" on the readyPattern OR
       // on a built-in heuristic (the line mentions "Local:" / "ready" / "listening").
       // RegExp construction is validated at config-load (previewConfigForRepo
@@ -551,6 +803,10 @@ function wireChildStreams(state: ActiveState): void {
   state.child.once("exit", (code, signal) => {
     if (active !== state) return // already replaced
     const wasStopped = state._stopRequested
+    console.log(
+      `[collab.preview] child exit session=${state.collabSessionId} ` +
+        `code=${code} signal=${signal} wasStopped=${wasStopped} status=${state.status}`,
+    )
 
     if (wasStopped) {
       // stopPreview() drove this exit.  It already broadcast
@@ -660,9 +916,38 @@ export async function resumePreviewsOnBoot(): Promise<void> {
     `[collab.preview] resumePreviewsOnBoot: ${intents.length} intent(s) on disk; picking session=${pick.collabSessionId} repo=${pick.repoFullName} (most-recent)`,
   )
 
+  // Look up the session owner's most-recent unexpired OAuth token so the
+  // resumed install can authenticate any private git+https dependencies
+  // (npm packages declared as git deps in package.json that resolve to
+  // private unleashlive repos).  No Driver "clicker" exists on a boot
+  // resume — the owner is the canonical fallback (always a Driver per
+  // ADR-0005, always present in collab_session).  Returns null if every
+  // login for this user has expired or no row exists, in which case the
+  // resumed install runs unauthenticated and private deps will fail with
+  // git's standard credential-prompt error (which surfaces in the
+  // preview banner's log tail).
+  let gitAccessToken: string | null = null
+  try {
+    const cs = session.getCollabSession(pick.collabSessionId)
+    if (cs) {
+      const cookieAuth = await import("./cookie-auth")
+      gitAccessToken = cookieAuth.latestAccessTokenForGithubId(cs.ownerGithubId)
+      if (!gitAccessToken) {
+        console.warn(
+          `[collab.preview] resumePreviewsOnBoot: no fresh OAuth token for owner github_id=${cs.ownerGithubId}; resumed install will run unauthenticated`,
+        )
+      }
+    }
+  } catch (err) {
+    console.warn(
+      `[collab.preview] resumePreviewsOnBoot: owner-token lookup threw; resumed install will run unauthenticated:`,
+      err,
+    )
+  }
+
   let result: LaunchResult
   try {
-    result = launchPreview(pick.collabSessionId, pick.repoFullName)
+    result = launchPreview(pick.collabSessionId, pick.repoFullName, gitAccessToken)
   } catch (err) {
     console.error(
       `[collab.preview] resumePreviewsOnBoot: launchPreview threw for session=${pick.collabSessionId}:`,

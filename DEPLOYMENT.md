@@ -448,6 +448,39 @@ If we hit this, the awsvpc-compatible options are:
    `USER opencode` (requires a Dockerfile change to either chown
    `/etc/hosts` or split the entrypoint into a root-init phase).
 
+#### Optional: HTTPS-upstream dev servers
+
+If a repo's dev server binds **TLS** on its loopback port (Angular CLI
+with `--ssl`, Vite with `--https`, CRA with `HTTPS=true`, anything
+that wants a secure-context browser API to work — Service Workers,
+`getUserMedia`, clipboard), drop a `.opencode-preview.json` in the
+repo root with `"upstreamScheme": "https"`:
+
+```json
+{
+  "command": "pnpm run start",
+  "port": 8080,
+  "upstreamScheme": "https"
+}
+```
+
+The proxy will switch to TLS for both the HTTP path
+(`fetch("https://127.0.0.1:<port>/...")`) and the WS upgrade path
+(`tls.connect()` instead of `net.connect()`).  Self-signed certs are
+accepted via `rejectUnauthorized: false` — this is safe because the
+connect target is literal `127.0.0.1` in the same container, with no
+MITM surface to defend against and no possibility of validating an
+IP-literal cert chain anyway.
+
+Most repos shouldn't need this.  The browser already talks HTTPS to
+the ALB; terminating TLS a second time inside the container adds no
+security.  Use it only when the dev server's own code branches on
+`location.protocol === "https:"` (some service-worker registration
+flows do).  The cheaper alternative — drop `--ssl` from your
+preview-specific start script — is what `unleashlive/frontend`
+shipped (a `start:preview` script + a `.opencode-preview.json`
+without `upstreamScheme`).
+
 ---
 
 ## Part C — First-session walkthrough (Driver)

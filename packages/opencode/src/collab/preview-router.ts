@@ -22,25 +22,59 @@
  */
 
 import { connect as netConnect } from "node:net"
+import { connect as tlsConnect } from "node:tls"
 import type { IncomingMessage } from "node:http"
 import type { Socket } from "node:net"
 import { lookupCookieIdentityFromHeaders } from "./cookie-auth"
+import { getActiveUpstreamScheme, getActivePreviewPort, getActiveServePath } from "./preview-launcher"
 
 const PREVIEW_PREFIX = "/preview/"
 
 /**
- * Parse `/preview/<port>/<rest>` out of an incoming URL.
- * Returns null if the URL doesn't match.
+ * Parse a `/preview/...` URL.  Two shapes accepted:
+ *
+ *   1. /preview/<port>/<rest>     — explicit port (legacy / multi-preview-future)
+ *   2. /preview/<rest>            — portless; routes to the active preview's
+ *                                    port via `getActivePreviewPort()`.  This
+ *                                    is the shape unleashlive/frontend uses
+ *                                    (commit a `<base href="/preview/">` into
+ *                                    its build so chunk URLs don't need to
+ *                                    hardcode the port).
+ *
+ * Detection rule for the explicit form: the first path segment after
+ * `/preview/` must be all digits AND parse as an integer in [1, 65535].
+ * Anything else falls through to portless.  Trade-off: an SPA route whose
+ * first segment is purely numeric in that range (e.g. `/preview/3000`)
+ * would be mis-parsed as a port — accepted risk because real SPA routes
+ * almost never look like that, and the explicit-port form was here first.
+ *
+ * Returns null if no preview is currently active AND no explicit port was
+ * given.
  */
 export function parsePreviewPath(pathname: string): { port: number; rest: string } | null {
   if (!pathname.startsWith(PREVIEW_PREFIX)) return null
   const after = pathname.slice(PREVIEW_PREFIX.length)
   const slash = after.indexOf("/")
-  const portStr = slash === -1 ? after : after.slice(0, slash)
-  const rest = slash === -1 ? "" : after.slice(slash) // keeps leading "/"
-  const port = Number(portStr)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return null
-  return { port, rest: rest || "/" }
+  const firstSeg = slash === -1 ? after : after.slice(0, slash)
+  const restAfterFirstSeg = slash === -1 ? "" : after.slice(slash) // keeps leading "/"
+
+  // Explicit-port form: first segment is all-digits and in valid port range.
+  // Restrict to /^\d+$/ (not just `Number()` parse) so URL-encoded weirdness
+  // ("8080%20", "+8080") falls through to portless rather than masquerading.
+  if (/^\d+$/.test(firstSeg)) {
+    const port = Number(firstSeg)
+    if (port >= 1 && port <= 65535) {
+      return { port, rest: restAfterFirstSeg || "/" }
+    }
+  }
+
+  // Portless form.  Route the WHOLE path-after-/preview/ to the active
+  // preview's port.  Returns null when no preview is running — the caller
+  // (collab middleware) lets the request fall through to other routes,
+  // which then typically 404.
+  const activePort = getActivePreviewPort()
+  if (activePort === null) return null
+  return { port: activePort, rest: "/" + after }
 }
 
 /**
@@ -80,22 +114,47 @@ function upstreamHostHeader(port: number): string {
 }
 
 /**
- * Forward a plain HTTP request through to the dev server on
- * 127.0.0.1:<port>, rewriting the Host header to
- * `local.unleashlive.com:<port>` so the dev server sees its expected
- * hostname.  Returns a Response the collab middleware can hand back to
- * the browser.  Hop-by-hop headers are stripped; everything else passes
- * through.
+ * Forward an HTTP request through to the dev server on 127.0.0.1:<port>
+ * while presenting Host: local.unleashlive.com:<port> on the wire.
+ * Returns a Response the collab middleware can hand back to the browser.
+ * Hop-by-hop headers are stripped; everything else passes through.
+ *
+ * URL uses the literal loopback IP (`PREVIEW_UPSTREAM_TCP_HOST`) so the
+ * TCP connect doesn't depend on /etc/hosts (incompatible with ECS awsvpc
+ * — see the constant's docstring).  Bun's fetch preserves the user-set
+ * Host header, so the dev server still sees the expected hostname.
+ *
+ * Transport (http vs https) is picked per-active-preview via
+ * `getActiveUpstreamScheme(port)` — opt-in for repos whose
+ * `.opencode-preview.json` sets `"upstreamScheme": "https"` (Angular CLI
+ * --ssl, Vite --https, CRA HTTPS=true, …).  Default "http" keeps every
+ * existing repo unchanged.  TLS uses `rejectUnauthorized: false` because
+ * the connect target is literal 127.0.0.1 in the same container — there
+ * is no MITM surface to defend against, and chained cert verification
+ * against an IP literal isn't possible anyway.
  */
 export async function handlePreviewHttp(req: Request, port: number, rest: string): Promise<Response> {
   const url = new URL(req.url)
-  // TCP-connect to literal 127.0.0.1 (NOT the hostname alias).  Mirrors
-  // the WebSocket path below — see PREVIEW_UPSTREAM_TCP_HOST for the
-  // rationale (awsvpc bans container-level extraHosts, so an alias-
-  // based fetch would ENOTFOUND on ECS).  The Host header rewrite
-  // further down is what makes the dev server see its expected
-  // hostname on the wire.
-  const target = `http://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest}${url.search}`
+  const scheme = getActiveUpstreamScheme(port)
+  // Path to send to the upstream dev server.
+  //
+  //   - servePath is null (default)  → forward the stripped `rest` (legacy
+  //     behavior; dev server listens at "/" and sees /main.js, /chunk-X.js).
+  //   - servePath is a string        → prepend it to `rest`, so the dev
+  //     server receives e.g. /preview/main.js (matches an Angular CLI
+  //     dev-server whose baseHref-derived servePath is "/preview/").
+  //
+  // `rest` always starts with "/" (parsePreviewPath guarantees) so the
+  // simple concat works without double-slashing.
+  const servePath = getActiveServePath(port)
+  const upstreamPath = servePath ? servePath.replace(/\/$/, "") + rest : rest
+  const target = `${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${upstreamPath}${url.search}`
+
+  // Log every request so CloudWatch shows the full proxy attempt history.
+  // Volume is bounded by `/preview/<port>/*` traffic, which is itself idle-
+  // swept at 30 min — quiet during normal browsing, just verbose enough
+  // during a debugging session to be useful.
+  console.log(`[collab.preview-proxy] ${req.method} ${rest} → ${target}`)
 
   // Strip hop-by-hop headers + the Host header (we set it ourselves below
   // so the dev server sees its expected hostname; the browser's original
@@ -141,7 +200,21 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
       // Stream the response back without buffering.
       // @ts-expect-error — Bun supports this option even though node fetch typing omits it.
       redirect: "manual",
+      // Bun-specific: when scheme === "https" the dev server's cert is
+      // a self-signed in-container blob (e.g. ssl/cert.pem from the repo).
+      // We're connecting to literal 127.0.0.1 — no MITM surface, and chain
+      // validation against an IP literal is impossible.  Accept any cert.
+      // For scheme === "http" this option is a harmless no-op.
+      // Future fallback if Bun ever drops this init field: node:https
+      // `https.request()` with `rejectUnauthorized: false` in agent options.
+      // @ts-expect-error — Bun-only fetch init field, not in standard typings.
+      tls: { rejectUnauthorized: false },
     })
+
+    console.log(
+      `[collab.preview-proxy] ${req.method} ${rest} ← ${upstream.status} ${upstream.statusText} ` +
+        `(content-encoding=${upstream.headers.get("content-encoding") ?? "none"})`,
+    )
 
     // Pass through the upstream's body (which may itself be a stream) and
     // headers as-is, minus anything hop-by-hop the upstream might have set.
@@ -149,6 +222,19 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
     respHeaders.delete("connection")
     respHeaders.delete("keep-alive")
     respHeaders.delete("transfer-encoding")
+    // Bun's fetch auto-decompresses gzip / br / deflate response bodies and
+    // hands `upstream.body` to us as the DECODED byte stream — but
+    // `upstream.headers` still claim the original Content-Encoding (from
+    // the upstream server) and Content-Length (the on-the-wire compressed
+    // size).  Forwarding those headers verbatim makes the BROWSER try to
+    // decompress an already-decompressed body → ERR_CONTENT_DECODING_FAILED.
+    // Strip both; the browser will treat the body as raw bytes.
+    //
+    // Side note: this also fixes the `Content-Length` mismatch which
+    // would otherwise risk a "response truncated" error if the browser
+    // relied on the header to know when to stop reading.
+    respHeaders.delete("content-encoding")
+    respHeaders.delete("content-length")
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
@@ -156,14 +242,37 @@ export async function handlePreviewHttp(req: Request, port: number, rest: string
     })
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
+    // CloudWatch needs the same info the user sees in the 502 body, so the
+    // operator can diagnose without iframe-terminal access.  Includes the
+    // stack trace if `err` is an Error — usually it's a TypeError("fetch
+    // failed") wrapping a transport error in `.cause`.
+    console.error(
+      `[collab.preview-proxy] upstream ${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}${rest} failed: ${detail}`,
+      err instanceof Error && (err as Error & { cause?: unknown }).cause
+        ? `cause: ${String((err as Error & { cause?: unknown }).cause)}`
+        : "",
+    )
+    // Hint at scheme mismatch — common 502 cause once HTTPS-upstream support
+    // exists.  Two cases:
+    //   - Proxy is configured "http" (default) but the dev server bound TLS
+    //     → the byte-level "Unable to connect" / EPROTO from TLS handshake
+    //       failure surfaces as a 502 here.  Set `upstreamScheme: "https"`.
+    //   - Proxy is configured "https" but the dev server is plain HTTP
+    //     → similar shape, opposite direction.  Drop `upstreamScheme` or
+    //       set it to "http".
+    const schemeHint =
+      scheme === "https"
+        ? `<p><em>Proxy is configured to speak HTTPS to the upstream.  If the dev server is actually plain HTTP, drop <code>"upstreamScheme"</code> from <code>.opencode-preview.json</code> (or set it to <code>"http"</code>).</em></p>`
+        : `<p><em>If the dev server runs TLS in-container (Angular CLI <code>--ssl</code>, Vite <code>--https</code>, CRA <code>HTTPS=true</code>), add <code>"upstreamScheme": "https"</code> to <code>.opencode-preview.json</code>.</em></p>`
     return new Response(
       `<!doctype html><meta charset="utf-8"><title>Preview unavailable</title>` +
-        `<div style="font-family:system-ui;margin:3rem auto;max-width:520px;line-height:1.5">` +
+        `<div style="font-family:system-ui;margin:3rem auto;max-width:560px;line-height:1.5">` +
         `<h1 style="margin:0 0 .5rem 0">Preview unavailable</h1>` +
-        `<p>Couldn't reach <code>127.0.0.1:${port}</code> from inside the workspace container.</p>` +
+        `<p>Couldn't reach <code>${scheme}://${PREVIEW_UPSTREAM_TCP_HOST}:${port}</code> from inside the workspace container.</p>` +
         `<p>Is a dev server actually listening on port ${port}?  In the iframe terminal:</p>` +
         `<pre style="background:#111;color:#eee;padding:.75rem;border-radius:6px">ss -lntp | grep ${port}</pre>` +
         `<p>If the dev server is up but this still 502s, check that it's bound to <code>0.0.0.0</code> (or <code>127.0.0.1</code>) rather than an external interface.  Vite/Webpack default to localhost-only, which is fine; <code>--host 0.0.0.0</code> works too.</p>` +
+        schemeHint +
         `<p>Error: <code>${detail.replace(/</g, "&lt;")}</code></p>` +
         `</div>`,
       { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
@@ -207,18 +316,42 @@ export function attachPreviewUpgrade(server: {
       return
     }
 
-    // TCP-connect to the loopback alias.  Resolved via /etc/hosts to
-    // 127.0.0.1, but `netConnect` accepts hostnames so we can be explicit
-    // about the intent.  Using `127.0.0.1` here would still work because
-    // the Host header rewrite below is what the dev server actually sees;
-    // the hostname only matters when the upstream is on a remote IP.
-    // We use 127.0.0.1 for the TCP connect because it's strictly faster
-    // (skips the DNS lookup) and the dev server is always loopback —
-    // the hostname rewrite is purely for the Host header below.
-    const upstreamSocket = netConnect({ host: "127.0.0.1", port: parsed.port })
+    // Connect to the loopback dev server.  Plain TCP for the default
+    // "http" upstream, TLS for the opt-in "https" upstream (Angular CLI
+    // --ssl etc.).  Both `netConnect` and `tlsConnect` return a Duplex
+    // with identical .write / .on('data') / .pipe() surface, so the rest
+    // of this handler (the handshake-write below + the bidirectional
+    // pipe at the bottom) doesn't need to branch.
+    //
+    // `rejectUnauthorized: false` for TLS: we're connecting to literal
+    // 127.0.0.1 inside the same container — no MITM surface to defend
+    // against, and chain validation against an IP literal is impossible
+    // anyway.  See `handlePreviewHttp`'s tls option for the matching
+    // rationale on the HTTP path.
+    const upstreamScheme = getActiveUpstreamScheme(parsed.port)
+    // Mirror the HTTP path's keep-prefix logic: when the active preview
+    // declared a `servePath`, the dev server's WS endpoint also lives
+    // under that prefix (Angular's @vite/client connects to
+    // /preview/@vite/client, not /@vite/client).  Prepend servePath to
+    // the stripped `rest` to satisfy the dev server's routing.
+    const upstreamServePath = getActiveServePath(parsed.port)
+    const wsUpstreamPath = upstreamServePath
+      ? upstreamServePath.replace(/\/$/, "") + (parsed.rest || "/")
+      : (parsed.rest || "/")
+    console.log(
+      `[collab.preview-proxy] WS upgrade ${pathname} → ${upstreamScheme}://127.0.0.1:${parsed.port}${wsUpstreamPath}`,
+    )
+    const upstreamSocket: Socket =
+      upstreamScheme === "https"
+        ? (tlsConnect({ host: "127.0.0.1", port: parsed.port, rejectUnauthorized: false }) as unknown as Socket)
+        : netConnect({ host: "127.0.0.1", port: parsed.port })
 
     const cleanup = (err?: Error) => {
       if (err) {
+        console.error(
+          `[collab.preview-proxy] WS upgrade upstream error ` +
+            `${upstreamScheme}://127.0.0.1:${parsed.port}: ${err.message}`,
+        )
         try {
           clientSocket.write(
             "HTTP/1.1 502 Bad Gateway\r\n" +
@@ -235,11 +368,19 @@ export function attachPreviewUpgrade(server: {
     upstreamSocket.on("error", cleanup)
     clientSocket.on("error", cleanup)
 
-    upstreamSocket.once("connect", () => {
-      // Build the rewritten request line + headers.  Rewrite the URL by
-      // stripping the /preview/<port> prefix; everything else (Sec-WebSocket-*
-      // headers, Upgrade, Connection, Origin, etc.) passes through.
-      const newUrl = (parsed.rest || "/") + (url.includes("?") ? url.slice(url.indexOf("?")) : "")
+    // For plain TCP, "connect" fires when the three-way handshake completes.
+    // For TLS, "connect" only signals TCP; we want "secureConnect" which
+    // fires after the TLS handshake (writes before secureConnect would be
+    // buffered + flushed plaintext-over-TLS in a way that worked by
+    // accident but is brittle).  One handler, picked once.
+    const upstreamReady = upstreamScheme === "https" ? "secureConnect" : "connect"
+    upstreamSocket.once(upstreamReady, () => {
+      // Build the rewritten request line + headers.  Path was already
+      // resolved above (wsUpstreamPath) — strip-prefix by default, keep-
+      // prefix when the active preview declared a servePath.  Everything
+      // else (Sec-WebSocket-* headers, Upgrade, Connection, Origin, etc.)
+      // passes through.
+      const newUrl = wsUpstreamPath + (url.includes("?") ? url.slice(url.indexOf("?")) : "")
       const lines: string[] = [`${req.method ?? "GET"} ${newUrl} HTTP/1.1`]
       const raw = req.rawHeaders
       for (let i = 0; i < raw.length; i += 2) {

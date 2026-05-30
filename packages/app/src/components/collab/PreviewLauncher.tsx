@@ -205,7 +205,15 @@ function RunningBanner(props: {
   onRestart: () => void
   busy: boolean
 }) {
-  const url = () => `/preview/${props.state.port}/`
+  // Use the portless `/preview/` URL form — the proxy's parsePreviewPath
+  // routes it to the active preview's port automatically (commit b313df846
+  // on opencode-collab).  Frontend repos that ship `.opencode-preview.json`
+  // with a matching `<base href="/preview/">` (e.g. Angular CLI with the
+  // `preview` build configuration) rely on this URL form so their internal
+  // routing + asset URLs resolve correctly.  Falling back to the explicit
+  // `/preview/<port>/` form would still work for legacy clients but is
+  // less consistent with what the SPA's index.html expects.
+  const url = () => `/preview/`
   return (
     <div class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 space-y-1.5">
       <div class="flex items-center gap-2 text-xs text-emerald-200">

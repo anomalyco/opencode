@@ -19,7 +19,7 @@
  */
 
 import { Database } from "@/storage/db"
-import { eq, and, isNull } from "drizzle-orm"
+import { eq, and, isNull, desc, gt } from "drizzle-orm"
 import { base64Decode } from "@opencode-ai/core/util/encode"
 import {
   CollabAuthSessionTable,
@@ -27,6 +27,7 @@ import {
   CollabParticipantTable,
   CollabRepoTable,
 } from "./schema.sql"
+import { decryptToken, isEncrypted } from "./crypto"
 
 // NOTE: the auth gate only needs the cookie holder's identity
 // (github_id, github_login) for the participation check.  The encrypted
@@ -375,5 +376,54 @@ function nativeSessionHasRepos(nativeSessionId: string): boolean {
       .where(eq(CollabSessionTable.session_id, nativeSessionId))
       .get()
     return !!row
+  })
+}
+
+/**
+ * Return the GitHub OAuth access token for the most-recently-created
+ * unexpired auth session belonging to `githubId`, decrypted via the same
+ * crypto helpers `router.ts:getSession()` uses for the cookie path.
+ *
+ * Returns null when:
+ *  - no auth-session row exists for this user (they never logged in, OR
+ *    every prior session expired and was opportunistically deleted)
+ *  - the most-recent row's `expires_at` is in the past (we don't
+ *    proactively delete here — opportunistic delete in getSession is
+ *    enough; we just don't hand out a stale token)
+ *  - the encrypted token fails to decrypt under the current SESSION_SECRET
+ *    (rotation case — caller should treat this exactly like "no token")
+ *
+ * Used by the preview-launcher's resume path on container boot — there
+ * isn't a Driver "clicker" to attach a token to, so we look up the session
+ * owner's most-recent login.  The hot-path POST /preview/launch route
+ * doesn't call this; it passes the clicker's `sess.githubAccessToken`
+ * directly.
+ *
+ * Security note: callers MUST only use the returned token for git-clone
+ * operations scoped to the user's own collab session.  Never log it,
+ * never include it in any URL we persist (lockfile, .gitconfig, etc.).
+ */
+export function latestAccessTokenForGithubId(githubId: number): string | null {
+  return Database.use((db) => {
+    const row = db
+      .select()
+      .from(CollabAuthSessionTable)
+      .where(
+        and(
+          eq(CollabAuthSessionTable.github_id, githubId),
+          gt(CollabAuthSessionTable.expires_at, new Date()),
+        ),
+      )
+      .orderBy(desc(CollabAuthSessionTable.created_at))
+      .get()
+    if (!row) return null
+    let accessToken = row.github_access_token
+    if (isEncrypted(accessToken)) {
+      const secret = process.env["SESSION_SECRET"] ?? ""
+      const plain = decryptToken(accessToken, secret)
+      if (plain === null) return null // rotation / corruption — treat as no-token
+      accessToken = plain
+    }
+    return accessToken
   })
 }

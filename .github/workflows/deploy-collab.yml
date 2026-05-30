@@ -107,8 +107,64 @@ jobs:
           # frontend live-preview work, not here.  Until that lands, the
           # preview proxy may not resolve the alias inside the dev server, but
           # the rest of the app deploys cleanly.
+          # Re-assert task-level memory + cpu on every deploy.  Same
+          # self-heal idea as the deploymentConfiguration update-service
+          # call below: even if an operator dials these down in the AWS
+          # Console (or a previous task-def revision had different
+          # values), the next deploy puts them back to the canonical
+          # values we know work for the workload.
+          #
+          # 16 GB / 4 vCPU sized for Angular `ng serve` + ad-hoc heavier
+          # workloads.  That dev server peaks ~4-5 GB of resident memory
+          # during compile on a real-sized app; the static-serve fallback
+          # peaks during the build step (also ~4 GB); plus opencode's
+          # ~500 MB baseline, plus pnpm install peaks, plus headroom for
+          # LLM tool calls running concurrently.  At 8 GB we still saw
+          # tail-latency crashes when the build coincided with a heavy
+          # LLM turn — 16 GB gives comfortable margin.  4 vCPU doubles
+          # compute parallelism for ng compile + pnpm install, which
+          # are both worker-thread heavy.
+          #
+          # Anything below 16 GB risks the kernel OOM-killer taking down
+          # the WHOLE task (which manifests as ALL collab sessions
+          # disconnecting at once — much worse than the dev server alone
+          # dying).  Fargate per-task minimums require cpu and memory to
+          # be quantised in supported pairs; 4096 CPU / 16384 MB is a
+          # valid pair (see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html#task_size).
+          #
+          # Cost: ~$290/mo running 24/7 on Fargate ap-southeast-2 — roughly
+          # 2x the previous 2vCPU/8GB tier ($145/mo).  Acceptable given the
+          # cross-session correlated-crash failure mode we were seeing.
+          # Re-assert the SQLite EFS mount point on every deploy.  The EFS
+          # access point is mounted into the container; legacy task-def
+          # revisions had it at `/root/.local/share/opencode` (the
+          # pre-ADR-0003 root-user layout), but opencode now runs as uid
+          # 10001 with HOME=/home/opencode and writes its SQLite DB at
+          # `/home/opencode/.local/share/opencode/opencode-local.db`.
+          # With the EFS mount at the OLD path, the runtime path falls
+          # back to overlayfs and every deploy wipes the collab_session
+          # table.
+          #
+          # The map() form is idempotent — already-correct paths pass
+          # through unchanged; only the legacy `/root/...` form gets
+          # rewritten.  Caveat: the EFS access point itself ALSO needs
+          # to permit uid 10001 writes (POSIX user 10001/10001) — the
+          # mount path fix alone isn't sufficient if the access point
+          # is still uid 0/0.  That's a one-time AWS Console action
+          # outside the task-def shape.  After this jq patch lands and
+          # the next deploy runs, the entrypoint's "EFS path is
+          # writable" log line confirms whether the access point uid
+          # also needs fixing.
           jq --arg img "${{ steps.img.outputs.sha_image }}" '
             .containerDefinitions[0].image = $img
+            | .cpu = "4096"
+            | .memory = "16384"
+            | .containerDefinitions[0].mountPoints |= map(
+                if .containerPath == "/root/.local/share/opencode"
+                then .containerPath = "/home/opencode/.local/share/opencode"
+                else .
+                end
+              )
             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                   .compatibilities, .registeredAt, .registeredBy)
           ' current.json > new.json
