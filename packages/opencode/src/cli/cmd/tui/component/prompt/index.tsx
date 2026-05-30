@@ -40,6 +40,7 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
+import { errorMessage } from "@/util/error"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
@@ -64,7 +65,6 @@ import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
   sessionID?: string
-  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -201,7 +201,6 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
-  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -218,14 +217,25 @@ export function Prompt(props: PromptProps) {
 
   async function createWorkspace(selection: Extract<WorkspaceSelection, { type: "new" }>) {
     setCreatingWorkspace(true)
-    const result = await sdk.client.experimental.workspace
-      .create({ type: selection.workspaceType, branch: null })
-      .catch(() => undefined)
-    if (result == undefined || result.error || !result.data) {
+    let result
+    try {
+      result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
+    } catch (err) {
       selectWorkspace(undefined)
       setCreatingWorkspace(false)
       toast.show({
-        message: "Creating workspace failed",
+        title: "Creating workspace failed",
+        message: errorMessage(err),
+        variant: "error",
+      })
+      return
+    }
+    if (result.error || !result.data) {
+      selectWorkspace(undefined)
+      setCreatingWorkspace(false)
+      toast.show({
+        title: "Creating workspace failed",
+        message: errorMessage(result.error ?? "no response"),
         variant: "error",
       })
       return
@@ -511,7 +521,14 @@ export function Prompt(props: PromptProps) {
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
           const value = text
-          const content = await Editor.open({ value, renderer })
+          const content = await Editor.open({
+            value,
+            renderer,
+            cwd:
+              (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+              project.instance.directory() ||
+              process.cwd(),
+          })
           if (!content) return
 
           input.setText(content)
@@ -1061,7 +1078,7 @@ export function Prompt(props: PromptProps) {
     if (sessionID == null) {
       const workspace = workspaceSelection()
       const workspaceID = iife(() => {
-        if (!workspace) return defaultWorkspaceID()
+        if (!workspace) return undefined
         if (workspace.type === "none") return undefined
         if (workspace.type === "existing") return workspace.workspaceID
         return undefined
@@ -1422,17 +1439,7 @@ export function Prompt(props: PromptProps) {
     | undefined
   >(() => {
     const selected = workspaceSelection()
-    if (!selected) {
-      const workspaceID = defaultWorkspaceID()
-      if (props.sessionID || !workspaceID) return
-      const workspace = project.workspace.get(workspaceID)
-      return {
-        type: "existing",
-        workspaceType: workspace?.type ?? "unknown",
-        workspaceName: workspace?.name ?? workspaceID,
-        status: project.workspace.status(workspaceID) ?? "error",
-      }
-    }
+    if (!selected) return
     if (selected.type === "none") return
     if (props.sessionID && !workspaceCreating()) return
     if (selected.type === "new") {
@@ -1450,7 +1457,10 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const agent = local.agent.current()
+    const agent =
+      status().type !== "idle"
+        ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
+        : local.agent.current()
     const color = agent ? local.agent.color(agent.name) : theme.border
     return {
       frames: createFrames({
@@ -1469,11 +1479,13 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
+  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
 
   return (
     <>
-      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
+          width="100%"
           border={["left"]}
           borderColor={borderHighlight()}
           customBorderChars={{
@@ -1488,14 +1500,16 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
+            width="100%"
           >
             <textarea
+              width="100%"
               placeholder={placeholderText()}
               placeholderColor={theme.textMuted}
               textColor={leader() ? theme.textMuted : theme.text}
               focusedTextColor={leader() ? theme.textMuted : theme.text}
               minHeight={1}
-              maxHeight={6}
+              maxHeight={maxHeight()}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)

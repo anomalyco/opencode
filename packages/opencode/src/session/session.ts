@@ -1,10 +1,10 @@
 import { Slug } from "@opencode-ai/core/util/slug"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
@@ -102,7 +102,7 @@ export function fromRow(row: SessionRow): Info {
     share,
     metadata: row.metadata ?? {},
     revert,
-    permission: row.permission ?? undefined,
+    permission: row.permission ? [...row.permission] : undefined,
     time: {
       created: row.time_created,
       updated: row.time_updated,
@@ -513,6 +513,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
+export const use = serviceUse(Service)
+
 export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
@@ -557,7 +559,7 @@ export const layer: Layer.Layer<
         agent: input.agent,
         model: input.model,
         metadata: input.metadata ?? {},
-        permission: input.permission,
+        permission: input.permission ? [...input.permission] : undefined,
         cost: 0,
         tokens: EmptyTokens,
         time: {
@@ -756,7 +758,7 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       permission: Permission.Ruleset
     }) {
-      yield* patch(input.sessionID, { permission: input.permission, time: { updated: Date.now() } })
+      yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } })
     })
 
     const setRevert = Effect.fn("Session.setRevert")(function* (input: {

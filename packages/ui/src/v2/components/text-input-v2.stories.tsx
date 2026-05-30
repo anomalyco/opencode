@@ -85,7 +85,7 @@ export const Controlled = {
         <TextInputV2 value={value()} onInput={(e) => setValue(e.currentTarget.value)} placeholder="Type here…" />
         <div
           style={{
-            "font-family": "var(--font-family-sans)",
+            "font-family": "var(--v2-font-family-sans)",
             "font-size": "12px",
             color: "var(--text-text-faint)",
           }}

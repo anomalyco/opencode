@@ -19,7 +19,7 @@ import {
   WorkspaceRoutingQuery,
   WorkspaceRoutingQueryFields,
 } from "../middleware/workspace-routing"
-import { ApiNotFoundError } from "../errors"
+import { ApiNotFoundError, PermissionNotFoundError, SessionBusyError } from "../errors"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 
@@ -237,7 +237,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("fork", SessionPaths.fork, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
-          payload: Schema.optional(ForkPayload),
+          payload: [HttpApiSchema.NoContent, ForkPayload],
           success: described(Session.Info, "200"),
           error: [HttpApiError.BadRequest, ApiNotFoundError],
         }).annotateMerge(
@@ -355,7 +355,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: ShellPayload,
           success: described(MessageV2.WithParts, "Created message"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.shell",
@@ -368,7 +368,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: RevertPayload,
           success: described(Session.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.revert",
@@ -381,7 +381,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           success: described(Session.Info, "Updated session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.unrevert",
@@ -394,7 +394,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: PermissionResponsePayload,
           success: described(Schema.Boolean, "Permission processed successfully"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, PermissionNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.respond",
@@ -407,7 +407,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID, messageID: MessageID },
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Successfully deleted message"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, SessionBusyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.deleteMessage",

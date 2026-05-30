@@ -35,7 +35,7 @@ const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
     Effect.sleep("2 seconds").pipe(Effect.flatMap(() => Effect.fail(new Error(message)))),
   )
 
-const remove = (id: SessionID) => SessionNs.Service.use((svc) => svc.remove(id))
+const remove = (id: SessionID) => SessionNs.use.remove(id)
 
 const subscribeGlobal = (type: string, callback: (event: NonNullable<GlobalEvent["payload"]>) => void) => {
   const listener = (event: GlobalEvent) => {

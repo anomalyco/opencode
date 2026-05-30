@@ -2288,6 +2288,15 @@
               "enum": ["git", "branch"]
             },
             "required": true
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -2988,11 +2997,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3067,11 +3076,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3146,11 +3155,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3241,11 +3250,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3312,6 +3321,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "McpServerNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
+                }
+              }
+            }
           }
         },
         "description": "Connect an MCP server.",
@@ -3371,6 +3390,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "McpServerNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3610,11 +3639,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "ProjectNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/ProjectNotFoundError"
                 }
               }
             }
@@ -3944,11 +3973,11 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "PtyNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4017,6 +4046,16 @@
                       "$ref": "#/components/schemas/InvalidRequestError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PtyNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4114,11 +4153,11 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "PtyNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4199,21 +4238,21 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "PtyForbiddenError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/effect_HttpApiError_Forbidden"
+                  "$ref": "#/components/schemas/PtyForbiddenError"
                 }
               }
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "PtyNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PtyNotFoundError"
                 }
               }
             }
@@ -4348,11 +4387,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "QuestionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/QuestionNotFoundError"
                 }
               }
             }
@@ -4449,11 +4488,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "QuestionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/QuestionNotFoundError"
                 }
               }
             }
@@ -4588,11 +4627,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "PermissionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PermissionNotFoundError"
                 }
               }
             }
@@ -6194,6 +6233,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Permanently delete a specific message and all of its parts from a session without reverting file changes.",
@@ -7123,6 +7172,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Execute a shell command within the session context and return the AI's response.",
@@ -7239,6 +7298,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Revert a specific message in a session, undoing its effects and restoring the previous state.",
@@ -7340,6 +7409,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Restore all previously reverted messages in a session.",
@@ -7422,11 +7501,18 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "NotFoundError | PermissionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/NotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PermissionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -8217,6 +8303,26 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
+                }
+              }
+            }
           }
         },
         "description": "Create a v2 session message and queue it for the agent loop.",
@@ -8303,6 +8409,26 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
+                }
+              }
+            }
           }
         },
         "description": "Compact a v2 session conversation.",
@@ -8367,6 +8493,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
                 }
               }
             }
@@ -8444,6 +8590,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
                 }
               }
             }
@@ -8551,6 +8717,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
                 }
               }
             }
@@ -9852,11 +10038,14 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "WorkspaceCreateError | BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkspaceCreateError"
+                    },
                     {
                       "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
                     },
@@ -10149,6 +10338,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
           }
         },
         "description": "Move a session's sync history into the target workspace, or detach it to the local project.",
@@ -10207,20 +10406,32 @@
             "required": true
           },
           {
-            "name": "directory",
             "in": "query",
+            "name": "directory",
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
-            "name": "workspace",
             "in": "query",
+            "name": "workspace",
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ticket",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10567,6 +10778,18 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventModels-devRefreshed"
+          },
+          {
+            "$ref": "#/components/schemas/EventAccountAdded"
+          },
+          {
+            "$ref": "#/components/schemas/EventAccountRemoved"
+          },
+          {
+            "$ref": "#/components/schemas/EventAccountSwitched"
           }
         ]
       },
@@ -10917,6 +11140,9 @@
             "type": "object",
             "properties": {
               "message": {
+                "type": "string"
+              },
+              "ref": {
                 "type": "string"
               }
             },
@@ -11369,7 +11595,7 @@
           },
           "pid": {
             "type": "integer",
-            "exclusiveMinimum": 0
+            "minimum": 0
           }
         },
         "required": ["id", "title", "command", "args", "cwd", "status", "pid"],
@@ -12980,6 +13206,18 @@
                 "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
               },
               {
+                "$ref": "#/components/schemas/EventModels-devRefreshed"
+              },
+              {
+                "$ref": "#/components/schemas/EventAccountAdded"
+              },
+              {
+                "$ref": "#/components/schemas/EventAccountRemoved"
+              },
+              {
+                "$ref": "#/components/schemas/EventAccountSwitched"
+              },
+              {
                 "$ref": "#/components/schemas/SyncEventMessageUpdated"
               },
               {
@@ -13365,7 +13603,20 @@
                     "enum": [false]
                   }
                 ],
-                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout."
+                "description": "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout."
+              },
+              "headerTimeout": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  }
+                ],
+                "description": "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout."
               },
               "chunkTimeout": {
                 "type": "integer",
@@ -13494,7 +13745,6 @@
                       }
                     }
                   },
-                  "required": ["input", "output"],
                   "additionalProperties": false
                 },
                 "experimental": {
@@ -13588,6 +13838,11 @@
           },
           "scope": {
             "type": "string"
+          },
+          "callbackPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
           },
           "redirectUri": {
             "type": "string"
@@ -15203,34 +15458,103 @@
         "required": ["error"],
         "additionalProperties": false
       },
-      "NotFoundError": {
-        "type": "object",
-        "required": ["name", "data"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["NotFoundError"]
-          },
-          "data": {
-            "type": "object",
-            "required": ["message"],
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "effect_HttpApiError_Forbidden": {
+      "McpServerNotFoundError": {
         "type": "object",
         "properties": {
           "_tag": {
             "type": "string",
-            "enum": ["Forbidden"]
+            "enum": ["McpServerNotFoundError"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
           }
         },
-        "required": ["_tag"],
+        "required": ["_tag", "name", "message"],
+        "additionalProperties": false
+      },
+      "ProjectNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProjectNotFoundError"]
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "projectID", "message"],
+        "additionalProperties": false
+      },
+      "PtyNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PtyNotFoundError"]
+          },
+          "ptyID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "ptyID", "message"],
+        "additionalProperties": false
+      },
+      "PtyForbiddenError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PtyForbiddenError"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "QuestionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["QuestionNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
+        "additionalProperties": false
+      },
+      "PermissionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PermissionNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
         "additionalProperties": false
       },
       "ProviderAuthMethod": {
@@ -15396,6 +15720,25 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "NotFoundError": {
+        "type": "object",
+        "required": ["name", "data"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["NotFoundError"]
+          },
+          "data": {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "TextPartInput": {
         "type": "object",
         "properties": {
@@ -15541,6 +15884,23 @@
         "required": ["type", "prompt", "description", "agent"],
         "additionalProperties": false
       },
+      "SessionBusyError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionBusyError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
       "V2SessionsResponse": {
         "type": "object",
         "properties": {
@@ -15594,6 +15954,57 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "SessionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionNotFoundError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
+      "ServiceUnavailableError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ServiceUnavailableError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "UnknownError1": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["UnknownError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
       "V2SessionMessagesResponse": {
         "type": "object",
         "properties": {
@@ -15617,23 +16028,6 @@
           }
         },
         "required": ["items", "cursor"],
-        "additionalProperties": false
-      },
-      "ServiceUnavailableError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ServiceUnavailableError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "service": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "ProviderNotFoundError": {
@@ -15846,6 +16240,27 @@
         "required": ["id", "type", "name", "projectID", "timeUsed"],
         "additionalProperties": false
       },
+      "WorkspaceCreateError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["WorkspaceCreateError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "WorkspaceWarpError": {
         "type": "object",
         "properties": {
@@ -15865,6 +16280,17 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "effect_HttpApiError_Forbidden": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["Forbidden"]
+          }
+        },
+        "required": ["_tag"],
         "additionalProperties": false
       },
       "SyncEventMessageUpdated": {
@@ -20308,6 +20734,172 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventModels-devRefreshed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["models-dev.refreshed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "AccountV2OAuthCredential": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "refresh", "access", "expires"],
+        "additionalProperties": false
+      },
+      "AccountV2ApiKeyCredential": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["api"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["type", "key"],
+        "additionalProperties": false
+      },
+      "AccountV2Credential": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AccountV2OAuthCredential"
+          },
+          {
+            "$ref": "#/components/schemas/AccountV2ApiKeyCredential"
+          }
+        ]
+      },
+      "AccountV2Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "serviceID": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "credential": {
+            "$ref": "#/components/schemas/AccountV2Credential"
+          }
+        },
+        "required": ["id", "serviceID", "description", "credential"],
+        "additionalProperties": false
+      },
+      "EventAccountAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.added"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/AccountV2Info"
+              }
+            },
+            "required": ["account"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountRemoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.removed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/AccountV2Info"
+              }
+            },
+            "required": ["account"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.switched"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "serviceID": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": ["serviceID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "SessionInfo": {
         "type": "object",
         "properties": {
@@ -21021,7 +21613,7 @@
                 "properties": {
                   "via": {
                     "type": "string",
-                    "enum": ["auth"]
+                    "enum": ["account"]
                   },
                   "service": {
                     "type": "string"

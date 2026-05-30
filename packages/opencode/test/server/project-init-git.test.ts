@@ -83,7 +83,7 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.directory,
       })
 
-      const ctx = yield* InstanceStore.Service.use((store) => store.reload({ directory: tmp.directory }))
+      const ctx = yield* InstanceStore.use.reload({ directory: tmp.directory })
       const tracked = yield* Snapshot.Service.use((snapshot) => snapshot.track()).pipe(
         Effect.provideService(InstanceRef, ctx),
       )

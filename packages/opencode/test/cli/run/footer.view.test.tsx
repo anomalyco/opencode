@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
+import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
@@ -24,6 +25,7 @@ import type {
   RunProvider,
   StreamCommit,
 } from "@/cli/cmd/run/types"
+import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
 
 function bindings(...keys: string[]) {
   return keys.map((key) => ({ key }))
@@ -396,6 +398,53 @@ test("direct footer shows subagent indicator while prompt is running", async () 
   try {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("interrupt · 1 agent · ↓ to view")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct question body separates single-select checkmark from label", async () => {
+  const request = {
+    id: "question-1",
+    sessionID: "session-1",
+    questions: [
+      {
+        question: "Which categorical concept is often described as a universal way to combine two objects?",
+        header: "Universal Product",
+        options: [
+          { label: "Product", description: "A product comes with projections." },
+          { label: "Equalizer", description: "An equalizer selects morphisms where arrows agree." },
+        ],
+      },
+    ],
+  } satisfies QuestionRequest
+  const replies: unknown[] = []
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={12}>
+        <RunQuestionBody
+          request={request}
+          theme={RUN_THEME_FALLBACK.footer}
+          onReply={(input) => {
+            replies.push(input)
+          }}
+          onReject={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: 12,
+    },
+  )
+
+  try {
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(replies).toHaveLength(1)
+    expect(app.captureCharFrame()).toContain("Product ✓")
   } finally {
     app.renderer.destroy()
   }
