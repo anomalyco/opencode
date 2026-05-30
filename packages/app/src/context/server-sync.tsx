@@ -418,6 +418,24 @@ export function createServerSyncContext() {
         void serverSDK.event.start()
       }, 0)
     }
+
+    let hiddenAt = 0
+    const HIDDEN_THRESHOLD_MS = 2000
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now()
+        return
+      }
+      if (hiddenAt === 0) return
+      const awayTime = Date.now() - hiddenAt
+      hiddenAt = 0
+      if (awayTime < HIDDEN_THRESHOLD_MS) return
+      void bootstrap.refetch()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    onCleanup(() => document.removeEventListener("visibilitychange", handleVisibility))
   })
 
   const projectApi = {
