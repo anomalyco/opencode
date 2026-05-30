@@ -71,7 +71,8 @@ export const layer = Layer.effect(
       if (!origin) return undefined
       const normalized = url(origin)
       if (!normalized) return undefined
-      return ID.make(Hash.fast(`git-remote:${normalized}`))
+      const storeHash = Hash.short(repo.store)
+      return ID.make(Hash.fast(`git-remote:${normalized}|${storeHash}`))
     })
 
     function url(input: string) {
@@ -100,7 +101,9 @@ export const layer = Layer.effect(
 
     const root = Effect.fnUntraced(function* (repo: Git.Repo) {
       const root = (yield* git.roots(repo))[0]
-      return root ? ID.make(root) : undefined
+      if (!root) return undefined
+      const storeHash = Hash.short(repo.store)
+      return ID.make(Hash.fast(`git-root:${root}|${storeHash}`))
     })
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {

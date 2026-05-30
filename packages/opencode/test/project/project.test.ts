@@ -40,8 +40,13 @@ function run<A, E>(fn: (svc: Project.Interface) => Effect.Effect<A, E>) {
   })
 }
 
-function remoteProjectID(remote: string) {
-  return ProjectID.make(Hash.fast(`git-remote:${remote}`))
+function remoteProjectID(remote: string, store: string) {
+  const storeHash = Hash.short(store)
+  return ProjectID.make(Hash.fast(`git-remote:${remote}|${storeHash}`))
+}
+
+function storePath(tmp: string) {
+  return path.join(tmp, ".git")
 }
 
 /**
@@ -174,7 +179,7 @@ describe("Project.fromDirectory", () => {
 
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
-      expect(project.id).toBe(remoteProjectID("github.com/Test-Org/Test-Repo"))
+      expect(project.id).toBe(remoteProjectID("github.com/Test-Org/Test-Repo", storePath(tmp)))
     }),
   )
 
@@ -188,8 +193,10 @@ describe("Project.fromDirectory", () => {
       const { project: a } = yield* run((svc) => svc.fromDirectory(ssh))
       const { project: b } = yield* run((svc) => svc.fromDirectory(https))
 
-      expect(a.id).toBe(remoteProjectID("github.com/owner/repo"))
-      expect(b.id).toBe(a.id)
+      // 不同 store → 不同 ID
+      expect(a.id).toBe(remoteProjectID("github.com/owner/repo", storePath(ssh)))
+      expect(b.id).toBe(remoteProjectID("github.com/owner/repo", storePath(https)))
+      expect(a.id).not.toBe(b.id)
     }),
   )
 
@@ -198,7 +205,7 @@ describe("Project.fromDirectory", () => {
       const tmp = yield* tmpdirScoped({ git: true })
       const projects = yield* Project.Service
       const { project: rootProject } = yield* projects.fromDirectory(tmp)
-      const remoteID = remoteProjectID("github.com/acme/app")
+      const remoteID = remoteProjectID("github.com/acme/app", storePath(tmp))
       const sessionID = crypto.randomUUID() as SessionID
       const workspaceID = WorkspaceID.ascending()
 
@@ -355,7 +362,7 @@ describe("Project.fromDirectory with worktrees", () => {
     }),
   )
 
-  it.live("separate clones of the same repo should share project ID", () =>
+  it.live("separate clones of the same repo should have different project IDs", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ git: true })
 
@@ -371,7 +378,7 @@ describe("Project.fromDirectory with worktrees", () => {
       const { project: a } = yield* run((svc) => svc.fromDirectory(tmp))
       const { project: b } = yield* run((svc) => svc.fromDirectory(clone))
 
-      expect(b.id).toBe(a.id)
+      expect(b.id).not.toBe(a.id)
     }),
   )
 
