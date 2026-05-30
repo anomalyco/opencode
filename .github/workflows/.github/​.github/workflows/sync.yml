@@ -20,4 +20,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/Ejdjdososs/opencode main
+          git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/Ejdjdososs/opencode HEAD:refs/heads/main
