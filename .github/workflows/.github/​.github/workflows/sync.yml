@@ -1,0 +1,18 @@
+name: Sync to Hugging Face Hub
+on:
+  push:
+    branches: [ main ]
+  force_push:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+      - name: Push to HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: git push --force https://hhhh694940-create:$HF_TOKEN@huggingface.co/spaces/hhhh694940-create/OpenCode main
