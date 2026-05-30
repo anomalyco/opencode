@@ -3675,6 +3675,109 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+
+    test("anthropic opus 4.6 dot-format models return adaptive thinking variants without display", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-4.6-opus",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-4.6-opus",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({ thinking: { type: "adaptive" }, effort: "high" })
+      expect(result.max).toEqual({ thinking: { type: "adaptive" }, effort: "max" })
+    })
+
+    test("anthropic opus 4.6 dash-format models return adaptive thinking variants without display", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-4-6-opus",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-4-6-opus",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.high).toEqual({ thinking: { type: "adaptive" }, effort: "high" })
+    })
+
+    test("anthropic opus 4.7 dot-format models return adaptive thinking variants with xhigh and display summarized", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-4.7-opus",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-4.7-opus",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
+      })
+      expect(result.xhigh).toEqual({
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "xhigh",
+      })
+    })
+
+    test("anthropic opus 4.7 dash-format models return adaptive thinking variants with xhigh and display summarized", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-4-7-opus",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-4-7-opus",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
+      })
+    })
+
+    test("anthropic opus 4.8 dot-format models return adaptive thinking variants with xhigh and display summarized", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-4.8-opus",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-4.8-opus",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.high).toEqual({
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
+      })
+    })
+
+    test("non-anthropic models with opus-like substrings do not get adaptive thinking", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/aws--llama-opus-4.7-fake",
+        providerID: "sap-ai-core",
+        api: {
+          id: "aws--llama-opus-4.7-fake",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
   })
 
   describe("ai-gateway-provider (cloudflare-ai-gateway)", () => {
