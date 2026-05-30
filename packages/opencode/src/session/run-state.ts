@@ -58,7 +58,10 @@ export const layer = Layer.effect(
       const next = Runner.make<MessageV2.WithParts>(data.scope, {
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
-          yield* status.set(sessionID, { type: "idle" })
+          const current = yield* status.get(sessionID)
+          if (current.type !== "retry_exhausted") {
+            yield* status.set(sessionID, { type: "idle" })
+          }
         }),
         onBusy: status.set(sessionID, { type: "busy" }),
         onInterrupt,

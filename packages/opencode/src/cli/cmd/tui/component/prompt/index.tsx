@@ -480,6 +480,14 @@ export function Prompt(props: PromptProps) {
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
+          // When retry_exhausted, Escape dismisses the error via server-side abort
+          // (local-only sync.set would be overwritten by the next SSE push)
+          if (status().type === "retry_exhausted") {
+            if (props.sessionID) {
+              void sdk.client.session.abort({ sessionID: props.sessionID }).catch(() => {})
+            }
+            return
+          }
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
@@ -1035,6 +1043,41 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return false
     if (workspaceCreating()) return false
     if (auto()?.visible) return false
+    // When session is retry_exhausted, Enter retries by re-sending the last user message
+    if (status().type === "retry_exhausted" && props.sessionID) {
+      const lastUser = lastUserMessage()
+      if (lastUser) {
+        const textParts = (sync.data.part[lastUser.id] ?? [])
+          .filter((p): p is typeof p & { type: "text" } => p.type === "text" && !(p as any).synthetic && (p as any).text?.trim())
+          .map((p) => ({ id: PartID.ascending(), type: "text" as const, text: (p as any).text }))
+
+        if (textParts.length > 0) {
+          const agent = local.agent.current()
+          const selectedModel = local.model.current()
+          if (agent && selectedModel) {
+            // Optimistic flip to busy prevents a second Enter from double-submitting
+            // while retry_exhausted is still the server-side status
+            const exhaustedStatus = status()
+            sync.set("session_status", props.sessionID, { type: "busy" })
+            sdk.client.session
+              .prompt({
+                sessionID: props.sessionID,
+                messageID: MessageID.ascending(),
+                agent: agent.name,
+                ...selectedModel,
+                model: selectedModel,
+                variant: local.model.variant.current(),
+                parts: textParts,
+              })
+              .catch(() => {
+                sync.set("session_status", props.sessionID!, exhaustedStatus)
+              })
+            return true
+          }
+        }
+      }
+      // If we can't find the last message, fall through to normal submit
+    }
     if (!store.prompt.input) return false
     const agent = local.agent.current()
     if (!agent) return false
@@ -1643,6 +1686,55 @@ export function Prompt(props: PromptProps) {
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
           <Switch>
+            <Match when={status().type === "retry_exhausted"}>
+              {(() => {
+                const exhausted = createMemo(() => {
+                  const s = status()
+                  if (s.type !== "retry_exhausted") return
+                  return s
+                })
+                const errorMessage = createMemo(() => {
+                  const e = exhausted()
+                  if (!e) return ""
+                  if (e.message.includes("exceeded your current quota") && e.message.includes("gemini"))
+                    return "gemini is way too hot right now"
+                  if (e.message.length > 80) return e.message.slice(0, 80) + "..."
+                  return e.message
+                })
+                const isTruncated = createMemo(() => {
+                  const e = exhausted()
+                  if (!e) return false
+                  return e.message.length > 120
+                })
+                const handleErrorMessageClick = () => {
+                  const e = exhausted()
+                  if (!e) return
+                  if (isTruncated()) {
+                    void DialogAlert.show(dialog, "Retry Error", e.message)
+                  }
+                }
+
+                return (
+                  <box flexDirection="row" gap={1} flexGrow={1} justifyContent="space-between">
+                    <box flexShrink={0} flexDirection="row" gap={1}>
+                      <box marginLeft={1}>
+                        <text fg={theme.error}>✕</text>
+                      </box>
+                      <box flexDirection="row" gap={1} flexShrink={0} onMouseUp={handleErrorMessageClick}>
+                        <text fg={theme.error}>
+                          {errorMessage()}{isTruncated() ? " (click to expand)" : ""} [attempt #{exhausted()?.attempt}]
+                        </text>
+                      </box>
+                    </box>
+                    <text fg={theme.text}>
+                      enter <span style={{ fg: theme.textMuted }}>retry</span>
+                      {" · "}
+                      esc <span style={{ fg: theme.textMuted }}>dismiss</span>
+                    </text>
+                  </box>
+                )
+              })()}
+            </Match>
             <Match when={status().type !== "idle"}>
               <box
                 flexDirection="row"

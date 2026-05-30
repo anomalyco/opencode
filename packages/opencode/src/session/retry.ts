@@ -26,6 +26,28 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+export const RETRY_MAX_ATTEMPTS = 3
+
+const NETWORK_ERROR_PATTERNS = [
+  "econnreset",
+  "econnrefused",
+  "etimedout",
+  "econnaborted",
+  "fetch failed",
+  "failed to fetch",
+  "socket hang up",
+  "network error",
+  "network request failed",
+  "connection reset",
+  "connection refused",
+  "connection timed out",
+  "request timed out",
+]
+
+function hasNetworkErrorMessage(message: string): boolean {
+  const lower = message.toLowerCase()
+  return NETWORK_ERROR_PATTERNS.some((pattern) => lower.includes(pattern))
+}
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -71,7 +93,7 @@ export function retryable(error: Err, provider: string) {
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
-    if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
+    if (!error.data.isRetryable && !(status !== undefined && status >= 500) && !hasNetworkErrorMessage(error.data.message)) return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
         message: GO_UPSELL_MESSAGE,
@@ -128,7 +150,8 @@ export function retryable(error: Err, provider: string) {
     if (
       lower.includes("rate increased too quickly") ||
       lower.includes("rate limit") ||
-      lower.includes("too many requests")
+      lower.includes("too many requests") ||
+      NETWORK_ERROR_PATTERNS.some((pattern) => lower.includes(pattern))
     ) {
       return { message: msg }
     }
@@ -136,7 +159,7 @@ export function retryable(error: Err, provider: string) {
 
   const json = parseJSON(msg)
   if (!json || typeof json !== "object") return undefined
-  const code = typeof json.code === "string" ? json.code : ""
+  const code = typeof json.code === "string" ? json.code : typeof json.code === "number" ? String(json.code) : ""
 
   if (json.type === "error" && json.error?.type === "too_many_requests") {
     return { message: "Too Many Requests" }
@@ -146,6 +169,17 @@ export function retryable(error: Err, provider: string) {
   }
   if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
     return { message: "Rate Limited" }
+  }
+  if (json.type === "error" && typeof json.error?.type === "string") {
+    const errorType = json.error.type
+    if (
+      errorType === "server_error" ||
+      errorType === "upstream_error" ||
+      errorType === "stream_read_error" ||
+      errorType === "service_unavailable_error"
+    ) {
+      return { message: typeof json.error.message === "string" ? json.error.message : errorType }
+    }
   }
   return undefined
 }
@@ -180,6 +214,7 @@ export function policy(opts: {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
+      if (meta.attempt > RETRY_MAX_ATTEMPTS) return Cause.done(meta.attempt)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
