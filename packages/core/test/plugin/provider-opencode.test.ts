@@ -5,11 +5,17 @@ import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
+import { Policy } from "@opencode-ai/core/policy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { location } from "../fixture/location"
 import { it, model, provider, withEnv } from "./provider-helper"
 
 const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, write: 0 } }]
-const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))
+const locationLayer = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory: AbsolutePath.make("test") })),
+)
 
 describe("OpencodePlugin", () => {
   it.effect("uses a public key and disables paid models without credentials", () =>
@@ -18,8 +24,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode")
           catalog.provider.update(item.id, () => {})
           const paid = model("opencode", "paid", { cost: cost(1) })
@@ -39,8 +45,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode")
           catalog.provider.update(item.id, () => {})
           const free = model("opencode", "free", { cost: cost(0) })
@@ -60,8 +66,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode")
           catalog.provider.update(item.id, () => {})
           const outputOnly = model("opencode", "output-only", { cost: cost(0, 1) })
@@ -81,8 +87,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode")
           catalog.provider.update(item.id, () => {})
           const paid = model("opencode", "paid", { cost: cost(1) })
@@ -102,8 +108,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode", { env: ["CUSTOM_OPENCODE_API_KEY"] })
           catalog.provider.update(item.id, (draft) => {
             draft.env = [...item.env]
@@ -125,8 +131,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode", {
             options: {
               headers: {},
@@ -157,8 +163,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("opencode", { enabled: { via: "account", service: "opencode" } })
           catalog.provider.update(item.id, (draft) => {
             draft.enabled = item.enabled
@@ -180,8 +186,8 @@ describe("OpencodePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(OpencodePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const item = provider("openai")
           catalog.provider.update(item.id, () => {})
           const paid = model("openai", "paid", { cost: cost(1) })
@@ -200,8 +206,8 @@ describe("OpencodePlugin", () => {
       const catalog = yield* Catalog.Service
       const providerID = ProviderV2.ID.opencode
 
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, ModelV2.ID.make("cheap-mini"), (model) => {
           model.capabilities.input = ["text"]
@@ -220,6 +226,8 @@ describe("OpencodePlugin", () => {
       const selected = yield* catalog.model.small(providerID)
 
       expect(Option.getOrUndefined(selected)?.id).toBe(ModelV2.ID.make("gpt-5-nano"))
-    }).pipe(Effect.provide(Catalog.defaultLayer.pipe(Layer.provide(locationLayer)))),
+    }).pipe(
+      Effect.provide(Catalog.defaultLayer.pipe(Layer.provide(Policy.defaultLayer), Layer.provide(locationLayer))),
+    ),
   )
 })
