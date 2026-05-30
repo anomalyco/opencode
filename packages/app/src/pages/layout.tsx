@@ -2673,6 +2673,41 @@ export default function Layout(props: ParentProps) {
       return item.vcs === "git" || layout.sidebar.workspaces(item.worktree)()
     })
     const homedir = createMemo(() => globalSync.data.path.home)
+    const copyProjectPath = () => {
+      const directory = worktree()
+      if (!directory) return
+      const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+      console.debug(`[sidebar-project] copy path dir=${directory}`)
+      if (!clipboard?.writeText) {
+        console.debug(`[sidebar-project] clipboard unavailable dir=${directory}`)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: "Clipboard unavailable",
+        })
+        return
+      }
+      void clipboard.writeText(directory).then(
+        () => {
+          console.debug(`[sidebar-project] copied path dir=${directory}`)
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: language.t("session.share.copy.copied"),
+            description: directory,
+          })
+        },
+        (err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          console.debug(`[sidebar-project] copy path failed dir=${directory} err=${message}`)
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+            description: message,
+          })
+        },
+      )
+    }
 
     return (
       <div
@@ -2727,20 +2762,35 @@ export default function Layout(props: ParentProps) {
                     stopPropagation
                   />
 
-                  <Tooltip
-                    placement="bottom"
-                    gutter={2}
-                    value={worktree()}
-                    class="shrink-0"
-                    contentStyle={{
-                      "max-width": "640px",
-                      transform: "translate3d(52px, 0, 0)",
-                    }}
-                  >
-                    <span class="text-12-regular text-text-weak truncate select-text">
-                      {worktree().replace(homedir(), "~")}
-                    </span>
-                  </Tooltip>
+                  <div class="flex min-w-0 items-center gap-1">
+                    <Tooltip
+                      placement="bottom"
+                      gutter={2}
+                      value={worktree()}
+                      class="min-w-0"
+                      contentStyle={{
+                        "max-width": "640px",
+                        transform: "translate3d(52px, 0, 0)",
+                      }}
+                    >
+                      <span class="block min-w-0 truncate select-text text-12-regular text-text-weak">
+                        {worktree().replace(homedir(), "~")}
+                      </span>
+                    </Tooltip>
+                    <Tooltip placement="bottom" value={language.t("session.header.open.copyPath")}>
+                      <IconButton
+                        icon="copy"
+                        variant="ghost"
+                        class="size-5 shrink-0 rounded-md text-icon-base"
+                        aria-label={language.t("session.header.open.copyPath")}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          copyProjectPath()
+                        }}
+                      />
+                    </Tooltip>
+                  </div>
                 </div>
 
                 <DropdownMenu modal>
