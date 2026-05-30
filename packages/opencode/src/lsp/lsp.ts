@@ -13,11 +13,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { InstanceRef } from "@/effect/instance-ref"
-import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "lsp" })
-const busRuntime = makeRuntime(Bus.Service, Bus.layer)
 
 export const Event = {
   Updated: BusEvent.define("lsp.updated", Schema.Struct({})),
@@ -294,9 +291,7 @@ export const layer = Layer.effect(
           if (!client) continue
 
           result.push(client)
-          void busRuntime.runPromise((bus) =>
-            bus.publish(Event.Updated, {}).pipe(Effect.provideService(InstanceRef, ctx)),
-          )
+          await Bus.publish(ctx, Event.Updated, {})
         }
 
         return result

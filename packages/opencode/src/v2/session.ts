@@ -3,7 +3,7 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceID } from "@/control-plane/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "@opencode-ai/core/session-message"
 import type { Prompt } from "@opencode-ai/core/session-prompt"
 import { ProjectID } from "@/project/schema"
@@ -65,6 +65,18 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
   sessionID: SessionID,
 }) {}
 
+export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
+  "Session.OperationUnavailableError",
+  {
+    operation: Schema.Literals(["prompt", "compact", "wait"]),
+  },
+) {}
+
+export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
+  sessionID: SessionID,
+  messageID: SessionMessage.ID,
+}) {}
+
 export interface Interface {
   readonly create: (input?: {
     agent?: string
@@ -97,14 +109,16 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], never>
-  readonly context: (sessionID: SessionID) => Effect.Effect<SessionMessage.Message[], never>
+  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly context: (
+    sessionID: SessionID,
+  ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   readonly prompt: (input: {
     id?: EventV2.ID
     sessionID: SessionID
     prompt: Prompt
     delivery?: Delivery
-  }) => Effect.Effect<SessionMessage.User, never>
+  }) => Effect.Effect<SessionMessage.User, NotFoundError | OperationUnavailableError>
   readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
   readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
   readonly subagent: (input: {
@@ -113,11 +127,11 @@ export interface Interface {
     prompt: Prompt
     agent: string
     model?: ModelV2.Ref
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
-  readonly compact: (sessionID: SessionID) => Effect.Effect<void, never>
-  readonly wait: (sessionID: SessionID) => Effect.Effect<void, never>
+  readonly compact: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -126,10 +140,18 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
-    const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
+      decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
+        Effect.mapError(
+          () =>
+            new MessageDecodeError({
+              sessionID: SessionID.make(row.session_id),
+              messageID: SessionMessage.ID.make(row.id),
+            }),
+        ),
+      )
 
     function fromRow(row: typeof SessionTable.$inferSelect): Info {
       return new Info({
@@ -144,7 +166,7 @@ export const layer = Layer.effect(
           ? {
               id: ModelV2.ID.make(row.model.id),
               providerID: ProviderV2.ID.make(row.model.providerID),
-              variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
+              variant: row.model.variant ? ModelV2.VariantID.make(row.model.variant) : undefined,
             }
           : undefined,
         cost: row.cost,
@@ -177,6 +199,8 @@ export const layer = Layer.effect(
       list: Effect.fn("V2Session.list")(function* (input) {
         const direction = input.cursor?.direction ?? "next"
         let order = input.order ?? "desc"
+        // This is a load bearing sort, desktop relies on this
+        const sortColumn = SessionTable.time_updated
         // Query the adjacent rows in reverse, then flip them back into the requested order below.
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
@@ -186,18 +210,18 @@ export const layer = Layer.effect(
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if (input.roots) conditions.push(isNull(SessionTable.parent_id))
-        if (input.start) conditions.push(gte(SessionTable.time_created, input.start))
+        if (input.start) conditions.push(gte(sortColumn, input.start))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.cursor) {
           conditions.push(
             order === "asc"
               ? or(
-                  gt(SessionTable.time_created, input.cursor.time),
-                  and(eq(SessionTable.time_created, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
+                  gt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
                 )!
               : or(
-                  lt(SessionTable.time_created, input.cursor.time),
-                  and(eq(SessionTable.time_created, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
+                  lt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
                 )!,
           )
         }
@@ -206,7 +230,7 @@ export const layer = Layer.effect(
           .from(SessionTable)
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .orderBy(
-            order === "asc" ? asc(SessionTable.time_created) : desc(SessionTable.time_created),
+            order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
 
@@ -214,6 +238,7 @@ export const layer = Layer.effect(
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
+        yield* result.get(input.sessionID)
         const direction = input.cursor?.direction ?? "next"
         let order = input.order ?? "desc"
         // Query the adjacent rows in reverse, then flip them back into the requested order below.
@@ -252,9 +277,10 @@ export const layer = Layer.effect(
           const rows = input.limit === undefined ? query.all() : query.limit(input.limit).all()
           return direction === "previous" ? rows.toReversed() : rows
         })
-        return rows.map((row) => decode(row))
+        return yield* Effect.forEach(rows, (row) => decode(row))
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
+        yield* result.get(sessionID)
         const rows = Database.use((db) => {
           const compaction = db
             .select()
@@ -284,10 +310,11 @@ export const layer = Layer.effect(
             .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
             .all()
         })
-        return rows.map((row) => decode(row))
+        return yield* Effect.forEach(rows, (row) => decode(row))
       }),
-      prompt: Effect.fn("V2Session.prompt")(function* (_input) {
-        return {} as any
+      prompt: Effect.fn("V2Session.prompt")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* new OperationUnavailableError({ operation: "prompt" })
       }),
       shell: Effect.fn("V2Session.shell")(function* (_input) {}),
       skill: Effect.fn("V2Session.skill")(function* (_input) {}),
@@ -326,8 +353,14 @@ export const layer = Layer.effect(
           if (!text) return
         }).pipe(Effect.forkChild())
       }),
-      compact: Effect.fn("V2Session.compact")(function* (_sessionID) {}),
-      wait: Effect.fn("V2Session.wait")(function* (_sessionID) {}),
+      compact: Effect.fn("V2Session.compact")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "compact" })
+      }),
+      wait: Effect.fn("V2Session.wait")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "wait" })
+      }),
     })
 
     return result

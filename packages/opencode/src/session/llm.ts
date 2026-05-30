@@ -1,24 +1,24 @@
 import { Provider } from "@/provider/provider"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import * as Log from "@opencode-ai/core/util/log"
 import { Cause, Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
-import { mergeDeep } from "remeda"
+import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
+import type { LLMEvent } from "@opencode-ai/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
+import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
-import { InstanceState } from "@/effect/instance-state"
 import type { Agent } from "@/agent/agent"
 import { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
-import { SystemPrompt } from "./system"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
@@ -33,14 +33,12 @@ import {
 } from "./fallback"
 import { ProviderID } from "@/provider/schema"
 import { SessionRetry } from "./retry"
+import { LLMAISDK } from "./llm/ai-sdk"
+import { LLMNativeRuntime } from "./llm/native-runtime"
+import { LLMRequestPrep } from "./llm/request"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
-type Result = Awaited<ReturnType<typeof streamText>>
-
-// Avoid re-instantiating remeda's deep merge types in this hot LLM path; the runtime behavior is still mergeDeep.
-const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
-  mergeDeep(target, source ?? {}) as Record<string, any>
 
 export type StreamInput = {
   user: MessageV2.User
@@ -62,18 +60,25 @@ export type StreamRequest = StreamInput & {
   abort: AbortSignal
 }
 
-export type Event = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
-
 export interface Interface {
-  readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
+  readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
+export const use = serviceUse(Service)
+
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | Bus.Service | RuntimeFlags.Service
+  | Auth.Service
+  | Config.Service
+  | Provider.Service
+  | Plugin.Service
+  | Permission.Service
+  | Bus.Service
+  | LLMClientService
+  | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -83,6 +88,7 @@ const live: Layer.Layer<
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
     const bus = yield* Bus.Service
+    const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
     const cooldown = new CooldownManager()
     const sessionFallbackState = new SessionFallbackState()
@@ -141,302 +147,184 @@ const live: Layer.Layer<
         providerID: input.model.providerID,
       })
 
-      const cfg = yield* config.get()
-      const tools = resolveTools(input)
+      const [language, cfg, item, info] = yield* Effect.all(
+        [
+          provider.getLanguage(input.model),
+          config.get(),
+          provider.getProvider(input.model.providerID),
+          auth.get(input.model.providerID),
+        ],
+        { concurrency: "unbounded" },
+      )
 
-      const tryProvider = (model: Provider.Model, providerID: string, _modelID: string) =>
+      const isWorkflow = language instanceof GitLabWorkflowLanguageModel
+      const prepared = yield* LLMRequestPrep.prepare({
+        ...input,
+        provider: item,
+        auth: info,
+        plugin,
+        flags,
+        isWorkflow,
+      })
+
+      // Wire up toolExecutor for DWS workflow models so that tool calls
+      // from the workflow service are executed via opencode's tool system
+      // and results sent back over the WebSocket.
+      if (language instanceof GitLabWorkflowLanguageModel) {
+        const workflowModel = language as GitLabWorkflowLanguageModel & {
+          sessionID?: string
+          sessionPreapprovedTools?: string[]
+          approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
+        }
+        workflowModel.sessionID = input.sessionID
+        workflowModel.systemPrompt = prepared.system.join("\n")
+        workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
+          const t = prepared.tools[toolName]
+          if (!t || !t.execute) {
+            return { result: "", error: `Unknown tool: ${toolName}` }
+          }
+          try {
+            const result = await t.execute!(JSON.parse(argsJson), {
+              toolCallId: _requestID,
+              messages: input.messages,
+              abortSignal: input.abort,
+            })
+            const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
+            return {
+              result: output,
+              metadata: typeof result === "object" ? result?.metadata : undefined,
+              title: typeof result === "object" ? result?.title : undefined,
+            }
+          } catch (e: any) {
+            return { result: "", error: e.message ?? String(e) }
+          }
+        }
+
+        const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
+        workflowModel.sessionPreapprovedTools = Object.keys(prepared.tools).filter((name) => {
+          const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
+          return !match || match.action !== "ask"
+        })
+
+        const bridge = yield* EffectBridge.make()
+        const approvedToolsForSession = new Set<string>()
+        workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
+          const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
+          if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
+            return { approved: true }
+          }
+
+          const id = PermissionID.ascending()
+          let unsub: (() => void) | undefined
+          try {
+            unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
+              if (evt.properties.requestID === id) void evt.properties.reply
+            })
+            const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
+              try {
+                const parsed = JSON.parse(t.args) as Record<string, unknown>
+                const title = (parsed?.title ?? parsed?.name ?? "") as string
+                return title ? `${t.name}: ${title}` : t.name
+              } catch {
+                return t.name
+              }
+            })
+            const uniquePatterns = [...new Set(toolPatterns)] as string[]
+            await bridge.promise(
+              perm.ask({
+                id,
+                sessionID: SessionID.make(input.sessionID),
+                permission: "workflow_tool_approval",
+                patterns: uniquePatterns,
+                metadata: { tools: approvalTools },
+                always: uniquePatterns,
+                ruleset: [],
+              }),
+            )
+            for (const name of uniqueNames) approvedToolsForSession.add(name)
+            workflowModel.sessionPreapprovedTools = [
+              ...(workflowModel.sessionPreapprovedTools ?? []),
+              ...uniqueNames,
+            ]
+            return { approved: true }
+          } catch {
+            return { approved: false }
+          } finally {
+            unsub?.()
+          }
+        })
+      }
+
+      const tracer = cfg.experimental?.openTelemetry
+        ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
+        : undefined
+      const telemetryTracer = tracer
+        ? new Proxy(tracer, {
+            get(target, prop, receiver) {
+              if (prop !== "startSpan") return Reflect.get(target, prop, receiver)
+              return (...args: Parameters<typeof target.startSpan>) => {
+                const span = target.startSpan(...args)
+                span.setAttribute("session.id", input.sessionID)
+                return span
+              }
+            },
+          })
+        : undefined
+
+      const tryProvider = (m: Provider.Model, providerID: string, _modelID: string) =>
         Effect.gen(function* () {
-          const language = yield* provider.getLanguage(model)
-          const [item, info] = yield* Effect.all(
-            [provider.getProvider(providerID), auth.get(providerID)],
+          const lang = yield* provider.getLanguage(m)
+          const [provItem, provInfo] = yield* Effect.all(
+            [provider.getProvider(ProviderID.make(providerID)), auth.get(ProviderID.make(providerID))],
             { concurrency: "unbounded" },
           )
-
-          // TODO: move this to a proper hook
-          const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
-
-          const system: string[] = []
-          system.push(
-            [
-              // use agent prompt otherwise provider prompt
-              ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(model)),
-              // any custom prompt passed into this call
-              ...input.system,
-              // any custom prompt from last user message
-              ...(input.user.system ? [input.user.system] : []),
-            ]
-              .filter((x) => x)
-              .join("\n"),
-          )
-
-          const header = system[0]
-          yield* plugin.trigger(
-            "experimental.chat.system.transform",
-            { sessionID: input.sessionID, model },
-            { system },
-          )
-          // rejoin to maintain 2-part structure for caching if header unchanged
-          if (system.length > 2 && system[0] === header) {
-            const rest = system.slice(1)
-            system.length = 0
-            system.push(header, rest.join("\n"))
-          }
-
-          // GitHub Copilot may require the tools parameter when message history contains
-          // tool calls but no tools are active (e.g. compaction). Inject a stub tool that
-          // is never meant to be invoked.
-          if (
-            model.providerID.includes("github-copilot") &&
-            Object.keys(tools).length === 0 &&
-            hasToolCalls(input.messages)
-          ) {
-            tools["_noop"] = tool({
-              description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
-              inputSchema: jsonSchema({
-                type: "object",
-                properties: {
-                  reason: { type: "string", description: "Unused" },
-                },
-              }),
-              execute: async () => ({ output: "", title: "", metadata: {} }),
-            })
-          }
-          const sortedTools = Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b)))
-
-          if (language instanceof GitLabWorkflowLanguageModel) {
-            const workflowModel = language as GitLabWorkflowLanguageModel & {
-              sessionID?: string
-              sessionPreapprovedTools?: string[]
-              approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
-            }
-            workflowModel.sessionID = input.sessionID
-            workflowModel.systemPrompt = system.join("\n")
-            workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
-              const t = sortedTools[toolName]
-              if (!t || !t.execute) {
-                return { result: "", error: `Unknown tool: ${toolName}` }
-              }
-              try {
-                const result = await t.execute!(JSON.parse(argsJson), {
-                  toolCallId: _requestID,
-                  messages: input.messages,
-                  abortSignal: input.abort,
-                })
-                const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
-                return {
-                  result: output,
-                  metadata: typeof result === "object" ? result?.metadata : undefined,
-                  title: typeof result === "object" ? result?.title : undefined,
-                }
-              } catch (e: any) {
-                return { result: "", error: e.message ?? String(e) }
-              }
-            }
-
-            const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
-            workflowModel.sessionPreapprovedTools = Object.keys(sortedTools).filter((name) => {
-              const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
-              return !match || match.action !== "ask"
-            })
-
-            const bridge = yield* EffectBridge.make()
-            const approvedToolsForSession = new Set<string>()
-            workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
-              const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
-              if (uniqueNames.every((name) => approvedToolsForSession.has(name))) {
-                return { approved: true }
-              }
-
-              const id = PermissionID.ascending()
-              let unsub: (() => void) | undefined
-              try {
-                unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
-                  if (evt.properties.requestID === id) void evt.properties.reply
-                })
-                const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
-                  try {
-                    const parsed = JSON.parse(t.args) as Record<string, unknown>
-                    const title = (parsed?.title ?? parsed?.name ?? "") as string
-                    return title ? `${t.name}: ${title}` : t.name
-                  } catch {
-                    return t.name
-                  }
-                })
-                const uniquePatterns = [...new Set(toolPatterns)] as string[]
-                await bridge.promise(
-                  perm.ask({
-                    id,
-                    sessionID: SessionID.make(input.sessionID),
-                    permission: "workflow_tool_approval",
-                    patterns: uniquePatterns,
-                    metadata: { tools: approvalTools },
-                    always: uniquePatterns,
-                    ruleset: [],
-                  }),
-                )
-                for (const name of uniqueNames) approvedToolsForSession.add(name)
-                workflowModel.sessionPreapprovedTools = [
-                  ...(workflowModel.sessionPreapprovedTools ?? []),
-                  ...uniqueNames,
-                ]
-                return { approved: true }
-              } catch {
-                return { approved: false }
-              } finally {
-                unsub?.()
-              }
-            })
-          }
-
-          const variant =
-            !input.small && model.variants && input.user.model.variant
-              ? model.variants[input.user.model.variant]
-              : {}
-          const base = input.small
-            ? ProviderTransform.smallOptions(model)
-            : ProviderTransform.options({
-                model,
-                sessionID: input.sessionID,
-                providerOptions: item.options,
-              })
-          const options = mergeOptions(mergeOptions(mergeOptions(base, model.options), input.agent.options), variant)
-          if (isOpenaiOauth) {
-            options.instructions = system.join("\n")
-          }
-
-          const isWorkflow = language instanceof GitLabWorkflowLanguageModel
-          const messages = isOpenaiOauth
-            ? input.messages
-            : isWorkflow
-              ? input.messages
-              : [
-                  ...system.map(
-                    (x): ModelMessage => ({
-                      role: "system",
-                      content: x,
-                    }),
-                  ),
-                  ...input.messages,
-                ]
-
-          const params = yield* plugin.trigger(
-            "chat.params",
-            {
-              sessionID: input.sessionID,
-              agent: input.agent.name,
-              model,
-              provider: item,
-              message: input.user,
-            },
-            {
-              temperature: model.capabilities.temperature
-                ? (input.agent.temperature ?? ProviderTransform.temperature(model))
-                : undefined,
-              topP: input.agent.topP ?? ProviderTransform.topP(model),
-              topK: ProviderTransform.topK(model),
-              maxOutputTokens: ProviderTransform.maxOutputTokens(model, flags.outputTokenMax),
-              options,
-            },
-          )
-
-          const { headers } = yield* plugin.trigger(
-            "chat.headers",
-            {
-              sessionID: input.sessionID,
-              agent: input.agent.name,
-              model,
-              provider: item,
-              message: input.user,
-            },
-            {
-              headers: {},
-            },
-          )
-
-          const tracer = cfg.experimental?.openTelemetry
-            ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
-            : undefined
-          const telemetryTracer = tracer
-            ? new Proxy(tracer, {
-                get(target, prop, receiver) {
-                  if (prop !== "startSpan") return Reflect.get(target, prop, receiver)
-                  return (...args: Parameters<typeof target.startSpan>) => {
-                    const span = target.startSpan(...args)
-                    span.setAttribute("session.id", input.sessionID)
-                    return span
-                  }
-                },
-              })
-            : undefined
-
-          const opencodeProjectID = model.providerID.startsWith("opencode")
-            ? (yield* InstanceState.context).project.id
-            : undefined
-
+          const wf = lang instanceof GitLabWorkflowLanguageModel
+          const p = yield* LLMRequestPrep.prepare({
+            ...input,
+            model: m,
+            provider: provItem,
+            auth: provInfo,
+            plugin,
+            flags,
+            isWorkflow: wf,
+          })
           return streamText({
             onError(error) {
-              l.error("stream error", {
-                error,
-              })
+              l.error("stream error", { error })
             },
             async experimental_repairToolCall(failed) {
               const lower = failed.toolCall.toolName.toLowerCase()
-              if (lower !== failed.toolCall.toolName && sortedTools[lower]) {
-                l.info("repairing tool call", {
-                  tool: failed.toolCall.toolName,
-                  repaired: lower,
-                })
-                return {
-                  ...failed.toolCall,
-                  toolName: lower,
-                }
+              if (lower !== failed.toolCall.toolName && p.tools[lower]) {
+                l.info("repairing tool call", { tool: failed.toolCall.toolName, repaired: lower })
+                return { ...failed.toolCall, toolName: lower }
               }
               return {
                 ...failed.toolCall,
-                input: JSON.stringify({
-                  tool: failed.toolCall.toolName,
-                  error: failed.error.message,
-                }),
+                input: JSON.stringify({ tool: failed.toolCall.toolName, error: failed.error.message }),
                 toolName: "invalid",
               }
             },
-            temperature: params.temperature,
-            topP: params.topP,
-            topK: params.topK,
-            providerOptions: ProviderTransform.providerOptions(model, params.options),
-            activeTools: Object.keys(sortedTools).filter((x) => x !== "invalid"),
-            tools: sortedTools,
+            temperature: p.params.temperature,
+            topP: p.params.topP,
+            topK: p.params.topK,
+            providerOptions: ProviderTransform.providerOptions(m, p.params.options),
+            activeTools: Object.keys(p.tools).filter((x) => x !== "invalid"),
+            tools: p.tools,
             toolChoice: input.toolChoice,
-            maxOutputTokens: params.maxOutputTokens,
+            maxOutputTokens: p.params.maxOutputTokens,
             abortSignal: input.abort,
-            headers: {
-              ...(model.providerID.startsWith("opencode")
-                ? {
-                    "x-opencode-project": opencodeProjectID,
-                    "x-opencode-session": input.sessionID,
-                    "x-opencode-request": input.user.id,
-                    "x-opencode-client": flags.client,
-                    "User-Agent": `opencode/${InstallationVersion}`,
-                  }
-                : {
-                    "x-session-affinity": input.sessionID,
-                    ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                    "User-Agent": `opencode/${InstallationVersion}`,
-                  }),
-              ...model.headers,
-              ...headers,
-            },
+            headers: p.headers,
             maxRetries: input.retries ?? 0,
-            messages,
+            messages: p.messages,
             model: wrapLanguageModel({
-              model: language,
+              model: lang,
               middleware: [
                 {
                   specificationVersion: "v3" as const,
                   async transformParams(args) {
                     if (args.type === "stream") {
                       // @ts-expect-error
-                      args.params.prompt = ProviderTransform.message(args.params.prompt, model, options)
+                      args.params.prompt = ProviderTransform.message(args.params.prompt, m, p.messageTransformOptions)
                     }
                     return args.params
                   },
@@ -454,6 +342,57 @@ const live: Layer.Layer<
             },
           })
         })
+
+      // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
+      // either returns a ready LLMEvent stream or a concrete fallback reason.
+      if (flags.experimentalNativeLlm) {
+        const native = LLMNativeRuntime.stream({
+          model: input.model,
+          provider: item,
+          auth: info,
+          llmClient,
+          messages: prepared.messages,
+          tools: prepared.tools,
+          toolChoice: input.toolChoice,
+          temperature: prepared.params.temperature,
+          topP: prepared.params.topP,
+          topK: prepared.params.topK,
+          maxOutputTokens: prepared.params.maxOutputTokens,
+          providerOptions: prepared.params.options,
+          headers: prepared.headers,
+          abort: input.abort,
+        })
+        if (native.type === "supported") {
+          yield* Effect.logInfo("llm runtime selected").pipe(
+            Effect.annotateLogs({
+              "llm.runtime": "native",
+              "llm.provider": input.model.providerID,
+              "llm.model": input.model.id,
+            }),
+          )
+          return {
+            type: "native" as const,
+            stream: native.stream,
+          }
+        }
+        yield* Effect.logInfo("llm runtime selected").pipe(
+          Effect.annotateLogs({
+            "llm.runtime": "ai-sdk",
+            "llm.provider": input.model.providerID,
+            "llm.model": input.model.id,
+            "llm.native_unsupported_reason": native.reason,
+          }),
+        )
+        l.info("native runtime unavailable; falling back to ai-sdk", { reason: native.reason })
+      }
+
+      yield* Effect.logInfo("llm runtime selected").pipe(
+        Effect.annotateLogs({
+          "llm.runtime": "ai-sdk",
+          "llm.provider": input.model.providerID,
+          "llm.model": input.model.id,
+        }),
+      )
 
       return yield* withFallback(
         {
@@ -487,7 +426,17 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
             const result = yield* run({ ...input, abort: ctrl.signal })
-            return result as unknown as Stream.Stream<Event, unknown>
+
+            if (typeof result === "object" && result !== null && "type" in result && (result as any).type === "native") {
+              return (result as { type: "native"; stream: Stream.Stream<LLMEvent, unknown> }).stream
+            }
+
+            // withFallback returns Stream<StreamChunk, Error> which we need to
+            // convert to Stream<LLMEvent>. StreamChunk is the raw AI SDK chunk.
+            const fallbackStream = result as unknown as Stream.Stream<any, Error>
+            return fallbackStream.pipe(
+              Stream.mapError((e) => e),
+            ) as unknown as Stream.Stream<LLMEvent, unknown>
           }),
         ),
       )
@@ -504,29 +453,14 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(
+      LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
+    ),
     Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(Bus.defaultLayer),
   ),
 )
 
-function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
-  const disabled = Permission.disabled(
-    Object.keys(input.tools),
-    Permission.merge(input.agent.permission, input.permission ?? []),
-  )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
-}
-
-// Check if messages contain any tool-call content
-// Used to determine if a dummy tool should be added (GitHub Copilot only; see stream()).
-export function hasToolCalls(messages: ModelMessage[]): boolean {
-  for (const msg of messages) {
-    if (!Array.isArray(msg.content)) continue
-    for (const part of msg.content) {
-      if (part.type === "tool-call" || part.type === "tool-result") return true
-    }
-  }
-  return false
-}
+export const hasToolCalls = LLMRequestPrep.hasToolCalls
 
 export * as LLM from "./llm"

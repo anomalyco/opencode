@@ -60,7 +60,7 @@ function fileSource(
   }
 }
 
-function prompt(msg: SessionMessages[number]): RunPrompt {
+export function messagePrompt(msg: SessionMessages[number]): RunPrompt {
   const parts: RunPrompt["parts"] = []
   let text = msg.parts
     .filter((part): part is Extract<SessionMessages[number]["parts"][number], { type: "text" }> => {
@@ -135,7 +135,7 @@ function turn(msg: SessionMessages[number]): Turn | undefined {
   }
 
   return {
-    prompt: prompt(msg),
+    prompt: messagePrompt(msg),
     provider: msg.info.model.providerID,
     model: msg.info.model.modelID,
     variant: msg.info.model.variant,

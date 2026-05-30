@@ -1,8 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model } from "./provider-helper"
 
 describe("GithubCopilotPlugin", () => {
@@ -145,29 +147,35 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("filters gpt-5-chat-latest before Copilot language selection", () =>
+  it.effect("disables gpt-5-chat-latest before Copilot language selection", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
       yield* plugin.add(GithubCopilotPlugin)
-      const result = yield* plugin.trigger(
-        "model.update",
-        {},
-        { model: model("github-copilot", "gpt-5-chat-latest"), cancel: false },
-      )
-      expect(result.cancel).toBe(true)
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
+        catalog.provider.update(ProviderV2.ID.make("github-copilot"), () => {})
+        catalog.model.update(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+      })
+      expect(
+        (yield* catalog.model.get(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+      ).toBe(false)
     }),
   )
 
-  it.effect("does not filter gpt-5-chat-latest for non-Copilot providers", () =>
+  it.effect("does not disable gpt-5-chat-latest for non-Copilot providers", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
       yield* plugin.add(GithubCopilotPlugin)
-      const result = yield* plugin.trigger(
-        "model.update",
-        {},
-        { model: model("custom-copilot", "gpt-5-chat-latest"), cancel: false },
-      )
-      expect(result.cancel).toBe(false)
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
+        catalog.provider.update(ProviderV2.ID.make("custom-copilot"), () => {})
+        catalog.model.update(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+      })
+      expect(
+        (yield* catalog.model.get(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+      ).toBe(true)
     }),
   )
 

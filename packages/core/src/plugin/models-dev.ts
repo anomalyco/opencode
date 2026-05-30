@@ -1,7 +1,8 @@
-import { DateTime, Effect } from "effect"
+import { DateTime, Effect, Scope, Stream } from "effect"
 import { Catalog } from "../catalog"
+import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
-import { ModelsDev } from "../models"
+import { ModelsDev } from "../models-dev"
 import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 
@@ -54,55 +55,66 @@ export const ModelsDevPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const modelsDev = yield* ModelsDev.Service
-    for (const item of Object.values(yield* modelsDev.get())) {
-      const providerID = ProviderV2.ID.make(item.id)
-      yield* catalog.provider.update(providerID, (provider) => {
-        provider.name = item.name
-        provider.env = [...item.env]
-        provider.endpoint = item.npm
-          ? {
-              type: "aisdk",
-              package: item.npm,
-              url: item.api,
-            }
-          : {
-              type: "unknown",
-            }
-      })
-
-      for (const model of Object.values(item.models)) {
-        const modelID = ModelV2.ID.make(model.id)
-        yield* catalog.model
-          .update(providerID, modelID, (draft) => {
-            draft.name = model.name
-            draft.family = model.family ? ModelV2.Family.make(model.family) : undefined
-            draft.endpoint = model.provider?.npm
+    const events = yield* EventV2.Service
+    const scope = yield* Scope.Scope
+    const transform = yield* catalog.transform()
+    const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
+      const data = yield* modelsDev.get()
+      yield* transform((catalog) => {
+        for (const item of Object.values(data)) {
+          const providerID = ProviderV2.ID.make(item.id)
+          catalog.provider.update(providerID, (provider) => {
+            provider.name = item.name
+            provider.env = [...item.env]
+            provider.endpoint = item.npm
               ? {
                   type: "aisdk",
-                  package: model.provider?.npm,
-                  url: model.provider.api,
+                  package: item.npm,
+                  url: item.api,
                 }
               : {
                   type: "unknown",
                 }
-            draft.capabilities = {
-              tools: model.tool_call,
-              input: [...(model.modalities?.input ?? [])],
-              output: [...(model.modalities?.output ?? [])],
-            }
-            draft.variants = variants(model)
-            draft.time.released = released(model.release_date)
-            draft.cost = cost(model.cost)
-            draft.status = model.status ?? "active"
-            draft.enabled = true
-            draft.limit = {
-              context: model.limit.context,
-              input: model.limit.input,
-              output: model.limit.output,
-            }
           })
-          .pipe(Effect.orDie)
-      }
-    }
+
+          for (const model of Object.values(item.models)) {
+            const modelID = ModelV2.ID.make(model.id)
+            catalog.model.update(providerID, modelID, (draft) => {
+              draft.name = model.name
+              draft.family = model.family ? ModelV2.Family.make(model.family) : undefined
+              draft.endpoint = model.provider?.npm
+                ? {
+                    type: "aisdk",
+                    package: model.provider?.npm,
+                    url: model.provider.api,
+                  }
+                : {
+                    type: "unknown",
+                  }
+              draft.capabilities = {
+                tools: model.tool_call,
+                input: [...(model.modalities?.input ?? [])],
+                output: [...(model.modalities?.output ?? [])],
+              }
+              draft.variants = variants(model)
+              draft.time.released = released(model.release_date)
+              draft.cost = cost(model.cost)
+              draft.status = model.status ?? "active"
+              draft.enabled = true
+              draft.limit = {
+                context: model.limit.context,
+                input: model.limit.input,
+                output: model.limit.output,
+              }
+            })
+          }
+        }
+      })
+    })
+    yield* refresh()
+    yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
+      Stream.runForEach(() => refresh()),
+      Effect.forkIn(scope, { startImmediately: true }),
+    )
   }).pipe(Effect.provide(ModelsDev.defaultLayer)),
 })

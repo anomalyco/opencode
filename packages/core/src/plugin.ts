@@ -2,27 +2,35 @@ export * as PluginV2 from "./plugin"
 
 import { createDraft, finishDraft, type Draft } from "immer"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { type ProviderV2 } from "./provider"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
 import type { ModelV2 } from "./model"
+import type { Catalog } from "./catalog"
+import { EventV2 } from "./event"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type
 
+export const Event = {
+  Added: EventV2.define({
+    type: "plugin.added",
+    schema: {
+      id: ID,
+    },
+  }),
+}
+
 type HookSpec = {
-  "provider.update": {
-    input: {}
-    output: {
-      provider: ProviderV2.Info
-      cancel: boolean
-    }
+  "catalog.transform": {
+    input: Catalog.Editor
+    output: {}
   }
-  "model.update": {
-    input: {}
-    output: {
-      model: ModelV2.Info
-      cancel: boolean
+  "account.switched": {
+    input: {
+      serviceID: import("./account").AccountV2.ServiceID
+      from?: import("./account").AccountV2.ID
+      to?: import("./account").AccountV2.ID
     }
+    output: {}
   }
   "aisdk.language": {
     input: {
@@ -61,15 +69,24 @@ export type HookFunctions = {
 export type HookInput<Name extends keyof Hooks> = HookSpec[Name]["input"]
 export type HookOutput<Name extends keyof Hooks> = HookSpec[Name]["output"]
 
-export type Effect = Effect.Effect<HookFunctions | void, never, never>
+export type Effect<R = never> = Effect.Effect<HookFunctions | void, never, R | Scope.Scope>
 
 export function define<R>(input: { id: ID; effect: Effect.Effect<HookFunctions | void, never, R> }) {
   return input
 }
 
 export interface Interface {
-  readonly add: (input: { id: ID; effect: Effect }) => Effect.Effect<void>
+  readonly add: (input: {
+    id: ID
+    effect: Effect.Effect<void | HookFunctions, never, Scope.Scope>
+  }) => Effect.Effect<void, never, never>
   readonly remove: (id: ID) => Effect.Effect<void>
+  readonly triggerFor: <Name extends keyof Hooks>(
+    id: ID,
+    name: Name,
+    input: HookInput<Name>,
+    output: HookOutput<Name>,
+  ) => Effect.Effect<HookInput<Name> & HookOutput<Name>>
   readonly trigger: <Name extends keyof Hooks>(
     name: Name,
     input: HookInput<Name>,
@@ -85,21 +102,30 @@ export const layer = Layer.effect(
     let hooks: {
       id: ID
       hooks: HookFunctions
+      scope: Scope.Closeable
     }[] = []
+    const events = yield* EventV2.Service
 
     const svc = Service.of({
       add: Effect.fn("Plugin.add")(function* (input) {
-        const result = yield* input.effect
-        if (!result) return
+        const existing = hooks.find((item) => item.id === input.id)
+        if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
+        const scope = yield* Scope.make()
+        const result = yield* input.effect.pipe(Scope.provide(scope))
         hooks = [
           ...hooks.filter((item) => item.id !== input.id),
           {
             id: input.id,
-            hooks: result,
+            hooks: result ?? {},
+            scope,
           },
         ]
+        yield* events.publish(Event.Added, { id: input.id })
       }),
       trigger: Effect.fn("Plugin.trigger")(function* (name, input, output) {
+        return yield* svc.triggerFor(ID.make("*"), name, input, output)
+      }),
+      triggerFor: Effect.fn("Plugin.triggerFor")(function* (id, name, input, output) {
         const draftEntries = new Map<string, ReturnType<typeof createDraft>>()
         const event = {
           ...input,
@@ -114,6 +140,7 @@ export const layer = Layer.effect(
         }
 
         for (const item of hooks) {
+          if (id !== ID.make("*") && item.id !== id) continue
           const match = item.hooks[name]
           if (!match) continue
           yield* match(event as any).pipe(
@@ -133,14 +160,16 @@ export const layer = Layer.effect(
         return event as any
       }),
       remove: Effect.fn("Plugin.remove")(function* (id) {
+        const existing = hooks.find((item) => item.id === id)
         hooks = hooks.filter((item) => item.id !== id)
+        if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
       }),
     })
     return svc
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
 
 // opencode
 // sdcok
