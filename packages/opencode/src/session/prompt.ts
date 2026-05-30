@@ -48,6 +48,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Skill } from "@/skill"
 import { SessionEvent } from "@opencode-ai/core/session-event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -127,6 +128,7 @@ export const layer = Layer.effect(
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
     const references = yield* Reference.Service
+    const skill = yield* Skill.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -1064,7 +1066,18 @@ export const layer = Layer.effect(
         }
 
         if (part.type === "skill") {
-          return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
+          const resolved = yield* skill.get(part.name).pipe(Effect.orDie)
+          if (!resolved) return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
+          return [
+            { ...part, messageID: info.id, sessionID: input.sessionID },
+            {
+              messageID: info.id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              synthetic: true,
+              text: `## Skill: ${resolved.name}\n\n${resolved.content.trim()}`,
+            },
+          ]
         }
 
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
@@ -1670,6 +1683,7 @@ export const defaultLayer = Layer.suspend(() =>
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
         Reference.defaultLayer,
+        Skill.defaultLayer,
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,

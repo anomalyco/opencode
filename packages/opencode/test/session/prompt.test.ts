@@ -216,6 +216,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provideMerge(deps),
   )
   return SessionPrompt.layer.pipe(
+    Layer.provide(Skill.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(Reference.defaultLayer),

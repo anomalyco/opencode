@@ -40,7 +40,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign, expandPastedTextPlaceholders } from "./part"
-import { expand, references } from "./skill"
+import { references } from "./skill"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -770,10 +770,20 @@ export function Prompt(props: PromptProps) {
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
-      } else if (part.type === "skill" && part.source) {
-        start = part.source.start
-        end = part.source.end
-        virtualText = part.source.value
+      } else if (part.type === "skill") {
+        if (part.source) {
+          start = part.source.start
+          end = part.source.end
+          virtualText = part.source.value
+        } else {
+          const name = "$" + part.name
+          const idx = input.plainText.indexOf(name)
+          if (idx !== -1) {
+            start = Bun.stringWidth(input.plainText.slice(0, idx))
+            end = start + Bun.stringWidth(name)
+            virtualText = name
+          }
+        }
         styleId = skillStyleId
       } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
@@ -1218,7 +1228,19 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      inputText = expand(inputText, (name) => skills()?.find((skill) => skill.name === name))
+      // Ensure every $skillname reference has a structured SkillPartInput
+      const refNames = new Set(references(inputText).map((ref) => ref.name))
+      if (refNames.size > 0) {
+        const existingNames = new Set(
+          nonTextParts.filter((p): p is { type: "skill"; name: string } => p.type === "skill" && "name" in p).map((p) => p.name),
+        )
+        for (const name of refNames) {
+          if (existingNames.has(name)) continue
+          if (!skills()?.find((s) => s.name === name)) continue
+          nonTextParts.push({ type: "skill", name })
+          existingNames.add(name)
+        }
+      }
 
       sdk.client.session
         .prompt({
