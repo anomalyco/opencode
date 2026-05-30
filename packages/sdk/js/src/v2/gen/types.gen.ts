@@ -698,6 +698,19 @@ export type AgentPart = {
   }
 }
 
+export type SkillPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "skill"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
 export type RetryPart = {
   id: string
   sessionID: string
@@ -733,6 +746,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | SkillPart
 
 export type PermissionAction = "allow" | "deny" | "ask"
 
@@ -1821,6 +1835,17 @@ export type FilePartInput = {
 export type AgentPartInput = {
   id?: string
   type: "agent"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
+export type SkillPartInput = {
+  id?: string
+  type: "skill"
   name: string
   source?: {
     value: string

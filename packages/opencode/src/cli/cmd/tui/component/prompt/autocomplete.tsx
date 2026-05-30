@@ -560,15 +560,12 @@ export function Autocomplete(props: {
     props.setPrompt((draft) => {
       const partIndex = draft.parts.length
       draft.parts.push({
-        type: "text",
-        text: virtualText,
+        type: "skill",
+        name,
         source: {
-          text: {
-            start: extmarkStart,
-            end: extmarkEnd,
-            value: virtualText,
-          },
-          kind: "skill",
+          start: extmarkStart,
+          end: extmarkEnd,
+          value: virtualText,
         },
       })
       props.setExtmark(partIndex, extmarkId)

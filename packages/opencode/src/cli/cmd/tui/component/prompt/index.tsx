@@ -9,7 +9,18 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, createResource, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  onMount,
+  createSignal,
+  onCleanup,
+  on,
+  Show,
+  Switch,
+  Match,
+} from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -759,11 +770,15 @@ export function Prompt(props: PromptProps) {
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
+      } else if (part.type === "skill" && part.source) {
+        start = part.source.start
+        end = part.source.end
+        virtualText = part.source.value
+        styleId = skillStyleId
       } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = part.source.kind === "skill" ? skillStyleId : pasteStyleId
       }
 
       if (virtualText) {
@@ -801,6 +816,9 @@ export function Prompt(props: PromptProps) {
               } else if (part.type === "file" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
+              } else if (part.type === "skill" && part.source) {
+                part.source.start = extmark.start
+                part.source.end = extmark.end
               } else if (part.type === "text" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
@@ -1133,8 +1151,8 @@ export function Prompt(props: PromptProps) {
       }
     }
 
-    // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    // Filter out text parts (pasted content) since they've been expanded inline above.
+    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text" && part.type !== "skill")
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1356,11 +1374,12 @@ export function Prompt(props: PromptProps) {
         produce((draft) => {
           const partIndex = draft.prompt.parts.length
           draft.prompt.parts.push({
-            type: "text",
-            text: ref.value,
+            type: "skill",
+            name: ref.name,
             source: {
-              text: { start: extmarkStart, end: extmarkEnd, value: ref.value },
-              kind: "skill",
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: ref.value,
             },
           })
           draft.extmarkToPartIndex.set(extmarkId, partIndex)

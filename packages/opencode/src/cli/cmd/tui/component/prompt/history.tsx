@@ -5,7 +5,7 @@ import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart, FilePart, SkillPart, TextPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
   input: string
@@ -13,6 +13,7 @@ export type PromptInfo = {
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | Omit<SkillPart, "id" | "messageID" | "sessionID">
     | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
         source?: {
           text: {
@@ -20,7 +21,7 @@ export type PromptInfo = {
             end: number
             value: string
           }
-          kind?: "paste" | "skill"
+          kind?: "paste"
         }
       })
   )[]

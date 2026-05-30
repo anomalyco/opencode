@@ -5,6 +5,7 @@ import type {
   FilePart,
   LspStatus,
   McpStatus,
+  SkillPart,
   Todo,
   Message,
   Part,
@@ -186,6 +187,7 @@ export type TuiPromptInfo = {
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | Omit<SkillPart, "id" | "messageID" | "sessionID">
     | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
         source?: {
           text: {
