@@ -1381,6 +1381,33 @@ describe("ProviderTransform.message - empty image handling", () => {
     expect(result[0].content[1]).toEqual({ type: "image", image: `data:image/png;base64,${validBase64}` })
   })
 
+  test("should replace unsupported image file MIME types with error text", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Use this icon" },
+          {
+            type: "file",
+            url: "data:image/vnd.microsoft.icon;base64,AAABAA==",
+            mediaType: "image/vnd.microsoft.icon",
+            filename: "toolbox.ico",
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Use this icon" })
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "toolbox.ico" (unsupported image MIME type: image/vnd.microsoft.icon). Inform the user.',
+    })
+  })
+
   test("should handle mixed valid and empty images", () => {
     const validBase64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="

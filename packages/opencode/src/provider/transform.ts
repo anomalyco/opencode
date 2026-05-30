@@ -6,6 +6,7 @@ import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
+const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 
 function mimeToModality(mime: string): Modality | undefined {
   if (mime.startsWith("image/")) return "image"
@@ -418,6 +419,13 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       const filename = part.type === "file" ? part.filename : undefined
       const modality = mimeToModality(mime)
       if (!modality) return part
+      if (modality === "image" && !SUPPORTED_IMAGE_MIMES.has(mime)) {
+        const name = filename ? `"${filename}"` : mime
+        return {
+          type: "text" as const,
+          text: `ERROR: Cannot read ${name} (unsupported image MIME type: ${mime}). Inform the user.`,
+        }
+      }
       if (model.capabilities.input[modality]) return part
 
       const name = filename ? `"${filename}"` : modality
