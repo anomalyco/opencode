@@ -46,7 +46,7 @@
 ### 安装
 
 ```bash
-# 直接安装 (YOLO)
+# 直接安装 (YOLO) --- 一键脚本安装，不用操心细节
 curl -fsSL https://opencode.ai/install | bash
 
 # 软件包管理器
@@ -88,7 +88,7 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 1. `$OPENCODE_INSTALL_DIR` - 自定义安装目录
 2. `$XDG_BIN_DIR` - 符合 XDG 基础目录规范的路径
-3. `$HOME/bin` - 如果存在或可创建的用户二进制目录
+3. `$HOME/bin` - 标准的用户二进制目录（如果存在或可以被创建）
 4. `$HOME/.opencode/bin` - 默认备用路径
 
 ```bash
