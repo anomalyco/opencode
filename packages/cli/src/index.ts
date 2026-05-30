@@ -2,8 +2,8 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import * as NodeServices from "@effect/platform-node/NodeServices"
-import { AccountV2 } from "@opencode-ai/core/account"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { Auth } from "@opencode-ai/core/auth"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -38,7 +38,7 @@ const layer = PluginBoot.layer.pipe(
       Catalog.layer.pipe(Layer.provideMerge(Layer.mergeAll(eventLayer, pluginLayer, policyLayer))),
       eventLayer,
       pluginLayer,
-      AccountV2.defaultLayer,
+      Auth.defaultLayer,
       AgentV2.defaultLayer,
       Config.defaultLayer.pipe(Layer.provideMerge(policyLayer)),
       Npm.defaultLayer,

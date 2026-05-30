@@ -21,4 +21,5 @@ export const migrations = (await Promise.all([
   import("./migration/20260507164347_add_workspace_time"),
   import("./migration/20260510033149_session_usage"),
   import("./migration/20260511000411_data_migration_state"),
+  import("./migration/20260530232709_lovely_romulus"),
 ])).map((module) => module.default) satisfies DatabaseMigration.Migration[]
