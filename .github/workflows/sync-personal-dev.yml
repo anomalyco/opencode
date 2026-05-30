@@ -1,0 +1,79 @@
+name: sync-personal-dev
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # Every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: personal/dev
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/anomalyco/opencode.git
+
+      - name: Fetch upstream
+        run: git fetch upstream dev
+
+      - name: Rebase onto upstream/dev
+        id: rebase
+        run: |
+          git rebase upstream/dev
+        continue-on-error: true
+
+      - name: Check rebase result
+        id: check
+        run: |
+          if git rebase --show-current-patch &>/dev/null; then
+            echo "rebase_failed=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Rebase had conflicts - manual resolution needed"
+            exit 1
+          else
+            echo "rebase_failed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push rebased branch
+        if: steps.check.outputs.rebase_failed != 'true'
+        run: git push origin personal/dev --force-with-lease
+
+      - name: Notify on conflict
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'sync-personal-dev: rebase conflict needs manual resolution';
+            const body = `The automatic sync of \`personal/dev\` with upstream \`anomalyco/opencode:dev\` failed due to merge conflicts.\n\nTo resolve:\n1. Pull the branch locally\n2. Run \`git rebase origin/dev\`\n3. Resolve conflicts\n4. Push the result\n\nThis issue was created by the [sync-personal-dev workflow](https://github.com/${context.repo.owner}/${context.repo.repo}/actions).\n\nLast attempted: ${new Date().toISOString()}`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['sync-conflict'],
+              per_page: 1
+            });
+
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['sync-conflict']
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: body
+              });
+            }
