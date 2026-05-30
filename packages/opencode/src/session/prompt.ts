@@ -270,12 +270,24 @@ export const layer = Layer.effect(
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
-      // Title fallback: only agent-specific. We deliberately do NOT inherit
-      // cfg.fallbacks here — that list is sized for the main chat model and
-      // typically contains heavy/expensive models, which is wrong for the
-      // small title-generation pass. Users wanting title fallback configure
-      // it explicitly on the title agent.
-      const titleFallbacks = ag.fallbacks?.length ? ag.fallbacks : undefined
+      // Title fallback: agent-specific overrides first. If none configured,
+      // auto-generate a fallback chain from small models of other providers
+      // so title generation degrades gracefully instead of silently failing.
+      let titleFallbacks: Array<{ providerID: string; modelID: string }> | undefined = undefined
+      if (ag.fallbacks?.length) {
+        titleFallbacks = ag.fallbacks.map((f) => ({ providerID: f.providerID as string, modelID: f.modelID as string }))
+      } else {
+        const providers = yield* provider.list()
+        const others = Object.keys(providers).filter((p) => p !== mdl.providerID)
+        const chain: Array<{ providerID: string; modelID: string }> = []
+        for (const pID of others) {
+          const small = yield* provider.getSmallModel(ProviderID.make(pID)).pipe(Effect.option)
+          if (Option.isSome(small) && small.value) {
+            chain.push({ providerID: pID, modelID: small.value.id as string })
+          }
+        }
+        if (chain.length > 0) titleFallbacks = chain
+      }
       const FALLBACK_IDS = new Set(["fallback-notice", "fallback-resume", "fallback-using"])
       const text = yield* llm
         .stream({
