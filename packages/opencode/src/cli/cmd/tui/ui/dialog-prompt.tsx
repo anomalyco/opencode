@@ -4,7 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
 import { useTuiConfig } from "../context/tui-config"
-import { useBindings, useCommandShortcut } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings, useCommandShortcut } from "../keymap"
 
 export type DialogPromptProps = {
   title: string
@@ -33,8 +33,7 @@ export function DialogPrompt(props: DialogPromptProps) {
   useBindings(() => ({
     target: textareaTarget,
     enabled: textareaTarget() !== undefined && !props.busy,
-    // Dialog form semantics must win over the global managed textarea input layer.
-    priority: 1,
+    priority: DIALOG_LAYER_PRIORITY,
     commands: [
       {
         name: "dialog.prompt.submit",

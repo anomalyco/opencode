@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show } from "solid-js"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -34,6 +34,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   })
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "tab",
@@ -57,6 +58,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
 
   useBindings(() => ({
     enabled: store.active !== "filename",
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "space",

@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 export function DialogSessionDeleteFailed(props: {
   session: string
@@ -41,6 +41,7 @@ export function DialogSessionDeleteFailed(props: {
   }
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       { key: "return", desc: "Confirm recovery option", group: "Dialog", cmd: () => void confirm() },
       { key: "left", desc: "Delete broken session", group: "Dialog", cmd: () => setStore("active", "delete") },

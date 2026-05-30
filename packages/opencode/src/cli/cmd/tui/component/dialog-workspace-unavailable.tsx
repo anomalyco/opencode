@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 export function DialogWorkspaceUnavailable(props: { onRestore?: () => boolean | void | Promise<boolean | void> }) {
   const dialog = useDialog()
@@ -24,6 +24,7 @@ export function DialogWorkspaceUnavailable(props: { onRestore?: () => boolean | 
   }
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       { key: "return", desc: "Confirm workspace option", group: "Dialog", cmd: () => void confirm() },
       { key: "left", desc: "Cancel workspace restore", group: "Dialog", cmd: () => setStore("active", "cancel") },

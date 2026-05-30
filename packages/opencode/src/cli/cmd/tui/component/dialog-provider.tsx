@@ -14,7 +14,7 @@ import * as Clipboard from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "@tui/util/provider-origin"
 import { useConnected } from "./use-connected"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -240,6 +240,7 @@ function AutoMethod(props: AutoMethodProps) {
   const toast = useToast()
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "c",

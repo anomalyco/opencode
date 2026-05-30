@@ -14,6 +14,7 @@ import { TuiKeybind } from "./config/keybind"
 export const LEADER_TOKEN = "leader"
 export const OPENCODE_BASE_MODE = "base"
 export const COMMAND_PALETTE_COMMAND = "command.palette.show"
+export const DIALOG_LAYER_PRIORITY = 1000
 
 const OPENCODE_MODE_KEY = "opencode.mode"
 

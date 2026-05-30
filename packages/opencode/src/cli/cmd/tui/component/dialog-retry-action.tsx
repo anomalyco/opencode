@@ -5,7 +5,7 @@ import { selectedForeground, useTheme } from "@tui/context/theme"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { Link } from "@tui/ui/link"
 import { BgPulse } from "./bg-pulse"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 const GO_URL = "https://opencode.ai/go"
 const PAD_X = 3
@@ -45,6 +45,7 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
   const [selected, setSelected] = createSignal<"dismiss" | "action">("action")
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "left",

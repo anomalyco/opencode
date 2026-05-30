@@ -4,7 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { Locale } from "@/util/locale"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 export type DialogConfirmProps = {
   title: string
@@ -24,6 +24,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
   })
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "return",

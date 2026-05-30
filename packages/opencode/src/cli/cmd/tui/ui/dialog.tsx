@@ -6,7 +6,7 @@ import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Selection from "@tui/util/selection"
-import { useBindings, useOpencodeModeStack } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings, useOpencodeModeStack } from "../keymap"
 
 export function Dialog(
   props: ParentProps<{
@@ -101,6 +101,7 @@ function init() {
 
   useBindings(() => ({
     enabled: store.stack.length > 0 && !renderer.getSelection()?.getSelectedText(),
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "escape",

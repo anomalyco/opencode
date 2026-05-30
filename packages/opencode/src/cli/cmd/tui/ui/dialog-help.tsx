@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "./dialog"
-import { useBindings, useCommandShortcut } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings, useCommandShortcut } from "../keymap"
 
 export function DialogHelp() {
   const dialog = useDialog()
@@ -9,6 +9,7 @@ export function DialogHelp() {
   const commandShortcut = useCommandShortcut("command.palette.show")
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       { key: "return", desc: "Close help", group: "Dialog", cmd: () => dialog.clear() },
       { key: "escape", desc: "Close help", group: "Dialog", cmd: () => dialog.clear() },

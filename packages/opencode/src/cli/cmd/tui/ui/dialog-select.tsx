@@ -18,7 +18,7 @@ import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { Locale } from "@/util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../context/tui-config"
-import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -238,6 +238,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const enabledActions = actions().filter((item) => !item.disabled)
 
     return {
+      priority: DIALOG_LAYER_PRIORITY,
       commands: [
         {
           name: "dialog.select.prev",

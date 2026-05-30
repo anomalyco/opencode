@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
-import { useBindings } from "../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../keymap"
 
 export type DialogAlertProps = {
   title: string
@@ -14,6 +14,7 @@ export function DialogAlert(props: DialogAlertProps) {
   const { theme } = useTheme()
 
   useBindings(() => ({
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [
       {
         key: "return",

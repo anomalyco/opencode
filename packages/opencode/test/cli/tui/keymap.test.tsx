@@ -5,6 +5,7 @@ import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import {
+  DIALOG_LAYER_PRIORITY,
   getOpencodeModeStack,
   OPENCODE_BASE_MODE,
   OpencodeKeymapProvider,
@@ -53,6 +54,60 @@ test("legacy page key aliases compile as page keys", async () => {
       up: [["pageup"]],
       down: [["pagedown"]],
     })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("dialog priority beats newer default priority bindings", async () => {
+  const runs: string[] = []
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createTuiResolvedConfig()
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+    const offDialog = keymap.registerLayer({
+      priority: DIALOG_LAYER_PRIORITY,
+      commands: [
+        {
+          name: "test.dialog",
+          run() {
+            runs.push("dialog")
+          },
+        },
+      ],
+      bindings: [{ key: "ctrl+g", cmd: "test.dialog" }],
+    })
+    const offGlobal = keymap.registerLayer({
+      commands: [
+        {
+          name: "test.global",
+          run() {
+            runs.push("global")
+          },
+        },
+      ],
+      bindings: [{ key: "ctrl+g", cmd: "test.global" }],
+    })
+
+    onCleanup(() => {
+      offGlobal()
+      offDialog()
+      offKeymap()
+    })
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <box />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />, { kittyKeyboard: true })
+  try {
+    app.mockInput.pressKey("g", { ctrl: true })
+    expect(runs).toEqual(["dialog"])
   } finally {
     app.renderer.destroy()
   }
@@ -120,8 +175,20 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   const app = await testRender(() => <Harness />)
   try {
     expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
+      base: {
+        "session.list": 1,
+        "session.new": 1,
+        "session.page.up": 2,
+        "session.first": 2,
+        "model.list": 1,
+      },
+      question: {
+        "session.list": 1,
+        "session.new": 1,
+        "session.page.up": 2,
+        "session.first": 2,
+        "model.list": 0,
+      },
       autocomplete: {
         "session.list": 1,
         "session.new": 1,

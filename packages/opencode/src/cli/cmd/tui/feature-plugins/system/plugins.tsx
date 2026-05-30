@@ -4,7 +4,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
-import { useBindings } from "../../keymap"
+import { DIALOG_LAYER_PRIORITY, useBindings } from "../../keymap"
 
 const id = "internal:plugin-manager"
 
@@ -41,6 +41,7 @@ function Install(props: { api: TuiPluginApi }) {
 
   useBindings(() => ({
     enabled: !busy(),
+    priority: DIALOG_LAYER_PRIORITY,
     bindings: [{ key: "tab", desc: "Toggle install scope", group: "Plugins", cmd: () => setGlobal((value) => !value) }],
   }))
 
