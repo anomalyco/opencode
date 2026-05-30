@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
@@ -19,6 +19,7 @@ import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
+import { ChildProcessSpawner } from "effect/unstable/process"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -31,6 +32,40 @@ const shellLayer = Layer.mergeAll(
   testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)
+const outputDrainMarker = "OPENCODE_SHELL_OUTPUT_DRAIN_MARKER"
+const outputDrainLayer = Layer.mergeAll(
+  Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make(() =>
+      Effect.succeed(
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(0),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          // exitCode resolves first to verify ShellTool waits for output drain.
+          all: Stream.fromEffect(Effect.sleep("10 millis")).pipe(
+            Stream.flatMap(() => Stream.make(new TextEncoder().encode(outputDrainMarker))),
+          ),
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        }),
+      ),
+    ),
+  ),
+  AppFileSystem.defaultLayer,
+  Plugin.defaultLayer,
+  Truncate.defaultLayer,
+  Config.defaultLayer,
+  Agent.defaultLayer,
+  RuntimeFlags.defaultLayer,
+  testInstanceStoreLayer,
+)
+const outputDrainIt = testEffect(outputDrainLayer)
 type ShellTestServices =
   | (typeof shellLayer extends Layer.Layer<infer ROut, infer _E, infer _RIn> ? ROut : never)
   | InstanceStore.Service
@@ -1156,6 +1191,23 @@ describe("tool.shell abort", () => {
         expect(result.output).toContain("first")
         expect(result.output).toContain("second")
         expect(updates.length).toBeGreaterThan(1)
+      }),
+    ),
+  )
+})
+
+describe("tool.shell output", () => {
+  outputDrainIt.live("waits for output stream before returning", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: "echo test",
+          description: "Output drain test",
+          timeout: 5000,
+        })
+        expect(result.output).toContain(outputDrainMarker)
+        expect(result.metadata.output).toContain(outputDrainMarker)
       }),
     ),
   )
