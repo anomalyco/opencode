@@ -272,7 +272,7 @@ export const SetArchivedInput = Schema.Struct({
 })
 export const SetMetadataInput = Schema.Struct({
   sessionID: SessionID,
-  metadata: Schema.NullOr(Metadata),
+  metadata: Metadata,
 })
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
