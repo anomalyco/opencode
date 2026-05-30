@@ -2,7 +2,7 @@ name: sync-personal-dev
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # Every 6 hours
+    - cron: "0 0 * * *"  # Daily at midnight UTC
   workflow_dispatch:
 
 permissions:
