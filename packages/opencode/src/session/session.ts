@@ -179,6 +179,7 @@ const EmptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write
 
 const Share = Schema.Struct({
   url: Schema.String,
+  id: optionalOmitUndefined(Schema.String),
 })
 
 // Legacy HTTP accepted negative values here. Keep archive timestamps permissive

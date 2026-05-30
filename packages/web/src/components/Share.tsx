@@ -500,6 +500,7 @@ export default function Share(props: {
 
 export function fromV1(v1: Message.Info): MessageWithParts {
   if (v1.role === "assistant") {
+    const assistant = v1.metadata.assistant
     return {
       id: v1.id,
       sessionID: v1.metadata.sessionID,
@@ -510,10 +511,10 @@ export function fromV1(v1: Message.Info): MessageWithParts {
         created: v1.metadata.time.created,
         completed: v1.metadata.time.completed,
       },
-      cost: v1.metadata.assistant!.cost,
-      path: v1.metadata.assistant!.path,
-      summary: v1.metadata.assistant!.summary,
-      tokens: v1.metadata.assistant!.tokens ?? {
+      cost: assistant?.cost ?? 0,
+      path: assistant?.path ?? { cwd: "", root: "" },
+      summary: assistant?.summary,
+      tokens: assistant?.tokens ?? {
         input: 0,
         output: 0,
         cache: {
@@ -522,8 +523,8 @@ export function fromV1(v1: Message.Info): MessageWithParts {
         },
         reasoning: 0,
       },
-      modelID: v1.metadata.assistant!.modelID,
-      providerID: v1.metadata.assistant!.providerID,
+      modelID: assistant?.modelID ?? "",
+      providerID: assistant?.providerID ?? "",
       mode: "build",
       error: v1.metadata.error,
       parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
@@ -550,6 +551,7 @@ export function fromV1(v1: Message.Info): MessageWithParts {
           ]
         }
         if (part.type === "tool-invocation") {
+          const toolMeta = v1.metadata.tool?.[part.toolInvocation.toolCallId]
           return [
             {
               ...base,
@@ -565,13 +567,37 @@ export function fromV1(v1: Message.Info): MessageWithParts {
                   }
                 }
 
-                const { title, time, ...metadata } = v1.metadata.tool[part.toolInvocation.toolCallId]
+                if (!toolMeta) {
+                  if (part.toolInvocation.state === "call") {
+                    return {
+                      status: "running",
+                      input: part.toolInvocation.args,
+                      time: {
+                        start: 0,
+                      },
+                    }
+                  }
+                  if (part.toolInvocation.state === "result") {
+                    return {
+                      status: "completed",
+                      input: part.toolInvocation.args,
+                      output: part.toolInvocation.result,
+                    }
+                  }
+                  return {
+                    status: "pending",
+                    input: part.toolInvocation.args ?? {},
+                    raw: "",
+                  }
+                }
+
+                const { title, time, ...metadata } = toolMeta
                 if (part.toolInvocation.state === "call") {
                   return {
                     status: "running",
                     input: part.toolInvocation.args,
                     time: {
-                      start: time.start,
+                      start: time?.start ?? 0,
                     },
                   }
                 }

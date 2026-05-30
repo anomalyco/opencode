@@ -77,6 +77,63 @@ export function transformShareData(shareData: ShareData[]): {
   }
 }
 
+/**
+ * Validate imported message data for common issues.
+ * Returns warnings for recoverable issues and errors for fatal ones.
+ */
+export function validateImportMessages(
+  messages: Array<{ info: Message; parts: Part[] }>,
+): { warnings: string[]; errors: string[] } {
+  const warnings: string[] = []
+  const errors: string[] = []
+
+  for (const msg of messages) {
+    // Validate assistant messages have required metadata
+    if (msg.info.role === "assistant") {
+      if (!msg.info.metadata?.assistant) {
+        warnings.push(`Message ${msg.info.id} missing assistant metadata, may render incorrectly`)
+      } else {
+        // Check for required fields in assistant metadata
+        const assistant = msg.info.metadata.assistant
+        if (assistant.modelID && !assistant.providerID) {
+          warnings.push(`Message ${msg.info.id} has modelID but missing providerID`)
+        }
+      }
+
+      // Check tool invocations reference valid tool metadata
+      for (const part of msg.parts) {
+        if (part.type === "tool-invocation" && msg.info.metadata?.tool) {
+          const toolMeta = msg.info.metadata.tool[part.toolInvocation.toolCallId]
+          if (!toolMeta) {
+            warnings.push(
+              `Message ${msg.info.id}: tool invocation ${part.toolInvocation.toolName} missing tool metadata`,
+            )
+          }
+        }
+      }
+    }
+
+    // Validate user messages
+    if (msg.info.role === "user") {
+      if (!msg.info.metadata?.sessionID) {
+        errors.push(`User message ${msg.info.id} missing sessionID in metadata`)
+      }
+    }
+
+    // Check for messages without IDs
+    if (!msg.info.id) {
+      errors.push(`Message missing ID, cannot import`)
+    }
+
+    // Check for messages without sessionID
+    if (!msg.info.metadata?.sessionID) {
+      errors.push(`Message ${msg.info.id || "(no id)"} missing sessionID in metadata`)
+    }
+  }
+
+  return { warnings, errors }
+}
+
 type ExportData = { info: SDKSession; messages: Array<{ info: Message; parts: Part[] }> }
 
 export const ImportCommand = effectCmd({
@@ -147,6 +204,22 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     if (!transformed) {
       process.stdout.write(`Share not found or empty: ${slug}`)
       process.stdout.write(EOL)
+      return
+    }
+
+    // Validate and warn about malformed message metadata
+    const validationResult = validateImportMessages(transformed.messages)
+    if (validationResult.warnings.length > 0) {
+      for (const warning of validationResult.warnings) {
+        process.stdout.write(`Warning: ${warning}`)
+        process.stdout.write(EOL)
+      }
+    }
+    if (validationResult.errors.length > 0) {
+      for (const error of validationResult.errors) {
+        process.stdout.write(`Error: ${error}`)
+        process.stdout.write(EOL)
+      }
       return
     }
 

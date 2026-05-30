@@ -240,6 +240,14 @@ export const layer = Layer.effect(
       return { id: row.id, secret: row.secret, url: row.url } satisfies Share
     })
 
+    const getByShareId = Effect.fnUntraced(function* (shareID: string) {
+      const row = yield* db((db) =>
+        db.select().from(SessionShareTable).where(eq(SessionShareTable.id, shareID)).get(),
+      )
+      if (!row) return
+      return { id: row.id, secret: row.secret, url: row.url } satisfies Share
+    })
+
     const getCached = Effect.fnUntraced(function* (sessionID: SessionID) {
       const s = yield* InstanceState.get(state)
       if (s.shared.has(sessionID)) {
@@ -314,6 +322,18 @@ export const layer = Layer.effect(
     const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
       if (disabled) return { id: "", url: "", secret: "" }
       log.info("creating share", { sessionID })
+
+      // Check if session already has a share from a previous share or import
+      // If that share still exists on server, return it instead of creating a new one
+      const existingShare = yield* getCached(sessionID)
+      if (existingShare?.id) {
+        const serverShare = yield* getByShareId(existingShare.id)
+        if (serverShare) {
+          log.info("reusing existing share", { sessionID, shareID: existingShare.id })
+          return existingShare
+        }
+      }
+
       const req = yield* request()
       const result = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.create}`).pipe(
         HttpClientRequest.setHeaders(req.headers),
