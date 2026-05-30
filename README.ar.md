@@ -50,30 +50,30 @@
 curl -fsSL https://opencode.ai/install | bash
 
 # مديري الحزم
-npm i -g opencode-ai@latest        # او bun/pnpm/yarn
+npm i -g opencode-ai@latest        # أو bun/pnpm/yarn
 scoop install opencode             # Windows
 choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS و Linux (موصى به، دائما محدث)
-brew install opencode              # macOS و Linux (صيغة brew الرسمية، تحديث اقل)
+brew install anomalyco/tap/opencode # macOS و Linux (موصى به، دائمًا محدث)
+brew install opencode              # macOS و Linux (صيغة brew الرسمية، تحديث أقل)
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # اي نظام
-nix run nixpkgs#opencode           # او github:anomalyco/opencode لاحدث فرع dev
+mise use -g opencode               # أي نظام
+nix run nixpkgs#opencode           # أو github:anomalyco/opencode لأحدث فرع dev
 ```
 
 > [!TIP]
-> احذف الاصدارات الاقدم من 0.1.x قبل التثبيت.
+> احذف الإصدارات الأقدم من 0.1.x قبل التثبيت.
 
 ### تطبيق سطح المكتب (BETA)
 
-يتوفر OpenCode ايضا كتطبيق سطح مكتب. قم بالتنزيل مباشرة من [صفحة الاصدارات](https://github.com/anomalyco/opencode/releases) او من [opencode.ai/download](https://opencode.ai/download).
+يتوفر OpenCode أيضًا كتطبيق سطح مكتب. قم بالتنزيل مباشرة من [صفحة الإصدارات](https://github.com/anomalyco/opencode/releases) أو من [opencode.ai/download](https://opencode.ai/download).
 
 | المنصة                | التنزيل                            |
 | --------------------- | ---------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb` او `.rpm` او AppImage       |
+| Linux                 | `.deb` أو `.rpm` أو AppImage       |
 
 ```bash
 # macOS (Homebrew)
@@ -84,15 +84,15 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 #### مجلد التثبيت
 
-يحترم سكربت التثبيت ترتيب الاولوية التالي لمسار التثبيت:
+يحترم سكربت التثبيت ترتيب الأولوية التالي لمسار التثبيت:
 
 1. `$OPENCODE_INSTALL_DIR` - مجلد تثبيت مخصص
 2. `$XDG_BIN_DIR` - مسار متوافق مع مواصفات XDG Base Directory
-3. `$HOME/bin` - مجلد الثنائيات القياسي للمستخدم (ان وجد او امكن انشاؤه)
+3. `$HOME/bin` - مجلد الثنائيات القياسي للمستخدم (إن وجد أو أمكن إنشاؤه)
 4. `$HOME/.opencode/bin` - المسار الافتراضي الاحتياطي
 
 ```bash
-# امثلة
+# أمثلة
 OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
@@ -101,14 +101,14 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 يتضمن OpenCode وكيليْن (Agents) مدمجين يمكنك التبديل بينهما باستخدام زر `Tab`.
 
-- **build** - الافتراضي، وكيل بصلاحيات كاملة لاعمال التطوير
+- **build** - الافتراضي، وكيل بصلاحيات كاملة لأعمال التطوير
 - **plan** - وكيل للقراءة فقط للتحليل واستكشاف الكود
-  - يرفض تعديل الملفات افتراضيا
-  - يطلب الاذن قبل تشغيل اوامر bash
-  - مثالي لاستكشاف قواعد كود غير مألوفة او لتخطيط التغييرات
+  - يرفض تعديل الملفات افتراضيًا
+  - يطلب الإذن قبل تشغيل أوامر bash
+  - مثالي لاستكشاف قواعد كود غير مألوفة أو لتخطيط التغييرات
 
-بالاضافة الى ذلك يوجد وكيل فرعي **general** للبحث المعقد والمهام متعددة الخطوات.
-يستخدم داخليا ويمكن استدعاؤه بكتابة `@general` في الرسائل.
+بالإضافة إلى ذلك يوجد وكيل فرعي **general** للبحث المعقد والمهام متعددة الخطوات.
+يستخدم داخليًا ويمكن استدعاؤه بكتابة `@general` في الرسائل.
 
 تعرف على المزيد حول [agents](https://opencode.ai/docs/agents).
 
@@ -118,12 +118,12 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### المساهمة
 
-اذا كنت مهتما بالمساهمة في OpenCode، يرجى قراءة [contributing docs](./CONTRIBUTING.md) قبل ارسال pull request.
+إذا كنت مهتمًا بالمساهمة في OpenCode، يرجى قراءة [contributing docs](./CONTRIBUTING.md) قبل إرسال pull request.
 
 ### البناء فوق OpenCode
 
-اذا كنت تعمل على مشروع مرتبط بـ OpenCode ويستخدم "opencode" كجزء من اسمه (مثل "opencode-dashboard" او "opencode-mobile")، يرجى اضافة ملاحظة في README توضح انه ليس مبنيا بواسطة فريق OpenCode ولا يرتبط بنا بأي شكل.
+إذا كنت تعمل على مشروع مرتبط بـ OpenCode ويستخدم "opencode" كجزء من اسمه (مثل "opencode-dashboard" أو "opencode-mobile")، يرجى إضافة ملاحظة في README توضح أنه ليس مبنيًا بواسطة فريق OpenCode ولا يرتبط بنا بأي شكل.
 
 ---
 
-**انضم الى مجتمعنا** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**انضم إلى مجتمعنا** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
