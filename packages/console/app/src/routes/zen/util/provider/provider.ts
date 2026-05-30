@@ -49,6 +49,7 @@ export type ProviderHelper = (input: {
     parse: (chunk: string) => void
     retrieve: () => any
   }
+  extractUsage: (response: any) => any
   normalizeUsage: (usage: any) => UsageInfo
 }
 

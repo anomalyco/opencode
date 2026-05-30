@@ -7,6 +7,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model, withEnv } from "./provider-helper"
 
 const vertexOptions: Record<string, any>[] = []
+const googleAuthOptions: Record<string, any>[] = []
 
 void mock.module("@ai-sdk/google-vertex", () => ({
   createVertex: (options: Record<string, any>) => {
@@ -19,12 +20,14 @@ void mock.module("@ai-sdk/google-vertex", () => ({
 
 void mock.module("google-auth-library", () => ({
   GoogleAuth: class {
-    async getApplicationDefault() {
+    constructor(options: Record<string, any>) {
+      googleAuthOptions.push(options)
+    }
+
+    async getClient() {
       return {
-        credential: {
-          async getAccessToken() {
-            return { token: "vertex-token" }
-          },
+        async getAccessToken() {
+          return { token: "vertex-token" }
         },
       }
     }
@@ -160,6 +163,32 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
+  it.effect("keeps OpenAI-compatible Vertex endpoint templates regional for eu", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
+      yield* plugin.add(GoogleVertexPlugin)
+      const load = yield* catalog.loader()
+      yield* load((catalog) =>
+        catalog.provider.update(ProviderV2.ID.make("google-vertex"), (provider) => {
+          provider.endpoint = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
+          }
+          provider.options.aisdk.provider.project = "config-project"
+          provider.options.aisdk.provider.location = "eu"
+        }),
+      )
+      const provider = yield* catalog.provider.get(ProviderV2.ID.make("google-vertex"))
+      expect(provider.endpoint).toEqual({
+        type: "aisdk",
+        package: "@ai-sdk/openai-compatible",
+        url: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu",
+      })
+    }),
+  )
+
   it.effect("defaults location to us-central1 when only project is configured", () =>
     withEnv(
       {
@@ -221,6 +250,7 @@ describe("GoogleVertexPlugin", () => {
 
   it.effect("keeps Google auth fetch for OpenAI-compatible Vertex endpoints", () =>
     Effect.gen(function* () {
+      googleAuthOptions.length = 0
       const fetchCalls: { input: Parameters<typeof fetch>[0]; init?: RequestInit }[] = []
       const plugin = yield* PluginV2.Service
       yield* plugin.add(GoogleVertexPlugin)
@@ -266,6 +296,7 @@ describe("GoogleVertexPlugin", () => {
           }),
       )
       expect(fetchCalls).toHaveLength(1)
+      expect(googleAuthOptions).toEqual([{ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }])
       expect(fetchCalls[0].input).toBe("https://vertex.example")
       expect(new Headers(fetchCalls[0].init?.headers).get("authorization")).toBe("Bearer vertex-token")
       expect(new Headers(fetchCalls[0].init?.headers).get("x-test")).toBe("1")

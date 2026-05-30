@@ -47,7 +47,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session-event"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -81,6 +80,12 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
+
+function isOrphanedInterruptedTool(part: MessageV2.ToolPart) {
+  // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
+  // They are not pending work and must not trigger an assistant-prefill request.
+  return part.state.status === "error" && part.state.metadata?.interrupted === true
+}
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -129,7 +134,6 @@ export const layer = Layer.effect(
         cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
-        loop: (input: LoopInput) => loop(input),
       } satisfies TaskPromptOps
     })
 
@@ -683,7 +687,7 @@ export const layer = Layer.effect(
         .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
         .pipe(Effect.orDie)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
-      return yield* provider.defaultModel()
+      return yield* provider.defaultModel().pipe(Effect.orDie)
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
@@ -1258,12 +1262,13 @@ export const layer = Layer.effect(
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
-          // Some providers return "stop" even when the assistant message contains tool calls.
-          // Keep the loop running so tool results can be sent back to the model.
-          // Skip provider-executed tool parts — those were fully handled within the
-          // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
+          // Some providers return "stop" even when the assistant message contains
+          // tool calls. Keep the loop running so tool results can be sent back to
+          // the model, but ignore cleanup-marked interrupted orphans.
           const hasToolCalls =
-            lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+            lastAssistantMsg?.parts.some(
+              (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
+            ) ?? false
 
           if (
             lastAssistant?.finish &&
@@ -1271,6 +1276,16 @@ export const layer = Layer.effect(
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
+            const orphan = lastAssistantMsg?.parts.find(
+              (part): part is MessageV2.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+            )
+            if (orphan) {
+              yield* slog.warn("loop exit with orphaned interrupted tool", {
+                messageID: lastAssistant.id,
+                tool: orphan.tool,
+                callID: orphan.callID,
+              })
+            }
             yield* slog.info("exiting loop")
             break
           }

@@ -1793,6 +1793,7 @@ export class Vcs extends HeyApiClient {
       directory?: string
       workspace?: string
       mode: "git" | "branch"
+      context?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1804,6 +1805,7 @@ export class Vcs extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "mode" },
+            { in: "query", key: "context" },
           ],
         },
       ],
@@ -2631,6 +2633,8 @@ export class Pty extends HeyApiClient {
       ptyID: string
       directory?: string
       workspace?: string
+      cursor?: string
+      ticket?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2642,6 +2646,8 @@ export class Pty extends HeyApiClient {
             { in: "path", key: "ptyID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "ticket" },
           ],
         },
       ],

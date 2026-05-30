@@ -1,11 +1,10 @@
 import { Slug } from "@opencode-ai/core/util/slug"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 

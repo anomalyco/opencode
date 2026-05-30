@@ -1,5 +1,5 @@
 import path from "path"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Cause, Context, Effect, Fiber, Layer, Queue, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"

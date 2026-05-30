@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { createSignal, For } from "solid-js"
+import { For } from "solid-js"
 import { testRender } from "@opentui/solid"
+import { InlineToolRow } from "../../../src/cli/cmd/tui/routes/session/index"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
 
@@ -10,8 +11,6 @@ afterEach(() => {
 })
 
 type ToolFixture = { icon: string; label: string; error?: string }
-
-const INLINE_TOOL_ICON_WIDTH = 2
 
 const tools: readonly ToolFixture[] = [
   {
@@ -39,33 +38,6 @@ const tools: readonly ToolFixture[] = [
   },
 ] as const
 
-function InlineToolRow(props: { item: ToolFixture; errorExpanded?: boolean }) {
-  const [margin, setMargin] = createSignal(0)
-
-  return (
-    <box
-      marginTop={margin()}
-      paddingLeft={3}
-      renderBefore={function () {
-        const parent = this.parent
-        if (!parent) return
-        const previous = parent.getChildren()[parent.getChildren().indexOf(this) - 1]
-        setMargin(previous?.id.startsWith("text-") || previous?.id.startsWith("tool-block-") ? 1 : 0)
-      }}
-    >
-      <box flexDirection="row">
-        <text width={INLINE_TOOL_ICON_WIDTH}>{props.item.icon}</text>
-        <text flexGrow={1}>{props.item.label}</text>
-      </box>
-      {props.item.error && props.errorExpanded && (
-        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
-          <text>{props.item.error}</text>
-        </box>
-      )}
-    </box>
-  )
-}
-
 function ShellOutput() {
   return (
     <box id="tool-block-shell" marginTop={1} paddingTop={1} paddingBottom={1} paddingLeft={2} gap={1}>
@@ -83,7 +55,20 @@ function Fixture(props: { errorExpanded?: boolean; shellOutput?: boolean }) {
     <box flexDirection="column" width={72}>
       <box flexDirection="column">
         {props.shellOutput && <ShellOutput />}
-        <For each={tools}>{(item) => <InlineToolRow item={item} errorExpanded={props.errorExpanded} />}</For>
+        <For each={tools}>
+          {(item) => (
+            <InlineToolRow
+              icon={item.icon}
+              complete={true}
+              pending=""
+              failed={Boolean(item.error)}
+              error={item.error}
+              errorExpanded={props.errorExpanded}
+            >
+              {item.label}
+            </InlineToolRow>
+          )}
+        </For>
       </box>
     </box>
   )
