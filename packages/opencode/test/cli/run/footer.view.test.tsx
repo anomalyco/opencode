@@ -28,6 +28,7 @@ import type {
   StreamCommit,
 } from "@/cli/cmd/run/types"
 import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
+import { RejectField } from "@/cli/cmd/run/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const tuiConfig = createTuiResolvedConfig()
@@ -177,18 +178,18 @@ async function renderFooter(input: { tuiConfig?: RunTuiConfig; onCycle?: () => v
           tuiConfig={config}
           agent="opencode"
           onSubmit={() => true}
-          onPermissionReply={() => {}}
-          onQuestionReply={() => {}}
-          onQuestionReject={() => {}}
-          onCycle={input.onCycle ?? (() => {})}
+          onPermissionReply={() => { }}
+          onQuestionReply={() => { }}
+          onQuestionReject={() => { }}
+          onCycle={input.onCycle ?? (() => { })}
           onInterrupt={() => false}
-          onInputClear={() => {}}
-          onExit={() => {}}
-          onModelSelect={() => {}}
-          onVariantSelect={() => {}}
-          onRows={() => {}}
-          onLayout={() => {}}
-          onStatus={() => {}}
+          onInputClear={() => { }}
+          onExit={() => { }}
+          onModelSelect={() => { }}
+          onVariantSelect={() => { }}
+          onRows={() => { }}
+          onLayout={() => { }}
+          onStatus={() => { }}
         />
       </OpencodeKeymapProvider>
     )
@@ -277,14 +278,14 @@ test("direct command panel renders grouped command palette", async () => {
           subagents={subagents}
           variants={variants}
           variantCycle="ctrl+t"
-          onClose={() => {}}
-          onModel={() => {}}
-          onSubagent={() => {}}
-          onVariant={() => {}}
-          onVariantCycle={() => {}}
-          onCommand={() => {}}
-          onNew={() => {}}
-          onExit={() => {}}
+          onClose={() => { }}
+          onModel={() => { }}
+          onSubagent={() => { }}
+          onVariant={() => { }}
+          onVariantCycle={() => { }}
+          onCommand={() => { }}
+          onNew={() => { }}
+          onExit={() => { }}
         />
       </box>
     ),
@@ -335,14 +336,14 @@ test("direct command panel shows subagent entry when available", async () => {
           subagents={subagents}
           variants={variants}
           variantCycle="ctrl+t"
-          onClose={() => {}}
-          onModel={() => {}}
-          onSubagent={() => {}}
-          onVariant={() => {}}
-          onVariantCycle={() => {}}
-          onCommand={() => {}}
-          onNew={() => {}}
-          onExit={() => {}}
+          onClose={() => { }}
+          onModel={() => { }}
+          onSubagent={() => { }}
+          onVariant={() => { }}
+          onVariantCycle={() => { }}
+          onCommand={() => { }}
+          onNew={() => { }}
+          onExit={() => { }}
         />
       </box>
     ),
@@ -378,8 +379,8 @@ test("direct subagent panel renders active subagents", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           tabs={tabs}
           current={current}
-          onClose={() => {}}
-          onSelect={() => {}}
+          onClose={() => { }}
+          onSelect={() => { }}
           onRows={(value) => {
             rows = value
           }}
@@ -442,7 +443,7 @@ test.skip("direct footer dispatches leader variant binding only when leader is r
   }
 })
 
-test.skip("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
+test("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
   const calls: string[] = []
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", variant_cycle: "<leader>t" } }),
@@ -461,7 +462,7 @@ test.skip("direct footer keeps leader variant binding inactive when leader is di
   }
 })
 
-test.skip("direct footer shows subagent indicator while prompt is running", async () => {
+test("direct footer shows subagent indicator while prompt is running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
     status: "",
@@ -505,18 +506,18 @@ test.skip("direct footer shows subagent indicator while prompt is running", asyn
           tuiConfig={tuiConfig}
           agent="opencode"
           onSubmit={() => true}
-          onPermissionReply={() => {}}
-          onQuestionReply={() => {}}
-          onQuestionReject={() => {}}
-          onCycle={() => {}}
+          onPermissionReply={() => { }}
+          onQuestionReply={() => { }}
+          onQuestionReject={() => { }}
+          onCycle={() => { }}
           onInterrupt={() => false}
-          onInputClear={() => {}}
-          onExit={() => {}}
-          onModelSelect={() => {}}
-          onVariantSelect={() => {}}
-          onRows={() => {}}
-          onLayout={() => {}}
-          onStatus={() => {}}
+          onInputClear={() => { }}
+          onExit={() => { }}
+          onModelSelect={() => { }}
+          onVariantSelect={() => { }}
+          onRows={() => { }}
+          onLayout={() => { }}
+          onStatus={() => { }}
         />
       </OpencodeKeymapProvider>
     )
@@ -571,7 +572,7 @@ test("direct question body separates single-select checkmark from label", async 
           onReply={(input) => {
             replies.push(input)
           }}
-          onReject={() => {}}
+          onReject={() => { }}
         />
       </box>
     ),
@@ -592,6 +593,120 @@ test("direct question body separates single-select checkmark from label", async 
   }
 })
 
+test("direct custom answer submits through keymap return binding", async () => {
+  const question = {
+    id: "question-1",
+    sessionID: "session-1",
+    questions: [
+      {
+        question: "Which answer should I use?",
+        header: "Answer",
+        options: [{ label: "Provided", description: "Use the listed answer." }],
+        custom: true,
+      },
+    ],
+  } satisfies QuestionRequest
+  const questions: unknown[] = []
+  let off: (() => void) | undefined
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RunQuestionBody
+          request={question}
+          theme={RUN_THEME_FALLBACK.footer}
+          onReply={(input) => {
+            questions.push(input)
+          }}
+          onReject={() => { }}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={18}>
+        <Harness />
+      </box>
+    ),
+    { width: 100, height: 18, kittyKeyboard: true },
+  )
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("2")
+    await app.renderOnce()
+    "typed".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(questions).toEqual([{ requestID: "question-1", answers: [["typed"]] }])
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    off?.()
+    app.renderer.destroy()
+  }
+})
+
+test("direct permission rejection submits through keymap return binding", async () => {
+  let text = ""
+  const submits: string[] = []
+  let off: (() => void) | undefined
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RejectField
+          theme={RUN_THEME_FALLBACK.footer}
+          text=""
+          disabled={false}
+          onChange={(input) => {
+            text = input
+          }}
+          onConfirm={() => {
+            submits.push(text)
+          }}
+          onCancel={() => { }}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={18}>
+        <Harness />
+      </box>
+    ),
+    { width: 100, height: 18, kittyKeyboard: true },
+  )
+
+  try {
+    await app.renderOnce()
+    "retry".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("retry")
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(submits).toEqual(["retry"])
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    off?.()
+    app.renderer.destroy()
+  }
+})
+
 test("direct model panel renders current model selector", async () => {
   const [providers] = createSignal<RunProvider[] | undefined>([provider()])
   const [current] = createSignal<RunInput["model"]>({ providerID: "opencode", modelID: "gpt-5" })
@@ -603,8 +718,8 @@ test("direct model panel renders current model selector", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           providers={providers}
           current={current}
-          onClose={() => {}}
-          onSelect={() => {}}
+          onClose={() => { }}
+          onSelect={() => { }}
         />
       </box>
     ),
@@ -642,8 +757,8 @@ test("direct variant panel renders current variant selector", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           variants={variants}
           current={current}
-          onClose={() => {}}
-          onSelect={() => {}}
+          onClose={() => { }}
+          onSelect={() => { }}
         />
       </box>
     ),
