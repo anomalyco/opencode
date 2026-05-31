@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
-import { Policy } from "@opencode-ai/core/policy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -227,7 +227,7 @@ describe("OpencodePlugin", () => {
 
       expect(Option.getOrUndefined(selected)?.id).toBe(ModelV2.ID.make("gpt-5-nano"))
     }).pipe(
-      Effect.provide(Catalog.defaultLayer.pipe(Layer.provide(Policy.defaultLayer), Layer.provide(locationLayer))),
+      Effect.provide(Catalog.locationLayer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(locationLayer))),
     ),
   )
 })

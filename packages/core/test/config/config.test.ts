@@ -22,10 +22,9 @@ function testLayer(
   projectDirectory = directory,
   vcs?: Project.Vcs,
 ) {
-  return Config.layer.pipe(
+  return Config.locationLayer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Global.layerWith({ config: globalDirectory })),
-    Layer.provideMerge(Policy.defaultLayer),
     Layer.provide(
       Layer.succeed(
         Location.Service,

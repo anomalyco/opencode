@@ -3,7 +3,7 @@ import { Effect, Exit, Scope } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AgentV2.defaultLayer)
+const it = testEffect(AgentV2.locationLayer)
 
 describe("AgentV2", () => {
   it.effect("starts without agents", () =>

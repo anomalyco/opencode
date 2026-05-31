@@ -26,9 +26,9 @@ type HookSpec = {
   }
   "account.switched": {
     input: {
-      serviceID: import("./account").AccountV2.ServiceID
-      from?: import("./account").AccountV2.ID
-      to?: import("./account").AccountV2.ID
+      serviceID: import("./auth").Auth.ServiceID
+      from?: import("./auth").Auth.ID
+      to?: import("./auth").Auth.ID
     }
     output: {}
   }
@@ -169,7 +169,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
+export const locationLayer = layer
 
 // opencode
 // sdcok
