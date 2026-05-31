@@ -1053,6 +1053,117 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "preserves legacy compaction payload when it fits budget",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "summarize this")
+        const assistant = yield* createAssistantMessage(session.id, user.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "reasoning",
+          text: "legacy reasoning should be preserved",
+          metadata: { openai: { reasoningEncryptedContent: "legacy-encrypted-reasoning" } },
+          time: { start: Date.now(), end: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { cmd: "small output" },
+            output: "small legacy tool output",
+            title: "Shell",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* createSummaryCompaction(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(captured).toContain("legacy reasoning should be preserved")
+        expect(captured).toContain("small legacy tool output")
+        expect(captured).not.toContain("Tool output truncated for compaction")
+      }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 0 }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "reduces compaction payload to fit constrained model budget",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "summarize this")
+        const assistant = yield* createAssistantMessage(session.id, user.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "reasoning",
+          text: "hidden reasoning should not be compacted",
+          metadata: { openai: { reasoningEncryptedContent: "encrypted-reasoning".repeat(1_000) } },
+          time: { start: Date.now(), end: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { cmd: "generate large output" },
+            output: "tool-output-should-be-truncated".repeat(1_000),
+            title: "Shell",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* createSummaryCompaction(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(captured).not.toContain("hidden reasoning should not be compacted")
+        expect(captured).not.toContain("encrypted-reasoning")
+        expect(captured).not.toContain("tool-output-should-be-truncated")
+        expect(captured).toContain("Tool output truncated for compaction")
+      }).pipe(
+        withCompaction({
+          llm: stub.layer,
+          provider: ProviderTest.fake({ model: createModel({ context: 100, output: 10 }) }),
+          config: cfg({ tail_turns: 0 }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "retains a split turn suffix when a later message fits the preserve token budget",
     () => {
       const stub = llm()

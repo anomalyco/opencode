@@ -35,7 +35,8 @@ export const Event = {
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
-const TOOL_OUTPUT_MAX_CHARS = 2_000
+const MAX_COMPACTION_TOOL_OUTPUT_CHARS = 2_000
+const COMPACTION_INPUT_BUDGET_RATIO = 0.85
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
@@ -242,6 +243,57 @@ export const layer = Layer.effect(
       return Token.estimate(JSON.stringify(msgs))
     })
 
+    const prepareModelMessages = Effect.fn("SessionCompaction.prepareModelMessages")(function* (input: {
+      messages: MessageV2.WithParts[]
+      model: Provider.Model
+      cfg: Config.Info
+      prompt: string
+    }) {
+      const budget = Math.floor(
+        usable({ cfg: input.cfg, model: input.model, outputTokenMax: flags.outputTokenMax }) *
+          COMPACTION_INPUT_BUDGET_RATIO,
+      )
+
+      const build = (options: { stripReasoning?: boolean; toolOutputMaxChars: number }) =>
+        Effect.gen(function* () {
+          const modelMessages = yield* MessageV2.toModelMessagesEffect(input.messages, input.model, {
+            stripMedia: true,
+            stripReasoning: options.stripReasoning,
+            toolOutputMaxChars: options.toolOutputMaxChars,
+          })
+          return {
+            modelMessages,
+            tokens: Token.estimate(JSON.stringify(modelMessages) + input.prompt),
+            toolOutputMaxChars: options.toolOutputMaxChars,
+          }
+        })
+
+      const legacy = yield* build({ toolOutputMaxChars: MAX_COMPACTION_TOOL_OUTPUT_CHARS })
+      // Preserve the old payload shape when it fits; only reduce history when
+      // the compaction request itself would exceed the safe model budget.
+      if (input.model.limit.context === 0 || legacy.tokens <= budget) return { ...legacy, budget }
+
+      let low = 0
+      let high = MAX_COMPACTION_TOOL_OUTPUT_CHARS
+      let best = yield* build({ stripReasoning: true, toolOutputMaxChars: 0 })
+
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2)
+        const candidate = yield* build({ stripReasoning: true, toolOutputMaxChars: mid })
+        if (candidate.tokens <= budget) {
+          best = candidate
+          low = mid + 1
+        } else {
+          high = mid - 1
+        }
+      }
+
+      return {
+        ...best,
+        budget,
+      }
+    })
+
     const select = Effect.fn("SessionCompaction.select")(function* (input: {
       messages: SessionLegacy.WithParts[]
       cfg: Config.Info
@@ -405,9 +457,11 @@ export const layer = Layer.effect(
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
-        stripMedia: true,
-        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+      const prepared = yield* prepareModelMessages({
+        messages: msgs,
+        model,
+        cfg,
+        prompt: nextPrompt,
       })
       const ctx = yield* InstanceState.context
       const msg: SessionLegacy.Assistant = {
@@ -449,7 +503,7 @@ export const layer = Layer.effect(
         tools: {},
         system: [],
         messages: [
-          ...modelMessages,
+          ...prepared.modelMessages,
           {
             role: "user",
             content: [{ type: "text", text: nextPrompt }],
