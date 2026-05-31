@@ -14,16 +14,6 @@ import { ModelsDev } from "./models-dev"
 import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
 
-const sharedLayer = Layer.mergeAll(
-  Project.defaultLayer,
-  EventV2.defaultLayer,
-  Auth.defaultLayer,
-  Npm.defaultLayer,
-  ModelsDev.defaultLayer,
-  AppFileSystem.defaultLayer,
-  Global.defaultLayer,
-)
-
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
@@ -38,5 +28,13 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     ).pipe(Layer.provideMerge(location), Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
-  dependencies: [sharedLayer],
+  dependencies: [
+    Project.defaultLayer,
+    EventV2.defaultLayer,
+    Auth.defaultLayer,
+    Npm.defaultLayer,
+    ModelsDev.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Global.defaultLayer,
+  ],
 }) {}
