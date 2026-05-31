@@ -14,7 +14,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(PluginV2.defaultLayer)
+const it = testEffect(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))
 
 function context(
   records: { provider: ProviderV2.Info; models: Map<ModelV2.ID, ModelV2.Info> }[],

@@ -116,5 +116,5 @@ export const ModelsDevPlugin = PluginV2.define({
       Stream.runForEach(() => refresh()),
       Effect.forkScoped({ startImmediately: true }),
     )
-  }).pipe(Effect.provide(ModelsDev.defaultLayer)),
+  }),
 })

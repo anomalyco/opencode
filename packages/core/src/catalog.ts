@@ -89,7 +89,7 @@ enableMapSet()
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    yield* Location.Service
+    const location = yield* Location.Service
     const plugin = yield* PluginV2.Service
     const events = yield* EventV2.Service
     const policy = yield* Policy.Service
@@ -199,6 +199,11 @@ export const layer = Layer.effect(
     })
 
     yield* events.subscribe(PluginV2.Event.Added).pipe(
+      // Plugin registries are location scoped even though the event bus is process scoped.
+      Stream.filter(
+        (event) =>
+          event.location?.directory === location.directory && event.location.workspaceID === location.workspaceID,
+      ),
       Stream.runForEach((event) =>
         state.update((catalog) => plugin.triggerFor(event.data.id, "catalog.transform", catalog, {}), "plugin.added"),
       ),
@@ -317,8 +322,7 @@ export const layer = Layer.effect(
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(PluginV2.defaultLayer),
-  Layer.provide(Policy.defaultLayer),
+export const locationLayer = layer.pipe(
+  Layer.provideMerge(PluginV2.locationLayer),
+  Layer.provideMerge(Policy.locationLayer),
 )

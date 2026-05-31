@@ -5,7 +5,6 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { Policy } from "@opencode-ai/core/policy"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -30,11 +29,9 @@ void mock.module("gitlab-ai-provider", () => ({
 }))
 
 const itWithAccount = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
+  Catalog.locationLayer.pipe(
     Layer.provideMerge(Auth.defaultLayer),
     Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(Policy.defaultLayer),
     Layer.provideMerge(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/") }))),
     ),
