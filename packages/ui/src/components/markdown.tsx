@@ -265,13 +265,18 @@ function createIcon(path: string, slot: string) {
   return icon
 }
 
-function createCopyButton(labels: CopyLabels) {
+type CopyButtonPosition = "top" | "bottom"
+
+const copyButtonPositions: CopyButtonPosition[] = ["top", "bottom"]
+
+function createCopyButton(labels: CopyLabels, position: CopyButtonPosition) {
   const button = document.createElement("button")
   button.type = "button"
   button.setAttribute("data-component", "icon-button")
   button.setAttribute("data-variant", "secondary")
   button.setAttribute("data-size", "small")
   button.setAttribute("data-slot", "markdown-copy-button")
+  button.setAttribute("data-position", position)
   button.setAttribute("aria-label", labels.copy)
   button.setAttribute("data-tooltip", labels.copy)
   button.appendChild(createIcon(iconPaths.copy, "copy-icon"))
@@ -291,6 +296,35 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   button.setAttribute("data-tooltip", labels.copy)
 }
 
+function ensureCopyButtons(parent: Element, labels: CopyLabels) {
+  const buttons = Array.from(parent.children).filter(
+    (el): el is HTMLButtonElement =>
+      el instanceof HTMLButtonElement && el.getAttribute("data-slot") === "markdown-copy-button",
+  )
+  const used = new Set<HTMLButtonElement>()
+
+  for (const position of copyButtonPositions) {
+    let button = buttons.find(
+      (candidate) => candidate.getAttribute("data-position") === position && !used.has(candidate),
+    )
+    if (!button && position === "top") {
+      button = buttons.find((candidate) => !candidate.getAttribute("data-position") && !used.has(candidate))
+    }
+
+    if (button) {
+      button.setAttribute("data-position", position)
+      used.add(button)
+      continue
+    }
+
+    parent.appendChild(createCopyButton(labels, position))
+  }
+
+  for (const button of buttons) {
+    if (!used.has(button)) button.remove()
+  }
+}
+
 function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   const parent = block.parentElement
   if (!parent) return
@@ -300,22 +334,11 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
     wrapper.setAttribute("data-component", "markdown-code")
     parent.replaceChild(wrapper, block)
     wrapper.appendChild(block)
-    wrapper.appendChild(createCopyButton(labels))
+    ensureCopyButtons(wrapper, labels)
     return
   }
 
-  const buttons = Array.from(parent.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
-    (el): el is HTMLButtonElement => el instanceof HTMLButtonElement,
-  )
-
-  if (buttons.length === 0) {
-    parent.appendChild(createCopyButton(labels))
-    return
-  }
-
-  for (const button of buttons.slice(1)) {
-    button.remove()
-  }
+  ensureCopyButtons(parent, labels)
 }
 
 function markCodeLinks(root: HTMLDivElement) {
@@ -390,16 +413,14 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     if (!parent) return
     const wrapped = parent.getAttribute("data-component") === "markdown-code"
     if (wrapped) {
-      if (!parent.querySelector('[data-slot="markdown-copy-button"]')) {
-        parent.appendChild(createCopyButton(labels))
-      }
+      ensureCopyButtons(parent, labels)
       return
     }
     const wrapper = document.createElement("div")
     wrapper.setAttribute("data-component", "markdown-code")
     parent.replaceChild(wrapper, block)
     wrapper.appendChild(block)
-    wrapper.appendChild(createCopyButton(labels))
+    ensureCopyButtons(wrapper, labels)
   }
 
   const markCodeLinks = () => {
@@ -437,17 +458,23 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
 
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
-    const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
+    const wrapper = button.closest('[data-component="markdown-code"]')
+    const code = wrapper?.querySelector("code")
     const content = code?.textContent ?? ""
     if (!content) return
     const clipboard = navigator?.clipboard
     if (!clipboard) return
     await clipboard.writeText(content)
-    setCopyState(button, labels, true)
-    const existing = timeouts.get(button)
-    if (existing) clearTimeout(existing)
-    const timeout = setTimeout(() => setCopyState(button, labels, false), 2000)
-    timeouts.set(button, timeout)
+    const buttons = Array.from(wrapper?.querySelectorAll('[data-slot="markdown-copy-button"]') ?? []).filter(
+      (el): el is HTMLButtonElement => el instanceof HTMLButtonElement,
+    )
+    for (const actionButton of buttons) {
+      setCopyState(actionButton, labels, true)
+      const existing = timeouts.get(actionButton)
+      if (existing) clearTimeout(existing)
+      const timeout = setTimeout(() => setCopyState(actionButton, labels, false), 2000)
+      timeouts.set(actionButton, timeout)
+    }
   }
 
   decorate(root, labels)

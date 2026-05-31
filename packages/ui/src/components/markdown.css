@@ -153,7 +153,6 @@
 
   [data-slot="markdown-copy-button"] {
     position: absolute;
-    top: 4px;
     right: 4px;
     opacity: 0;
     transition: opacity 0.15s ease;
@@ -188,6 +187,14 @@
       opacity: 0;
       transition: opacity 0.15s ease;
     }
+  }
+
+  [data-slot="markdown-copy-button"][data-position="top"] {
+    top: 4px;
+  }
+
+  [data-slot="markdown-copy-button"][data-position="bottom"] {
+    bottom: 4px;
   }
 
   [data-slot="markdown-copy-button"]:hover::after,
