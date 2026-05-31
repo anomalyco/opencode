@@ -1426,6 +1426,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       restoreFocus()
     },
   }))
+  const variantControlState = createMemo<ComposerVariantControlState>(() => ({
+    title: language.t("command.model.variant.cycle"),
+    keybind: command.keybind("model.variant.cycle"),
+    options: variants(),
+    current: local.model.variant.current() ?? "default",
+    style: control(),
+    label: (value) => (value === "default" ? language.t("common.default") : value),
+    onSelect: (value) => {
+      local.model.variant.set(value === "default" ? undefined : value)
+      restoreFocus()
+    },
+  }))
   const newProjectTriggerState = createMemo<ComposerPickerTriggerState>(() => ({
     action: "prompt-project",
     icon: "folder-add-left",
@@ -1569,6 +1581,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <ComposerPickerTrigger state={newProjectTriggerState()} />
                   </Show>
                   <ComposerModelControl state={modelControlState()} />
+                  <Show when={variants().length > 2}>
+                    <ComposerVariantControl state={variantControlState()} />
+                  </Show>
                 </div>
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
@@ -1983,6 +1998,16 @@ type ComposerModelControlState = {
   onUnpaidClick: () => void
 }
 
+type ComposerVariantControlState = {
+  title: string
+  keybind: string
+  options: string[]
+  current: string
+  style: JSX.CSSProperties | undefined
+  label: (value: string) => string
+  onSelect: (value: string | undefined) => void
+}
+
 function ComposerPickerTrigger(props: ComponentProps<"button"> & { state: ComposerPickerTriggerState }) {
   const [local, rest] = splitProps(props, ["state", "class", "style", "onClick"])
   return (
@@ -2150,5 +2175,24 @@ function ComposerModelControl(props: { state: ComposerModelControlState }) {
         </TooltipKeybind>
       </Show>
     </Show>
+  )
+}
+
+function ComposerVariantControl(props: { state: ComposerVariantControlState }) {
+  return (
+    <TooltipKeybind placement="top" gutter={4} title={props.state.title} keybind={props.state.keybind}>
+      <Select
+        size="normal"
+        options={props.state.options}
+        current={props.state.current}
+        label={props.state.label}
+        onSelect={props.state.onSelect}
+        class="capitalize max-w-[150px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
+        valueClass="truncate text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+        triggerStyle={props.state.style}
+        triggerProps={{ "data-action": "prompt-model-variant" }}
+        variant="ghost"
+      />
+    </TooltipKeybind>
   )
 }
