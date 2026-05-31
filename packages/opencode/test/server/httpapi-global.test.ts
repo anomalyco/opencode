@@ -19,6 +19,9 @@ const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
     Layer.provide([controlHandlers, globalHandlers]),
     Layer.provide([authorizationLayer, schemaErrorLayer]),
+    // Raw HttpApi routes expose an opaque handler context at the request boundary.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+    HttpRouter.provideRequest(Layer.succeedContext(Context.empty() as Context.Context<unknown>)),
   ),
   { disableListenLog: true, disableLogger: true },
 ).pipe(
@@ -33,9 +36,6 @@ const apiLayer = HttpRouter.serve(
     }),
   ),
   Layer.provide(ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })),
-  // Raw HttpApi routes expose an opaque handler context at the web boundary.
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-  Layer.provide(Layer.succeedContext(Context.empty() as Context.Context<unknown>)),
 )
 const it = testEffect(apiLayer)
 

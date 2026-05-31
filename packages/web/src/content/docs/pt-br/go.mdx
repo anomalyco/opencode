@@ -103,7 +103,7 @@ A tabela abaixo fornece uma contagem estimada de requisições com base nos padr
 | DeepSeek V4 Pro   | 3,450                   | 8,550                  | 17,150              |
 | DeepSeek V4 Flash | 31,650                  | 79,050                 | 158,150             |
 
-As estimativas baseiam-se nos padrões médios de requisições observados:
+As estimativas se baseiam nos padrões médios de requisições observados:
 
 - GLM-5/5.1 — 700 tokens de entrada, 52.000 em cache, 150 tokens de saída por requisição
 - Kimi K2.5/K2.6 — 870 tokens de entrada, 55.000 em cache, 200 tokens de saída por requisição
@@ -114,6 +114,23 @@ As estimativas baseiam-se nos padrões médios de requisições observados:
 - Qwen3.6 Plus — 500 tokens de entrada, 57.000 em cache, 190 tokens de saída por requisição
 - MiMo-V2.5 — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
 - MiMo-V2.5-Pro — 790 tokens de entrada, 86.000 em cache, 305 tokens de saída por requisição
+
+As estimativas também se baseiam nos seguintes preços por 1M tokens:
+
+| Modelo            | Entrada | Saída | Leitura em cache | Escrita em cache |
+| ----------------- | ------- | ----- | ---------------- | ---------------- |
+| GLM-5.1           | $1.40   | $4.40 | $0.26            | -                |
+| GLM-5             | $1.00   | $3.20 | $0.20            | -                |
+| Kimi K2.6         | $0.95   | $4.00 | $0.16            | -                |
+| Kimi K2.5         | $0.60   | $3.00 | $0.10            | -                |
+| MiMo V2.5         | $0.14   | $0.28 | $0.0028          | -                |
+| MiMo V2.5 Pro     | $1.74   | $3.48 | $0.0145          | -                |
+| MiniMax M2.7      | $0.30   | $1.20 | $0.06            | $0.375           |
+| MiniMax M2.5      | $0.30   | $1.20 | $0.06            | $0.375           |
+| Qwen3.7 Max       | $2.50   | $7.50 | $0.50            | $3.125           |
+| Qwen3.6 Plus      | $0.50   | $3.00 | $0.05            | $0.625           |
+| DeepSeek V4 Pro   | $1.74   | $3.48 | $0.0145          | -                |
+| DeepSeek V4 Flash | $0.14   | $0.28 | $0.0028          | -                |
 
 Você pode acompanhar o seu uso atual no **<a href={console}>console</a>**.
 

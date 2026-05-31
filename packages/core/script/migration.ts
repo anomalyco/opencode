@@ -113,8 +113,10 @@ function escapeTemplate(line: string) {
 function renderRegistry(names: string[]) {
   return `import type { DatabaseMigration } from "./migration"
 
-export const migrations = (await Promise.all([
-${names.map((name) => `  import("./migration/${name}"),`).join("\n")}
-])).map((module) => module.default) satisfies DatabaseMigration.Migration[]
+export const migrations = (
+  await Promise.all([
+${names.map((name) => `    import("./migration/${name}"),`).join("\n")}
+  ])
+).map((module) => module.default) satisfies DatabaseMigration.Migration[]
 `
 }
