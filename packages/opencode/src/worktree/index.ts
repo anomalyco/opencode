@@ -386,7 +386,12 @@ export const layer: Layer.Layer<
       return Effect.tryPromise({
         try: () =>
           import("fs/promises").then((fsp) =>
-            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+            fsp.rm(target, {
+              recursive: true,
+              force: true,
+              maxRetries: process.platform === "win32" ? 50 : 5,
+              retryDelay: 100,
+            }),
           ),
         catch: (error) =>
           new RemoveFailedError({ message: errorMessage(error) || "Failed to remove git worktree directory" }),
