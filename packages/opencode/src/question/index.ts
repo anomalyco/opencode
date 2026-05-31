@@ -75,13 +75,13 @@ export const Reply = Schema.Struct({
 }).annotate({ identifier: "QuestionReply" })
 export type Reply = Schema.Schema.Type<typeof Reply>
 
-const Replied = Schema.Struct({
+export const Replied = Schema.Struct({
   sessionID: SessionID,
   requestID: QuestionID,
   answers: Schema.Array(Answer),
 }).annotate({ identifier: "QuestionReplied" })
 
-const Rejected = Schema.Struct({
+export const Rejected = Schema.Struct({
   sessionID: SessionID,
   requestID: QuestionID,
 }).annotate({ identifier: "QuestionRejected" })
