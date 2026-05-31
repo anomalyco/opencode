@@ -244,7 +244,7 @@ export const layer = Layer.effect(
     })
 
     const prepareModelMessages = Effect.fn("SessionCompaction.prepareModelMessages")(function* (input: {
-      messages: MessageV2.WithParts[]
+      messages: SessionLegacy.WithParts[]
       model: Provider.Model
       cfg: Config.Info
       prompt: string
