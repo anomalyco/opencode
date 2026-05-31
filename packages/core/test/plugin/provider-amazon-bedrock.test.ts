@@ -1,7 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
 
 function bedrockBaseURL(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
@@ -20,27 +22,30 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("moves endpoint option to endpoint URL", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
       yield* plugin.add(AmazonBedrockPlugin)
-      const result = yield* plugin.trigger(
-        "provider.update",
-        {},
-        {
-          provider: provider("amazon-bedrock", {
-            options: {
-              headers: {},
-              body: {},
-              aisdk: { provider: { endpoint: "https://bedrock.example" }, request: {} },
-            },
-          }),
-          cancel: false,
-        },
-      )
-      expect(result.provider.endpoint).toEqual({
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
+        const bedrock = provider("amazon-bedrock", {
+          endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
+          options: {
+            headers: {},
+            body: {},
+            aisdk: { provider: { endpoint: "https://bedrock.example" }, request: {} },
+          },
+        })
+        catalog.provider.update(bedrock.id, (item) => {
+          item.endpoint = bedrock.endpoint
+          item.options = bedrock.options
+        })
+      })
+      const result = yield* catalog.provider.get(ProviderV2.ID.amazonBedrock)
+      expect(result.endpoint).toEqual({
         type: "aisdk",
-        package: "test-provider",
+        package: "@ai-sdk/amazon-bedrock",
         url: "https://bedrock.example",
       })
-      expect(result.provider.options.aisdk.provider.endpoint).toBeUndefined()
+      expect(result.options.aisdk.provider.endpoint).toBeUndefined()
     }),
   )
 

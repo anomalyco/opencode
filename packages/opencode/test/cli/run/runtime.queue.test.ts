@@ -60,8 +60,8 @@ function footer() {
     api,
     events,
     commits,
-    submit(text: string) {
-      const next = { text, parts: [] as RunPrompt["parts"] }
+    submit(text: string, mode?: RunPrompt["mode"]) {
+      const next = mode ? { text, parts: [] as RunPrompt["parts"], mode } : { text, parts: [] as RunPrompt["parts"] }
       for (const fn of [...prompts]) {
         fn(next)
       }
@@ -135,6 +135,64 @@ describe("run runtime queue", () => {
         source: "system",
       },
     ])
+  })
+
+  test("shell mode submits /exit as a shell command", async () => {
+    const ui = footer()
+    const seen: RunPrompt[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        seen.push(input)
+        ui.api.close()
+      },
+    })
+
+    ui.submit("/exit", "shell")
+    await task
+
+    expect(seen).toEqual([{ text: "/exit", parts: [], mode: "shell" }])
+    expect(ui.commits).toEqual([])
+  })
+
+  test("shell mode submits /new instead of creating a session", async () => {
+    const ui = footer()
+    const seen: RunPrompt[] = []
+    let created = 0
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onNewSession: async () => {
+        created += 1
+      },
+      run: async (input) => {
+        seen.push(input)
+        ui.api.close()
+      },
+    })
+
+    ui.submit("/new", "shell")
+    await task
+
+    expect(created).toBe(0)
+    expect(seen).toEqual([{ text: "/new", parts: [], mode: "shell" }])
+    expect(ui.commits).toEqual([])
+  })
+
+  test("shell mode does not append a synthetic user row", async () => {
+    const ui = footer()
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async () => {
+        expect(ui.commits).toEqual([])
+        ui.api.close()
+      },
+    })
+
+    ui.submit("ls", "shell")
+    await task
   })
 
   test("preserves whitespace for initial input", async () => {

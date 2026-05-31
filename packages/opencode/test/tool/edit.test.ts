@@ -8,7 +8,7 @@ import { LSP } from "@/lsp/lsp"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as Tool from "../../src/tool/tool"
@@ -34,7 +34,7 @@ const layer = Layer.mergeAll(
   LSP.defaultLayer,
   AppFileSystem.defaultLayer,
   Format.defaultLayer,
-  Bus.layer,
+  EventV2Bridge.defaultLayer,
   Truncate.defaultLayer,
   Agent.defaultLayer,
 )
@@ -83,10 +83,13 @@ const makeDirectory = Effect.fn("EditToolTest.makeDirectory")(function* (p: stri
 })
 
 const onceBus = Effect.fn("EditToolTest.onceBus")(function* (def: typeof FileWatcher.Event.Updated) {
-  const bus = yield* Bus.Service
+  const events = yield* EventV2Bridge.Service
   const deferred = yield* Deferred.make<void>()
-  const unsub = yield* bus.subscribeCallback(def, () => Effect.runSync(Deferred.succeed(deferred, undefined)))
-  yield* Effect.addFinalizer(() => Effect.sync(unsub))
+  const unsub = yield* events.listen((event) => {
+    if (event.type === def.type) Deferred.doneUnsafe(deferred, Effect.void)
+    return Effect.void
+  })
+  yield* Effect.addFinalizer(() => unsub)
   return deferred
 })
 

@@ -39,7 +39,6 @@ import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter as createIpRateLimiter } from "./ipRateLimiter"
 import { createRateLimiter as createKeyRateLimiter } from "./keyRateLimiter"
-import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
@@ -48,6 +47,7 @@ import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createModelTpmLimiter } from "./modelTpmLimiter"
 import { createModelTpsLimiter } from "./modelTpsLimiter"
+import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -103,7 +103,6 @@ export async function handler(
     const zenApiKey = rawZenApiKey === "public" ? undefined : rawZenApiKey
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
-    const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
@@ -116,16 +115,16 @@ export async function handler(
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
-    const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, sessionId)
-    const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo, zenApiKey)
+    const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
+    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
+    const stickyProvider = await stickyTracker?.get()
     const billingSource = validateBilling(authInfo, modelInfo)
     logger.metric({ source: billingSource })
     const modelTpmLimiter = createModelTpmLimiter(modelInfo.providers)
@@ -139,8 +138,7 @@ export async function handler(
         zenData,
         authInfo,
         modelInfo,
-        ip,
-        sessionId,
+        stickyId,
         trialProviders,
         retry,
         stickyProvider,
@@ -167,9 +165,8 @@ export async function handler(
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
                   if (typeof v === "string") {
-                    if (v === "$ip") return [[k, ip]]
                     if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
-                    if (v === "$session") return sessionId ? [[k, sessionId]] : []
+                    if (v === "$user") return stickyId ? [[k, stickyId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
                       return headerValue ? [[k, headerValue]] : []
@@ -188,7 +185,7 @@ export async function handler(
         method: "POST",
         headers: (() => {
           const headers = new Headers(input.request.headers)
-          providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
+          providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
           })
@@ -233,10 +230,6 @@ export async function handler(
 
     const { providerInfo, reqBody, res, startTimestamp } = await retriableRequest()
 
-    // Store model request
-    dataDumper?.provideModel(providerInfo.storeModel)
-    dataDumper?.provideRequest(reqBody)
-
     // Store sticky provider
     if (res.status === 200) await stickyTracker?.set(providerInfo.id)
 
@@ -257,8 +250,9 @@ export async function handler(
     if (!isStream || [400, 404, 429].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
-      if (json.usage) {
-        const usageInfo = providerInfo.normalizeUsage(json.usage)
+      const usage = providerInfo.extractUsage(json)
+      if (usage) {
+        const usageInfo = providerInfo.normalizeUsage(usage)
         const costInfo = calculateCost(modelInfo, usageInfo)
         await trialLimiter?.track(usageInfo)
         await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
@@ -277,8 +271,6 @@ export async function handler(
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
-      dataDumper?.provideResponse(body)
-      dataDumper?.flush()
       return new Response(body, {
         status: resStatus,
         statusText: res.statusText,
@@ -309,7 +301,6 @@ export async function handler(
                   response_length: responseLength,
                   "timestamp.last_byte": timestampLastByte,
                 })
-                dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
@@ -347,7 +338,6 @@ export async function handler(
 
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
-              dataDumper?.provideStream(buffer)
 
               const parts = buffer.split(providerInfo.streamSeparator)
               buffer = parts.pop() ?? ""
@@ -486,13 +476,12 @@ export async function handler(
     zenData: ZenData,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
-    ip: string,
-    sessionId: string,
+    stickyId: string,
     trialProviders: string[] | undefined,
     retry: RetryOptions,
-    stickyProvider: string | undefined,
+    stickyProviderId: string | undefined,
     modelTpmLimits: Record<string, number> | undefined,
-    modelTpsLimits: Record<string, boolean> | undefined,
+    modelTpsLimits: Record<string, { qualify: number; unqualify: number }> | undefined,
   ) {
     const modelProvider = (() => {
       // Byok is top priority b/c if user set their own API key, we should use it
@@ -501,22 +490,18 @@ export async function handler(
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
-      // Always use the same provider for the same session
-      if (stickyProvider) {
-        const provider = modelInfo.providers.find((provider) => provider.id === stickyProvider)
-        if (provider) return provider
-      }
-
+      // Prioritize trial providers
+      let allProviders = modelInfo.providers.filter((provider) => !provider.disabled)
       if (trialProviders) {
-        const trialProvider = trialProviders[Math.floor(Math.random() * trialProviders.length)]
-        const provider = modelInfo.providers.find((provider) => provider.id === trialProvider)
-        if (provider) return provider
+        allProviders = allProviders.map((provider) => ({
+          ...provider,
+          priority: trialProviders.includes(provider.id) ? 0 : provider.priority,
+        }))
       }
 
       if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
         let topPriority = Infinity
-        const providers = modelInfo.providers
-          .filter((provider) => !provider.disabled)
+        const providers = allProviders
           .filter((provider) => provider.weight !== 0)
           .filter((provider) => !retry.excludeProviders.includes(provider.id))
           .filter((provider) => {
@@ -526,7 +511,11 @@ export async function handler(
           })
           .filter((provider) => {
             if (!provider.tpsGoal) return true
-            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? false
+            const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
+              qualify: 0,
+              unqualify: 0,
+            }
+            const isLowTps = tps.qualify + tps.unqualify > 10 && tps.qualify < tps.unqualify
             return !isLowTps
           })
           .map((provider) => {
@@ -537,19 +526,34 @@ export async function handler(
           .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
         // Use the last 4 characters of session ID to select a provider
-        const identifier = sessionId.length ? sessionId : ip
         let h = 0
-        const l = identifier.length
+        const l = stickyId.length
         for (let i = l - 4; i < l; i++) {
-          h = (h * 31 + identifier.charCodeAt(i)) | 0 // 32-bit int
+          h = (h * 31 + stickyId.charCodeAt(i)) | 0 // 32-bit int
         }
         const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
         const provider = providers[index || 0]
-        if (provider) return provider
+
+        // sticky provider does not exist => use selected provider
+        if (!stickyProviderId) return provider
+        const stickProvider = allProviders.find((provider) => provider.id === stickyProviderId)
+        if (!stickProvider) return provider
+
+        // stick provider exists + selected provider is API type => use sticky provider
+        if (!provider.tpsGoal) return stickProvider
+
+        // stick provier exists + selected provider is GPU type + GPU not idle => use selected provider
+        const tps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? {
+          qualify: 0,
+          unqualify: 0,
+        }
+        if (tps.qualify <= tps.unqualify * 3) return stickProvider
+
+        return provider
       }
 
       // fallback provider
-      return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
+      return allProviders.find((provider) => provider.id === modelInfo.fallbackProvider)
     })()
 
     if (!modelProvider) throw new ModelError(t("zen.api.error.noProviderAvailable"))
@@ -978,6 +982,19 @@ export async function handler(
     authInfo = authInfo!
 
     const cost = centsToMicroCents(totalCostInCent)
+
+    // For hot workspaces, batch balance/usage updates through Redis to avoid
+    // row-level lock contention on BillingTable/UserTable. Returns the amount
+    // to flush this request, or null to skip the DB writes entirely.
+    const balanceFlush = await (async () => {
+      if (billingSource !== "subscription" && billingSource !== "lite" && HOT_WORKSPACES.has(authInfo.workspaceID)) {
+        const workspaceCost = billingSource === "free" || billingSource === "byok" ? 0 : cost
+        const flush = await accumulateUsage(authInfo.workspaceID, authInfo.user.id, workspaceCost, cost)
+        return { batched: true as const, flush }
+      }
+      return { batched: false as const, flush: null }
+    })()
+
     await Database.use((db) =>
       Promise.all([
         db.insert(UsageTable).values({
@@ -1001,10 +1018,6 @@ export async function handler(
             return undefined
           })(),
         }),
-        db
-          .update(KeyTable)
-          .set({ timeUsed: sql`now()` })
-          .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
         ...(() => {
           if (billingSource === "subscription") {
             const plan = authInfo.billing.subscription!.plan
@@ -1083,18 +1096,22 @@ export async function handler(
             ]
           }
 
+          // Batched hot workspace: skip DB writes unless this request is the flush.
+          if (balanceFlush.batched && !balanceFlush.flush) return []
+
+          const workspaceDelta = balanceFlush.flush?.workspaceCost ?? cost
+          const userDelta = balanceFlush.flush?.userCost ?? cost
+          const balanceDelta = billingSource === "free" || billingSource === "byok" ? 0 : workspaceDelta
+
           return [
             db
               .update(BillingTable)
               .set({
-                balance:
-                  billingSource === "free" || billingSource === "byok"
-                    ? sql`${BillingTable.balance} - ${0}`
-                    : sql`${BillingTable.balance} - ${cost}`,
+                balance: sql`${BillingTable.balance} - ${balanceDelta}`,
                 monthlyUsage: sql`
               CASE
-                WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${workspaceDelta}
+                ELSE ${workspaceDelta}
               END
             `,
                 timeMonthlyUsageUpdated: sql`now()`,
@@ -1105,8 +1122,8 @@ export async function handler(
               .set({
                 monthlyUsage: sql`
               CASE
-                WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${userDelta}
+                ELSE ${userDelta}
               END
             `,
                 timeMonthlyUsageUpdated: sql`now()`,
