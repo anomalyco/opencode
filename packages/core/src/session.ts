@@ -2,7 +2,7 @@ export * as SessionV2 from "./session"
 export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context } from "effect"
-import { and, asc, desc, eq, gt, gte, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -35,6 +35,9 @@ export type ListCursor = typeof ListCursor.Type
 
 const ListInputBase = {
   workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
+  roots: Schema.Boolean.pipe(Schema.optional),
+  start: Schema.Finite.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
   limit: Schema.Int.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
@@ -209,6 +212,11 @@ export const layer = Layer.effect(
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
+        if (input.path) {
+          conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
+        }
+        if (input.roots) conditions.push(isNull(SessionTable.parent_id))
+        if (input.start) conditions.push(gte(sortColumn, input.start))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.cursor) {
           conditions.push(

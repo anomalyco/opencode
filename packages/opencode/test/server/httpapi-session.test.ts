@@ -435,6 +435,43 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "honors v2 session list filters",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const nestedDir = path.join(test.directory, "packages", "opencode", "src")
+        yield* Effect.promise(() => mkdir(nestedDir, { recursive: true }))
+
+        const parent = yield* createSession({ title: "v2 parent" })
+        const child = yield* createSession({ title: "v2 child", parentID: parent.id })
+        const nested = yield* createSession({ title: "v2 nested" }).pipe(provideInstanceEffect(nestedDir))
+
+        const roots = yield* requestJson<{ items: Array<{ id: string }> }>("/api/session?roots=true&limit=20", {
+          headers,
+        })
+        const rootIDs = roots.items.map((session) => session.id)
+        expect(rootIDs).toContain(parent.id)
+        expect(rootIDs).not.toContain(child.id)
+
+        const future = yield* requestJson<{ items: Array<{ id: string }> }>(
+          `/api/session?start=${Date.now() + 86_400_000}&limit=20`,
+          { headers },
+        )
+        expect(future.items.map((session) => session.id)).not.toContain(parent.id)
+
+        const pathFiltered = yield* requestJson<{ items: Array<{ id: string }> }>(
+          "/api/session?path=packages/opencode&limit=20",
+          { headers },
+        )
+        const pathIDs = pathFiltered.items.map((session) => session.id)
+        expect(pathIDs).toContain(nested.id)
+        expect(pathIDs).not.toContain(parent.id)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>
       Effect.gen(function* () {

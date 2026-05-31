@@ -119,6 +119,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
             limit: ctx.query.limit ?? DefaultSessionsLimit,
             order,
             workspaceID: filters.workspaceID,
+            path: filters.path,
+            roots: filters.roots,
+            start: filters.start,
             search: filters.search,
             cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
           }
