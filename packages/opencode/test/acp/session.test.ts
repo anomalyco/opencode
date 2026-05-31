@@ -1,16 +1,16 @@
 import { describe, expect } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as ACPError from "@/acp/error"
 import * as ACPSession from "@/acp/session"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { testEffect } from "../lib/effect"
 
 const sessionTest = testEffect(ACPSession.defaultLayer)
 
 const model = (providerID: string, modelID: string): ACPSession.SelectedModel => ({
-  providerID: ProviderID.make(providerID),
-  modelID: ModelID.make(modelID),
+  providerID: ProviderV2.ID.make(providerID),
+  modelID: ProviderV2.ModelID.make(modelID),
 })
 
 const mcpServer: McpServer = {

@@ -21,6 +21,7 @@ export default {
       )
         continue
 
+      const ip = event.event.request.headers["x-real-ip"]
       let data: Record<string, unknown> = {
         "cf.continent": event.event.request.cf?.continent,
         "cf.country": event.event.request.cf?.country,
@@ -32,7 +33,8 @@ export default {
         duration: event.wallTime,
         request_length: parseInt(event.event.request.headers["content-length"] ?? "0"),
         status: event.event.response?.status ?? 0,
-        ip: event.event.request.headers["x-real-ip"],
+        ip,
+        "ip.prefix": ipPrefix(ip),
       }
       const time = new Date(event.eventTimestamp ?? Date.now()).toISOString()
       const events = [
@@ -110,6 +112,7 @@ function toLakeEvent(time: string, data: Record<string, unknown>) {
     request_length: integer(data, "request_length"),
     status: integer(data, "status"),
     ip: string(data, "ip"),
+    ip_prefix: string(data, "ip.prefix"),
     is_stream: boolean(data, "is_stream"),
     session: string(data, "session"),
     request: string(data, "request"),
@@ -146,13 +149,33 @@ function toLakeEvent(time: string, data: Record<string, unknown>) {
     cost_cache_read_microcents: integer(data, "cost.cache_read.microcents"),
     cost_cache_write_microcents: integer(data, "cost.cache_write.microcents"),
     cost_total_microcents: integer(data, "cost.total.microcents"),
-    cost_input: integer(data, "cost.input"),
-    cost_output: integer(data, "cost.output"),
-    cost_cache_read: integer(data, "cost.cache_read"),
-    cost_cache_write_5m: integer(data, "cost.cache_write_5m"),
-    cost_cache_write_1h: integer(data, "cost.cache_write_1h"),
-    cost_total: integer(data, "cost.total"),
   }
+}
+
+// Returns a stable lookup key for an IP address.
+// IPv4: full address as /32 (e.g. "203.0.113.45/32").
+// IPv6: the /64 network prefix (e.g. "2001:db8:abcd:1234::/64"). ISPs commonly
+// rotate the lower 64 host bits via SLAAC privacy extensions (RFC 8981), so
+// grouping by /64 collapses those rotations into one key.
+function ipPrefix(ip: string | undefined) {
+  if (!ip) return undefined
+  if (ip.includes(".") && !ip.includes(":")) return `${ip}/32`
+  if (!ip.includes(":")) return undefined
+
+  // Expand "::" to its full form, then keep the first 4 hextets.
+  const [head, tail] = ip.split("::") as [string, string | undefined]
+  const headParts = head ? head.split(":") : []
+  const tailParts = tail !== undefined ? tail.split(":") : []
+  const missing = 8 - headParts.length - tailParts.length
+  if (missing < 0) return undefined
+  const full = [...headParts, ...new Array(missing).fill("0"), ...tailParts]
+  if (full.length !== 8) return undefined
+
+  const prefix = full
+    .slice(0, 4)
+    .map((part) => part.toLowerCase().replace(/^0+(?=.)/, ""))
+    .join(":")
+  return `${prefix}::/64`
 }
 
 function string(data: Record<string, unknown>, key: string) {

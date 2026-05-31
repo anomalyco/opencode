@@ -4,8 +4,8 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { readdir, realpath } from "fs/promises"
 import path from "path"
-import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -22,13 +22,13 @@ const log = Log.create({ service: "file.watcher" })
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
 export const Event = {
-  Updated: BusEvent.define(
-    "file.watcher.updated",
-    Schema.Struct({
+  Updated: EventV2.define({
+    type: "file.watcher.updated",
+    schema: {
       file: Schema.String,
       event: Schema.Literals(["add", "change", "unlink"]),
-    }),
-  ),
+    },
+  }),
 }
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
@@ -69,6 +69,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const git = yield* Git.Service
+    const events = yield* EventV2Bridge.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("FileWatcher.state")(
@@ -98,9 +99,9 @@ export const layer = Layer.effect(
           const cb: ParcelWatcher.SubscribeCallback = bridge.bind((err, evts) => {
             // if (err) return
             for (const evt of evts) {
-              if (evt.type === "create") void Bus.publish(ctx, Event.Updated, { file: evt.path, event: "add" })
-              if (evt.type === "update") void Bus.publish(ctx, Event.Updated, { file: evt.path, event: "change" })
-              if (evt.type === "delete") void Bus.publish(ctx, Event.Updated, { file: evt.path, event: "unlink" })
+              if (evt.type === "create") bridge.fork(events.publish(Event.Updated, { file: evt.path, event: "add" }))
+              if (evt.type === "update") bridge.fork(events.publish(Event.Updated, { file: evt.path, event: "change" }))
+              if (evt.type === "delete") bridge.fork(events.publish(Event.Updated, { file: evt.path, event: "unlink" }))
             }
           })
 
@@ -162,6 +163,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Git.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Config.defaultLayer),
+  Layer.provide(Git.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
+)
 
 export * as FileWatcher from "./watcher"

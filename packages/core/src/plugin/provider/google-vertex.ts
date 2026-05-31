@@ -59,7 +59,7 @@ export const GoogleVertexPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (
             item.provider.endpoint.package !== "@ai-sdk/google-vertex" &&
@@ -110,7 +110,7 @@ export const GoogleVertexAnthropicPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (item.provider.endpoint.package !== "@ai-sdk/google-vertex/anthropic") continue
           const project =

@@ -9,6 +9,7 @@ import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Config } from "@/config/config"
 import { FileWatcher } from "../../src/file/watcher"
 import { Git } from "../../src/git"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 // Native @parcel/watcher bindings aren't reliably available in CI (missing on Linux, flaky on Windows)
 const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -27,6 +28,7 @@ const watcherConfigLayer = ConfigProvider.layer(
 const watcherLayer = FileWatcher.layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(Git.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(watcherConfigLayer),
 )
 

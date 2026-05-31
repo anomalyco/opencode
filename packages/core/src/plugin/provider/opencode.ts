@@ -8,7 +8,7 @@ export const OpencodePlugin = PluginV2.define({
     let hasKey = false
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        const item = evt.data.find((record) => record.provider.id === ProviderV2.ID.opencode)
+        const item = evt.provider.get(ProviderV2.ID.opencode)
         if (!item) return
         hasKey = Boolean(
           process.env.OPENCODE_API_KEY ||

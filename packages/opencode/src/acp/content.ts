@@ -1,9 +1,9 @@
 import type { ContentBlock, ContentChunk, ResourceLink, Role } from "@agentclientprotocol/sdk"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import type { MessageV2 } from "@/session/message-v2"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 
-export type PromptPart = MessageV2.TextPartInput | MessageV2.FilePartInput
+export type PromptPart = SessionLegacy.TextPartInput | SessionLegacy.FilePartInput
 
 export type ReplayPart =
   | {
@@ -141,7 +141,7 @@ function uriToFilePart(
   uri: string,
   mime: string,
   filename?: string,
-): MessageV2.FilePartInput | MessageV2.TextPartInput {
+): SessionLegacy.FilePartInput | SessionLegacy.TextPartInput {
   try {
     if (uri.startsWith("file://")) {
       return {

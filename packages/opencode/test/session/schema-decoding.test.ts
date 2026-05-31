@@ -8,8 +8,8 @@ import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { Todo } from "../../src/session/todo"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
-import { ProjectID } from "../../src/project/schema"
-import { WorkspaceID } from "../../src/control-plane/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 
 // Covers the session-domain Effect Schema migration. For each migrated
 // schema we assert:
@@ -22,8 +22,8 @@ const sessionID = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3
 const sessionIDChild = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
 const messageID = Schema.decodeUnknownSync(MessageID)("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
 const partID = Schema.decodeUnknownSync(PartID)("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
-const projectID = ProjectID.make("proj-alpha")
-const workspaceID = Schema.decodeUnknownSync(WorkspaceID)("wrk-primary")
+const projectID = ProjectV2.ID.make("proj-alpha")
+const workspaceID = Schema.decodeUnknownSync(WorkspaceV2.ID)("wrk-primary")
 
 function decodeUnknown<S extends Schema.Top>(schema: S) {
   const decode = Schema.decodeUnknownSync(schema as any)
@@ -64,6 +64,7 @@ describe("Session.Info", () => {
       share: { url: "https://share.example.com/s/1" },
       title: "Full session",
       version: "1.0.0",
+      metadata: { source: "test" },
       time: { created: 100, updated: 200, compacting: 150, archived: 300 },
       permission: [{ action: "allow" as const, pattern: "*", permission: "read" }],
       revert: {
@@ -157,6 +158,7 @@ describe("Session input schemas", () => {
     const populated = {
       parentID: sessionID,
       title: "child",
+      metadata: { source: "test" },
       permission: [{ action: "ask" as const, pattern: "*", permission: "bash" }],
       workspaceID,
     }

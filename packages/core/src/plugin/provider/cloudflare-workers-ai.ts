@@ -11,7 +11,7 @@ export const CloudflareWorkersAIPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        const item = evt.data.find((record) => record.provider.id === providerID)
+        const item = evt.provider.get(providerID)
         if (!item) return
         evt.provider.update(item.provider.id, (provider) => {
           if (provider.endpoint.type !== "aisdk") return

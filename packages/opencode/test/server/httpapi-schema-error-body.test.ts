@@ -1,19 +1,23 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { HttpClientResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
-import * as Database from "@/storage/db"
-import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Server } from "../../src/server/server"
+import { Database } from "@opencode-ai/core/database/database"
+
 import { Session } from "@/session/session"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
 import { MessageID, PartID } from "../../src/session/schema"
-import { PartTable } from "@/session/session.sql"
+import { PartTable } from "@opencode-ai/core/session/sql"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Session.defaultLayer)
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
+
+const text = (response: HttpClientResponse.HttpClientResponse) => response.text
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -28,7 +32,7 @@ const seedCorruptStepFinishPart = Effect.gen(function* () {
     role: "user",
     sessionID: info.id,
     agent: "build",
-    model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+    model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
     time: { created: Date.now() },
   })
   const partID = PartID.ascending()
@@ -43,22 +47,20 @@ const seedCorruptStepFinishPart = Effect.gen(function* () {
   })
   // Schema.Finite still rejects NaN at encode: exact mirror of the corrupt row
   // that broke the user's session in the OMO/Windows bug.
-  yield* Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .update(PartTable)
-        .set({
-          data: {
-            type: "step-finish",
-            reason: "stop",
-            cost: 0,
-            tokens: { input: 0, output: NaN, reasoning: 0, cache: { read: 0, write: 0 } },
-          } as never, // drizzle's .set() can't narrow the discriminated union
-        })
-        .where(eq(PartTable.id, partID))
-        .run(),
-    ),
-  )
+  const { db } = yield* Database.Service
+  yield* db
+    .update(PartTable)
+    .set({
+      data: {
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: { input: 0, output: NaN, reasoning: 0, cache: { read: 0, write: 0 } },
+      } as never, // drizzle's .set() can't narrow the discriminated union
+    })
+    .where(eq(PartTable.id, partID))
+    .run()
+    .pipe(Effect.orDie)
   return info.id
 })
 
@@ -68,16 +70,14 @@ describe("schema-rejection wire shape", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        const res = yield* Effect.promise(async () =>
-          Server.Default().app.request(SyncPaths.history, {
-            method: "POST",
-            headers: { "x-opencode-directory": test.directory, "content-type": "application/json" },
-            body: JSON.stringify({ aggregate: -1 }),
-          }),
-        )
-        const body = yield* Effect.promise(async () => res.text())
+        const res = yield* requestInDirectory(SyncPaths.history, test.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ aggregate: -1 }),
+        })
+        const body = yield* text(res)
         expect(res.status).toBe(400)
-        expect(res.headers.get("content-type") ?? "").toContain("application/json")
+        expect(res.headers["content-type"] ?? "").toContain("application/json")
         const parsed = JSON.parse(body)
         expect(parsed).toMatchObject({
           name: "BadRequest",
@@ -96,8 +96,8 @@ describe("schema-rejection wire shape", () => {
         const test = yield* TestInstance
         // /find/file?limit=999999 violates the limit constraint check.
         const url = `/find/file?query=foo&limit=999999&directory=${encodeURIComponent(test.directory)}`
-        const res = yield* Effect.promise(async () => Server.Default().app.request(url))
-        const body = yield* Effect.promise(async () => res.text())
+        const res = yield* requestInDirectory(url, test.directory)
+        const body = yield* text(res)
         expect(res.status).toBe(400)
         const parsed = JSON.parse(body)
         expect(parsed).toMatchObject({ name: "BadRequest", data: { kind: "Query" } })
@@ -110,12 +110,8 @@ describe("schema-rejection wire shape", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        const res = yield* Effect.promise(async () =>
-          Server.Default().app.request("/api/session?limit=0", {
-            headers: { "x-opencode-directory": test.directory },
-          }),
-        )
-        const parsed = JSON.parse(yield* Effect.promise(async () => res.text()))
+        const res = yield* requestInDirectory("/api/session?limit=0", test.directory)
+        const parsed = JSON.parse(yield* text(res))
         expect(res.status).toBe(400)
         expect(parsed).toMatchObject({ _tag: "InvalidRequestError", kind: "Query" })
         expect(parsed.message).toEqual(expect.any(String))
@@ -132,14 +128,12 @@ describe("schema-rejection wire shape", () => {
       Effect.gen(function* () {
         const test = yield* TestInstance
         const huge = "X".repeat(50_000)
-        const res = yield* Effect.promise(async () =>
-          Server.Default().app.request(SyncPaths.history, {
-            method: "POST",
-            headers: { "x-opencode-directory": test.directory, "content-type": "application/json" },
-            body: JSON.stringify({ aggregate: huge }),
-          }),
-        )
-        const body = yield* Effect.promise(async () => res.text())
+        const res = yield* requestInDirectory(SyncPaths.history, test.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ aggregate: huge }),
+        })
+        const body = yield* text(res)
         expect(res.status).toBe(400)
         // 1 KB cap + small JSON envelope ≈ <2 KB — never tens of KB.
         expect(body.length).toBeLessThan(2 * 1024)
@@ -156,10 +150,10 @@ describe("schema-rejection wire shape", () => {
         const test = yield* TestInstance
         const sessionID = yield* seedCorruptStepFinishPart
         const url = `${SessionPaths.messages.replace(":sessionID", sessionID)}?limit=80&directory=${encodeURIComponent(test.directory)}`
-        const res = yield* Effect.promise(async () => Server.Default().app.request(url))
-        const body = yield* Effect.promise(async () => res.text())
+        const res = yield* requestInDirectory(url, test.directory)
+        const body = yield* text(res)
         expect(res.status).toBe(400)
-        expect(res.headers.get("content-type") ?? "").toContain("application/json")
+        expect(res.headers["content-type"] ?? "").toContain("application/json")
         const parsed = JSON.parse(body)
         expect(parsed).toMatchObject({ name: "BadRequest", data: { kind: "Body" } })
         // Field path in data.message — what made this PR worth shipping.

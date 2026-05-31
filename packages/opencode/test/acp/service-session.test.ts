@@ -11,18 +11,18 @@ import type {
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Effect, ManagedRuntime } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
 import { ACPSession } from "@/acp/session"
 import { UsageService } from "@/acp/usage"
-import { ModelID, ProviderID } from "@/provider/schema"
 import type { Provider } from "@/provider/provider"
 
-const providerID = ProviderID.make("test")
-const modelID = ModelID.make("test-model")
-const configuredModelID = ModelID.make("configured-model")
-const secondModelID = ModelID.make("second-model")
+const providerID = ProviderV2.ID.make("test")
+const modelID = ProviderV2.ModelID.make("test-model")
+const configuredModelID = ProviderV2.ModelID.make("configured-model")
+const secondModelID = ProviderV2.ModelID.make("second-model")
 
 const provider: Provider.Info = {
   id: providerID,

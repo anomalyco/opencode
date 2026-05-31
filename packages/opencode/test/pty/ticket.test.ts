@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { WorkspaceID } from "../../src/control-plane/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { PtyID } from "../../src/pty/schema"
 import { PtyTicket } from "../../src/pty/ticket"
 import { testEffect } from "../lib/effect"
@@ -47,10 +47,12 @@ describe("PTY websocket tickets", () => {
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
       const ptyID = PtyID.ascending()
-      const workspaceID = WorkspaceID.ascending()
+      const workspaceID = WorkspaceV2.ID.ascending()
       const issued = yield* tickets.issue({ ptyID, workspaceID })
 
-      expect(yield* tickets.consume({ ptyID, workspaceID: WorkspaceID.ascending(), ticket: issued.ticket })).toBe(false)
+      expect(yield* tickets.consume({ ptyID, workspaceID: WorkspaceV2.ID.ascending(), ticket: issued.ticket })).toBe(
+        false,
+      )
       expect(yield* tickets.consume({ ptyID, workspaceID, ticket: issued.ticket })).toBe(true)
     }),
   )

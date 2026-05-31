@@ -1,4 +1,5 @@
 import type { Config } from "@/config/config"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
@@ -19,7 +20,7 @@ export function usable(input: { cfg: Config.Info; model: Provider.Model; outputT
 
 export function isOverflow(input: {
   cfg: Config.Info
-  tokens: MessageV2.Assistant["tokens"]
+  tokens: SessionLegacy.Assistant["tokens"]
   model: Provider.Model
   outputTokenMax?: number
 }) {

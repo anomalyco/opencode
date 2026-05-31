@@ -11,7 +11,6 @@
  */
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Server } from "@/server/server"
 import { SessionPaths } from "@/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
@@ -19,10 +18,11 @@ import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import * as Log from "@opencode-ai/core/util/log"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, Storage.defaultLayer))
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, Storage.defaultLayer, httpApiLayer))
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -51,16 +51,13 @@ describe("session diff with missing patch (#26574)", () => {
           storage.write(["session_diff", session.id], [{ file: "legacy.txt", additions: 1, deletions: 0 }]),
         )
 
-        const response = yield* Effect.promise(() =>
-          Promise.resolve(
-            Server.Default().app.request(pathFor(SessionPaths.diff, { sessionID: session.id }), {
-              headers: { "x-opencode-directory": test.directory },
-            }),
-          ),
+        const response = yield* requestInDirectory(
+          pathFor(SessionPaths.diff, { sessionID: session.id }),
+          test.directory,
         )
 
         expect(response.status).toBe(200)
-        const body = (yield* Effect.promise(() => response.json())) as Array<{
+        const body = (yield* response.json) as Array<{
           file: string
           patch?: string
           additions: number

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
 import { Plugin } from "../../src/plugin"
 import { Pty } from "../../src/pty"
@@ -11,7 +11,7 @@ type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
 
 const it = testEffect(
   Pty.layer.pipe(
-    Layer.provideMerge(Bus.layer),
+    Layer.provideMerge(EventV2Bridge.defaultLayer),
     Layer.provideMerge(Config.defaultLayer),
     Layer.provideMerge(Plugin.defaultLayer),
   ),
@@ -19,27 +19,19 @@ const it = testEffect(
 const ptyTest = process.platform === "win32" ? it.instance.skip : it.instance
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
-  const bus = yield* Bus.Service
+  const source = yield* EventV2Bridge.Service
   const events = yield* Queue.unbounded<PtyEvent>()
 
-  const subscribe = <A>(effect: Effect.Effect<() => void, never, A>) =>
-    Effect.acquireRelease(effect, (off) => Effect.sync(off))
-
-  yield* subscribe(
-    bus.subscribeCallback(Pty.Event.Created, (evt) => {
-      Queue.offerUnsafe(events, { type: "created", id: evt.properties.info.id })
-    }),
-  )
-  yield* subscribe(
-    bus.subscribeCallback(Pty.Event.Exited, (evt) => {
-      Queue.offerUnsafe(events, { type: "exited", id: evt.properties.id })
-    }),
-  )
-  yield* subscribe(
-    bus.subscribeCallback(Pty.Event.Deleted, (evt) => {
-      Queue.offerUnsafe(events, { type: "deleted", id: evt.properties.id })
-    }),
-  )
+  const unsubscribe = yield* source.listen((event) => {
+    if (event.type === Pty.Event.Created.type)
+      Queue.offerUnsafe(events, { type: "created", id: (event.data as typeof Pty.Event.Created.data.Type).info.id })
+    if (event.type === Pty.Event.Exited.type)
+      Queue.offerUnsafe(events, { type: "exited", id: (event.data as typeof Pty.Event.Exited.data.Type).id })
+    if (event.type === Pty.Event.Deleted.type)
+      Queue.offerUnsafe(events, { type: "deleted", id: (event.data as typeof Pty.Event.Deleted.data.Type).id })
+    return Effect.void
+  })
+  yield* Effect.addFinalizer(() => unsubscribe)
 
   return events
 })

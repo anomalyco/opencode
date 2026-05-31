@@ -15,7 +15,7 @@ export const AzurePlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (item.provider.endpoint.package !== "@ai-sdk/azure") continue
           const configured = item.provider.options.aisdk.provider.resourceName
@@ -58,7 +58,7 @@ export const AzureCognitiveServicesPlugin = PluginV2.define({
       "catalog.transform": Effect.fn(function* (evt) {
         const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
         if (!resourceName) return
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (item.provider.endpoint.package !== "@ai-sdk/openai-compatible") continue
           if (!item.provider.id.includes("azure-cognitive-services")) continue

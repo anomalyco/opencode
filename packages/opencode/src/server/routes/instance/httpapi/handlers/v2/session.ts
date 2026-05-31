@@ -1,5 +1,6 @@
-import { WorkspaceID } from "@/control-plane/schema"
-import { SessionV2 } from "@/v2/session"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
@@ -20,7 +21,7 @@ const SessionCursor = Schema.Struct({
   direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
   directory: Schema.String.pipe(Schema.optional),
   path: Schema.String.pipe(Schema.optional),
-  workspaceID: WorkspaceID.pipe(Schema.optional),
+  workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
   roots: Schema.Boolean.pipe(Schema.optional),
   start: Schema.Finite.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
@@ -78,7 +79,7 @@ const sessionCursor = {
 
 function decodeWorkspaceID(input: string | undefined) {
   if (input === undefined) return Effect.succeed(undefined)
-  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(input)
+  const workspaceID = Schema.decodeUnknownOption(WorkspaceV2.ID)(input)
   if (Option.isSome(workspaceID)) return Effect.succeed(workspaceID.value)
   return Effect.fail(
     new InvalidRequestError({
@@ -114,17 +115,21 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
             start: ctx.query.start,
             search: ctx.query.search,
           }
-          const sessions = yield* session.list({
+          const input = {
             limit: ctx.query.limit ?? DefaultSessionsLimit,
             order,
-            directory: filters.directory,
-            path: filters.path,
             workspaceID: filters.workspaceID,
-            roots: filters.roots,
-            start: filters.start,
             search: filters.search,
             cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
-          })
+          }
+          const sessions = yield* session.list(
+            filters.directory
+              ? {
+                  ...input,
+                  directory: AbsolutePath.make(filters.directory),
+                }
+              : input,
+          )
           const first = sessions[0]
           const last = sessions.at(-1)
           return {
@@ -168,7 +173,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "compact",
         Effect.fn(function* (ctx) {
-          yield* session.compact(ctx.params.sessionID).pipe(
+          yield* session.compact({ sessionID: ctx.params.sessionID }).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
                 new SessionNotFoundError({

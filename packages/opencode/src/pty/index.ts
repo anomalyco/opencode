@@ -1,5 +1,5 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -96,10 +96,10 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Pty
 }) {}
 
 export const Event = {
-  Created: BusEvent.define("pty.created", Schema.Struct({ info: Info })),
-  Updated: BusEvent.define("pty.updated", Schema.Struct({ info: Info })),
-  Exited: BusEvent.define("pty.exited", Schema.Struct({ id: PtyID, exitCode: NonNegativeInt })),
-  Deleted: BusEvent.define("pty.deleted", Schema.Struct({ id: PtyID })),
+  Created: EventV2.define({ type: "pty.created", schema: { info: Info } }),
+  Updated: EventV2.define({ type: "pty.updated", schema: { info: Info } }),
+  Exited: EventV2.define({ type: "pty.exited", schema: { id: PtyID, exitCode: NonNegativeInt } }),
+  Deleted: EventV2.define({ type: "pty.deleted", schema: { id: PtyID } }),
 }
 
 export interface Interface {
@@ -126,7 +126,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const plugin = yield* Plugin.Service
 
     function teardown(session: Active) {
@@ -173,7 +173,7 @@ export const layer = Layer.effect(
       s.sessions.delete(id)
       log.info("removing session", { id })
       teardown(session)
-      yield* bus.publish(Event.Deleted, { id: session.info.id })
+      yield* events.publish(Event.Deleted, { id: session.info.id })
     })
 
     const list = Effect.fn("Pty.list")(function* () {
@@ -269,10 +269,10 @@ export const layer = Layer.effect(
         if (session.info.status === "exited") return
         log.info("session exited", { id, exitCode })
         session.info.status = "exited"
-        bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
+        bridge.fork(events.publish(Event.Exited, { id, exitCode }))
         bridge.fork(remove(id))
       })
-      yield* bus.publish(Event.Created, { info })
+      yield* events.publish(Event.Created, { info })
       return info
     })
 
@@ -284,7 +284,7 @@ export const layer = Layer.effect(
       if (input.size) {
         session.process.resize(input.size.cols, input.size.rows)
       }
-      yield* bus.publish(Event.Updated, { info: session.info })
+      yield* events.publish(Event.Updated, { info: session.info })
       return session.info
     })
 
@@ -369,7 +369,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Bus.layer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Plugin.defaultLayer),
   Layer.provide(Config.defaultLayer),
 )

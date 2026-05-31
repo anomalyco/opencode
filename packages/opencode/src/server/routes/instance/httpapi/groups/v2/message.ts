@@ -1,5 +1,5 @@
 import { SessionID } from "@/session/schema"
-import { SessionMessage } from "@opencode-ai/core/session-message"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"

@@ -5,7 +5,7 @@ import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
-import { Bus } from "../bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
@@ -29,7 +29,7 @@ export const WriteTool = Tool.define(
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
     const fs = yield* AppFileSystem.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const format = yield* Format.Service
 
     return {
@@ -65,8 +65,8 @@ export const WriteTool = Tool.define(
           if (yield* format.file(filepath)) {
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }
-          yield* bus.publish(File.Event.Edited, { file: filepath })
-          yield* bus.publish(FileWatcher.Event.Updated, {
+          yield* events.publish(File.Event.Edited, { file: filepath })
+          yield* events.publish(FileWatcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",
           })

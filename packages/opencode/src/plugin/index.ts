@@ -6,7 +6,6 @@ import type {
   WorkspaceAdapter as PluginWorkspaceAdapter,
 } from "@opencode-ai/plugin"
 import { Config } from "@/config/config"
-import { Bus } from "../bus"
 import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
@@ -20,7 +19,7 @@ import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cl
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
-import { Effect, Layer, Context, Stream } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
@@ -29,6 +28,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
 const log = Log.create({ service: "plugin" })
@@ -123,7 +123,7 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -133,7 +133,7 @@ export const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
-          bridge.fork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
         }
 
         const { Server } = yield* Effect.promise(() => import("../server/server"))
@@ -235,7 +235,7 @@ export const layer = Layer.effect(
           }).pipe(
             Effect.catch(() => {
               // TODO: make proper events for this
-              // bus.publish(Session.Event.Error, {
+              // events.publish(Session.Event.Error, {
               //   error: new NamedError.Unknown({
               //     message: `Failed to load plugin ${load.spec}: ${message}`,
               //   }).toObject(),
@@ -255,6 +255,16 @@ export const layer = Layer.effect(
           }).pipe(Effect.ignore)
         }
 
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.location?.directory !== ctx.directory) return Effect.void
+          return Effect.sync(() => {
+            for (const hook of hooks) {
+              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
+            }
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+
         yield* Effect.addFinalizer(() =>
           Effect.forEach(
             hooks,
@@ -267,18 +277,6 @@ export const layer = Layer.effect(
               }).pipe(Effect.ignore),
             { discard: true },
           ),
-        )
-
-        // Subscribe to bus events, fiber interrupted when scope closes
-        yield* (yield* bus.subscribeAll()).pipe(
-          Stream.runForEach((input) =>
-            Effect.sync(() => {
-              for (const hook of hooks) {
-                void hook["event"]?.({ event: input as any })
-              }
-            }),
-          ),
-          Effect.forkScoped,
         )
 
         return { hooks }
@@ -314,7 +312,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Bus.layer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )

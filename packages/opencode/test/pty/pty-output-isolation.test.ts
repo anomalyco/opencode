@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
 import { Plugin } from "../../src/plugin"
 import { Pty } from "../../src/pty"
@@ -10,7 +10,7 @@ type Socket = Parameters<Pty.Interface["connect"]>[1]
 
 const it = testEffect(
   Pty.layer.pipe(
-    Layer.provideMerge(Bus.layer),
+    Layer.provideMerge(EventV2Bridge.defaultLayer),
     Layer.provideMerge(Config.defaultLayer),
     Layer.provideMerge(Plugin.defaultLayer),
   ),

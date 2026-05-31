@@ -1,4 +1,4 @@
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -62,12 +62,12 @@ export const Content = Schema.Struct({
 export type Content = DeepMutable<Schema.Schema.Type<typeof Content>>
 
 export const Event = {
-  Edited: BusEvent.define(
-    "file.edited",
-    Schema.Struct({
+  Edited: EventV2.define({
+    type: "file.edited",
+    schema: {
       file: Schema.String,
-    }),
-  ),
+    },
+  }),
 }
 
 const log = Log.create({ service: "file" })

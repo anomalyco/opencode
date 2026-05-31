@@ -112,7 +112,7 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { Bus } = await import("../../src/bus")
+const { EventV2Bridge } = await import("../../src/event-v2-bridge")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
 const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
@@ -123,7 +123,7 @@ const mcpTest = testEffect(
   Layer.mergeAll(
     MCP.layer.pipe(
       Layer.provide(McpAuth.defaultLayer),
-      Layer.provideMerge(Bus.layer),
+      Layer.provideMerge(EventV2Bridge.defaultLayer),
       Layer.provide(Config.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),

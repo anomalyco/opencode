@@ -1,4 +1,4 @@
-import { SessionV2 } from "@/v2/session"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { Layer } from "effect"
 import { layer as v2LocationLayer } from "../groups/v2/location"
 import { messageHandlers } from "./v2/message"

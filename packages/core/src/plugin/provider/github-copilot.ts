@@ -31,7 +31,7 @@ export const GithubCopilotPlugin = PluginV2.define({
           : evt.sdk.chat(evt.model.apiID)
       }),
       "catalog.transform": Effect.fn(function* (evt) {
-        const item = evt.data.find((record) => record.provider.id === ProviderV2.ID.githubCopilot)
+        const item = evt.provider.get(ProviderV2.ID.githubCopilot)
         if (!item || !item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) return
         evt.model.update(item.provider.id, ModelV2.ID.make("gpt-5-chat-latest"), (model) => {
           // This chat-only alias conflicts with the Copilot GPT-5 Responses route,

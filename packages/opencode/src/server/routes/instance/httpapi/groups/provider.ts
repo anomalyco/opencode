@@ -1,12 +1,13 @@
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
-import { ProviderID } from "@/provider/schema"
+
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const root = "/provider"
 
@@ -21,7 +22,7 @@ export class ProviderAuthApiError extends Schema.ErrorClass<ProviderAuthApiError
   {
     name: ProviderAuthErrorName,
     data: Schema.Struct({
-      providerID: Schema.optional(ProviderID),
+      providerID: Schema.optional(ProviderV2.ID),
       field: Schema.optional(Schema.String),
       message: Schema.optional(Schema.String),
       kind: Schema.optional(Schema.String),
@@ -55,7 +56,7 @@ export const ProviderApi = HttpApi.make("provider")
           }),
         ),
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {
-          params: { providerID: ProviderID },
+          params: { providerID: ProviderV2.ID },
           query: WorkspaceRoutingQuery,
           payload: ProviderAuth.AuthorizeInput,
           success: described(Schema.UndefinedOr(ProviderAuth.Authorization), "Authorization URL and method"),
@@ -68,7 +69,7 @@ export const ProviderApi = HttpApi.make("provider")
           }),
         ),
         HttpApiEndpoint.post("callback", `${root}/:providerID/oauth/callback`, {
-          params: { providerID: ProviderID },
+          params: { providerID: ProviderV2.ID },
           query: WorkspaceRoutingQuery,
           payload: ProviderAuth.CallbackInput,
           success: described(Schema.Boolean, "OAuth callback processed successfully"),

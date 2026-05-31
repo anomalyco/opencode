@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Directory } from "@/acp/directory"
 import { Command } from "@/command"
-import { ModelID, ProviderID } from "@/provider/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Provider } from "@/provider/provider"
 import { Effect, Layer } from "effect"
 import { it } from "../lib/effect"
@@ -13,8 +13,8 @@ const command = (name: string): Command.Info => ({
   hints: [],
 })
 
-const model = (providerID: ProviderID, id: string, variants?: Directory.ModelVariants): Provider.Model => ({
-  id: ModelID.make(id),
+const model = (providerID: ProviderV2.ID, id: string, variants?: Directory.ModelVariants): Provider.Model => ({
+  id: ProviderV2.ModelID.make(id),
   providerID,
   api: {
     id,
@@ -49,8 +49,8 @@ const model = (providerID: ProviderID, id: string, variants?: Directory.ModelVar
 })
 
 const snapshot = (directory: string) => {
-  const providerID = ProviderID.make(`provider-${directory}`)
-  const modelID = ModelID.make(`model-${directory}`)
+  const providerID = ProviderV2.ID.make(`provider-${directory}`)
+  const modelID = ProviderV2.ModelID.make(`model-${directory}`)
   const providers = {
     [providerID]: {
       id: providerID,
@@ -63,10 +63,10 @@ const snapshot = (directory: string) => {
           low: { reasoningEffort: "low" },
           high: { reasoningEffort: "high" },
         }),
-        [ModelID.make(`plain-${directory}`)]: model(providerID, `plain-${directory}`),
+        [ProviderV2.ModelID.make(`plain-${directory}`)]: model(providerID, `plain-${directory}`),
       },
     },
-  } satisfies Record<ProviderID, Provider.Info>
+  } satisfies Record<ProviderV2.ID, Provider.Info>
 
   return Directory.build({
     directory,
@@ -148,7 +148,7 @@ describe("ACP directory snapshot", () => {
         low: { reasoningEffort: "low" },
         high: { reasoningEffort: "high" },
       })
-      expect(directory.variants(alpha, { ...model, modelID: ModelID.make("missing") })).toBeUndefined()
+      expect(directory.variants(alpha, { ...model, modelID: ProviderV2.ModelID.make("missing") })).toBeUndefined()
     }).pipe(Effect.provide(fakeLayer([]))),
   )
 

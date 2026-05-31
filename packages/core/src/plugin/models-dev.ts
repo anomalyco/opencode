@@ -57,10 +57,10 @@ export const ModelsDevPlugin = PluginV2.define({
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
-    const load = yield* catalog.loader()
+    const transform = yield* catalog.transform()
     const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
       const data = yield* modelsDev.get()
-      yield* load((catalog) => {
+      yield* transform((catalog) => {
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
           catalog.provider.update(providerID, (provider) => {
@@ -114,7 +114,7 @@ export const ModelsDevPlugin = PluginV2.define({
     yield* refresh()
     yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() => refresh()),
-      Effect.forkIn(scope, { startImmediately: true }),
+      Effect.forkScoped({ startImmediately: true }),
     )
-  }).pipe(Effect.provide(ModelsDev.defaultLayer)),
+  }),
 })

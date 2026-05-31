@@ -1,6 +1,6 @@
 import * as InstanceState from "@/effect/instance-state"
 import { Project } from "@/project/project"
-import { ProjectID } from "@/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -33,7 +33,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
     })
 
     const update = Effect.fn("ProjectHttpApi.update")(function* (ctx: {
-      params: { projectID: ProjectID }
+      params: { projectID: ProjectV2.ID }
       payload: Project.UpdatePayload
     }) {
       return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID }).pipe(

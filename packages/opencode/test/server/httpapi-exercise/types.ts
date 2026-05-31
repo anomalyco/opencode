@@ -1,4 +1,5 @@
 import type { Duration, Effect } from "effect"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import type { Config } from "../../../src/config/config"
 import type { Project } from "../../../src/project/project"
 import type { Worktree } from "../../../src/worktree"
@@ -57,7 +58,7 @@ export type ScenarioContext = {
   sessionGet: (sessionID: SessionID) => Effect.Effect<SessionInfo | undefined>
   project: () => Effect.Effect<Project.Info>
   message: (sessionID: SessionID, input?: { text?: string }) => Effect.Effect<MessageSeed>
-  messages: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts[]>
+  messages: (sessionID: SessionID) => Effect.Effect<SessionLegacy.WithParts[]>
   todos: (sessionID: SessionID, todos: TodoInfo[]) => Effect.Effect<void>
   worktree: (input?: { name?: string }) => Effect.Effect<Worktree.Info>
   worktreeRemove: (directory: string) => Effect.Effect<void>
@@ -118,4 +119,4 @@ export type Result =
 
 export type SessionInfo = { id: SessionID; title: string; parentID?: SessionID }
 export type TodoInfo = { content: string; status: string; priority: string }
-export type MessageSeed = { info: MessageV2.User; part: MessageV2.TextPart }
+export type MessageSeed = { info: SessionLegacy.User; part: SessionLegacy.TextPart }

@@ -177,10 +177,6 @@ export function RunQuestionBody(props: {
         return
       }
 
-      if (event.name === "return" && !event.shift && !event.ctrl && !event.meta) {
-        saveCustom()
-        event.preventDefault()
-      }
       return
     }
 
@@ -496,6 +492,7 @@ export function RunQuestionBody(props: {
                             focusedBackgroundColor={props.theme.surface}
                             cursorColor={props.theme.text}
                             focused={!disabled()}
+                            onSubmit={saveCustom}
                             onContentChange={() => {
                               if (!area || area.isDestroyed || disabled()) {
                                 return

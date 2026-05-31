@@ -1,4 +1,4 @@
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Session } from "@/session/session"
 import { Effect } from "effect"
@@ -26,15 +26,15 @@ const commandAliases = {
 
 export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handlers) =>
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const session = yield* Session.Service
-    const publishCommand = (command: typeof TuiEvent.CommandExecute.properties.Type.command | undefined) =>
-      bus.publish(TuiEvent.CommandExecute, { command } as typeof TuiEvent.CommandExecute.properties.Type)
+    const publishCommand = (command: typeof TuiEvent.CommandExecute.data.Type.command | undefined) =>
+      events.publish(TuiEvent.CommandExecute, { command } as typeof TuiEvent.CommandExecute.data.Type)
 
     const appendPrompt = Effect.fn("TuiHttpApi.appendPrompt")(function* (ctx: {
-      payload: typeof TuiEvent.PromptAppend.properties.Type
+      payload: typeof TuiEvent.PromptAppend.data.Type
     }) {
-      yield* bus.publish(TuiEvent.PromptAppend, ctx.payload)
+      yield* events.publish(TuiEvent.PromptAppend, ctx.payload)
       return true
     })
 
@@ -77,29 +77,30 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
     })
 
     const showToast = Effect.fn("TuiHttpApi.showToast")(function* (ctx: {
-      payload: typeof TuiEvent.ToastShow.properties.Type
+      payload: typeof TuiEvent.ToastShow.data.Type
     }) {
-      yield* bus.publish(TuiEvent.ToastShow, ctx.payload)
+      yield* events.publish(TuiEvent.ToastShow, ctx.payload)
       return true
     })
 
     const publish = Effect.fn("TuiHttpApi.publish")(function* (ctx: { payload: typeof TuiPublishPayload.Type }) {
       if (ctx.payload.type === TuiEvent.PromptAppend.type)
-        yield* bus.publish(TuiEvent.PromptAppend, ctx.payload.properties)
+        yield* events.publish(TuiEvent.PromptAppend, ctx.payload.properties)
       if (ctx.payload.type === TuiEvent.CommandExecute.type)
-        yield* bus.publish(TuiEvent.CommandExecute, ctx.payload.properties)
-      if (ctx.payload.type === TuiEvent.ToastShow.type) yield* bus.publish(TuiEvent.ToastShow, ctx.payload.properties)
+        yield* events.publish(TuiEvent.CommandExecute, ctx.payload.properties)
+      if (ctx.payload.type === TuiEvent.ToastShow.type)
+        yield* events.publish(TuiEvent.ToastShow, ctx.payload.properties)
       if (ctx.payload.type === TuiEvent.SessionSelect.type)
-        yield* bus.publish(TuiEvent.SessionSelect, ctx.payload.properties)
+        yield* events.publish(TuiEvent.SessionSelect, ctx.payload.properties)
       return true
     })
 
     const selectSession = Effect.fn("TuiHttpApi.selectSession")(function* (ctx: {
-      payload: typeof TuiEvent.SessionSelect.properties.Type
+      payload: typeof TuiEvent.SessionSelect.data.Type
     }) {
       if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
       yield* SessionError.mapStorageNotFound(session.get(ctx.payload.sessionID))
-      yield* bus.publish(TuiEvent.SessionSelect, ctx.payload)
+      yield* events.publish(TuiEvent.SessionSelect, ctx.payload)
       return true
     })
 
