@@ -114,7 +114,7 @@ export const ModelsDevPlugin = PluginV2.define({
     yield* refresh()
     yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() => refresh()),
-      Effect.forkIn(scope, { startImmediately: true }),
+      Effect.forkScoped({ startImmediately: true }),
     )
-  }).pipe(Effect.provide(ModelsDev.defaultLayer)),
+  }),
 })

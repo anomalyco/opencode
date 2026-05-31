@@ -7,7 +7,7 @@ import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  Policy.defaultLayer.pipe(
+  Policy.locationLayer.pipe(
     Layer.provide(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
     ),
