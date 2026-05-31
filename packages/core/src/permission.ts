@@ -2,6 +2,17 @@ export * as PermissionV2 from "./permission"
 
 import { Schema } from "effect"
 import { Wildcard } from "./util/wildcard"
+import { Identifier } from "./id/id"
+import { Newtype } from "./schema"
+
+export class PermissionID extends Newtype<PermissionID>()(
+  "PermissionID",
+  Schema.String.check(Schema.isStartsWith("per")),
+) {
+  static ascending(id?: string): PermissionID {
+    return this.make(Identifier.ascending("permission", id))
+  }
+}
 
 export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Action" })
 export type Action = typeof Action.Type

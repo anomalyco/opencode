@@ -67,7 +67,6 @@ Den nuværende liste over modeller inkluderer:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -85,7 +84,7 @@ OpenCode Go inkluderer følgende grænser:
 - **Ugentlig grænse** — forbrug for $30
 - **Månedlig grænse** — forbrug for $60
 
-Grænserne er defineret i dollarværdi. Det betyder, at dit faktiske antal anmodninger afhænger af den model, du bruger. Billigere modeller som MiniMax M2.5 tillader flere anmodninger, mens dyrere modeller som GLM-5.1 tillader færre.
+Grænserne er defineret i dollarværdi. Det betyder, at dit faktiske antal anmodninger afhænger af den model, du bruger. Billigere modeller som DeepSeek V4 Flash tillader flere anmodninger, mens dyrere modeller som GLM-5.1 tillader færre.
 
 Tabellen nedenfor giver et estimeret antal anmodninger baseret på typiske Go-forbrugsmønstre:
 
@@ -101,7 +100,6 @@ Tabellen nedenfor giver et estimeret antal anmodninger baseret på typiske Go-fo
 | MiniMax M2.5      | 6,300                   | 15,900              | 31,800                |
 | Qwen3.7 Max       | 950                     | 2,390               | 4,770                 |
 | Qwen3.6 Plus      | 3,300                   | 8,200               | 16,300                |
-| Qwen3.5 Plus      | 10,200                  | 25,200              | 50,500                |
 | DeepSeek V4 Pro   | 3,450                   | 8,550               | 17,150                |
 | DeepSeek V4 Flash | 31,650                  | 79,050              | 158,150               |
 
@@ -114,7 +112,6 @@ Estimaterne er baseret på observerede gennemsnitlige anmodningsmønstre:
 - MiniMax M2.7/M2.5 — 300 input, 55.000 cachelagrede, 125 output-tokens pr. anmodning
 - Qwen3.7 Max — 420 input, 66.000 cachelagrede, 200 output-tokens pr. anmodning
 - Qwen3.6 Plus — 500 input, 57.000 cachelagrede, 190 output-tokens pr. anmodning
-- Qwen3.5 Plus — 410 input, 47.000 cachelagrede, 140 output-tokens pr. anmodning
 - MiMo-V2.5 — 830 input, 71.500 cachelagrede, 295 output-tokens pr. anmodning
 - MiMo-V2.5-Pro — 790 input, 86.000 cachelagrede, 305 output-tokens pr. anmodning
 
@@ -154,7 +151,6 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 Dit [model id](/docs/config/#models) i din OpenCode config
 bruger formatet `opencode-go/<model-id>`. For eksempel for Kimi K2.6, vil du
