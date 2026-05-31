@@ -257,15 +257,17 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
 
       // Verify the tool call completed (in the first assistant message)
       const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
+      const user = allMsgs.find((msg): msg is SessionLegacy.WithParts & { info: SessionLegacy.User } => msg.info.role === "user")
       const tool = allMsgs
         .flatMap((m) => m.parts)
         .find((p): p is SessionLegacy.ToolPart => p.type === "tool" && p.tool === "bash")
       expect(tool?.state.status).toBe("completed")
+      if (!user) throw new Error("Expected user message")
 
-      // Poll for diff — summarize() is fire-and-forget
+      // Poll for the turn diff — summarize() is fire-and-forget.
       let diff: Array<{ file?: string }> = []
       for (let i = 0; i < 50; i++) {
-        diff = yield* summary.diff({ sessionID: session.id })
+        diff = yield* summary.diff({ sessionID: session.id, messageID: user.info.id })
         if (diff.length > 0) break
         yield* Effect.sleep("100 millis")
       }

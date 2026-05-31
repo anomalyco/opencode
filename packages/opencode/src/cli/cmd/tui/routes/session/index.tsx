@@ -210,7 +210,8 @@ export function Session() {
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
-    return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
+    const completed = messages().findLast((x) => x.role === "assistant" && x.time.completed)?.id
+    return messages().findLast((x) => x.role === "assistant" && !x.time.completed && (!completed || x.id > completed))?.id
   })
 
   const lastAssistant = createMemo(() => {
