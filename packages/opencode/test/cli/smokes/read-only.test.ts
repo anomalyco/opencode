@@ -87,6 +87,17 @@ describe("opencode read-only commands (smoke)", () => {
     60_000,
   )
 
+  cliIt.live(
+    "session list json: exits 0 and prints an empty array",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const r = yield* opencode.spawn(["session", "list", "--format", "json"])
+        opencode.expectExit(r, 0, "session list --format json")
+        expect(r.stdout.trim()).toBe("[]")
+      }),
+    60_000,
+  )
+
   // `stats` aggregates token usage from the session DB. Empty DB → all zeros.
   cliIt.live(
     "stats: exits 0",
