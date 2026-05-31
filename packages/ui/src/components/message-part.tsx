@@ -1218,6 +1218,7 @@ export function UserMessageDisplay(props: {
               <Markdown
                 text={text()}
                 cacheKey={textPart()?.id}
+                instant
                 stage={props.markdownStage}
                 onStage={props.onMarkdownStage}
                 eager={props.markdownEager}
