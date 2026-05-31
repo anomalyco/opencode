@@ -124,7 +124,7 @@ export const layer = Layer.effect(
           text: () => result.stdout.toString("utf8"),
           stdout: result.stdout,
           stderr: result.stderr,
-          truncated: result.truncated,
+          truncated: result.stdoutTruncated || result.stderrTruncated,
         } satisfies Result
       },
       Effect.catch((err) => Effect.succeed(fail(err))),

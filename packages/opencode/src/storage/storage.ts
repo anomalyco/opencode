@@ -20,13 +20,6 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Not
   static isInstance(input: unknown): input is NotFoundError {
     return input instanceof NotFoundError
   }
-
-  toObject() {
-    return {
-      name: "NotFoundError" as const,
-      data: { message: this.message },
-    }
-  }
 }
 
 export type Error = AppFileSystem.Error | NotFoundError

@@ -22,6 +22,9 @@ export const ID = Schema.String.pipe(
 )
 export type ID = typeof ID.Type
 
+export const ModelID = Schema.String.pipe(Schema.brand("ModelID"))
+export type ModelID = typeof ModelID.Type
+
 const OpenAIResponses = Schema.Struct({
   type: Schema.Literal("openai/responses"),
   url: Schema.String,
@@ -86,7 +89,7 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
       name: Schema.String,
     }),
     Schema.Struct({
-      via: Schema.Literal("auth"),
+      via: Schema.Literal("account"),
       service: Schema.String,
     }),
     Schema.Struct({

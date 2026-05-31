@@ -36,7 +36,7 @@ export const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
 export const defaultMatcher: RequestMatcher = (incoming, recorded) =>
   canonicalSnapshot(incoming) === canonicalSnapshot(recorded)
 
-const safeText = (value: unknown) => {
+export const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
   if (secretFindings(value).length > 0) return JSON.stringify(REDACTED)
   const text = JSON.stringify(value)

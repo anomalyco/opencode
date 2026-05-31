@@ -20,7 +20,8 @@ describe("AppProcess", () => {
         const result = yield* svc.run(cmd("-e", "process.stdout.write('hi\\n')"))
         expect(result.exitCode).toBe(0)
         expect(result.stdout.toString("utf8")).toBe("hi\n")
-        expect(result.truncated).toBe(false)
+        expect(result.stdoutTruncated).toBe(false)
+        expect(result.stderrTruncated).toBe(false)
       }),
     )
 
@@ -84,14 +85,28 @@ describe("AppProcess", () => {
     )
 
     it.effect(
-      "truncates output when maxOutputBytes is set",
+      "truncates stdout when maxOutputBytes is set",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
         const result = yield* svc.run(cmd("-e", "process.stdout.write('0123456789')"), { maxOutputBytes: 5 })
         expect(result.exitCode).toBe(0)
-        expect(result.truncated).toBe(true)
+        expect(result.stdoutTruncated).toBe(true)
+        expect(result.stderrTruncated).toBe(false)
         expect(result.stdout.length).toBe(5)
         expect(result.stdout.toString("utf8")).toBe("01234")
+      }),
+    )
+
+    it.effect(
+      "truncates stderr when maxErrorBytes is set",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const result = yield* svc.run(cmd("-e", "process.stderr.write('0123456789')"), { maxErrorBytes: 5 })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdoutTruncated).toBe(false)
+        expect(result.stderrTruncated).toBe(true)
+        expect(result.stderr.length).toBe(5)
+        expect(result.stderr.toString("utf8")).toBe("01234")
       }),
     )
 

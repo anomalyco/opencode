@@ -7,7 +7,7 @@ import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
 import { ShellTool } from "../../src/tool/shell"
 import { Filesystem } from "@/util/filesystem"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
@@ -17,6 +17,8 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceStore } from "@/project/instance-store"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -25,10 +27,13 @@ const shellLayer = Layer.mergeAll(
   Truncate.defaultLayer,
   Config.defaultLayer,
   Agent.defaultLayer,
+  RuntimeFlags.defaultLayer,
+  testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)
 type ShellTestServices =
   | (typeof shellLayer extends Layer.Layer<infer ROut, infer _E, infer _RIn> ? ROut : never)
+  | InstanceStore.Service
   | Scope.Scope
 
 const initShell = Effect.fn("ShellToolTest.init")(function* () {
@@ -1077,6 +1082,28 @@ describe("tool.shell abort", () => {
     15_000,
   )
 
+  it.live(
+    "uses RuntimeFlags bashDefaultTimeoutMs when timeout is omitted",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const tool = yield* initShell()
+          expect(tool.description).toContain("commands will time out after 500ms")
+          const result = yield* tool.execute(
+            {
+              command: `echo started && sleep 60`,
+              description: "Default timeout test",
+            },
+            ctx,
+          )
+          expect(result.output).toContain("started")
+          expect(result.output).toContain("exceeding timeout 500 ms")
+        }),
+      ).pipe(Effect.provide(RuntimeFlags.layer({ bashDefaultTimeoutMs: 500 }))),
+    15_000,
+  )
+
   if (process.platform !== "win32") {
     it.live("captures stderr in output", () =>
       runIn(
@@ -1195,7 +1222,7 @@ describe("tool.shell truncation", () => {
         const filepath = (result.metadata as { outputPath?: string }).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = yield* Effect.promise(() => Filesystem.readText(filepath!))
+        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
         const lines = saved.trim().split(/\r?\n/)
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

@@ -31,7 +31,8 @@ export interface RunResult {
   readonly exitCode: number
   readonly stdout: Buffer
   readonly stderr: Buffer
-  readonly truncated: boolean
+  readonly stdoutTruncated: boolean
+  readonly stderrTruncated: boolean
 }
 
 export type Interface = ChildProcessSpawner["Service"] & {
@@ -147,7 +148,8 @@ export const layer = Layer.effect(
             exitCode,
             stdout: stdout.buffer,
             stderr: stderr.buffer,
-            truncated: stdout.truncated,
+            stdoutTruncated: stdout.truncated,
+            stderrTruncated: stderr.truncated,
           } satisfies RunResult
         }),
       )

@@ -1,0 +1,28 @@
+[data-component="tag"] {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 16px;
+  padding: 0 4px;
+  user-select: none;
+
+  border-radius: 2px;
+  border: 0.5px solid var(--border-border-base);
+  background: var(--background-bg-layer-02);
+
+  font-family: var(--v2-font-family-sans);
+  font-style: normal;
+  font-weight: 530;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.05px;
+  color: var(--text-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="tag"][data-high-contrast] {
+  border-color: var(--border-border-strong);
+}

@@ -49,20 +49,20 @@ function app(modules: Runtime, options: CallOptions) {
   if (appCache[cacheKey]) return appCache[cacheKey]
 
   const handler = HttpRouter.toWebHandler(
-    modules.ExperimentalHttpApiServer.routes.pipe(
+    modules.HttpApiApp.routes.pipe(
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({ OPENCODE_SERVER_PASSWORD: password, OPENCODE_SERVER_USERNAME: username }),
         ),
       ),
     ),
-    { disableLogger: true },
+    { disableLogger: true, memoMap: modules.memoMap },
   ).handler
   return (appCache[cacheKey] = {
     request(input: string | URL | Request, init?: RequestInit) {
       return handler(
         input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
-        modules.ExperimentalHttpApiServer.context,
+        modules.HttpApiApp.context,
       )
     },
   })

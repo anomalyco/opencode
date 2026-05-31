@@ -1,22 +1,22 @@
 import { EOL } from "os"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { effectCmd } from "../../effect-cmd"
-import { PluginBoot } from "@/v2/plugin-boot"
-
-const layer = Catalog.defaultLayer.pipe(Layer.provide(PluginBoot.defaultLayer))
 
 export const V2Command = effectCmd({
   command: "v2",
   describe: "debug v2 catalog and built-in plugins",
   instance: false,
-  handler: Effect.fn("Cli.debug.v2")(function* () {
-    const result = yield* Effect.gen(function* () {
+  handler: () =>
+    Effect.gen(function* () {
+      yield* PluginBoot.Service.use((service) => service.wait())
       const catalog = yield* Catalog.Service
-
       const providers = (yield* catalog.provider.available()).sort((a, b) => a.id.localeCompare(b.id))
       const all = (yield* catalog.provider.all()).sort((a, b) => a.id.localeCompare(b.id))
-      return {
+      const result = {
         providers,
         default: catalog.model
           .default()
@@ -33,8 +33,14 @@ export const V2Command = effectCmd({
           ),
         ),
       }
-    }).pipe(Effect.provide(layer), Effect.orDie)
-
-    process.stdout.write(JSON.stringify(result, null, 2) + EOL)
-  }),
+      process.stdout.write(JSON.stringify(result, null, 2) + EOL)
+    }).pipe(
+      Effect.withSpan("Cli.debug.v2"),
+      Effect.provide(
+        LocationServiceMap.get({
+          directory: AbsolutePath.make(process.cwd()),
+        }),
+      ),
+      Effect.provide(LocationServiceMap.layer),
+    ),
 })
