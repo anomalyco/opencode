@@ -476,6 +476,18 @@ export const ShellTool = Tool.define(
         },
       })
 
+      // Validate cwd exists before spawning. Bun misattributes a missing cwd
+      // as ENOENT on the shell binary (e.g., '/bin/bash'), which is misleading.
+      // See: https://github.com/oven-sh/bun/issues/14535
+      const fs = yield* AppFileSystem.Service
+      if (!(yield* fs.isDir(input.cwd).pipe(Effect.orDie))) {
+        throw Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
+          code: "ENOENT",
+          errno: -2,
+          path: input.cwd,
+        })
+      }
+
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
