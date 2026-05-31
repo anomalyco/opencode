@@ -215,6 +215,79 @@ test("clears existing variants so refreshed models calculate provider-specific v
   expect(models["claude-opus-4.7"].variants).toBeUndefined()
 })
 
+test("preserves user-configured limit overrides from existing models", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "claude-opus-4.6",
+              name: "Claude Opus 4.6",
+              version: "claude-opus-4.6-2026-03-01",
+              capabilities: {
+                family: "claude-opus",
+                limits: {
+                  max_context_window_tokens: 200000,
+                  max_output_tokens: 32000,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = await CopilotModels.get(
+    "https://api.githubcopilot.com",
+    {},
+    {
+      "claude-opus-4.6": {
+        id: "claude-opus-4.6",
+        providerID: "github-copilot",
+        api: {
+          id: "claude-opus-4.6",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+        name: "Claude Opus 4.6",
+        family: "claude-opus",
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        limit: {
+          context: 1000000,
+          input: 900000,
+          output: 64000,
+        },
+        options: {},
+        headers: {},
+        release_date: "2026-03-01",
+        status: "active",
+      },
+    },
+  )
+
+  expect(models["claude-opus-4.6"].limit.context).toBe(1000000)
+  expect(models["claude-opus-4.6"].limit.input).toBe(900000)
+  expect(models["claude-opus-4.6"].limit.output).toBe(64000)
+})
+
 test("remaps fallback oauth model urls to the enterprise host", async () => {
   globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
 
