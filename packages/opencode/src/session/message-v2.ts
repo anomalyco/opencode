@@ -371,7 +371,17 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             })
         }
         if (part.type === "reasoning") {
-          if (differentModel) {
+          // Anthropic verifies a cryptographic signature on thinking/redacted_thinking
+          // blocks and rejects any subsequent request whose thinking block is not
+          // byte-identical ("thinking blocks ... cannot be modified"). The signature
+          // lives in part.metadata, so unlike text/tool metadata it must be preserved
+          // even when differentModel is true (fallback model switches, variant changes,
+          // or proxy setups where the persisted providerID differs from the live one).
+          const isAnthropicReasoning =
+            model.providerID === "anthropic" ||
+            model.providerID.includes("anthropic") ||
+            model.api?.npm === "@ai-sdk/anthropic"
+          if (differentModel && !isAnthropicReasoning) {
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({
                 type: "text",
