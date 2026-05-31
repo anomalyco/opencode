@@ -825,7 +825,25 @@ export const layer = Layer.effect(
           const client = new Client({ name: "opencode", version: InstallationVersion })
           return client
             .connect(transport)
-            .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
+            .then(async () => {
+              // connect() resolves before the SDK starts the OAuth dance,
+              // so force a real request to make it run and let onRedirect
+              // populate capturedUrl before we return.
+              try {
+                await client.listTools(undefined, { timeout: 15_000 })
+                return { authorizationUrl: "", oauthState, client } satisfies AuthResult
+              } catch (err) {
+                const start = Date.now()
+                while (!capturedUrl && Date.now() - start < 5_000) {
+                  await new Promise((r) => setTimeout(r, 50))
+                }
+                if (capturedUrl) {
+                  pendingOAuthTransports.set(mcpName, transport)
+                  return { authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult
+                }
+                throw err
+              }
+            })
         },
         catch: (error) => error,
       }).pipe(
