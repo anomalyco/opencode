@@ -67,7 +67,6 @@ Den nåværende listen over modeller inkluderer:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -85,7 +84,7 @@ OpenCode Go inkluderer følgende grenser:
 - **Ukentlig grense** — $30 i bruk
 - **Månedlig grense** — $60 i bruk
 
-Grensene er definert i dollarverdi. Dette betyr at ditt faktiske antall forespørsler avhenger av modellen du bruker. Billigere modeller som MiniMax M2.5 tillater flere forespørsler, mens dyrere modeller som GLM-5.1 tillater færre.
+Grensene er definert i dollarverdi. Dette betyr at ditt faktiske antall forespørsler avhenger av modellen du bruker. Billigere modeller som DeepSeek V4 Flash tillater flere forespørsler, mens dyrere modeller som GLM-5.1 tillater færre.
 
 Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksmønstre for Go:
 
@@ -101,7 +100,6 @@ Tabellen nedenfor gir et estimert antall forespørsler basert på typiske bruksm
 | MiniMax M2.5      | 6,300                    | 15,900               | 31,800                 |
 | Qwen3.7 Max       | 950                      | 2,390                | 4,770                  |
 | Qwen3.6 Plus      | 3,300                    | 8,200                | 16,300                 |
-| Qwen3.5 Plus      | 10,200                   | 25,200               | 50,500                 |
 | DeepSeek V4 Pro   | 3,450                    | 8,550                | 17,150                 |
 | DeepSeek V4 Flash | 31,650                   | 79,050               | 158,150                |
 
@@ -114,7 +112,6 @@ Estimatene er basert på observerte gjennomsnittlige forespørselsmønstre:
 - MiniMax M2.7/M2.5 — 300 input, 55 000 bufret, 125 output-tokens per forespørsel
 - Qwen3.7 Max — 420 input, 66 000 bufret, 200 output-tokens per forespørsel
 - Qwen3.6 Plus — 500 input, 57 000 bufret, 190 output-tokens per forespørsel
-- Qwen3.5 Plus — 410 input, 47 000 bufret, 140 output-tokens per forespørsel
 - MiMo-V2.5 — 830 input, 71 500 bufret, 295 output-tokens per forespørsel
 - MiMo-V2.5-Pro — 790 input, 86 000 bufret, 305 output-tokens per forespørsel
 
@@ -154,7 +151,6 @@ Du kan også få tilgang til Go-modeller gjennom følgende API-endepunkter.
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 [Modell-ID-en](/docs/config/#models) i din OpenCode-konfigurasjon
 bruker formatet `opencode-go/<model-id>`. For eksempel, for Kimi K2.6, vil du

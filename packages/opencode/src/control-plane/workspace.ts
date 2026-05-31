@@ -1,28 +1,28 @@
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { asc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { Project } from "@/project/project"
-import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
-import { SyncEvent } from "@/sync"
-import { EventSequenceTable, EventTable } from "@/sync/event.sql"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { ProjectID } from "@/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Slug } from "@opencode-ai/core/util/slug"
-import { WorkspaceTable } from "./workspace.sql"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { getAdapter, registeredAdapters } from "./adapters"
 import { type Target, type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
-import { WorkspaceID } from "./schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
-import { SessionTable } from "@/session/session.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
 import { errorData } from "@/util/error"
@@ -40,25 +40,25 @@ export const Info = Schema.Struct({
 export type Info = WorkspaceInfo & { timeUsed: number }
 
 export const ConnectionStatus = Schema.Struct({
-  workspaceID: WorkspaceID,
+  workspaceID: WorkspaceV2.ID,
   status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
 })
 export type ConnectionStatus = Schema.Schema.Type<typeof ConnectionStatus>
 
 export const Event = {
-  Ready: BusEvent.define(
-    "workspace.ready",
-    Schema.Struct({
+  Ready: EventV2.define({
+    type: "workspace.ready",
+    schema: {
       name: Schema.String,
-    }),
-  ),
-  Failed: BusEvent.define(
-    "workspace.failed",
-    Schema.Struct({
+    },
+  }),
+  Failed: EventV2.define({
+    type: "workspace.failed",
+    schema: {
       message: Schema.String,
-    }),
-  ),
-  Status: BusEvent.define("workspace.status", ConnectionStatus),
+    },
+  }),
+  Status: EventV2.define({ type: "workspace.status", schema: ConnectionStatus.fields }),
 }
 
 function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
@@ -74,22 +74,19 @@ function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
   }
 }
 
-const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-  Effect.sync(() => Database.use(fn))
-
 const log = Log.create({ service: "workspace-sync" })
 
 export const CreateInput = Schema.Struct({
-  id: Schema.optional(WorkspaceID),
+  id: Schema.optional(WorkspaceV2.ID),
   type: Info.fields.type,
   branch: Info.fields.branch,
-  projectID: ProjectID,
+  projectID: ProjectV2.ID,
   extra: Schema.optional(Info.fields.extra),
 })
 export type CreateInput = Schema.Schema.Type<typeof CreateInput>
 
 export const SessionWarpInput = Schema.Struct({
-  workspaceID: Schema.NullOr(WorkspaceID),
+  workspaceID: Schema.NullOr(WorkspaceV2.ID),
   sessionID: SessionID,
   copyChanges: Schema.optional(Schema.Boolean),
 })
@@ -105,7 +102,7 @@ export class WorkspaceNotFoundError extends Schema.TaggedErrorClass<WorkspaceNot
   "WorkspaceNotFoundError",
   {
     message: Schema.String,
-    workspaceID: WorkspaceID,
+    workspaceID: WorkspaceV2.ID,
   },
 ) {}
 
@@ -121,7 +118,7 @@ export class SessionWarpHttpError extends Schema.TaggedErrorClass<SessionWarpHtt
   "WorkspaceSessionWarpHttpError",
   {
     message: Schema.String,
-    workspaceID: WorkspaceID,
+    workspaceID: WorkspaceV2.ID,
     sessionID: SessionID,
     status: Schema.Number,
     body: Schema.String,
@@ -153,17 +150,17 @@ export interface Interface {
   readonly sessionWarp: (input: SessionWarpInput) => Effect.Effect<void, SessionWarpError>
   readonly list: (project: Project.Info) => Effect.Effect<Info[]>
   readonly syncList: (project: Project.Info) => Effect.Effect<void>
-  readonly get: (id: WorkspaceID) => Effect.Effect<Info | undefined>
-  readonly remove: (id: WorkspaceID) => Effect.Effect<Info | undefined>
+  readonly get: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined>
+  readonly remove: (id: WorkspaceV2.ID) => Effect.Effect<Info | undefined>
   readonly status: () => Effect.Effect<ConnectionStatus[]>
-  readonly isSyncing: (workspaceID: WorkspaceID) => Effect.Effect<boolean>
+  readonly isSyncing: (workspaceID: WorkspaceV2.ID) => Effect.Effect<boolean>
   readonly waitForSync: (
-    workspaceID: WorkspaceID,
+    workspaceID: WorkspaceV2.ID,
     state: Record<string, number>,
     signal?: AbortSignal,
     timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
-  readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
+  readonly startWorkspaceSyncing: (projectID: ProjectV2.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
@@ -177,14 +174,15 @@ export const layer = Layer.effect(
     const session = yield* Session.Service
     const prompt = yield* SessionPrompt.Service
     const http = yield* HttpClient.HttpClient
-    const sync = yield* SyncEvent.Service
+    const events = yield* EventV2Bridge.Service
     const vcs = yield* Vcs.Service
     const flags = yield* RuntimeFlags.Service
     const fs = yield* AppFileSystem.Service
-    const connections = new Map<WorkspaceID, ConnectionStatus>()
-    const syncFibers = yield* FiberMap.make<WorkspaceID, void, SyncLoopError>()
+    const { db } = yield* Database.Service
+    const connections = new Map<WorkspaceV2.ID, ConnectionStatus>()
+    const syncFibers = yield* FiberMap.make<WorkspaceV2.ID, void, SyncLoopError>()
 
-    const setStatus = (id: WorkspaceID, status: ConnectionStatus["status"]) => {
+    const setStatus = (id: WorkspaceV2.ID, status: ConnectionStatus["status"]) => {
       const prev = connections.get(id)
       if (prev?.status === status) return
       const next = { workspaceID: id, status }
@@ -270,7 +268,7 @@ export const layer = Layer.effect(
     })
 
     const runInWorkspace = <A, E, R>(input: {
-      workspaceID?: WorkspaceID
+      workspaceID?: WorkspaceV2.ID
       local: () => Effect.Effect<A, E, R>
       remote: (input: {
         workspace: Info
@@ -333,19 +331,20 @@ export const layer = Layer.effect(
       url: URL | string,
       headers: HeadersInit | undefined,
     ) {
-      const sessionIDs = yield* db((db) =>
-        db
-          .select({ id: SessionTable.id })
-          .from(SessionTable)
-          .where(eq(SessionTable.workspace_id, space.id))
-          .all()
-          .map((row) => row.id),
-      )
+      const sessionIDs = (yield* db
+        .select({ id: SessionTable.id })
+        .from(SessionTable)
+        .where(eq(SessionTable.workspace_id, space.id))
+        .all()
+        .pipe(Effect.orDie)).map((row) => row.id)
       const state = sessionIDs.length
         ? Object.fromEntries(
-            (yield* db((db) =>
-              db.select().from(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, sessionIDs)).all(),
-            )).map((row) => [row.aggregate_id, row.seq]),
+            (yield* db
+              .select()
+              .from(EventSequenceTable)
+              .where(inArray(EventSequenceTable.aggregate_id, sessionIDs))
+              .all()
+              .pipe(Effect.orDie)).map((row) => [row.aggregate_id, row.seq]),
           )
         : {}
 
@@ -371,20 +370,20 @@ export const layer = Layer.effect(
         })
       }
 
-      const events = (yield* response.json) as HistoryEvent[]
+      const history = (yield* response.json) as HistoryEvent[]
 
       log.info("workspace history synced", {
         workspaceID: space.id,
-        events: events.length,
+        events: history.length,
       })
 
       yield* Effect.forEach(
-        events,
+        history,
         (event) =>
-          sync
+          events
             .replay(
               {
-                id: event.id,
+                id: EventV2.ID.make(event.id),
                 aggregateID: event.aggregate_id,
                 seq: event.seq,
                 type: event.type,
@@ -431,11 +430,11 @@ export const layer = Layer.effect(
           yield* parseSSE(stream, (evt) =>
             Effect.gen(function* () {
               if (!evt || typeof evt !== "object" || !("payload" in evt)) return
-              const payload = evt.payload as { type?: string; syncEvent?: SyncEvent.SerializedEvent }
+              const payload = evt.payload as { type?: string; syncEvent?: EventV2.SerializedEvent }
               if (payload.type === "server.heartbeat") return
 
               if (payload.type === "sync" && payload.syncEvent) {
-                const failed = yield* sync.replay(payload.syncEvent).pipe(
+                const failed = yield* events.replay(payload.syncEvent, { publish: true }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
                     Effect.sync(() => {
@@ -524,13 +523,13 @@ export const layer = Layer.effect(
       )
     })
 
-    const stopSync = Effect.fn("Workspace.stopSync")(function* (id: WorkspaceID) {
+    const stopSync = Effect.fn("Workspace.stopSync")(function* (id: WorkspaceV2.ID) {
       yield* FiberMap.remove(syncFibers, id)
       connections.delete(id)
     })
 
     const create = Effect.fn("Workspace.create")(function* (input: CreateInput) {
-      const id = WorkspaceID.ascending(input.id)
+      const id = WorkspaceV2.ID.ascending(input.id)
       const adapter = getAdapter(input.projectID, input.type)
       const config = yield* WorkspaceAdapterRuntime.configure(adapter, {
         ...input,
@@ -551,20 +550,20 @@ export const layer = Layer.effect(
         timeUsed: Date.now(),
       }
 
-      yield* db((db) => {
-        db.insert(WorkspaceTable)
-          .values({
-            id: info.id,
-            type: info.type,
-            branch: info.branch,
-            name: info.name,
-            directory: info.directory,
-            extra: info.extra,
-            project_id: info.projectID,
-            time_used: info.timeUsed,
-          })
-          .run()
-      })
+      yield* db
+        .insert(WorkspaceTable)
+        .values({
+          id: info.id,
+          type: info.type,
+          branch: info.branch,
+          name: info.name,
+          directory: info.directory,
+          extra: info.extra,
+          project_id: info.projectID,
+          time_used: info.timeUsed,
+        })
+        .run()
+        .pipe(Effect.orDie)
 
       const env = {
         OPENCODE_AUTH_CONTENT: JSON.stringify(yield* auth.all()),
@@ -603,13 +602,12 @@ export const layer = Layer.effect(
           sessionID: input.sessionID,
         })
 
-        const current = yield* db((db) =>
-          db
-            .select({ workspaceID: SessionTable.workspace_id })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, input.sessionID))
-            .get(),
-        )
+        const current = yield* db
+          .select({ workspaceID: SessionTable.workspace_id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
 
         if (current?.workspaceID) {
           const previous = yield* get(current.workspaceID)
@@ -634,7 +632,7 @@ export const layer = Layer.effect(
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored
-            yield* sync.claim(input.sessionID, input.workspaceID ?? previous.projectID)
+            yield* events.claim(input.sessionID, input.workspaceID ?? previous.projectID)
           }
         }
 
@@ -669,12 +667,7 @@ export const layer = Layer.effect(
         }
 
         if (input.workspaceID === null) {
-          yield* sync.run(Session.Event.Updated, {
-            sessionID: input.sessionID,
-            info: {
-              workspaceID: null,
-            },
-          })
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined })
 
           log.info("session warp complete", {
             workspaceID: input.workspaceID,
@@ -695,12 +688,7 @@ export const layer = Layer.effect(
         const target = yield* WorkspaceAdapterRuntime.target(space)
 
         if (target.type === "local") {
-          yield* sync.run(Session.Event.Updated, {
-            sessionID: input.sessionID,
-            info: {
-              workspaceID: input.workspaceID,
-            },
-          })
+          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
 
           log.info("session warp complete", {
             workspaceID: input.workspaceID,
@@ -710,20 +698,19 @@ export const layer = Layer.effect(
           return
         }
 
-        const rows = yield* db((db) =>
-          db
-            .select({
-              id: EventTable.id,
-              aggregateID: EventTable.aggregate_id,
-              seq: EventTable.seq,
-              type: EventTable.type,
-              data: EventTable.data,
-            })
-            .from(EventTable)
-            .where(eq(EventTable.aggregate_id, input.sessionID))
-            .orderBy(asc(EventTable.seq))
-            .all(),
-        )
+        const rows = yield* db
+          .select({
+            id: EventTable.id,
+            aggregateID: EventTable.aggregate_id,
+            seq: EventTable.seq,
+            type: EventTable.type,
+            data: EventTable.data,
+          })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, input.sessionID))
+          .orderBy(asc(EventTable.seq))
+          .all()
+          .pipe(Effect.orDie)
         if (rows.length === 0)
           return yield* new SessionEventsNotFoundError({
             message: `No events found for session: ${input.sessionID}`,
@@ -810,6 +797,8 @@ export const layer = Layer.effect(
           })
         }
 
+        yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
+
         log.info("session warp complete", {
           workspaceID: input.workspaceID,
           sessionID: input.sessionID,
@@ -829,15 +818,14 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Workspace.list")(function* (project: Project.Info) {
-      return yield* db((db) =>
-        db
-          .select()
-          .from(WorkspaceTable)
-          .where(eq(WorkspaceTable.project_id, project.id))
-          .all()
-          .map(fromRow)
-          .sort((a, b) => a.id.localeCompare(b.id)),
-      )
+      return (yield* db
+        .select()
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.project_id, project.id))
+        .all()
+        .pipe(Effect.orDie))
+        .map(fromRow)
+        .sort((a, b) => a.id.localeCompare(b.id))
     })
 
     const syncList = Effect.fn("Workspace.syncList")(function* (project: Project.Info) {
@@ -864,7 +852,7 @@ export const layer = Layer.effect(
             names.add(item.name)
 
             const info: Info = {
-              id: WorkspaceID.ascending(),
+              id: WorkspaceV2.ID.ascending(),
               type: item.type,
               branch: item.branch,
               name: item.name,
@@ -874,20 +862,20 @@ export const layer = Layer.effect(
               timeUsed: Date.now(),
             }
 
-            yield* db((db) => {
-              db.insert(WorkspaceTable)
-                .values({
-                  id: info.id,
-                  type: info.type,
-                  branch: info.branch,
-                  name: info.name,
-                  directory: info.directory,
-                  extra: info.extra,
-                  project_id: info.projectID,
-                  time_used: info.timeUsed,
-                })
-                .run()
-            })
+            yield* db
+              .insert(WorkspaceTable)
+              .values({
+                id: info.id,
+                type: info.type,
+                branch: info.branch,
+                name: info.name,
+                directory: info.directory,
+                extra: info.extra,
+                project_id: info.projectID,
+                time_used: info.timeUsed,
+              })
+              .run()
+              .pipe(Effect.orDie)
 
             yield* startSync(info)
           }),
@@ -895,20 +883,19 @@ export const layer = Layer.effect(
       )
     })
 
-    const get = Effect.fn("Workspace.get")(function* (id: WorkspaceID) {
-      const row = yield* db((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
+    const get = Effect.fn("Workspace.get")(function* (id: WorkspaceV2.ID) {
+      const row = yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return
       return fromRow(row)
     })
 
-    const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceID) {
-      const sessions = yield* db((db) =>
-        db
-          .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
-          .from(SessionTable)
-          .where(eq(SessionTable.workspace_id, id))
-          .all(),
-      )
+    const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceV2.ID) {
+      const sessions = yield* db
+        .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.workspace_id, id))
+        .all()
+        .pipe(Effect.orDie)
       const sessionIDs = new Set(sessions.map((sessionInfo) => sessionInfo.id))
       yield* Effect.forEach(
         sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
@@ -917,7 +904,7 @@ export const layer = Layer.effect(
         { discard: true },
       )
 
-      const row = yield* db((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
+      const row = yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return
 
       yield* stopSync(id)
@@ -933,7 +920,7 @@ export const layer = Layer.effect(
           }),
       )
 
-      yield* db((db) => db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run())
+      yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, id)).run().pipe(Effect.orDie)
       return info
     })
 
@@ -941,30 +928,21 @@ export const layer = Layer.effect(
       return [...connections.values()]
     })
 
-    const isSyncing = Effect.fn("Workspace.isSyncing")(function* (workspaceID: WorkspaceID) {
+    const isSyncing = Effect.fn("Workspace.isSyncing")(function* (workspaceID: WorkspaceV2.ID) {
       const exists = yield* FiberMap.has(syncFibers, workspaceID)
       return exists && connections.get(workspaceID)?.status !== "error"
     })
 
     const waitForSync = Effect.fn("Workspace.waitForSync")(function* (
-      workspaceID: WorkspaceID,
+      workspaceID: WorkspaceV2.ID,
       state: Record<string, number>,
       signal?: AbortSignal,
       timeout = TIMEOUT,
     ) {
-      if (synced(state)) return
+      if (yield* synced(db, state)) return
 
       yield* Effect.catch(
-        waitEvent({
-          timeout,
-          signal,
-          fn(event) {
-            if (event.workspace !== workspaceID && event.payload.type !== "sync") {
-              return false
-            }
-            return synced(state)
-          },
-        }),
+        waitUntilSynced({ db, workspaceID, state, signal, timeout }),
         (): Effect.Effect<never, WaitForSyncError> =>
           signal?.aborted
             ? Effect.fail(
@@ -982,14 +960,13 @@ export const layer = Layer.effect(
       )
     })
 
-    const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectID) {
-      const rows = yield* db((db) =>
-        db
-          .selectDistinct({ workspace: WorkspaceTable })
-          .from(WorkspaceTable)
-          .where(eq(WorkspaceTable.project_id, projectID))
-          .all(),
-      )
+    const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectV2.ID) {
+      const rows = yield* db
+        .selectDistinct({ workspace: WorkspaceTable })
+        .from(WorkspaceTable)
+        .where(eq(WorkspaceTable.project_id, projectID))
+        .all()
+        .pipe(Effect.orDie)
 
       for (const { workspace } of rows) {
         yield* startSync(fromRow(workspace)).pipe(
@@ -1025,11 +1002,12 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Session.defaultLayer),
-  Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(SessionPrompt.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(Vcs.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
@@ -1044,26 +1022,46 @@ type HistoryEvent = {
   data: Record<string, unknown>
 }
 
-function synced(state: Record<string, number>) {
+function waitUntilSynced(input: {
+  db: Database.Interface["db"]
+  workspaceID: WorkspaceV2.ID
+  state: Record<string, number>
+  signal?: AbortSignal
+  timeout: number
+}): Effect.Effect<void, unknown> {
+  return Effect.suspend(() =>
+    waitEvent({
+      timeout: input.timeout,
+      signal: input.signal,
+      fn(event) {
+        return event.workspace === input.workspaceID || event.payload.type === "sync"
+      },
+    }).pipe(
+      Effect.andThen(synced(input.db, input.state)),
+      Effect.flatMap((done): Effect.Effect<void, unknown> => (done ? Effect.void : waitUntilSynced(input))),
+    ),
+  )
+}
+
+function synced(db: Database.Interface["db"], state: Record<string, number>): Effect.Effect<boolean> {
   const ids = Object.keys(state)
-  if (ids.length === 0) return true
+  if (ids.length === 0) return Effect.succeed(true)
 
-  const done = Object.fromEntries(
-    Database.use((db) =>
-      db
-        .select({
-          id: EventSequenceTable.aggregate_id,
-          seq: EventSequenceTable.seq,
-        })
-        .from(EventSequenceTable)
-        .where(inArray(EventSequenceTable.aggregate_id, ids))
-        .all(),
-    ).map((row) => [row.id, row.seq]),
-  ) as Record<string, number>
-
-  return ids.every((id) => {
-    return (done[id] ?? -1) >= state[id]
-  })
+  return db
+    .select({
+      id: EventSequenceTable.aggregate_id,
+      seq: EventSequenceTable.seq,
+    })
+    .from(EventSequenceTable)
+    .where(inArray(EventSequenceTable.aggregate_id, ids))
+    .all()
+    .pipe(
+      Effect.orDie,
+      Effect.map((rows) => {
+        const done = Object.fromEntries(rows.map((row) => [row.id, row.seq])) as Record<string, number>
+        return ids.every((id) => (done[id] ?? -1) >= state[id])
+      }),
+    )
 }
 
 function route(url: string | URL, path: string) {

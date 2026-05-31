@@ -4,7 +4,7 @@ import { Effect, Layer } from "effect"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(LSP.defaultLayer, CrossSpawnSpawner.defaultLayer))
@@ -20,137 +20,113 @@ describe("LSP service lifecycle", () => {
     spawnSpy.mockRestore()
   })
 
-  it.live("init() completes without error", () => provideTmpdirInstance(() => LSP.Service.use((lsp) => lsp.init())))
+  it.instance("init() completes without error", () => LSP.Service.use((lsp) => lsp.init()))
 
-  it.live("status() returns empty array initially", () =>
-    provideTmpdirInstance(() =>
+  it.instance("status() returns empty array initially", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.status()
+        expect(Array.isArray(result)).toBe(true)
+        expect(result.length).toBe(0)
+      }),
+    ),
+  )
+
+  it.instance("diagnostics() returns empty object initially", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.diagnostics()
+        expect(typeof result).toBe("object")
+        expect(Object.keys(result).length).toBe(0)
+      }),
+    ),
+  )
+
+  it.instance("hasClients() returns false for .ts files in instance when LSP is unset", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.hasClients(path.join((yield* TestInstance).directory, "test.ts"))
+        expect(result).toBe(false)
+      }),
+    ),
+  )
+
+  it.instance(
+    "hasClients() returns true for .ts files in instance when lsp is true",
+    () =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {
-          const result = yield* lsp.status()
-          expect(Array.isArray(result)).toBe(true)
-          expect(result.length).toBe(0)
+          const result = yield* lsp.hasClients(path.join((yield* TestInstance).directory, "test.ts"))
+          expect(result).toBe(true)
         }),
       ),
-    ),
+    { config: { lsp: true } },
   )
 
-  it.live("diagnostics() returns empty object initially", () =>
-    provideTmpdirInstance(() =>
+  it.instance(
+    "hasClients() keeps built-in LSPs when config object is provided",
+    () =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {
-          const result = yield* lsp.diagnostics()
-          expect(typeof result).toBe("object")
-          expect(Object.keys(result).length).toBe(0)
+          const result = yield* lsp.hasClients(path.join((yield* TestInstance).directory, "test.ts"))
+          expect(result).toBe(true)
         }),
       ),
+    { config: { lsp: { eslint: { disabled: true } } } },
+  )
+
+  it.instance("hasClients() returns false for files outside instance", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.hasClients(path.join((yield* TestInstance).directory, "..", "outside.ts"))
+        expect(typeof result).toBe("boolean")
+      }),
     ),
   )
 
-  it.live("hasClients() returns false for .ts files in instance when LSP is unset", () =>
-    provideTmpdirInstance((dir) =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          const result = yield* lsp.hasClients(path.join(dir, "test.ts"))
-          expect(result).toBe(false)
-        }),
-      ),
+  it.instance("workspaceSymbol() returns empty array with no clients", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.workspaceSymbol("test")
+        expect(Array.isArray(result)).toBe(true)
+        expect(result.length).toBe(0)
+      }),
     ),
   )
 
-  it.live("hasClients() returns true for .ts files in instance when lsp is true", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
-          Effect.gen(function* () {
-            const result = yield* lsp.hasClients(path.join(dir, "test.ts"))
-            expect(result).toBe(true)
-          }),
-        ),
-      { config: { lsp: true } },
+  it.instance("definition() returns empty array for unknown file", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.definition({
+          file: path.join((yield* TestInstance).directory, "nonexistent.ts"),
+          line: 0,
+          character: 0,
+        })
+        expect(Array.isArray(result)).toBe(true)
+      }),
     ),
   )
 
-  it.live("hasClients() keeps built-in LSPs when config object is provided", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        LSP.Service.use((lsp) =>
-          Effect.gen(function* () {
-            const result = yield* lsp.hasClients(path.join(dir, "test.ts"))
-            expect(result).toBe(true)
-          }),
-        ),
-      {
-        config: {
-          lsp: {
-            eslint: { disabled: true },
-          },
-        },
-      },
+  it.instance("references() returns empty array for unknown file", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.references({
+          file: path.join((yield* TestInstance).directory, "nonexistent.ts"),
+          line: 0,
+          character: 0,
+        })
+        expect(Array.isArray(result)).toBe(true)
+      }),
     ),
   )
 
-  it.live("hasClients() returns false for files outside instance", () =>
-    provideTmpdirInstance((dir) =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          const result = yield* lsp.hasClients(path.join(dir, "..", "outside.ts"))
-          expect(typeof result).toBe("boolean")
-        }),
-      ),
-    ),
-  )
-
-  it.live("workspaceSymbol() returns empty array with no clients", () =>
-    provideTmpdirInstance(() =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          const result = yield* lsp.workspaceSymbol("test")
-          expect(Array.isArray(result)).toBe(true)
-          expect(result.length).toBe(0)
-        }),
-      ),
-    ),
-  )
-
-  it.live("definition() returns empty array for unknown file", () =>
-    provideTmpdirInstance((dir) =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          const result = yield* lsp.definition({
-            file: path.join(dir, "nonexistent.ts"),
-            line: 0,
-            character: 0,
-          })
-          expect(Array.isArray(result)).toBe(true)
-        }),
-      ),
-    ),
-  )
-
-  it.live("references() returns empty array for unknown file", () =>
-    provideTmpdirInstance((dir) =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          const result = yield* lsp.references({
-            file: path.join(dir, "nonexistent.ts"),
-            line: 0,
-            character: 0,
-          })
-          expect(Array.isArray(result)).toBe(true)
-        }),
-      ),
-    ),
-  )
-
-  it.live("multiple init() calls are idempotent", () =>
-    provideTmpdirInstance(() =>
-      LSP.Service.use((lsp) =>
-        Effect.gen(function* () {
-          yield* lsp.init()
-          yield* lsp.init()
-          yield* lsp.init()
-        }),
-      ),
+  it.instance("multiple init() calls are idempotent", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        yield* lsp.init()
+        yield* lsp.init()
+        yield* lsp.init()
+      }),
     ),
   )
 })

@@ -1,4 +1,5 @@
 import path from "path"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -12,7 +13,7 @@ import BUILD_SWITCH from "./prompt/build-switch.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
 
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
-  messages: MessageV2.WithParts[]
+  messages: SessionLegacy.WithParts[]
   agent: Agent.Info
   session: Session.Info
 }) {
