@@ -2,7 +2,7 @@ import { Deferred, Effect, Layer, Schema, Context, Option as EffectOption } from
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { SessionID, MessageID } from "@/session/schema"
+import { SessionID, MessageID, PartID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import * as Log from "@opencode-ai/core/util/log"
@@ -46,6 +46,17 @@ export type Prompt = Schema.Schema.Type<typeof Prompt>
 export const Info = Prompt
 export type Info = Prompt
 
+export const Image = Schema.Struct({
+  type: Schema.Literal("image"),
+  mime: Schema.String,
+  url: Schema.String,
+  filename: Schema.optional(Schema.String),
+}).annotate({ identifier: "QuestionImageAnswer" })
+export type Image = Schema.Schema.Type<typeof Image>
+
+export const Part = Schema.Union([Schema.String, Image]).annotate({ identifier: "QuestionAnswerPart" })
+export type Part = Schema.Schema.Type<typeof Part>
+
 export const Tool = Schema.Struct({
   messageID: MessageID,
   callID: Schema.String,
@@ -63,7 +74,7 @@ export const Request = Schema.Struct({
 export type Request = Schema.Schema.Type<typeof Request>
 const isRequest = Schema.is(Request)
 
-export const Answer = Schema.Array(Schema.String).annotate({ identifier: "QuestionAnswer" })
+export const Answer = Schema.Array(Part).annotate({ identifier: "QuestionAnswer" })
 export type Answer = Schema.Schema.Type<typeof Answer>
 
 export const Reply = Schema.Struct({
@@ -116,11 +127,45 @@ type QuestionToolPart = {
   part: MessageV2.ToolPart
 }
 
-const cloneAnswers = (answers: ReadonlyArray<Answer>) => answers.map((answer) => [...answer])
+const cloneAnswers = (answers: ReadonlyArray<Answer>) =>
+  answers.map((answer) => answer.map((part) => (typeof part === "string" ? part : { ...part })))
+
+const formatAnswerPart = (part: Part) => {
+  if (typeof part === "string") return part
+  return part.filename ? `[image: ${part.filename}]` : "[image]"
+}
+
+function extractBase64(url: string): string {
+  const comma = url.indexOf(",")
+  if (comma === -1) return url
+  const body = url.slice(comma + 1)
+  if (!body.startsWith("data:")) return body
+  return extractBase64(body)
+}
+
+function dataUrl(url: string, mime: string) {
+  if (!url.startsWith("data:")) return `data:${mime};base64,${url}`
+  return `data:${mime};base64,${extractBase64(url)}`
+}
+
+function answerFile(part: Part, sessionID: SessionID, messageID: MessageID): MessageV2.FilePart | undefined {
+  if (typeof part === "string") return undefined
+  return {
+    id: PartID.ascending(),
+    sessionID,
+    messageID,
+    type: "file",
+    mime: part.mime,
+    url: dataUrl(part.url, part.mime),
+    filename: part.filename,
+  }
+}
 
 const formatAnsweredOutput = (request: Request, answers: ReadonlyArray<Answer>) => {
   const formatted = request.questions
-    .map((q, i) => `"${q.question}"="${answers[i]?.length ? answers[i].join(", ") : "Unanswered"}"`)
+    .map(
+      (q, i) => `"${q.question}"="${answers[i]?.length ? answers[i].map(formatAnswerPart).join(", ") : "Unanswered"}"`,
+    )
     .join(", ")
 
   return {
@@ -322,7 +367,9 @@ export const layer = Layer.effect(
       const result: QuestionToolPart[] = []
       const sessions = yield* session.list({ limit: 1000 })
       for (const item of sessions) {
-        const messages = yield* session.messages({ sessionID: item.id }).pipe(Effect.catchCause(() => Effect.succeed([])))
+        const messages = yield* session
+          .messages({ sessionID: item.id })
+          .pipe(Effect.catchCause(() => Effect.succeed([])))
         for (const message of messages) {
           for (const part of message.parts) {
             const request = requestFromPart(part)
@@ -349,8 +396,16 @@ export const layer = Layer.effect(
       const now = Date.now()
       const input = item.part.state.input ?? { questions: item.request.questions }
       const time =
-        item.part.state.status === "running" ? { start: item.part.state.time.start, end: now } : { start: now, end: now }
+        item.part.state.status === "running"
+          ? { start: item.part.state.time.start, end: now }
+          : { start: now, end: now }
       const output = formatAnsweredOutput(item.request, answers)
+      const attachments = answers.flatMap((answer) =>
+        answer.flatMap((part) => {
+          const next = answerFile(part, item.part.sessionID, item.part.messageID)
+          return next ? [next] : []
+        }),
+      )
       yield* session.updatePart({
         ...item.part,
         state: {
@@ -363,6 +418,7 @@ export const layer = Layer.effect(
             answers: cloneAnswers(answers),
           },
           time,
+          attachments: attachments.length ? attachments : undefined,
         },
       })
     })
@@ -373,7 +429,9 @@ export const layer = Layer.effect(
       const now = Date.now()
       const input = item.part.state.input ?? { questions: item.request.questions }
       const time =
-        item.part.state.status === "running" ? { start: item.part.state.time.start, end: now } : { start: now, end: now }
+        item.part.state.status === "running"
+          ? { start: item.part.state.time.start, end: now }
+          : { start: now, end: now }
       yield* session.updatePart({
         ...item.part,
         state: {

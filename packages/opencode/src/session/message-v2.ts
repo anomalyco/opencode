@@ -35,6 +35,7 @@ interface FetchDecompressionError extends Error {
 }
 
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
+export const QUESTION_ATTACHMENT_PROMPT = "Attached media from question answer:"
 export { isMedia }
 
 export const AbortedError = NamedError.create("MessageAbortedError", { message: Schema.String })
@@ -645,6 +646,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  type ExtractedMedia = {
+    prompt: string
+    attachment: { mime: string; url: string; filename?: string }
+  }
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -749,7 +754,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 
     if (msg.info.role === "assistant") {
       const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
-      const media: Array<{ mime: string; url: string; filename?: string }> = []
+      const media: ExtractedMedia[] = []
 
       if (
         msg.info.error &&
@@ -804,11 +809,16 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message
             const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-            const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
+            const extractedMedia = mediaAttachments.filter(
+              (a) => part.tool === "question" || !supportsMediaInToolResult(a),
+            )
             if (extractedMedia.length > 0) {
-              media.push(...extractedMedia)
+              const prompt = part.tool === "question" ? QUESTION_ATTACHMENT_PROMPT : SYNTHETIC_ATTACHMENT_PROMPT
+              media.push(...extractedMedia.map((attachment) => ({ prompt, attachment })))
             }
-            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
+            const finalAttachments = attachments.filter(
+              (a) => !isMedia(a.mime) || (part.tool !== "question" && supportsMediaInToolResult(a)),
+            )
 
             const output =
               finalAttachments.length > 0
@@ -885,16 +895,22 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         result.push(assistantMessage)
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
-        if (media.length > 0) {
+        for (let i = 0; i < media.length; ) {
+          const prompt = media[i]!.prompt
+          const group: ExtractedMedia[] = []
+          while (i < media.length && media[i]!.prompt === prompt) {
+            group.push(media[i]!)
+            i++
+          }
           result.push({
             id: MessageID.ascending(),
             role: "user",
             parts: [
               {
                 type: "text" as const,
-                text: SYNTHETIC_ATTACHMENT_PROMPT,
+                text: prompt,
               },
-              ...media.map((attachment) => ({
+              ...group.map(({ attachment }) => ({
                 type: "file" as const,
                 url: normalizeDataUrl(attachment.url, attachment.mime),
                 mediaType: attachment.mime,
@@ -991,7 +1007,12 @@ export function* stream(sessionID: SessionID) {
 
 export function parts(message_id: MessageID) {
   const rows = Database.use((db) =>
-    db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.time_created, PartTable.id).all(),
+    db
+      .select()
+      .from(PartTable)
+      .where(eq(PartTable.message_id, message_id))
+      .orderBy(PartTable.time_created, PartTable.id)
+      .all(),
   )
   return rows.map(
     (row) =>

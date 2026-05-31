@@ -1,5 +1,5 @@
-import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Queue } from "effect"
+import { describe, expect, test } from "bun:test"
+import { Effect, Fiber, Layer, Queue, Schema } from "effect"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -45,6 +45,18 @@ const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Quest
 })
 
 describe("tool.question", () => {
+  test("question answer schema accepts image answer parts", () => {
+    const answer = Schema.decodeUnknownSync(Question.Answer)([
+      "details",
+      { type: "image", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "proof.png" },
+    ])
+
+    expect(answer).toEqual([
+      "details",
+      { type: "image", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "proof.png" },
+    ])
+  })
+
   it.instance("should successfully execute with valid question parameters", () =>
     Effect.gen(function* () {
       const question = yield* Question.Service
@@ -112,6 +124,49 @@ describe("tool.question", () => {
 
       const result = yield* Fiber.join(fiber)
       expect(result.output).toContain(`"What do you see?"="Attached"`)
+    }),
+  )
+
+  it.instance("returns image answers as tool result attachments", () =>
+    Effect.gen(function* () {
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
+        {
+          question: "What do you see?",
+          header: "Image",
+          options: [{ label: "Attached", description: "Use the image" }],
+        },
+      ]
+
+      const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({
+        requestID: item.id,
+        answers: [
+          [
+            "details",
+            {
+              type: "image",
+              mime: "image/png",
+              url: "data:image/png;base64,data:image/png;base64,AAAA",
+              filename: "proof.png",
+            },
+          ],
+        ],
+      })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.output).toContain(`"What do you see?"="details, [image: proof.png]"`)
+      expect(result.attachments).toEqual([
+        {
+          type: "file",
+          mime: "image/png",
+          url: "data:image/png;base64,AAAA",
+          filename: "proof.png",
+        },
+      ])
     }),
   )
 

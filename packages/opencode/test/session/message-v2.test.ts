@@ -418,16 +418,16 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("falls back to a user image message when tool results include media but model input has no image support", async () => {
+  test("extracts question answer media into a user image message", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
-    const noImageModel = {
+    const imageModel = {
       ...model,
       capabilities: {
         ...model.capabilities,
         input: {
           ...model.capabilities.input,
-          image: false,
+          image: true,
         },
       },
     }
@@ -473,7 +473,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, noImageModel)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run question" }],
@@ -498,15 +498,21 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "question",
             output: {
-              type: "content",
-              value: [
-                {
-                  type: "text",
-                  text: 'User has answered your questions: "What do you see?"="[image: proof.png]".',
-                },
-                { type: "media", mediaType: "image/png", data: "Zm9v" },
-              ],
+              type: "text",
+              value: 'User has answered your questions: "What do you see?"="[image: proof.png]".',
             },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from question answer:" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "proof.png",
+            data: "data:image/png;base64,Zm9v",
           },
         ],
       },
