@@ -277,9 +277,17 @@ export default function Share(props: {
 
       if (msg.role === "assistant") {
         result.cost += msg.cost
-        result.tokens.input += msg.tokens.input
-        result.tokens.output += msg.tokens.output
-        result.tokens.reasoning += msg.tokens.reasoning
+
+        // Only count tokens from the last assistant message,
+        // matching the TUI behavior (packages/tui/internal/components/chat/messages.go).
+        // The token counts in each assistant message already include
+        // the full context for that turn, so summing across all
+        // assistant messages would over-count.
+        if (i === msgs.length - 1 || msgs[i + 1]?.role !== "assistant") {
+          result.tokens.input = msg.tokens.input
+          result.tokens.output = msg.tokens.output
+          result.tokens.reasoning = msg.tokens.reasoning
+        }
 
         result.models[`${msg.providerID} ${msg.modelID}`] = [msg.providerID, msg.modelID]
 
@@ -398,31 +406,23 @@ export default function Share(props: {
                         {data().cost !== undefined ? (
                           <span>{formatCurrency(data().cost, props.messages.locale)}</span>
                         ) : (
-                          <span data-placeholder>&mdash;</span>
+                          <span>&mdash;</span>
                         )}
                       </li>
                       <li>
-                        <span data-element-label>{props.messages.input_tokens}</span>
-                        {data().tokens.input ? (
+                        <span data-element-label>{props.messages.tokens_in}</span>
+                        {data().tokens.input !== undefined ? (
                           <span>{formatNumber(data().tokens.input, props.messages.locale)}</span>
                         ) : (
-                          <span data-placeholder>&mdash;</span>
+                          <span>&mdash;</span>
                         )}
                       </li>
                       <li>
-                        <span data-element-label>{props.messages.output_tokens}</span>
-                        {data().tokens.output ? (
+                        <span data-element-label>{props.messages.tokens_out}</span>
+                        {data().tokens.output !== undefined ? (
                           <span>{formatNumber(data().tokens.output, props.messages.locale)}</span>
                         ) : (
-                          <span data-placeholder>&mdash;</span>
-                        )}
-                      </li>
-                      <li>
-                        <span data-element-label>{props.messages.reasoning_tokens}</span>
-                        {data().tokens.reasoning ? (
-                          <span>{formatNumber(data().tokens.reasoning, props.messages.locale)}</span>
-                        ) : (
-                          <span data-placeholder>&mdash;</span>
+                          <span>&mdash;</span>
                         )}
                       </li>
                     </ul>
@@ -432,213 +432,25 @@ export default function Share(props: {
             </Show>
           </div>
 
-          <Show when={debug}>
-            <div style={{ margin: "2rem 0" }}>
-              <div
-                style={{
-                  border: "1px solid #ccc",
-                  padding: "1rem",
-                  "overflow-y": "auto",
-                }}
-              >
-                <Show when={data().messages.length > 0} fallback={<p>{props.messages.waiting_for_messages}</p>}>
-                  <ul style={{ "list-style-type": "none", padding: 0 }}>
-                    <For each={data().messages}>
-                      {(msg) => (
-                        <li
-                          style={{
-                            padding: "0.75rem",
-                            margin: "0.75rem 0",
-                            "box-shadow": "0 1px 3px rgba(0,0,0,0.1)",
-                          }}
-                        >
-                          <div>
-                            <strong>{props.messages.debug_key}:</strong> {msg.id}
-                          </div>
-                          <pre>{JSON.stringify(msg, null, 2)}</pre>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </Show>
-              </div>
-            </div>
-          </Show>
-
           <Show when={showScrollButton()}>
-            <button
-              type="button"
-              class={styles["scroll-button"]}
-              onClick={() => document.body.scrollIntoView({ behavior: "smooth", block: "end" })}
-              onMouseEnter={() => {
-                setIsButtonHovered(true)
-                if (scrollTimeout) {
-                  clearTimeout(scrollTimeout)
-                }
-              }}
-              onMouseLeave={() => {
-                setIsButtonHovered(false)
-                if (showScrollButton()) {
-                  scrollTimeout = window.setTimeout(() => {
-                    if (!isButtonHovered()) {
-                      setShowScrollButton(false)
-                    }
-                  }, 3000)
-                }
-              }}
-              title={props.messages.scroll_to_bottom}
-              aria-label={props.messages.scroll_to_bottom}
+            <div
+              data-component="scroll-button"
+              onClick={() =>
+                window.scrollTo({
+                  top: document.body.scrollHeight,
+                  behavior: "smooth",
+                })
+              }
+              onMouseEnter={() => setIsButtonHovered(true)}
+              onMouseLeave={() => setIsButtonHovered(false)}
             >
-              <IconArrowDown width={20} height={20} />
-            </button>
+              <span data-component="button-icon">
+                <IconArrowDown />
+              </span>
+            </div>
           </Show>
         </main>
       </ShareI18nProvider>
     </Show>
   )
-}
-
-export function fromV1(v1: Message.Info): MessageWithParts {
-  if (v1.role === "assistant") {
-    return {
-      id: v1.id,
-      sessionID: v1.metadata.sessionID,
-      role: "assistant",
-      parentID: "",
-      agent: "build",
-      time: {
-        created: v1.metadata.time.created,
-        completed: v1.metadata.time.completed,
-      },
-      cost: v1.metadata.assistant!.cost,
-      path: v1.metadata.assistant!.path,
-      summary: v1.metadata.assistant!.summary,
-      tokens: v1.metadata.assistant!.tokens ?? {
-        input: 0,
-        output: 0,
-        cache: {
-          read: 0,
-          write: 0,
-        },
-        reasoning: 0,
-      },
-      modelID: v1.metadata.assistant!.modelID,
-      providerID: v1.metadata.assistant!.providerID,
-      mode: "build",
-      error: v1.metadata.error,
-      parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
-        const base = {
-          id: index.toString(),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "step-start") {
-          return [
-            {
-              ...base,
-              type: "step-start",
-            },
-          ]
-        }
-        if (part.type === "tool-invocation") {
-          return [
-            {
-              ...base,
-              type: "tool",
-              callID: part.toolInvocation.toolCallId,
-              tool: part.toolInvocation.toolName,
-              state: (() => {
-                if (part.toolInvocation.state === "partial-call") {
-                  return {
-                    status: "pending",
-                    input: {},
-                    raw: "",
-                  }
-                }
-
-                const { title, time, ...metadata } = v1.metadata.tool[part.toolInvocation.toolCallId]
-                if (part.toolInvocation.state === "call") {
-                  return {
-                    status: "running",
-                    input: part.toolInvocation.args,
-                    time: {
-                      start: time.start,
-                    },
-                  }
-                }
-
-                if (part.toolInvocation.state === "result") {
-                  return {
-                    status: "completed",
-                    input: part.toolInvocation.args,
-                    output: part.toolInvocation.result,
-                    title,
-                    time,
-                    metadata,
-                  }
-                }
-                throw new Error("unknown tool invocation state")
-              })(),
-            },
-          ]
-        }
-        return []
-      }),
-    }
-  }
-
-  if (v1.role === "user") {
-    return {
-      id: v1.id,
-      sessionID: v1.metadata.sessionID,
-      role: "user",
-      agent: "user",
-      model: {
-        providerID: "",
-        modelID: "",
-      },
-      time: {
-        created: v1.metadata.time.created,
-      },
-      parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
-        const base = {
-          id: index.toString(),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "file") {
-          return [
-            {
-              ...base,
-              type: "file",
-              mime: part.mediaType,
-              filename: part.filename,
-              url: part.url,
-            },
-          ]
-        }
-        return []
-      }),
-    }
-  }
-
-  throw new Error("unknown message type")
 }
