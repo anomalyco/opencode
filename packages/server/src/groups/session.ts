@@ -5,7 +5,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath, PositiveInt, RelativePath, withStatics } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { Schema, Struct } from "effect"
+import { Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
@@ -20,8 +20,18 @@ import { AgentV2 } from "@opencode-ai/core/agent"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 
+const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
+  }),
+)
+
 const SessionsQueryFields = {
   workspace: WorkspaceV2.ID.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
+  roots: QueryBoolean.pipe(Schema.optional),
+  start: Schema.NumberFromString.pipe(Schema.decodeTo(Schema.Finite), Schema.optional),
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
   }),
