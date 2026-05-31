@@ -1,13 +1,14 @@
 export * as PluginBoot from "./boot"
 
 import { Context, Deferred, Effect, Layer } from "effect"
-import { AccountV2 } from "../account"
+import { Auth } from "../auth"
 import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
 import { Config } from "../config"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { EventV2 } from "../event"
 import { Location } from "../location"
+import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
 import { AccountPlugin } from "./account"
@@ -21,13 +22,14 @@ type Plugin = {
   id: PluginV2.ID
   effect: PluginV2.Effect<
     | Catalog.Service
-    | AccountV2.Service
+    | Auth.Service
     | AgentV2.Service
     | Npm.Service
     | EventV2.Service
     | Location.Service
     | PluginV2.Service
     | Config.Service
+    | ModelsDev.Service
   >
 }
 
@@ -42,10 +44,11 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const plugin = yield* PluginV2.Service
-    const accounts = yield* AccountV2.Service
+    const accounts = yield* Auth.Service
     const agents = yield* AgentV2.Service
     const config = yield* Config.Service
     const location = yield* Location.Service
+    const modelsDev = yield* ModelsDev.Service
     const npm = yield* Npm.Service
     const events = yield* EventV2.Service
     const done = yield* Deferred.make<void>()
@@ -55,10 +58,11 @@ export const layer = Layer.effect(
         id: input.id,
         effect: input.effect.pipe(
           Effect.provideService(Catalog.Service, catalog),
-          Effect.provideService(AccountV2.Service, accounts),
+          Effect.provideService(Auth.Service, accounts),
           Effect.provideService(AgentV2.Service, agents),
           Effect.provideService(Config.Service, config),
           Effect.provideService(Location.Service, location),
+          Effect.provideService(ModelsDev.Service, modelsDev),
           Effect.provideService(Npm.Service, npm),
           Effect.provideService(EventV2.Service, events),
           Effect.provideService(PluginV2.Service, plugin),
@@ -90,12 +94,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Catalog.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(PluginV2.defaultLayer),
-  Layer.provide(AccountV2.defaultLayer),
-  Layer.provide(AgentV2.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(Npm.defaultLayer),
+export const locationLayer = layer.pipe(
+  Layer.provideMerge(Catalog.locationLayer),
+  Layer.provideMerge(Config.locationLayer),
+  Layer.provideMerge(AgentV2.locationLayer),
 )

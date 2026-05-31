@@ -22,8 +22,8 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
-import { BusEvent } from "../bus/bus-event"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
 import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
@@ -48,20 +48,20 @@ export const Resource = Schema.Struct({
 }).annotate({ identifier: "McpResource" })
 export type Resource = Schema.Schema.Type<typeof Resource>
 
-export const ToolsChanged = BusEvent.define(
-  "mcp.tools.changed",
-  Schema.Struct({
+export const ToolsChanged = EventV2.define({
+  type: "mcp.tools.changed",
+  schema: {
     server: Schema.String,
-  }),
-)
+  },
+})
 
-export const BrowserOpenFailed = BusEvent.define(
-  "mcp.browser.open.failed",
-  Schema.Struct({
+export const BrowserOpenFailed = EventV2.define({
+  type: "mcp.browser.open.failed",
+  schema: {
     mcpName: Schema.String,
     url: Schema.String,
-  }),
-)
+  },
+})
 
 export const Failed = NamedError.create("MCPFailed", {
   name: Schema.String,
@@ -278,7 +278,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -373,7 +373,7 @@ export const layer = Layer.effect(
                   status: "needs_client_registration" as const,
                   error: "Server does not support dynamic client registration. Please provide clientId in config.",
                 }
-                return bus
+                return events
                   .publish(TuiEvent.ToastShow, {
                     title: "MCP Authentication Required",
                     message: `Server "${key}" requires a pre-registered client ID. Add clientId to your config.`,
@@ -384,7 +384,7 @@ export const layer = Layer.effect(
               } else {
                 pendingOAuthTransports.set(key, transport)
                 lastStatus = { status: "needs_auth" as const }
-                return bus
+                return events
                   .publish(TuiEvent.ToastShow, {
                     title: "MCP Authentication Required",
                     message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
@@ -516,7 +516,7 @@ export const layer = Layer.effect(
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         s.defs[name] = listed
-        await bridge.promise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+        await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
 
@@ -880,7 +880,7 @@ export const layer = Layer.effect(
         ),
         Effect.catch(() => {
           log.warn("failed to open browser, user must open URL manually", { mcpName })
-          return bus.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
+          return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
         }),
       )
 
@@ -972,7 +972,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 
 export const defaultLayer = layer.pipe(
   Layer.provide(McpAuth.defaultLayer),
-  Layer.provide(Bus.layer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),

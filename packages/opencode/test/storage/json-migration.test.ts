@@ -4,13 +4,13 @@ import { drizzle, SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import path from "path"
 import fs from "fs/promises"
-import { readFileSync, readdirSync } from "fs"
+import { existsSync, readFileSync, readdirSync } from "fs"
 import { JsonMigration } from "@/storage/json-migration"
 import { Global } from "@opencode-ai/core/global"
-import { ProjectTable } from "../../src/project/project.sql"
-import { ProjectID } from "../../src/project/schema"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../../src/session/session.sql"
-import { SessionShareTable } from "../../src/share/share.sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
 // Test fixtures
@@ -79,10 +79,10 @@ function createTestDb() {
   sqlite.exec("PRAGMA foreign_keys = ON")
 
   // Apply schema migrations using drizzle migrate
-  const dir = path.join(import.meta.dirname, "../../migration")
+  const dir = path.join(import.meta.dirname, "../../../core/migration")
   const entries = readdirSync(dir, { withFileTypes: true })
   const migrations = entries
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && existsSync(path.join(dir, entry.name, "migration.sql")))
     .map((entry) => ({
       sql: readFileSync(path.join(dir, entry.name, "migration.sql"), "utf-8"),
       timestamp: Number(entry.name.split("_")[0]),
@@ -127,7 +127,7 @@ describe("JSON to SQLite migration", () => {
 
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
-    expect(projects[0].id).toBe(ProjectID.make("proj_test123abc"))
+    expect(projects[0].id).toBe(ProjectV2.ID.make("proj_test123abc"))
     expect(projects[0].worktree).toBe("/test/path")
     expect(projects[0].name).toBe("Test Project")
     expect(projects[0].sandboxes).toEqual(["/test/sandbox"])
@@ -151,7 +151,7 @@ describe("JSON to SQLite migration", () => {
 
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
-    expect(projects[0].id).toBe(ProjectID.make("proj_filename")) // Uses filename, not JSON id
+    expect(projects[0].id).toBe(ProjectV2.ID.make("proj_filename")) // Uses filename, not JSON id
   })
 
   test("migrates project with commands", async () => {
@@ -171,7 +171,7 @@ describe("JSON to SQLite migration", () => {
 
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
-    expect(projects[0].id).toBe(ProjectID.make("proj_with_commands"))
+    expect(projects[0].id).toBe(ProjectV2.ID.make("proj_with_commands"))
     expect(projects[0].commands).toEqual({ start: "npm run dev" })
   })
 
@@ -191,7 +191,7 @@ describe("JSON to SQLite migration", () => {
 
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
-    expect(projects[0].id).toBe(ProjectID.make("proj_no_commands"))
+    expect(projects[0].id).toBe(ProjectV2.ID.make("proj_no_commands"))
     expect(projects[0].commands).toBeNull()
   })
 
@@ -220,7 +220,7 @@ describe("JSON to SQLite migration", () => {
     const sessions = db.select().from(SessionTable).all()
     expect(sessions.length).toBe(1)
     expect(sessions[0].id).toBe(SessionID.make("ses_test456def"))
-    expect(sessions[0].project_id).toBe(ProjectID.make("proj_test123abc"))
+    expect(sessions[0].project_id).toBe(ProjectV2.ID.make("proj_test123abc"))
     expect(sessions[0].slug).toBe("test-session")
     expect(sessions[0].title).toBe("Test Session Title")
     expect(sessions[0].summary_additions).toBe(10)
@@ -421,7 +421,7 @@ describe("JSON to SQLite migration", () => {
     const sessions = db.select().from(SessionTable).all()
     expect(sessions.length).toBe(1)
     expect(sessions[0].id).toBe(SessionID.make("ses_migrated"))
-    expect(sessions[0].project_id).toBe(ProjectID.make(gitBasedProjectID)) // Uses directory, not stale JSON
+    expect(sessions[0].project_id).toBe(ProjectV2.ID.make(gitBasedProjectID)) // Uses directory, not stale JSON
   })
 
   test("uses filename for session id when JSON has different value", async () => {
@@ -452,7 +452,7 @@ describe("JSON to SQLite migration", () => {
     const sessions = db.select().from(SessionTable).all()
     expect(sessions.length).toBe(1)
     expect(sessions[0].id).toBe(SessionID.make("ses_from_filename")) // Uses filename, not JSON id
-    expect(sessions[0].project_id).toBe(ProjectID.make("proj_test123abc"))
+    expect(sessions[0].project_id).toBe(ProjectV2.ID.make("proj_test123abc"))
   })
 
   test("is idempotent (running twice doesn't duplicate)", async () => {
@@ -631,7 +631,7 @@ describe("JSON to SQLite migration", () => {
 
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
-    expect(projects[0].id).toBe(ProjectID.make("proj_test123abc"))
+    expect(projects[0].id).toBe(ProjectV2.ID.make("proj_test123abc"))
   })
 
   test("skips invalid todo entries while preserving source positions", async () => {
