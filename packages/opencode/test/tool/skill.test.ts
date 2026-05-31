@@ -9,6 +9,7 @@ import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "@/tool/registry"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { ToolRuntime } from "@opencode-ai/database/tool/runtime"
 import { testEffect } from "../lib/effect"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
@@ -27,7 +28,7 @@ afterEach(async () => {
 
 const node = CrossSpawnSpawner.defaultLayer
 
-const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
+const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node, ToolRuntime.layer))
 
 describe("tool.skill", () => {
   it.live("execute returns skill content block with files", () =>

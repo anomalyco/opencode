@@ -149,6 +149,9 @@ export class ToolRepo extends Context.Service<ToolRepo, ToolRepoInterface>()("@o
             const content = entity.content as unknown as ToolEntityContent
             yield* runtime.register(name, content.file_path)
           }
+          if (!(yield* runtime.isActive(name))) {
+            yield* runtime.activate(name)
+          }
           return yield* runtime.execute(name, args)
         }),
       })

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local-llm/qwen3.5",
+  "provider": {
+    "local-llm": {
+      "name": "Local LLM",
+      "npm": "@ai-sdk/openai-compatible",
+      "models": {
+        "qwen3.5": {
+          "tool_call": true,
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        }
+      },
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+        "apiKey": "not-needed"
+      }
+    }
+  }
+}

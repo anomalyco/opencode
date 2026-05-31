@@ -27,6 +27,7 @@ describe("ToolRuntime", () => {
       Effect.gen(function* () {
         const runtime = yield* ToolRuntime
         yield* runtime.register("add", `${toolsDir}/add.ts`)
+        yield* runtime.activate("add")
         return yield* runtime.execute("add", { a: 2, b: 3 })
       }),
     )
@@ -48,7 +49,7 @@ describe("ToolRuntime", () => {
       Effect.gen(function* () {
         const runtime = yield* ToolRuntime
         yield* runtime.register("add", `${toolsDir}/add.ts`)
-        return yield* runtime.list()
+        return yield* runtime.listCatalog()
       }),
     )
     expect(result).toHaveLength(1)
@@ -101,6 +102,7 @@ describe("ToolRuntime", () => {
       Effect.gen(function* () {
         const runtime = yield* ToolRuntime
         yield* runtime.register("counter", modulePath)
+        yield* runtime.activate("counter")
         const r1 = yield* runtime.execute("counter", {})
         const r2 = yield* runtime.execute("counter", {})
         const r3 = yield* runtime.execute("counter", {})

@@ -1,3 +1,5 @@
+import { ToolRuntime } from "@opencode-ai/database/tool/runtime"
+import { initDynamic, resolveDynamic } from "./dynamic"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
@@ -21,6 +23,8 @@ import z from "zod"
 import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
+import { SearchDataTool } from "./search-data"
+import { ImportTool } from "./import-tool"
 import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
@@ -104,6 +108,7 @@ export const layer: Layer.Layer<
   | Format.Service
   | Truncate.Service
   | RuntimeFlags.Service
+  | ToolRuntime
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,6 +118,7 @@ export const layer: Layer.Layer<
     const skill = yield* Skill.Service
     const truncate = yield* Truncate.Service
     const flags = yield* RuntimeFlags.Service
+    const runtime = yield* ToolRuntime
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -132,6 +138,8 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const searchDataTool = yield* SearchDataTool
+    const importToolTool = yield* ImportTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -219,6 +227,16 @@ export const layer: Layer.Layer<
           }
         }
 
+        yield* initDynamic().pipe(Effect.provideService(ToolRuntime, runtime))
+        const dynamic = yield* resolveDynamic().pipe(
+          Effect.provideService(ToolRuntime, runtime),
+          Effect.catchTag("ToolRuntimeError", (e) => {
+            log.warn("failed to resolve dynamic tools", { error: e.message })
+            return Effect.succeed([] as Tool.Def[])
+          }),
+        )
+        custom.push(...dynamic)
+
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
 
@@ -234,6 +252,8 @@ export const layer: Layer.Layer<
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
+          searchData: Tool.init(searchDataTool),
+          importTool: Tool.init(importToolTool),
           repo_clone: Tool.init(repoClone),
           repo_overview: Tool.init(repoOverview),
           skill: Tool.init(skilltool),
@@ -258,6 +278,8 @@ export const layer: Layer.Layer<
             tool.fetch,
             tool.todo,
             tool.search,
+            tool.searchData,
+            tool.importTool,
             ...(flags.experimentalScout ? [tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
@@ -391,7 +413,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Ripgrep.defaultLayer),
-      Layer.provide(Truncate.defaultLayer),
+      Layer.provide(Layer.mergeAll(Truncate.defaultLayer, ToolRuntime.layer)),
     )
     .pipe(Layer.provide(RuntimeFlags.defaultLayer)),
 )

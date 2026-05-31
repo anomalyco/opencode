@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -6,6 +6,7 @@ import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import { ulid } from "ulid"
 import { Database } from "../db"
+import { EmbeddingService, cosineSimilarity } from "../embedding/service"
 import type { Entity } from "../schema/entity.sql"
 import { EntityTable } from "../schema/entity.sql"
 import type { EntityType } from "../schema/types"
@@ -41,6 +42,11 @@ export interface EntityRepoInterface {
   delete(id: string): Effect.Effect<void, EntityRepoError>
 
   searchByName(query: string): Effect.Effect<Entity[], EntityRepoError>
+
+  search(
+    query: string,
+    opts?: { type?: EntityType; limit?: number },
+  ): Effect.Effect<Entity[], EntityRepoError | import("../embedding/service").EmbeddingError>
 }
 
 export class EntityRepo extends Context.Service<EntityRepo, EntityRepoInterface>()("@opencode-ai/database/EntityRepo") {
@@ -49,6 +55,7 @@ export class EntityRepo extends Context.Service<EntityRepo, EntityRepoInterface>
     Effect.gen(function* () {
       const svc = yield* Database
       const { db } = svc
+      const embeddings = yield* EmbeddingService
 
       return EntityRepo.of({
         create: Effect.fn("EntityRepo.create")(function* (input) {
@@ -115,7 +122,33 @@ export class EntityRepo extends Context.Service<EntityRepo, EntityRepoInterface>
             .where(eq(EntityTable.name, query))
             .pipe(Effect.mapError(mapError("Failed to search entities by name")))
         }),
+
+        search: Effect.fn("EntityRepo.search")(function* (query, opts) {
+          const queryVec = yield* embeddings.embed(query)
+
+          const rows = opts?.type
+            ? yield* db
+                .select()
+                .from(EntityTable)
+                .where(eq(EntityTable.type, opts.type))
+                .pipe(Effect.mapError(mapError("Failed to search entities")))
+            : yield* db
+                .select()
+                .from(EntityTable)
+                .pipe(Effect.mapError(mapError("Failed to search entities")))
+
+          const scored = rows
+            .filter((row) => row.embedding !== null)
+            .map((row) => {
+              const vec = JSON.parse(row.embedding!) as number[]
+              return { entity: row, score: cosineSimilarity(queryVec, vec) }
+            })
+            .sort((a, b) => b.score - a.score)
+
+          const limit = opts?.limit ?? 10
+          return scored.slice(0, limit).map((s) => s.entity)
+        }),
       })
     }),
-  ).pipe(Layer.provide(Database.layerMemory))
+  ).pipe(Layer.provide(Database.layerMemory), Layer.provide(EmbeddingService.layer))
 }

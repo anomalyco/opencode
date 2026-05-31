@@ -16,6 +16,7 @@ import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ToolRuntime } from "@opencode-ai/database/tool/runtime"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -41,6 +42,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
     RuntimeFlags.layer(flags),
+    ToolRuntime.layer,
   )
 
 const it = testEffect(layer())

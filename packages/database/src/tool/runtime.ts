@@ -16,13 +16,27 @@ interface ToolInstance {
   signature: ToolSignature
 }
 
+export interface ScoredSignature extends ToolSignature {
+  score: number
+}
+
 export interface ToolRuntimeInterface {
   register(name: string, filePath: string): Effect.Effect<ToolSignature, ToolRuntimeError>
   execute(name: string, args: unknown): Effect.Effect<unknown, ToolRuntimeError>
   unregister(name: string): Effect.Effect<void, ToolRuntimeError>
   reload(name: string, filePath: string): Effect.Effect<ToolSignature, ToolRuntimeError>
-  list(): Effect.Effect<ToolSignature[], ToolRuntimeError>
   isRegistered(name: string): Effect.Effect<boolean, never>
+
+  activate(name: string): Effect.Effect<ToolSignature, ToolRuntimeError>
+  deactivate(name: string): Effect.Effect<void, ToolRuntimeError>
+  isActive(name: string): Effect.Effect<boolean, never>
+
+  list(): Effect.Effect<ToolSignature[], ToolRuntimeError>
+  listCatalog(): Effect.Effect<ToolSignature[], ToolRuntimeError>
+
+  searchCatalog(query: string): Effect.Effect<ScoredSignature[], ToolRuntimeError>
+
+  setMaxActive(n: number): Effect.Effect<void, never>
 }
 
 const buildAndImport = Effect.fn("ToolRuntime.buildAndImport")(function* (name: string, filePath: string) {
@@ -71,26 +85,50 @@ const buildAndImport = Effect.fn("ToolRuntime.buildAndImport")(function* (name: 
   return { fn: mod.default as (args: any) => any, signature }
 })
 
+const touchUsage = (order: string[], name: string): void => {
+  const idx = order.indexOf(name)
+  if (idx >= 0) order.splice(idx, 1)
+  order.push(name)
+}
+
+const evictLRU = Effect.fn("ToolRuntime.evictLRU")(function* (active: Map<string, ToolInstance>, usageOrder: string[]) {
+  while (usageOrder.length > 0) {
+    const oldest = usageOrder.shift()!
+    if (active.has(oldest)) {
+      active.delete(oldest)
+      return oldest
+    }
+  }
+})
+
+const DEFAULT_MAX_ACTIVE = 20
+
 export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterface>()(
   "@opencode-ai/database/ToolRuntime",
 ) {
   static layer = Layer.effect(
     ToolRuntime,
     Effect.sync(() => {
-      const tools = new Map<string, ToolInstance>()
+      const catalog = new Map<string, ToolInstance>()
+      const active = new Map<string, ToolInstance>()
+      const usageOrder: string[] = []
+      let maxActive = DEFAULT_MAX_ACTIVE
 
       return ToolRuntime.of({
         register: Effect.fn("ToolRuntime.register")(function* (name, filePath) {
           const instance = yield* buildAndImport(name, filePath)
-          tools.set(name, instance)
+          catalog.set(name, instance)
           return instance.signature
         }),
 
         execute: Effect.fn("ToolRuntime.execute")(function* (name, args) {
-          const tool = tools.get(name)
+          const tool = active.get(name)
           if (!tool) {
-            return yield* new ToolRuntimeError({ message: `Tool "${name}" not registered` })
+            return yield* new ToolRuntimeError({
+              message: `Tool "${name}" is not active. Use import_tool to activate it first.`,
+            })
           }
+          touchUsage(usageOrder, name)
           return yield* Effect.try({
             try: () => tool.fn(args),
             catch: (cause) => new ToolRuntimeError({ message: `Tool "${name}" execution failed`, cause }),
@@ -98,22 +136,85 @@ export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterfa
         }),
 
         unregister: Effect.fn("ToolRuntime.unregister")(function* (name) {
-          tools.delete(name)
+          catalog.delete(name)
+          active.delete(name)
+          const idx = usageOrder.indexOf(name)
+          if (idx >= 0) usageOrder.splice(idx, 1)
         }),
 
         reload: Effect.fn("ToolRuntime.reload")(function* (name, filePath) {
-          tools.delete(name)
+          catalog.delete(name)
+          active.delete(name)
+          const idx = usageOrder.indexOf(name)
+          if (idx >= 0) usageOrder.splice(idx, 1)
           const instance = yield* buildAndImport(name, filePath)
-          tools.set(name, instance)
+          catalog.set(name, instance)
           return instance.signature
         }),
 
-        list: Effect.fn("ToolRuntime.list")(function* () {
-          return Array.from(tools.values()).map((t) => t.signature)
+        isRegistered: Effect.fn("ToolRuntime.isRegistered")(function* (name) {
+          return catalog.has(name)
         }),
 
-        isRegistered: Effect.fn("ToolRuntime.isRegistered")(function* (name) {
-          return tools.has(name)
+        activate: Effect.fn("ToolRuntime.activate")(function* (name) {
+          const instance = catalog.get(name)
+          if (!instance) {
+            return yield* new ToolRuntimeError({ message: `Tool "${name}" not found in catalog` })
+          }
+
+          if (active.has(name)) {
+            touchUsage(usageOrder, name)
+            return instance.signature
+          }
+
+          if (active.size >= maxActive) {
+            yield* evictLRU(active, usageOrder)
+          }
+
+          active.set(name, instance)
+          touchUsage(usageOrder, name)
+          return instance.signature
+        }),
+
+        deactivate: Effect.fn("ToolRuntime.deactivate")(function* (name) {
+          active.delete(name)
+          const idx = usageOrder.indexOf(name)
+          if (idx >= 0) usageOrder.splice(idx, 1)
+        }),
+
+        isActive: Effect.fn("ToolRuntime.isActive")(function* (name) {
+          return active.has(name)
+        }),
+
+        list: Effect.fn("ToolRuntime.list")(function* () {
+          return Array.from(active.values()).map((t) => t.signature)
+        }),
+
+        listCatalog: Effect.fn("ToolRuntime.listCatalog")(function* () {
+          return Array.from(catalog.values()).map((t) => t.signature)
+        }),
+
+        searchCatalog: Effect.fn("ToolRuntime.searchCatalog")(function* (query) {
+          const q = query.toLowerCase()
+          const results: ScoredSignature[] = []
+          for (const instance of catalog.values()) {
+            const sig = instance.signature
+            let score = 0
+            if (sig.name.toLowerCase().includes(q)) score += 10
+            if (sig.description.toLowerCase().includes(q)) score += 5
+            for (const key of Object.keys(sig.input)) {
+              if (key.toLowerCase().includes(q)) score += 2
+            }
+            for (const key of Object.keys(sig.output)) {
+              if (key.toLowerCase().includes(q)) score += 1
+            }
+            if (score > 0) results.push({ ...sig, score })
+          }
+          return results.sort((a, b) => b.score - a.score)
+        }),
+
+        setMaxActive: Effect.fn("ToolRuntime.setMaxActive")(function* (n) {
+          maxActive = n
         }),
       })
     }),
