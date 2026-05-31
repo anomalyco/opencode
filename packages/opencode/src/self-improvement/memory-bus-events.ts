@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { BusEvent } from "../../bus/bus-event"
+import { BusEvent } from "@/bus/bus-event"
 import { MemoryID, MemoryType } from "./schema"
 
 export const MemoryStored = BusEvent.define(
@@ -25,8 +25,8 @@ export const MemoryEvolved = BusEvent.define(
   "memory.evolved",
   Schema.Struct({
     memory_id: MemoryID,
-    old_version: Schema.Number.pipe(Schema.int()),
-    new_version: Schema.Number.pipe(Schema.int()),
+    old_version: Schema.Int,
+    new_version: Schema.Int,
   }),
 )
 
@@ -36,7 +36,7 @@ export const MemoryDecayed = BusEvent.define(
     memory_id: MemoryID,
     old_importance: Schema.Number,
     new_importance: Schema.Number,
-    action: Schema.Literal("decayed", "purged"),
+    action: Schema.Literals(["decayed", "purged"]),
   }),
 )
 
