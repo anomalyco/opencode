@@ -1,43 +1,39 @@
-import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
 import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect/instance-state"
-import { ProjectID } from "@/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { MessageID, SessionID } from "@/session/schema"
-import { PermissionTable } from "@/session/session.sql"
-import { Database } from "@/storage/db"
+import { PermissionTable } from "@opencode-ai/core/session/sql"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
-import { zod } from "@/util/effect-zod"
 import * as Log from "@opencode-ai/core/util/log"
-import { withStatics } from "@/util/schema"
-import { Wildcard } from "@/util/wildcard"
+import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
-import { evaluate as evalRule } from "./evaluate"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionID } from "./schema"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "permission" })
 
-export const Action = Schema.Literals(["allow", "deny", "ask"])
-  .annotate({ identifier: "PermissionAction" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Action = PermissionV2.Action.annotate({ identifier: "PermissionAction" })
 export type Action = Schema.Schema.Type<typeof Action>
 
 export const Rule = Schema.Struct({
   permission: Schema.String,
   pattern: Schema.String,
   action: Action,
-})
-  .annotate({ identifier: "PermissionRule" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "PermissionRule" })
 export type Rule = Schema.Schema.Type<typeof Rule>
 
-export const Ruleset = Schema.mutable(Schema.Array(Rule))
-  .annotate({ identifier: "PermissionRuleset" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = Schema.Schema.Type<typeof Ruleset>
 
-export class Request extends Schema.Class<Request>("PermissionRequest")({
+// Pure data; nothing checks class identity. As `Schema.Struct` + type alias,
+// `Permission.ask` can trust its already-typed input and skip the inner
+// `decodeUnknownSync` that would otherwise throw uncaught on any structural
+// mismatch. Same pattern as `Question.Request` in PR #28570.
+export const Request = Schema.Struct({
   id: PermissionID,
   sessionID: SessionID,
   permission: Schema.String,
@@ -50,11 +46,10 @@ export class Request extends Schema.Class<Request>("PermissionRequest")({
       callID: Schema.String,
     }),
   ),
-}) {
-  static readonly zod = zod(this)
-}
+}).annotate({ identifier: "PermissionRequest" })
+export type Request = Schema.Schema.Type<typeof Request>
 
-export const Reply = Schema.Literals(["once", "always", "reject"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Reply = Schema.Literals(["once", "always", "reject"])
 export type Reply = Schema.Schema.Type<typeof Reply>
 
 const reply = {
@@ -62,28 +57,25 @@ const reply = {
   message: Schema.optional(Schema.String),
 }
 
-export const ReplyBody = Schema.Struct(reply)
-  .annotate({ identifier: "PermissionReplyBody" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export const ReplyBody = Schema.Struct(reply).annotate({ identifier: "PermissionReplyBody" })
 export type ReplyBody = Schema.Schema.Type<typeof ReplyBody>
 
-export class Approval extends Schema.Class<Approval>("PermissionApproval")({
-  projectID: ProjectID,
+export const Approval = Schema.Struct({
+  projectID: ProjectV2.ID,
   patterns: Schema.Array(Schema.String),
-}) {
-  static readonly zod = zod(this)
-}
+}).annotate({ identifier: "PermissionApproval" })
+export type Approval = Schema.Schema.Type<typeof Approval>
 
 export const Event = {
-  Asked: BusEvent.define("permission.asked", Request),
-  Replied: BusEvent.define(
-    "permission.replied",
-    Schema.Struct({
+  Asked: EventV2.define({ type: "permission.asked", schema: Request.fields }),
+  Replied: EventV2.define({
+    type: "permission.replied",
+    schema: {
       sessionID: SessionID,
       requestID: PermissionID,
       reply: Reply,
-    }),
-  ),
+    },
+  }),
 }
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
@@ -108,28 +100,28 @@ export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("Permiss
   }
 }
 
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Permission.NotFoundError", {
+  requestID: PermissionID,
+}) {}
+
 export type Error = DeniedError | RejectedError | CorrectedError
 
 export const AskInput = Schema.Struct({
   ...Request.fields,
   id: Schema.optional(PermissionID),
   ruleset: Ruleset,
-})
-  .annotate({ identifier: "PermissionAskInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "PermissionAskInput" })
 export type AskInput = Schema.Schema.Type<typeof AskInput>
 
 export const ReplyInput = Schema.Struct({
   requestID: PermissionID,
   ...reply,
-})
-  .annotate({ identifier: "PermissionReplyInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "PermissionReplyInput" })
 export type ReplyInput = Schema.Schema.Type<typeof ReplyInput>
 
 export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<void, Error>
-  readonly reply: (input: ReplyInput) => Effect.Effect<void>
+  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -140,11 +132,11 @@ interface PendingEntry {
 
 interface State {
   pending: Map<PermissionID, PendingEntry>
-  approved: Ruleset
+  approved: Rule[]
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-  return evalRule(permission, pattern, ...rulesets)
+  return PermissionV2.evaluate(permission, pattern, ...rulesets)
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -152,15 +144,19 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
+    const { db } = yield* Database.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
-        const row = Database.use((db) =>
-          db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
-        )
+        const row = yield* db
+          .select()
+          .from(PermissionTable)
+          .where(eq(PermissionTable.project_id, ctx.project.id))
+          .get()
+          .pipe(Effect.orDie)
         const state = {
           pending: new Map<PermissionID, PendingEntry>(),
-          approved: row?.data ?? [],
+          approved: [...(row?.data ?? [])],
         }
 
         yield* Effect.addFinalizer(() =>
@@ -196,15 +192,20 @@ export const layer = Layer.effect(
       if (!needsAsk) return
 
       const id = request.id ?? PermissionID.ascending()
-      const info = Schema.decodeUnknownSync(Request)({
+      const info: Request = {
         id,
-        ...request,
-      })
+        sessionID: request.sessionID,
+        permission: request.permission,
+        patterns: request.patterns,
+        metadata: request.metadata,
+        always: request.always,
+        tool: request.tool,
+      }
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
-      yield* bus.publish(Event.Asked, info)
+      yield* events.publish(Event.Asked, info)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
         Effect.sync(() => {
@@ -216,10 +217,10 @@ export const layer = Layer.effect(
     const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const existing = pending.get(input.requestID)
-      if (!existing) return
+      if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
       pending.delete(input.requestID)
-      yield* bus.publish(Event.Replied, {
+      yield* events.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         reply: input.reply,
@@ -234,7 +235,7 @@ export const layer = Layer.effect(
         for (const [id, item] of pending.entries()) {
           if (item.info.sessionID !== existing.info.sessionID) continue
           pending.delete(id)
-          yield* bus.publish(Event.Replied, {
+          yield* events.publish(Event.Replied, {
             sessionID: item.info.sessionID,
             requestID: item.info.id,
             reply: "reject",
@@ -262,7 +263,7 @@ export const layer = Layer.effect(
         )
         if (!ok) continue
         pending.delete(id)
-        yield* bus.publish(Event.Replied, {
+        yield* events.publish(Event.Replied, {
           sessionID: item.info.sessionID,
           requestID: item.info.id,
           reply: "always",
@@ -289,7 +290,7 @@ function expand(pattern: string): string {
 }
 
 export function fromConfig(permission: ConfigPermission.Info) {
-  const ruleset: Ruleset = []
+  const ruleset: Rule[] = []
   for (const [key, value] of Object.entries(permission)) {
     if (typeof value === "string") {
       ruleset.push({ permission: key, action: value, pattern: "*" })
@@ -302,23 +303,14 @@ export function fromConfig(permission: ConfigPermission.Info) {
   return ruleset
 }
 
-export function merge(...rulesets: Ruleset[]): Ruleset {
-  return rulesets.flat()
+export function merge(...rulesets: Ruleset[]): Rule[] {
+  return [...PermissionV2.merge(...rulesets)]
 }
-
-const EDIT_TOOLS = ["edit", "write", "apply_patch"]
 
 export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
-  const result = new Set<string>()
-  for (const tool of tools) {
-    const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
-    const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
-    if (!rule) continue
-    if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
-  }
-  return result
+  return PermissionV2.disabled(tools, ruleset)
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
 
 export * as Permission from "."

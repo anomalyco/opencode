@@ -1,0 +1,13 @@
+[package]
+name = "worktree-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "worktree"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+worktree = { path = "../core" }

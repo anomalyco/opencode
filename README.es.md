@@ -97,20 +97,20 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### Agents
+### Agentes
 
-OpenCode incluye dos agents integrados que puedes alternar con la tecla `Tab`.
+OpenCode incluye dos agentes integrados que puedes alternar con la tecla `Tab`.
 
-- **build** - Por defecto, agent con acceso completo para trabajo de desarrollo
-- **plan** - Agent de solo lectura para análisis y exploración de código
-  - Niega ediciones de archivos por defecto
+- **build** - Por defecto, agente con acceso completo para tareas de desarrollo
+- **plan** - Agente de solo lectura para análisis y exploración de código
+  - Deniega ediciones de archivos por defecto
   - Pide permiso antes de ejecutar comandos bash
   - Ideal para explorar codebases desconocidas o planificar cambios
 
-Además, incluye un subagent **general** para búsquedas complejas y tareas de varios pasos.
+Además, incluye un subagente **general** para búsquedas complejas y tareas de varios pasos.
 Se usa internamente y se puede invocar con `@general` en los mensajes.
 
-Más información sobre [agents](https://opencode.ai/docs/agents).
+Más información sobre [agentes](https://opencode.ai/docs/agents).
 
 ### Documentación
 
@@ -120,21 +120,9 @@ Para más información sobre cómo configurar OpenCode, [**ve a nuestra document
 
 Si te interesa contribuir a OpenCode, lee nuestras [docs de contribución](./CONTRIBUTING.md) antes de enviar un pull request.
 
-### Construyendo sobre OpenCode
+### Proyectos basados en OpenCode
 
-Si estás trabajando en un proyecto relacionado con OpenCode y usas "opencode" como parte del nombre; por ejemplo, "opencode-dashboard" u "opencode-mobile", agrega una nota en tu README para aclarar que no está construido por el equipo de OpenCode y que no está afiliado con nosotros de ninguna manera.
-
-### FAQ
-
-#### ¿En qué se diferencia de Claude Code?
-
-Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias clave:
-
-- 100% open source
-- No está acoplado a ningún proveedor. Aunque recomendamos los modelos que ofrecemos a través de [OpenCode Zen](https://opencode.ai/zen); OpenCode se puede usar con Claude, OpenAI, Google o incluso modelos locales. A medida que evolucionan los modelos, las brechas se cerrarán y los precios bajarán, por lo que ser agnóstico al proveedor es importante.
-- Soporte LSP listo para usar
-- Un enfoque en la TUI. OpenCode está construido por usuarios de neovim y los creadores de [terminal.shop](https://terminal.shop); vamos a empujar los límites de lo que es posible en la terminal.
-- Arquitectura cliente/servidor. Esto, por ejemplo, permite ejecutar OpenCode en tu computadora mientras lo controlas de forma remota desde una app móvil. Esto significa que el frontend TUI es solo uno de los posibles clientes.
+Si estás trabajando en un proyecto basado en OpenCode y usas "opencode" como parte del nombre, por ejemplo, "opencode-dashboard" u "opencode-mobile", agrega una nota en tu README para aclarar que no está hecho por el equipo de OpenCode y que no está afiliado con nosotros de ninguna manera.
 
 ---
 

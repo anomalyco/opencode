@@ -1,10 +1,9 @@
 export type Runtime = {
   PublicApi: (typeof import("../../../src/server/routes/instance/httpapi/public"))["PublicApi"]
-  ExperimentalHttpApiServer: (typeof import("../../../src/server/routes/instance/httpapi/server"))["ExperimentalHttpApiServer"]
-  Server: (typeof import("../../../src/server/server"))["Server"]
+  HttpApiApp: (typeof import("../../../src/server/routes/instance/httpapi/server"))["HttpApiApp"]
   AppLayer: (typeof import("../../../src/effect/app-runtime"))["AppLayer"]
+  memoMap: (typeof import("@opencode-ai/core/effect/memo-map"))["memoMap"]
   InstanceRef: (typeof import("../../../src/effect/instance-ref"))["InstanceRef"]
-  Instance: (typeof import("../../../src/project/instance"))["Instance"]
   InstanceStore: (typeof import("../../../src/project/instance-store"))["InstanceStore"]
   Session: (typeof import("../../../src/session/session"))["Session"]
   Todo: (typeof import("../../../src/session/todo"))["Todo"]
@@ -22,10 +21,9 @@ export function runtime() {
   return (runtimePromise ??= (async () => {
     const publicApi = await import("../../../src/server/routes/instance/httpapi/public")
     const httpApiServer = await import("../../../src/server/routes/instance/httpapi/server")
-    const server = await import("../../../src/server/server")
     const appRuntime = await import("../../../src/effect/app-runtime")
+    const memoMap = await import("@opencode-ai/core/effect/memo-map")
     const instanceRef = await import("../../../src/effect/instance-ref")
-    const instance = await import("../../../src/project/instance")
     const instanceStore = await import("../../../src/project/instance-store")
     const session = await import("../../../src/session/session")
     const todo = await import("../../../src/session/todo")
@@ -36,11 +34,10 @@ export function runtime() {
     const db = await import("../../fixture/db")
     return {
       PublicApi: publicApi.PublicApi,
-      ExperimentalHttpApiServer: httpApiServer.ExperimentalHttpApiServer,
-      Server: server.Server,
+      HttpApiApp: httpApiServer.HttpApiApp,
       AppLayer: appRuntime.AppLayer,
+      memoMap: memoMap.memoMap,
       InstanceRef: instanceRef.InstanceRef,
-      Instance: instance.Instance,
       InstanceStore: instanceStore.InstanceStore,
       Session: session.Session,
       Todo: todo.Todo,

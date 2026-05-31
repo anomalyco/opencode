@@ -6,6 +6,9 @@ import { onMount } from "solid-js"
 import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { useEvent } from "../../../src/cli/cmd/tui/context/event"
+import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
+
+const projectID = "proj_test"
 
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
@@ -15,9 +18,10 @@ async function wait(fn: () => boolean, timeout = 2000) {
   }
 }
 
-function event(payload: Event, input: { directory: string; workspace?: string }): GlobalEvent {
+function event(payload: Event, input: { directory: string; project?: string; workspace?: string }): GlobalEvent {
   return {
     directory: input.directory,
+    project: input.project,
     workspace: input.workspace,
     payload,
   }
@@ -43,28 +47,11 @@ function update(version: string): Event {
   }
 }
 
-function createSource() {
-  let fn: ((event: GlobalEvent) => void) | undefined
-
-  return {
-    source: {
-      subscribe: async (handler: (event: GlobalEvent) => void) => {
-        fn = handler
-        return () => {
-          if (fn === handler) fn = undefined
-        }
-      },
-    },
-    emit(evt: GlobalEvent) {
-      if (!fn) throw new Error("event source not ready")
-      fn(evt)
-    },
-  }
-}
-
 async function mount() {
-  const source = createSource()
+  const events = createEventSource()
+  const calls = createFetch()
   const seen: Event[] = []
+  const workspaces: Array<string | undefined> = []
   let project!: ReturnType<typeof useProject>
   let done!: () => void
   const ready = new Promise<void>((resolve) => {
@@ -72,30 +59,37 @@ async function mount() {
   })
 
   const app = await testRender(() => (
-    <SDKProvider url="http://test" directory="/tmp/root" events={source.source}>
+    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
       <ProjectProvider>
         <Probe
-          onReady={(ctx) => {
+          onReady={async (ctx) => {
             project = ctx.project
+            await project.sync()
             done()
           }}
           seen={seen}
+          workspaces={workspaces}
         />
       </ProjectProvider>
     </SDKProvider>
   ))
 
   await ready
-  return { app, emit: source.emit, project, seen }
+  return { app, emit: events.emit, project, seen, workspaces }
 }
 
-function Probe(props: { seen: Event[]; onReady: (ctx: { project: ReturnType<typeof useProject> }) => void }) {
+function Probe(props: {
+  seen: Event[]
+  workspaces: Array<string | undefined>
+  onReady: (ctx: { project: ReturnType<typeof useProject> }) => void
+}) {
   const project = useProject()
   const event = useEvent()
 
   onMount(() => {
-    event.subscribe((evt) => {
+    event.subscribe((evt, { workspace }) => {
       props.seen.push(evt)
+      props.workspaces.push(workspace)
     })
     props.onReady({ project })
   })
@@ -104,25 +98,26 @@ function Probe(props: { seen: Event[]; onReady: (ctx: { project: ReturnType<type
 }
 
 describe("useEvent", () => {
-  test("delivers matching directory events without an active workspace", async () => {
-    const { app, emit, seen } = await mount()
+  test("delivers events for the current project", async () => {
+    const { app, emit, seen, workspaces } = await mount()
 
     try {
-      emit(event(vcs("main"), { directory: "/tmp/root" }))
+      emit(event(vcs("main"), { directory: "/tmp/other", project: projectID, workspace: "ws_a" }))
 
       await wait(() => seen.length === 1)
 
       expect(seen).toEqual([vcs("main")])
+      expect(workspaces).toEqual(["ws_a"])
     } finally {
       app.renderer.destroy()
     }
   })
 
-  test("ignores non-matching directory events without an active workspace", async () => {
+  test("ignores events for other projects", async () => {
     const { app, emit, seen } = await mount()
 
     try {
-      emit(event(vcs("other"), { directory: "/tmp/other" }))
+      emit(event(vcs("other"), { directory, project: "proj_other" }))
       await Bun.sleep(30)
 
       expect(seen).toHaveLength(0)
@@ -131,30 +126,16 @@ describe("useEvent", () => {
     }
   })
 
-  test("delivers matching workspace events when a workspace is active", async () => {
+  test("delivers current project events regardless of active workspace", async () => {
     const { app, emit, project, seen } = await mount()
 
     try {
       project.workspace.set("ws_a")
-      emit(event(vcs("ws"), { directory: "/tmp/other", workspace: "ws_a" }))
+      emit(event(vcs("ws"), { directory: "/tmp/other", project: projectID, workspace: "ws_b" }))
 
       await wait(() => seen.length === 1)
 
       expect(seen).toEqual([vcs("ws")])
-    } finally {
-      app.renderer.destroy()
-    }
-  })
-
-  test("ignores non-matching workspace events when a workspace is active", async () => {
-    const { app, emit, project, seen } = await mount()
-
-    try {
-      project.workspace.set("ws_a")
-      emit(event(vcs("ws"), { directory: "/tmp/root", workspace: "ws_b" }))
-      await Bun.sleep(30)
-
-      expect(seen).toHaveLength(0)
     } finally {
       app.renderer.destroy()
     }

@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { PtyID } from "../../src/pty/schema"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import * as Log from "@opencode-ai/core/util/log"
@@ -11,22 +9,19 @@ import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
 import { Config, Effect, Layer, Queue, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Pty } from "../../src/pty"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const testPty = process.platform === "win32" ? test.skip : test
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     yield* Effect.promise(() => resetDatabase())
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
         await resetDatabase()
       }),
     )
@@ -34,7 +29,7 @@ const testStateLayer = Layer.effectDiscard(
 )
 
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
-  ExperimentalHttpApiServer.routes,
+  HttpApiApp.routes,
   { disableListenLog: true, disableLogger: true },
 )
 
@@ -50,9 +45,8 @@ const effectIt = testEffect(
   ),
 )
 
-function app(experimental = true) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return experimental ? Server.Default().app : Server.Legacy().app
+function app() {
+  return Server.Default().app
 }
 
 function serverUrl() {
@@ -62,7 +56,6 @@ function serverUrl() {
 const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -119,18 +112,31 @@ describe("pty HttpApi bridge", () => {
 
     const missing = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
     expect(missing.status).toBe(404)
-  })
+    expect(await missing.json()).toEqual({
+      _tag: "PtyNotFoundError",
+      ptyID: info.id,
+      message: `PTY session not found: ${info.id}`,
+    })
 
-  test("matches Hono missing PTY error body", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const headers = { "x-opencode-directory": tmp.path }
-    const path = PtyPaths.get.replace(":ptyID", PtyID.ascending())
+    const missingUpdate = await app().request(PtyPaths.update.replace(":ptyID", info.id), {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ title: "missing" }),
+    })
+    expect(missingUpdate.status).toBe(404)
+    expect(await missingUpdate.json()).toEqual({
+      _tag: "PtyNotFoundError",
+      ptyID: info.id,
+      message: `PTY session not found: ${info.id}`,
+    })
 
-    const hono = await app(false).request(path, { headers })
-    const httpapi = await app().request(path, { headers })
-
-    expect(httpapi.status).toBe(hono.status)
-    expect(await httpapi.json()).toEqual(await hono.json())
+    const missingRemove = await app().request(PtyPaths.remove.replace(":ptyID", info.id), { method: "DELETE", headers })
+    expect(missingRemove.status).toBe(404)
+    expect(await missingRemove.json()).toEqual({
+      _tag: "PtyNotFoundError",
+      ptyID: info.id,
+      message: `PTY session not found: ${info.id}`,
+    })
   })
 
   test("returns 404 for missing PTY websocket before upgrade", async () => {
@@ -139,6 +145,71 @@ describe("pty HttpApi bridge", () => {
       headers: { "x-opencode-directory": tmp.path },
     })
     expect(response.status).toBe(404)
+  })
+
+  test("returns 404 for missing PTY websocket before decoding cursor query", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const response = await app().request(`${PtyPaths.connect.replace(":ptyID", PtyID.ascending())}?cursor=a&cursor=b`, {
+      headers: { "x-opencode-directory": tmp.path },
+    })
+    expect(response.status).toBe(404)
+  })
+
+  test("returns typed not found errors for missing PTY HTTP resources", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const missingID = String(PtyID.ascending())
+    const expected = {
+      _tag: "PtyNotFoundError",
+      ptyID: missingID,
+      message: `PTY session not found: ${missingID}`,
+    }
+
+    const found = await app().request(PtyPaths.get.replace(":ptyID", missingID), { headers })
+    expect(found.status).toBe(404)
+    expect(await found.json()).toEqual(expected)
+
+    const updated = await app().request(PtyPaths.update.replace(":ptyID", missingID), {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ title: "missing" }),
+    })
+    expect(updated.status).toBe(404)
+    expect(await updated.json()).toEqual(expected)
+
+    const removed = await app().request(PtyPaths.remove.replace(":ptyID", missingID), { method: "DELETE", headers })
+    expect(removed.status).toBe(404)
+    expect(await removed.json()).toEqual(expected)
+  })
+
+  test("returns typed errors for PTY connect token failures", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const missingID = String(PtyID.ascending())
+
+    const forbidden = await app().request(PtyPaths.connectToken.replace(":ptyID", missingID), {
+      method: "POST",
+      headers,
+    })
+    expect(forbidden.status).toBe(403)
+    expect(await forbidden.json()).toEqual({
+      _tag: "PtyForbiddenError",
+      message: "Invalid PTY connect token request",
+    })
+
+    const missing = await app().request(PtyPaths.connectToken.replace(":ptyID", missingID), {
+      method: "POST",
+      headers: {
+        ...headers,
+        "x-opencode-ticket": "1",
+      },
+    })
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({
+      _tag: "PtyNotFoundError",
+      ptyID: missingID,
+      message: `PTY session not found: ${missingID}`,
+    })
   })
   ;(process.platform === "win32" ? effectIt.live.skip : effectIt.live)(
     "serves PTY websocket output and input through Effect routes",

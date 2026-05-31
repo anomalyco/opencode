@@ -1,4 +1,5 @@
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -6,6 +7,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  ListToolsResultSchema,
+  ToolSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -13,16 +16,14 @@ import { Config } from "@/config/config"
 import { ConfigMCP } from "../config/mcp"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
-import z from "zod/v4"
-import { Installation } from "../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { McpOAuthProvider } from "./oauth-provider"
+import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
-import { BusEvent } from "../bus/bus-event"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
 import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
@@ -30,11 +31,13 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod as effectZod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
+
+const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
+  tools: ToolSchema.omit({ outputSchema: true }).array(),
+})
 
 export const Resource = Schema.Struct({
   name: Schema.String,
@@ -42,32 +45,31 @@ export const Resource = Schema.Struct({
   description: Schema.optional(Schema.String),
   mimeType: Schema.optional(Schema.String),
   client: Schema.String,
-})
-  .annotate({ identifier: "McpResource" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+}).annotate({ identifier: "McpResource" })
 export type Resource = Schema.Schema.Type<typeof Resource>
 
-export const ToolsChanged = BusEvent.define(
-  "mcp.tools.changed",
-  Schema.Struct({
+export const ToolsChanged = EventV2.define({
+  type: "mcp.tools.changed",
+  schema: {
     server: Schema.String,
-  }),
-)
+  },
+})
 
-export const BrowserOpenFailed = BusEvent.define(
-  "mcp.browser.open.failed",
-  Schema.Struct({
+export const BrowserOpenFailed = EventV2.define({
+  type: "mcp.browser.open.failed",
+  schema: {
     mcpName: Schema.String,
     url: Schema.String,
-  }),
-)
+  },
+})
 
-export const Failed = NamedError.create(
-  "MCPFailed",
-  z.object({
-    name: z.string(),
-  }),
-)
+export const Failed = NamedError.create("MCPFailed", {
+  name: Schema.String,
+})
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP.NotFoundError", {
+  name: Schema.String,
+}) {}
 
 type MCPClient = Client
 
@@ -94,9 +96,7 @@ export const Status = Schema.Union([
   StatusFailed,
   StatusNeedsAuth,
   StatusNeedsClientRegistration,
-])
-  .annotate({ identifier: "MCPStatus", discriminator: "status" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+]).annotate({ identifier: "MCPStatus", discriminator: "status" })
 export type Status = Schema.Schema.Type<typeof Status>
 
 // Store transports for OAuth servers to allow finishing auth
@@ -117,6 +117,41 @@ const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
 function remoteURL(key: string, value: string) {
   if (URL.canParse(value)) return new URL(value)
   log.warn("invalid remote mcp url", { key })
+}
+
+function isOutputSchemaValidationError(error: Error) {
+  return /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
+    error.message,
+  )
+}
+
+function listTools(key: string, client: MCPClient, timeout: number) {
+  return Effect.tryPromise({
+    try: () => client.listTools(undefined, { timeout }),
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  }).pipe(
+    Effect.map((result) => result.tools),
+    Effect.catch((error) => {
+      if (!isOutputSchemaValidationError(error)) return Effect.fail(error)
+
+      log.warn("failed to validate MCP tool output schemas, retrying without output schema validation", { key, error })
+      return Effect.tryPromise({
+        try: () =>
+          client.request({ method: "tools/list" }, TolerantListToolsResultSchema, {
+            timeout,
+          }),
+        catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+      }).pipe(
+        Effect.map((result) =>
+          result.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          })),
+        ),
+      )
+    }),
+  )
 }
 
 // Convert MCP tool definition to AI SDK Tool type
@@ -151,11 +186,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
 }
 
 function defs(key: string, client: MCPClient, timeout?: number) {
-  return Effect.tryPromise({
-    try: () => withTimeout(client.listTools(), timeout ?? DEFAULT_TIMEOUT),
-    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-  }).pipe(
-    Effect.map((result) => result.tools),
+  return listTools(key, client, timeout ?? DEFAULT_TIMEOUT).pipe(
     Effect.catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return Effect.succeed(undefined)
@@ -203,6 +234,7 @@ interface AuthResult {
 // --- Effect Service ---
 
 interface State {
+  config: Record<string, ConfigMCP.Info>
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
@@ -215,8 +247,8 @@ export interface Interface {
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCP.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
-  readonly connect: (name: string) => Effect.Effect<void>
-  readonly disconnect: (name: string) => Effect.Effect<void>
+  readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
+  readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
     clientName: string,
     name: string,
@@ -226,23 +258,27 @@ export interface Interface {
     clientName: string,
     resourceUri: string,
   ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
-  readonly startAuth: (mcpName: string) => Effect.Effect<{ authorizationUrl: string; oauthState: string }>
-  readonly authenticate: (mcpName: string) => Effect.Effect<Status>
-  readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status>
+  readonly startAuth: (
+    mcpName: string,
+  ) => Effect.Effect<{ authorizationUrl: string; oauthState: string }, NotFoundError>
+  readonly authenticate: (mcpName: string) => Effect.Effect<Status, NotFoundError>
+  readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status, NotFoundError>
   readonly removeAuth: (mcpName: string) => Effect.Effect<void>
-  readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean>
+  readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean, NotFoundError>
   readonly hasStoredTokens: (mcpName: string) => Effect.Effect<boolean>
   readonly getAuthStatus: (mcpName: string) => Effect.Effect<AuthStatus>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
 
+export const use = serviceUse(Service)
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -289,6 +325,7 @@ export const layer = Layer.effect(
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
+            callbackPort: oauthConfig?.callbackPort,
             redirectUri: oauthConfig?.redirectUri,
           },
           {
@@ -336,7 +373,7 @@ export const layer = Layer.effect(
                   status: "needs_client_registration" as const,
                   error: "Server does not support dynamic client registration. Please provide clientId in config.",
                 }
-                return bus
+                return events
                   .publish(TuiEvent.ToastShow, {
                     title: "MCP Authentication Required",
                     message: `Server "${key}" requires a pre-registered client ID. Add clientId to your config.`,
@@ -347,7 +384,7 @@ export const layer = Layer.effect(
               } else {
                 pendingOAuthTransports.set(key, transport)
                 lastStatus = { status: "needs_auth" as const }
-                return bus
+                return events
                   .publish(TuiEvent.ToastShow, {
                     title: "MCP Authentication Required",
                     message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
@@ -479,7 +516,7 @@ export const layer = Layer.effect(
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         s.defs[name] = listed
-        await bridge.promise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+        await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
 
@@ -489,6 +526,7 @@ export const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
         const config = cfg.mcp ?? {}
         const s: State = {
+          config: {},
           status: {},
           clients: {},
           defs: {},
@@ -583,6 +621,10 @@ export const layer = Layer.effect(
         result[key] = s.status[key] ?? { status: "disabled" }
       }
 
+      for (const key of Object.keys(s.config)) {
+        result[key] = s.status[key] ?? { status: "disabled" }
+      }
+
       return result
     })
 
@@ -606,21 +648,19 @@ export const layer = Layer.effect(
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCP.Info) {
-      yield* createAndStore(name, mcp)
       const s = yield* InstanceState.get(state)
+      s.config[name] = mcp
+      yield* createAndStore(name, mcp)
       return { status: s.status }
     })
 
     const connect = Effect.fn("MCP.connect")(function* (name: string) {
-      const mcp = yield* getMcpConfig(name)
-      if (!mcp) {
-        log.error("MCP config not found or invalid", { name })
-        return
-      }
+      const mcp = yield* requireMcpConfig(name)
       yield* createAndStore(name, { ...mcp, enabled: true })
     })
 
     const disconnect = Effect.fn("MCP.disconnect")(function* (name: string) {
+      yield* requireMcpConfig(name)
       const s = yield* InstanceState.get(state)
       yield* closeClient(s, name)
       delete s.clients[name]
@@ -644,7 +684,7 @@ export const layer = Layer.effect(
         ([clientName, client]) =>
           Effect.gen(function* () {
             const mcpConfig = config[clientName]
-            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
 
             const listed = s.defs[clientName]
             if (!listed) {
@@ -723,15 +763,23 @@ export const layer = Layer.effect(
     })
 
     const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
+      const s = yield* InstanceState.get(state)
+      if (s.config[mcpName]) return s.config[mcpName]
+
       const cfg = yield* cfgSvc.get()
       const mcpConfig = cfg.mcp?.[mcpName]
       if (!mcpConfig || !isMcpConfigured(mcpConfig)) return undefined
       return mcpConfig
     })
 
-    const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
+    const requireMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
       const mcpConfig = yield* getMcpConfig(mcpName)
-      if (!mcpConfig) throw new Error(`MCP server ${mcpName} not found or disabled`)
+      if (!mcpConfig) return yield* new NotFoundError({ name: mcpName })
+      return mcpConfig
+    })
+
+    const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
+      const mcpConfig = yield* requireMcpConfig(mcpName)
       if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
       if (mcpConfig.oauth === false) throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
       const url = remoteURL(mcpName, mcpConfig.url)
@@ -740,8 +788,13 @@ export const layer = Layer.effect(
       // OAuth config is optional - if not provided, we'll use auto-discovery
       const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
 
+      // Resolve effective redirect URI: explicit redirectUri > callbackPort shorthand > default
+      const effectiveRedirectUri =
+        oauthConfig?.redirectUri ??
+        (oauthConfig?.callbackPort ? `http://127.0.0.1:${oauthConfig.callbackPort}${OAUTH_CALLBACK_PATH}` : undefined)
+
       // Start the callback server with custom redirectUri if configured
-      yield* Effect.promise(() => McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri))
+      yield* Effect.promise(() => McpOAuthCallback.ensureRunning(effectiveRedirectUri))
 
       const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
         .map((b) => b.toString(16).padStart(2, "0"))
@@ -755,7 +808,7 @@ export const layer = Layer.effect(
           clientId: oauthConfig?.clientId,
           clientSecret: oauthConfig?.clientSecret,
           scope: oauthConfig?.scope,
-          redirectUri: oauthConfig?.redirectUri,
+          redirectUri: effectiveRedirectUri,
         },
         {
           onRedirect: async (url) => {
@@ -790,11 +843,9 @@ export const layer = Layer.effect(
       const result = yield* startAuth(mcpName)
       if (!result.authorizationUrl) {
         const client = "client" in result ? result.client : undefined
-        const mcpConfig = yield* getMcpConfig(mcpName)
-        if (!mcpConfig) {
-          yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
-          return { status: "failed", error: "MCP config not found after auth" } as Status
-        }
+        const mcpConfig = yield* requireMcpConfig(mcpName).pipe(
+          Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
+        )
 
         const listed = client ? yield* defs(mcpName, client, mcpConfig.timeout) : undefined
         if (!client || !listed) {
@@ -829,7 +880,7 @@ export const layer = Layer.effect(
         ),
         Effect.catch(() => {
           log.warn("failed to open browser, user must open URL manually", { mcpName })
-          return bus.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
+          return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
         }),
       )
 
@@ -845,6 +896,7 @@ export const layer = Layer.effect(
     })
 
     const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
+      yield* requireMcpConfig(mcpName)
       const transport = pendingOAuthTransports.get(mcpName)
       if (!transport) throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
 
@@ -863,8 +915,7 @@ export const layer = Layer.effect(
       yield* auth.clearCodeVerifier(mcpName)
       pendingOAuthTransports.delete(mcpName)
 
-      const mcpConfig = yield* getMcpConfig(mcpName)
-      if (!mcpConfig) return { status: "failed", error: "MCP config not found after auth" } as Status
+      const mcpConfig = yield* requireMcpConfig(mcpName)
 
       return yield* createAndStore(mcpName, mcpConfig)
     })
@@ -877,8 +928,7 @@ export const layer = Layer.effect(
     })
 
     const supportsOAuth = Effect.fn("MCP.supportsOAuth")(function* (mcpName: string) {
-      const mcpConfig = yield* getMcpConfig(mcpName)
-      if (!mcpConfig) return false
+      const mcpConfig = yield* requireMcpConfig(mcpName)
       return mcpConfig.type === "remote" && mcpConfig.oauth !== false
     })
 
@@ -921,8 +971,8 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 // --- Per-service runtime ---
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(McpAuth.layer),
-  Layer.provide(Bus.layer),
+  Layer.provide(McpAuth.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),

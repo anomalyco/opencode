@@ -9,10 +9,6 @@ export const email = `mailto:${config.email}`
 
 O OpenCode Go é uma assinatura de baixo custo — **US$ 5 no seu primeiro mês**, depois **US$ 10/mês** — que oferece acesso confiável a modelos abertos de programação populares.
 
-:::note
-O OpenCode Go está atualmente em beta.
-:::
-
 O Go funciona como qualquer outro provedor no OpenCode. Você assina o OpenCode Go e
 obtém a sua chave de API. Ele é **totalmente opcional** e você não precisa usá-lo para
 usar o OpenCode.
@@ -70,9 +66,9 @@ A lista atual de modelos inclui:
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
-- **Qwen3.5 Plus**
-- **Qwen3.6 Plus**
 - **MiniMax M2.7**
+- **Qwen3.6 Plus**
+- **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -88,24 +84,24 @@ O OpenCode Go inclui os seguintes limites:
 - **Limite semanal** — US$ 30 de uso
 - **Limite mensal** — US$ 60 de uso
 
-Os limites são definidos em valor em dólares. Isso significa que a sua contagem real de requisições depende do modelo que você usa. Modelos mais baratos como o MiniMax M2.5 permitem mais requisições, enquanto modelos de custo mais alto como o GLM-5.1 permitem menos.
+Os limites são definidos em valor em dólares. Isso significa que a sua contagem real de requisições depende do modelo que você usa. Modelos mais baratos como o DeepSeek V4 Flash permitem mais requisições, enquanto modelos de custo mais alto como o GLM-5.1 permitem menos.
 
 A tabela abaixo fornece uma contagem estimada de requisições com base nos padrões típicos de uso do Go:
 
-| Model              | requisições por 5 horas | requisições por semana | requisições por mês |
-| ------------------ | ----------------------- | ---------------------- | ------------------- |
-| GLM-5.1            | 880                     | 2,150                  | 4,300               |
-| GLM-5              | 1,150                   | 2,880                  | 5,750               |
-| Kimi K2.5          | 1,850                   | 4,630                  | 9,250               |
-| Kimi K2.6          | 1,150                   | 2,880                  | 5,750               |
-| MiMo-V2.5 (≤ 256K) | 2,150                   | 5,450                  | 10,900              |
-| MiMo-V2.5-Pro      | 1,290                   | 3,225                  | 6,450               |
-| MiniMax M2.7       | 3,400                   | 8,500                  | 17,000              |
-| MiniMax M2.5       | 6,300                   | 15,900                 | 31,800              |
-| Qwen3.6 Plus       | 3,300                   | 8,200                  | 16,300              |
-| Qwen3.5 Plus       | 10,200                  | 25,200                 | 50,500              |
-| DeepSeek V4 Pro    | 3,450                   | 8,550                  | 17,150              |
-| DeepSeek V4 Flash  | 31,650                  | 79,050                 | 158,150             |
+| Model             | requisições por 5 horas | requisições por semana | requisições por mês |
+| ----------------- | ----------------------- | ---------------------- | ------------------- |
+| GLM-5.1           | 880                     | 2,150                  | 4,300               |
+| GLM-5             | 1,150                   | 2,880                  | 5,750               |
+| Kimi K2.5         | 1,850                   | 4,630                  | 9,250               |
+| Kimi K2.6         | 1,150                   | 2,880                  | 5,750               |
+| MiMo-V2.5         | 30,100                  | 75,200                 | 150,400             |
+| MiMo-V2.5-Pro     | 3,250                   | 8,150                  | 16,300              |
+| MiniMax M2.7      | 3,400                   | 8,500                  | 17,000              |
+| MiniMax M2.5      | 6,300                   | 15,900                 | 31,800              |
+| Qwen3.7 Max       | 950                     | 2,390                  | 4,770               |
+| Qwen3.6 Plus      | 3,300                   | 8,200                  | 16,300              |
+| DeepSeek V4 Pro   | 3,450                   | 8,550                  | 17,150              |
+| DeepSeek V4 Flash | 31,650                  | 79,050                 | 158,150             |
 
 As estimativas baseiam-se nos padrões médios de requisições observados:
 
@@ -114,10 +110,10 @@ As estimativas baseiam-se nos padrões médios de requisições observados:
 - DeepSeek V4 Pro — 750 tokens de entrada, 82.000 em cache, 290 tokens de saída por requisição
 - DeepSeek V4 Flash — 790 tokens de entrada, 68.000 em cache, 280 tokens de saída por requisição
 - MiniMax M2.7/M2.5 — 300 tokens de entrada, 55.000 em cache, 125 tokens de saída por requisição
-- Qwen3.5 Plus — 410 tokens de entrada, 47.000 em cache, 140 tokens de saída por requisição
+- Qwen3.7 Max — 420 tokens de entrada, 66.000 em cache, 200 tokens de saída por requisição
 - Qwen3.6 Plus — 500 tokens de entrada, 57.000 em cache, 190 tokens de saída por requisição
-- MiMo-V2.5 — 1000 tokens de entrada, 60.000 em cache, 140 tokens de saída por requisição
-- MiMo-V2.5-Pro — 350 tokens de entrada, 41.000 em cache, 250 tokens de saída por requisição
+- MiMo-V2.5 — 830 tokens de entrada, 71.500 em cache, 295 tokens de saída por requisição
+- MiMo-V2.5-Pro — 790 tokens de entrada, 86.000 em cache, 305 tokens de saída por requisição
 
 Você pode acompanhar o seu uso atual no **<a href={console}>console</a>**.
 
@@ -153,8 +149,8 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 O [ID do modelo](/docs/config/#models) na sua configuração do OpenCode
 usa o formato `opencode-go/<model-id>`. Por exemplo, para o Kimi K2.6, você usaria

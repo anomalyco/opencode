@@ -6,12 +6,11 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
-import { Instance } from "../../src/project/instance"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { Truncate } from "@/tool/truncate"
 import { LspTool } from "../../src/tool/lsp"
-import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
@@ -20,7 +19,7 @@ afterEach(async () => {
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.make("msg_test"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -99,89 +98,89 @@ const asks = () => {
 
 describe("tool.lsp", () => {
   describe("permission metadata", () => {
-    it.live("keeps cursor details for position-based operations", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const file = path.join(dir, "test.ts")
-            yield* put(file)
+    it.instance(
+      "keeps cursor details for position-based operations",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const file = path.join(dir, "test.ts")
+          yield* put(file)
 
-            const { items, next } = asks()
-            const result = yield* run({ operation: "goToDefinition", filePath: file, line: 3, character: 7 }, next)
-            const req = items.find((item) => item.permission === "lsp")
+          const { items, next } = asks()
+          const result = yield* run({ operation: "goToDefinition", filePath: file, line: 3, character: 7 }, next)
+          const req = items.find((item) => item.permission === "lsp")
 
-            expect(req).toBeDefined()
-            expect(req!.metadata).toEqual({
-              operation: "goToDefinition",
-              filePath: file,
-              line: 3,
-              character: 7,
-            })
-            expect(result.title).toBe("goToDefinition test.ts:3:7")
-          }),
-        { git: true },
-      ),
+          expect(req).toBeDefined()
+          expect(req!.metadata).toEqual({
+            operation: "goToDefinition",
+            filePath: file,
+            line: 3,
+            character: 7,
+          })
+          expect(result.title).toBe("goToDefinition test.ts:3:7")
+        }),
+      { git: true },
     )
 
-    it.live("omits cursor details for documentSymbol", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const file = path.join(dir, "test.ts")
-            yield* put(file)
+    it.instance(
+      "omits cursor details for documentSymbol",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const file = path.join(dir, "test.ts")
+          yield* put(file)
 
-            const { items, next } = asks()
-            const result = yield* run({ operation: "documentSymbol", filePath: file, line: 3, character: 7 }, next)
-            const req = items.find((item) => item.permission === "lsp")
+          const { items, next } = asks()
+          const result = yield* run({ operation: "documentSymbol", filePath: file, line: 3, character: 7 }, next)
+          const req = items.find((item) => item.permission === "lsp")
 
-            expect(req).toBeDefined()
-            expect(req!.metadata).toEqual({
-              operation: "documentSymbol",
-              filePath: file,
-            })
-            expect(result.title).toBe("documentSymbol test.ts")
-          }),
-        { git: true },
-      ),
+          expect(req).toBeDefined()
+          expect(req!.metadata).toEqual({
+            operation: "documentSymbol",
+            filePath: file,
+          })
+          expect(result.title).toBe("documentSymbol test.ts")
+        }),
+      { git: true },
     )
 
-    it.live("omits file and cursor details for workspaceSymbol", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            workspaceSymbolQueries.length = 0
-            const file = path.join(dir, "test.ts")
-            yield* put(file)
+    it.instance(
+      "omits file and cursor details for workspaceSymbol",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          workspaceSymbolQueries.length = 0
+          const file = path.join(dir, "test.ts")
+          yield* put(file)
 
-            const { items, next } = asks()
-            const result = yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 }, next)
-            const req = items.find((item) => item.permission === "lsp")
+          const { items, next } = asks()
+          const result = yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 }, next)
+          const req = items.find((item) => item.permission === "lsp")
 
-            expect(req).toBeDefined()
-            expect(req!.metadata).toEqual({
-              operation: "workspaceSymbol",
-            })
-            expect(result.title).toBe("workspaceSymbol")
-          }),
-        { git: true },
-      ),
+          expect(req).toBeDefined()
+          expect(req!.metadata).toEqual({
+            operation: "workspaceSymbol",
+          })
+          expect(result.title).toBe("workspaceSymbol")
+        }),
+      { git: true },
     )
 
-    it.live("passes workspaceSymbol query to LSP", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            workspaceSymbolQueries.length = 0
-            const file = path.join(dir, "test.ts")
-            yield* put(file)
+    it.instance(
+      "passes workspaceSymbol query to LSP",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          workspaceSymbolQueries.length = 0
+          const file = path.join(dir, "test.ts")
+          yield* put(file)
 
-            yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7, query: "TestSymbol" })
-            yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 })
+          yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7, query: "TestSymbol" })
+          yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 })
 
-            expect(workspaceSymbolQueries).toEqual(["TestSymbol", ""])
-          }),
-        { git: true },
-      ),
+          expect(workspaceSymbolQueries).toEqual(["TestSymbol", ""])
+        }),
+      { git: true },
     )
   })
 })
