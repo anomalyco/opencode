@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
-import { groupParts } from "./message-part-order"
+import type { AssistantMessage, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
+import { groupParts, reasoningPartStreaming } from "./message-part-order"
 import { skillText } from "./message-skill"
 import { hold, streamsplit } from "./message-part-stream"
 
@@ -47,6 +47,23 @@ function tool(part: Partial<ToolPart> = {}): ToolPart {
   }
 }
 
+function assistant(completed?: number): AssistantMessage {
+  return {
+    id: "msg_1",
+    sessionID: "ses_1",
+    role: "assistant",
+    time: completed === undefined ? { created: 1 } : { created: 1, completed },
+    parentID: "msg_user",
+    modelID: "model_1",
+    providerID: "provider_1",
+    agent: "agent_1",
+    mode: "build",
+    path: { cwd: "/", root: "/" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+}
+
 describe("message-part groupParts", () => {
   const isContextGroupTool = () => false
 
@@ -89,6 +106,17 @@ describe("message-part groupParts", () => {
     )
 
     expect(groups.map((group) => group.key)).toEqual(["part:msg_1:part_text_1", "part:msg_2:part_reasoning_2"])
+  })
+})
+
+describe("message-part reasoningPartStreaming", () => {
+  test("uses the reasoning part end time before the assistant completion time", () => {
+    expect(reasoningPartStreaming(reasoning(), assistant())).toBe(true)
+    expect(reasoningPartStreaming(reasoning({ time: { start: 1, end: 2 } }), assistant())).toBe(false)
+  })
+
+  test("treats incomplete reasoning as stopped once the assistant completes", () => {
+    expect(reasoningPartStreaming(reasoning(), assistant(3))).toBe(false)
   })
 })
 

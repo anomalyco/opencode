@@ -1,4 +1,4 @@
-import type { Part as PartType } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part as PartType, ReasoningPart } from "@opencode-ai/sdk/v2"
 
 type PartRef = {
   messageID: string
@@ -52,6 +52,10 @@ export function orderTextReasoningSegments<T>(
 
   flush()
   return result
+}
+
+export function reasoningPartStreaming(part: ReasoningPart, message: AssistantMessage) {
+  return typeof part.time?.end !== "number" && typeof message.time.completed !== "number"
 }
 
 export function groupParts(

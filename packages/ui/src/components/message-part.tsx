@@ -62,6 +62,7 @@ import { hookName, isCustomHookTool, normalizeTool } from "./tool-meta"
 import {
   groupParts as groupOrderedParts,
   orderTextReasoningSegments,
+  reasoningPartStreaming,
   type PartGroup,
 } from "./message-part-order"
 export type { PartGroup } from "./message-part-order"
@@ -1791,7 +1792,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const [open, setOpen] = createSignal(false)
   const streaming = createMemo(() => {
     if (props.message.role !== "assistant") return false
-    return typeof (props.message as AssistantMessage).time.completed !== "number"
+    return reasoningPartStreaming(part, props.message as AssistantMessage)
   })
   const title = createMemo(() =>
     streaming() ? i18n.t("ui.messagePart.reasoning.thinking") : i18n.t("ui.messagePart.reasoning.thought"),
