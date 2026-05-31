@@ -17,8 +17,9 @@ import { dict as th } from "./th"
 import { dict as zh } from "./zh"
 import { dict as zht } from "./zht"
 import { dict as tr } from "./tr"
+import { dict as it } from "./it"
 
-const locales = [ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, uk, th, tr, zh, zht]
+const locales = [ar, br, bs, da, de, es, fr, it, ja, ko, no, pl, ru, uk, th, tr, zh, zht]
 const keys = ["command.session.previous.unseen", "command.session.next.unseen"] as const
 
 describe("i18n parity", () => {
