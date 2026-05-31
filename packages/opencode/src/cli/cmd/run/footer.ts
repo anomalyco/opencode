@@ -24,22 +24,22 @@
 // Ctrl-c clears a live prompt draft first; otherwise interrupt and exit use a
 // two-press pattern where the first press shows a hint and the second press
 // within 5 seconds actually fires the action.
-import { CliRenderEvents, type CliRenderer, type TreeSitterClient } from "@opentui/core"
+import { CliRenderEvents, type CliRenderer, type KeyEvent, type Renderable, type TreeSitterClient } from "@opentui/core"
+import type { Keymap } from "@opentui/keymap"
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { OpencodeKeymapProvider, formatKeyBindings } from "@/cli/cmd/tui/keymap"
 import { withRunSpan } from "./otel"
 import { RUN_COMMAND_PANEL_ROWS, RUN_SUBAGENT_PANEL_ROWS } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
-import { printableBinding } from "./prompt.shared"
 import { RunFooterView } from "./footer.view"
 import { RunScrollbackStream } from "./scrollback.surface"
 import type { RunTheme } from "./theme"
 import type {
   FooterApi,
   FooterEvent,
-  FooterKeybinds,
   FooterPatch,
   FooterPromptRoute,
   FooterState,
@@ -55,6 +55,7 @@ import type {
   RunPrompt,
   RunProvider,
   RunResource,
+  RunTuiConfig,
   StreamCommit,
 } from "./types"
 
@@ -80,7 +81,8 @@ type RunFooterOptions = {
   first: boolean
   history?: RunPrompt[]
   theme: RunTheme
-  keybinds: FooterKeybinds
+  keymap: Keymap<Renderable, KeyEvent>
+  tuiConfig: RunTuiConfig
   diffStyle: RunDiffStyle
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onQuestionReply: (input: QuestionReply) => void | Promise<void>
@@ -195,7 +197,6 @@ export class RunFooter implements FooterApi {
   private autocomplete = false
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
-  private interruptHint: string
   private requestExitHandler: (() => boolean) | undefined
   private scrollback: RunScrollbackStream
 
@@ -249,7 +250,6 @@ export class RunFooter implements FooterApi {
       setSubagent("questions", reconcile(next.questions, { key: "id" }))
     }
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
-    this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
     this.scrollback = new RunScrollbackStream(renderer, options.theme, {
       diffStyle: options.diffStyle,
       wrote: options.wrote,
@@ -259,42 +259,48 @@ export class RunFooter implements FooterApi {
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
 
+    const footer = this
     void render(
       () =>
-        createComponent(RunFooterView, {
-          directory: options.directory,
-          state: this.state,
-          view: this.view,
-          subagent: this.subagent,
-          findFiles: options.findFiles,
-          agents: this.agents,
-          resources: this.resources,
-          commands: this.commands,
-          providers: this.providers,
-          currentModel: this.currentModel,
-          variants: this.variants,
-          currentVariant: this.currentVariant,
-          theme: options.theme,
-          diffStyle: options.diffStyle,
-          keybinds: options.keybinds,
-          history: options.history,
-          agent: options.agentLabel,
-          onSubmit: this.handlePrompt,
-          onPermissionReply: this.handlePermissionReply,
-          onQuestionReply: this.handleQuestionReply,
-          onQuestionReject: this.handleQuestionReject,
-          onCycle: this.handleCycle,
-          onInterrupt: this.handleInterrupt,
-          onInputClear: this.handleInputClear,
-          onExitRequest: this.handleExit,
-          onRequestExit: this.setRequestExitHandler,
-          onExit: () => this.close(),
-          onModelSelect: this.handleModelSelect,
-          onVariantSelect: this.handleVariantSelect,
-          onRows: this.syncRows,
-          onLayout: this.syncLayout,
-          onStatus: this.setStatus,
-          onSubagentSelect: options.onSubagentSelect,
+        createComponent(OpencodeKeymapProvider, {
+          keymap: options.keymap,
+          get children() {
+            return createComponent(RunFooterView, {
+              directory: options.directory,
+              state: footer.state,
+              view: footer.view,
+              subagent: footer.subagent,
+              findFiles: options.findFiles,
+              agents: footer.agents,
+              resources: footer.resources,
+              commands: footer.commands,
+              providers: footer.providers,
+              currentModel: footer.currentModel,
+              variants: footer.variants,
+              currentVariant: footer.currentVariant,
+              theme: options.theme,
+              diffStyle: options.diffStyle,
+              tuiConfig: options.tuiConfig,
+              history: options.history,
+              agent: options.agentLabel,
+              onSubmit: footer.handlePrompt,
+              onPermissionReply: footer.handlePermissionReply,
+              onQuestionReply: footer.handleQuestionReply,
+              onQuestionReject: footer.handleQuestionReject,
+              onCycle: footer.handleCycle,
+              onInterrupt: footer.handleInterrupt,
+              onInputClear: footer.handleInputClear,
+              onExitRequest: footer.handleExit,
+              onRequestExit: footer.setRequestExitHandler,
+              onExit: () => footer.close(),
+              onModelSelect: footer.handleModelSelect,
+              onVariantSelect: footer.handleVariantSelect,
+              onRows: footer.syncRows,
+              onLayout: footer.syncLayout,
+              onStatus: footer.setStatus,
+              onSubagentSelect: options.onSubagentSelect,
+            })
+          },
         }),
       this.renderer,
     ).catch(() => {
@@ -781,6 +787,13 @@ export class RunFooter implements FooterApi {
     }, 5000)
   }
 
+  private interruptHint(): string {
+    const bindings = this.options.keymap
+      .getCommandBindings({ visibility: "registered", commands: ["session.interrupt"] })
+      .get("session.interrupt")
+    return formatKeyBindings(bindings, this.options.tuiConfig) || "esc"
+  }
+
   private clearExitTimer(): void {
     if (!this.exitTimeout) {
       return
@@ -815,7 +828,7 @@ export class RunFooter implements FooterApi {
 
     if (next < 2) {
       this.armInterruptTimer()
-      this.patch({ status: `${this.interruptHint} again to interrupt` })
+      this.patch({ status: `${this.interruptHint()} again to interrupt` })
       return true
     }
 

@@ -36,7 +36,7 @@ export const Cost = Schema.Struct({
 export const Ref = Schema.Struct({
   id: ID,
   providerID: ProviderV2.ID,
-  variant: VariantID,
+  variant: VariantID.pipe(Schema.optional),
 })
 export type Ref = typeof Ref.Type
 

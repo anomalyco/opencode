@@ -1,32 +1,21 @@
 // Boot-time resolution for direct interactive mode.
 //
 // These functions run concurrently at startup to gather everything the runtime
-// needs before the first frame: keybinds from TUI config, diff display style,
+// needs before the first frame: TUI keymap config, diff display style,
 // model variant list with context limits, and session history for the prompt
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
 import { Context, Effect, Layer } from "effect"
-import { stringifyKeyStroke } from "@opentui/keymap"
+import { createBindingLookup } from "@opentui/keymap/extras"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { TuiKeybind } from "@/cli/cmd/tui/config/keybind"
 import { makeRuntime } from "@/effect/run-service"
 import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"
-import type { FooterKeybinds, RunDiffStyle, RunInput, RunPrompt, RunProvider } from "./types"
+import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
 
-const DEFAULT_KEYBINDS: FooterKeybinds = {
-  leader: TuiKeybind.LeaderDefault,
-  leaderTimeout: 2000,
-  commandList: [{ key: "ctrl+p" }],
-  variantCycle: [{ key: "ctrl+t" }],
-  interrupt: [{ key: "escape" }],
-  historyPrevious: [{ key: "up" }],
-  historyNext: [{ key: "down" }],
-  inputClear: [{ key: "ctrl+c" }],
-  inputSubmit: [{ key: "return" }],
-  inputNewline: [{ key: "shift+return,ctrl+return,alt+return,ctrl+j" }],
-}
+const DEFAULT_LEADER_TIMEOUT = 2000
 
 export type ModelInfo = {
   providers: RunProvider[]
@@ -52,7 +41,7 @@ type BootService = {
     sessionID: string,
     model: RunInput["model"],
   ) => Effect.Effect<SessionInfo>
-  readonly resolveFooterKeybinds: () => Effect.Effect<FooterKeybinds>
+  readonly resolveRunTuiConfig: () => Effect.Effect<RunTuiConfig>
   readonly resolveDiffStyle: () => Effect.Effect<RunDiffStyle>
 }
 
@@ -80,28 +69,27 @@ function emptySessionInfo(): SessionInfo {
   }
 }
 
-function leaderKey(config: Config) {
-  const key = config.keybinds.get("leader")?.[0]?.key
-  if (!key) return TuiKeybind.LeaderDefault
-  return typeof key === "string" ? key : stringifyKeyStroke(key)
+function defaultRunTuiConfig(): RunTuiConfig {
+  const keybinds = TuiKeybind.parse({})
+  return {
+    keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
+      commandMap: TuiKeybind.CommandMap,
+      bindingDefaults: TuiKeybind.bindingDefaults(),
+    }),
+    leader_timeout: DEFAULT_LEADER_TIMEOUT,
+    diff_style: "auto",
+  }
 }
 
-function footerKeybinds(config: Config | undefined): FooterKeybinds {
+function runTuiConfig(config: Config | undefined): RunTuiConfig {
   if (!config) {
-    return DEFAULT_KEYBINDS
+    return defaultRunTuiConfig()
   }
 
   return {
-    leader: leaderKey(config),
-    leaderTimeout: config.leader_timeout,
-    commandList: config.keybinds.get("command.palette.show"),
-    variantCycle: config.keybinds.get("variant.cycle"),
-    interrupt: config.keybinds.get("session.interrupt"),
-    historyPrevious: config.keybinds.get("prompt.history.previous"),
-    historyNext: config.keybinds.get("prompt.history.next"),
-    inputClear: config.keybinds.get("prompt.clear"),
-    inputSubmit: config.keybinds.get("input.submit"),
-    inputNewline: config.keybinds.get("input.newline"),
+    keybinds: config.keybinds,
+    leader_timeout: config.leader_timeout,
+    diff_style: config.diff_style ?? "auto",
   }
 }
 
@@ -175,18 +163,18 @@ const layer = Layer.effect(
       }
     })
 
-    const resolveFooterKeybinds = Effect.fn("RunBoot.resolveFooterKeybinds")(function* () {
-      return footerKeybinds(yield* config())
+    const resolveRunTuiConfig = Effect.fn("RunBoot.resolveRunTuiConfig")(function* () {
+      return runTuiConfig(yield* config())
     })
 
     const resolveDiffStyle = Effect.fn("RunBoot.resolveDiffStyle")(function* () {
-      return (yield* config())?.diff_style ?? "auto"
+      return runTuiConfig(yield* config()).diff_style ?? "auto"
     })
 
     return Service.of({
       resolveModelInfo,
       resolveSessionInfo,
-      resolveFooterKeybinds,
+      resolveRunTuiConfig,
       resolveDiffStyle,
     })
   }),
@@ -212,9 +200,9 @@ export async function resolveSessionInfo(
   return runtime.runPromise((svc) => svc.resolveSessionInfo(sdk, sessionID, model)).catch(() => emptySessionInfo())
 }
 
-// Reads keybind overrides from TUI config and merges them with defaults.
-export async function resolveFooterKeybinds(): Promise<FooterKeybinds> {
-  return runtime.runPromise((svc) => svc.resolveFooterKeybinds()).catch(() => DEFAULT_KEYBINDS)
+// Reads TUI config once for direct mode keymap setup and display preferences.
+export async function resolveRunTuiConfig(): Promise<RunTuiConfig> {
+  return runtime.runPromise((svc) => svc.resolveRunTuiConfig()).catch(() => defaultRunTuiConfig())
 }
 
 export async function resolveDiffStyle(): Promise<RunDiffStyle> {

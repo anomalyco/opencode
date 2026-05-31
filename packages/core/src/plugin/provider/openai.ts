@@ -17,7 +17,7 @@ export const OpenAIPlugin = PluginV2.define({
         evt.language = evt.sdk.responses(evt.model.apiID)
       }),
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (item.provider.endpoint.package !== "@ai-sdk/openai") continue
           if (!item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) continue
