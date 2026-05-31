@@ -21,6 +21,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { usable } from "../../src/session/overflow"
 
 import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
@@ -223,6 +224,11 @@ function cfg(compaction?: Config.Info["compaction"]) {
   return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
+}
+
+function compactionInputBudget(model: Provider.Model, compaction?: Config.Info["compaction"]) {
+  const base = Schema.decodeUnknownSync(Config.Info)({}) as Config.Info
+  return Math.floor(usable({ cfg: { ...base, compaction }, model }) * 0.85)
 }
 
 const deps = Layer.mergeAll(
@@ -1108,8 +1114,10 @@ describe("session.compaction.process", () => {
     "reduces compaction payload to fit constrained model budget",
     () => {
       const stub = llm()
-      let captured = ""
-      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      let captured: LLM.StreamInput | undefined
+      const model = createModel({ context: 5_000, output: 500 })
+      const compaction = { tail_turns: 0 }
+      stub.push(reply("summary", (input) => (captured = input)))
       return Effect.gen(function* () {
         const test = yield* TestInstance
         const ssn = yield* SessionNs.Service
@@ -1148,15 +1156,190 @@ describe("session.compaction.process", () => {
         expect(parent).toBeTruthy()
         yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
 
-        expect(captured).not.toContain("hidden reasoning should not be compacted")
-        expect(captured).not.toContain("encrypted-reasoning")
-        expect(captured).not.toContain("tool-output-should-be-truncated")
-        expect(captured).toContain("Tool output truncated for compaction")
+        expect(captured).toBeDefined()
+        if (!captured) return
+        const text = JSON.stringify(captured.messages)
+        expect(Token.estimate(text)).toBeLessThanOrEqual(compactionInputBudget(model, compaction))
+        expect(text).not.toContain("hidden reasoning should not be compacted")
+        expect(text).not.toContain("encrypted-reasoning")
+        expect(text).not.toContain("tool-output-should-be-truncated".repeat(100))
+        expect(text).toContain("Tool output truncated for compaction")
       }).pipe(
         withCompaction({
           llm: stub.layer,
-          provider: ProviderTest.fake({ model: createModel({ context: 100, output: 10 }) }),
-          config: cfg({ tail_turns: 0 }),
+          provider: ProviderTest.fake({ model }),
+          config: cfg(compaction),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "marks compaction as errored when stripped payload still exceeds budget",
+    () => {
+      const stub = llm()
+      let captured: LLM.StreamInput | undefined
+      const model = createModel({ context: 400, output: 50 })
+      const compaction = { tail_turns: 0 }
+      stub.push((input) => {
+        captured = input
+        return Stream.fail(
+          new APICallError({
+            message: "prompt is too long: 1200 tokens > 400 maximum",
+            url: "https://example.com/v1/chat/completions",
+            requestBodyValues: {},
+            statusCode: 400,
+            responseHeaders: { "content-type": "application/json" },
+            isRetryable: false,
+          }),
+        )
+      })
+
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "summarize this")
+        const assistant = yield* createAssistantMessage(session.id, user.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "reasoning",
+          text: "reasoning should still be stripped",
+          metadata: { openai: { reasoningEncryptedContent: "encrypted-reasoning".repeat(1_000) } },
+          time: { start: Date.now(), end: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { cmd: "generate large output" },
+            output: "irreducible-tool-output".repeat(1_000),
+            title: "Shell",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* createSummaryCompaction(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(result).toBe("stop")
+        expect(captured).toBeDefined()
+        if (!captured) return
+        const text = JSON.stringify(captured.messages)
+        expect(Token.estimate(text)).toBeGreaterThan(compactionInputBudget(model, compaction))
+        expect(text).not.toContain("reasoning should still be stripped")
+        expect(text).not.toContain("encrypted-reasoning")
+        expect(text).not.toContain("irreducible-tool-output")
+        const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+          (item) => item.info.role === "assistant" && item.info.summary,
+        )
+        expect(summary?.info.role).toBe("assistant")
+        if (summary?.info.role === "assistant") {
+          expect(summary.info.finish).toBe("error")
+          expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
+        }
+      }).pipe(
+        withCompaction({
+          llm: stub.layer,
+          provider: ProviderTest.fake({ model }),
+          config: cfg(compaction),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "includes plugin compaction context when sizing the payload",
+    () => {
+      const stub = llm()
+      let captured: LLM.StreamInput | undefined
+      const model = createModel({ context: 6_000, output: 500 })
+      const compaction = { tail_turns: 0 }
+      const pluginContext = "plugin context " + "p".repeat(4_000)
+      const compacting = Layer.mock(Plugin.Service)({
+        trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+          if (name !== "experimental.session.compacting") return Effect.succeed(output)
+          return Effect.sync(() => {
+            ;(output as { context: string[] }).context = [pluginContext]
+            return output
+          })
+        },
+        list: () => Effect.succeed([]),
+        init: () => Effect.void,
+      })
+      stub.push(reply("summary", (input) => (captured = input)))
+
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "summarize this")
+        const assistant = yield* createAssistantMessage(session.id, user.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "reasoning",
+          text: "plugin pressure reasoning should be stripped",
+          metadata: { openai: { reasoningEncryptedContent: "plugin-encrypted-reasoning".repeat(1_000) } },
+          time: { start: Date.now(), end: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { cmd: "generate large output" },
+            output: "plugin-pressure-tool-output".repeat(1_000),
+            title: "Shell",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* createSummaryCompaction(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(captured).toBeDefined()
+        if (!captured) return
+        const text = JSON.stringify(captured.messages)
+        expect(Token.estimate(text)).toBeLessThanOrEqual(compactionInputBudget(model, compaction))
+        expect(text).toContain(pluginContext)
+        expect(text).not.toContain("plugin pressure reasoning should be stripped")
+        expect(text).not.toContain("plugin-encrypted-reasoning")
+        expect(text).not.toContain("plugin-pressure-tool-output".repeat(100))
+        expect(text).toContain("Tool output truncated for compaction")
+      }).pipe(
+        withCompaction({
+          llm: stub.layer,
+          provider: ProviderTest.fake({ model }),
+          config: cfg(compaction),
+          plugin: compacting,
         }),
       )
     },
