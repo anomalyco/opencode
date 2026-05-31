@@ -377,10 +377,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           // lives in part.metadata, so unlike text/tool metadata it must be preserved
           // even when differentModel is true (fallback model switches, variant changes,
           // or proxy setups where the persisted providerID differs from the live one).
-          const isAnthropicReasoning =
-            model.providerID === "anthropic" ||
-            model.providerID.includes("anthropic") ||
-            model.api?.npm === "@ai-sdk/anthropic"
+          const isAnthropicReasoning = isAnthropicReasoningModel(model)
           if (differentModel && !isAnthropicReasoning) {
             if (part.text.trim().length > 0)
               assistantMessage.parts.push({

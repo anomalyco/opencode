@@ -1658,3 +1658,38 @@ describe("session.message-v2.latest", () => {
     expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
   })
 })
+
+describe("session.message-v2.isAnthropicReasoningModel", () => {
+  test("matches first-party Anthropic provider", () => {
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "anthropic" })).toBe(true)
+  })
+
+  test("matches Google Vertex Anthropic provider", () => {
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "google-vertex-anthropic" })).toBe(true)
+  })
+
+  test("matches by ai-sdk npm package", () => {
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "custom", api: { npm: "@ai-sdk/anthropic" } })).toBe(true)
+    expect(
+      MessageV2.isAnthropicReasoningModel({ providerID: "custom", api: { npm: "@ai-sdk/google-vertex/anthropic" } }),
+    ).toBe(true)
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "custom", api: { npm: "@ai-sdk/amazon-bedrock" } })).toBe(
+      true,
+    )
+  })
+
+  test("does not match non-Anthropic providers", () => {
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "openai" })).toBe(false)
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "google" })).toBe(false)
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "openrouter", api: { npm: "@openrouter/ai-sdk-provider" } })).toBe(
+      false,
+    )
+  })
+
+  test("does not loosely match providers that merely contain 'anthropic'", () => {
+    // regression: a previous version used providerID.includes("anthropic"),
+    // which would wrongly match a hypothetical "not-anthropic" provider.
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "not-anthropic-router" })).toBe(false)
+    expect(MessageV2.isAnthropicReasoningModel({ providerID: "anthropic-compatible-proxy" })).toBe(false)
+  })
+})
