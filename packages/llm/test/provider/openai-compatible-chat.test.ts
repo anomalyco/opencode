@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
-import { LLMClient } from "../../src/route"
+import { LLM, Message, ToolCallPart } from "../../src"
+import { Auth, LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
@@ -12,13 +12,13 @@ import { sseEvents } from "../lib/sse"
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const model = OpenAICompatibleChat.model({
-  id: "deepseek-chat",
-  provider: "deepseek",
-  baseURL: "https://api.deepseek.test/v1/",
-  apiKey: "test-key",
-  queryParams: { "api-version": "2026-01-01" },
-})
+const model = OpenAICompatibleChat.route
+  .with({
+    provider: "deepseek",
+    endpoint: { baseURL: "https://api.deepseek.test/v1/", query: { "api-version": "2026-01-01" } },
+    auth: Auth.bearer("test-key"),
+  })
+  .model({ id: "deepseek-chat" })
 
 const request = LLM.request({
   id: "req_1",
@@ -63,10 +63,11 @@ describe("OpenAI-compatible Chat route", () => {
       expect(prepared.model).toMatchObject({
         id: "deepseek-chat",
         provider: "deepseek",
-        route: "openai-compatible-chat",
+        route: { id: "openai-compatible-chat" },
+      })
+      expect(prepared.model.route.endpoint).toMatchObject({
         baseURL: "https://api.deepseek.test/v1/",
-        apiKey: "test-key",
-        queryParams: { "api-version": "2026-01-01" },
+        query: { "api-version": "2026-01-01" },
       })
       expect(prepared.body).toEqual({
         model: "deepseek-chat",
@@ -93,13 +94,12 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       expect(
         providerFamilies.map(([provider, family]) => {
-          const model = family.model(`${provider}-model`, { apiKey: "test-key" })
+          const model = family.configure({ apiKey: "test-key" }).model(`${provider}-model`)
           return {
             id: String(model.id),
             provider: String(model.provider),
-            route: model.route,
-            baseURL: model.baseURL,
-            apiKey: model.apiKey,
+            route: model.route.id,
+            baseURL: model.route.endpoint.baseURL,
           }
         }),
       ).toEqual(
@@ -108,19 +108,20 @@ describe("OpenAI-compatible Chat route", () => {
           provider,
           route: "openai-compatible-chat",
           baseURL,
-          apiKey: "test-key",
         })),
       )
 
-      const custom = OpenAICompatible.deepseek.model("deepseek-chat", {
-        apiKey: "test-key",
-        baseURL: "https://custom.deepseek.test/v1",
-      })
+      const custom = OpenAICompatible.deepseek
+        .configure({
+          apiKey: "test-key",
+          baseURL: "https://custom.deepseek.test/v1",
+        })
+        .model("deepseek-chat")
       expect(custom).toMatchObject({
         provider: "deepseek",
-        route: "openai-compatible-chat",
-        baseURL: "https://custom.deepseek.test/v1",
+        route: { id: "openai-compatible-chat" },
       })
+      expect(custom.route.endpoint.baseURL).toBe("https://custom.deepseek.test/v1")
     }),
   )
 
@@ -157,9 +158,9 @@ describe("OpenAI-compatible Chat route", () => {
           ],
           toolChoice: "lookup",
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )
@@ -231,7 +232,7 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 })

@@ -255,7 +255,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Недорогие модели для кодинга для всех",
   "go.meta.description":
-    "Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами запросов за 5 часов для GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
+    "Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами запросов за 5 часов для GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
   "go.hero.title": "Недорогие модели для кодинга для всех",
   "go.hero.body":
     "Go открывает доступ к агентам-программистам разработчикам по всему миру. Предлагая щедрые лимиты и надежный доступ к наиболее способным моделям с открытым исходным кодом, вы можете создавать проекты с мощными агентами, не беспокоясь о затратах или доступности.",
@@ -305,7 +305,7 @@ export const dict = {
   "go.problem.item2": "Щедрые лимиты и надежный доступ",
   "go.problem.item3": "Создан для максимального числа программистов",
   "go.problem.item4":
-    "Включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash",
+    "Включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash",
   "go.how.title": "Как работает Go",
   "go.how.body":
     "Go начинается с $5 за первый месяц, затем $10/месяц. Вы можете использовать его с OpenCode или любым агентом.",
@@ -331,7 +331,7 @@ export const dict = {
   "go.faq.a2": "Go включает перечисленные ниже модели с щедрыми лимитами и надежным доступом.",
   "go.faq.q3": "Go — это то же самое, что и Zen?",
   "go.faq.a3":
-    "Нет. Zen - это оплата по мере использования, в то время как Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами и надежным доступом к моделям с открытым исходным кодом GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
+    "Нет. Zen - это оплата по мере использования, в то время как Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами и надежным доступом к моделям с открытым исходным кодом GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
   "go.faq.q4": "Сколько стоит Go?",
   "go.faq.a4.p1.beforePricing": "Go стоит",
   "go.faq.a4.p1.pricingLink": "$5 за первый месяц",
@@ -355,7 +355,7 @@ export const dict = {
 
   "go.faq.q9": "В чем разница между бесплатными моделями и Go?",
   "go.faq.a9":
-    "Бесплатные модели включают Big Pickle плюс промо-модели, доступные на данный момент, с квотой 200 запросов/день. Go включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash с более высокими квотами запросов, применяемыми в скользящих окнах (5 часов, неделя и месяц), что примерно эквивалентно $12 за 5 часов, $30 в неделю и $60 в месяц (фактическое количество запросов зависит от модели и использования).",
+    "Бесплатные модели включают Big Pickle плюс промо-модели, доступные на данный момент, с квотой 200 запросов/день. Go включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash с более высокими квотами запросов, применяемыми в скользящих окнах (5 часов, неделя и месяц), что примерно эквивалентно $12 за 5 часов, $30 в неделю и $60 в месяц (фактическое количество запросов зависит от модели и использования).",
 
   "zen.api.error.rateLimitExceeded": "Превышен лимит запросов. Пожалуйста, попробуйте позже.",
   "zen.api.error.modelNotSupported": "Модель {{model}} не поддерживается",
@@ -673,6 +673,41 @@ export const dict = {
   "workspace.lite.promo.subscribing": "Перенаправление...",
   "workspace.lite.promo.otherMethods": "Другие способы оплаты",
   "workspace.lite.promo.selectMethod": "Выберите способ оплаты",
+
+  "workspace.referral.copyLink": "Копировать ссылку",
+  "workspace.referral.copied": "Скопировано",
+  "workspace.referral.overview.title": "Пригласите друзей",
+  "workspace.referral.overview.subtitle": "Получите $5, когда друг оформит подписку. Он тоже получит $5.",
+  "workspace.referral.instructions.share": "Поделитесь своей реферальной ссылкой",
+  "workspace.referral.instructions.subscribe": "Ваш друг присоединяется и оформляет подписку на Go",
+  "workspace.referral.instructions.claim":
+    "Вы оба получаете кредит на использование $5, который можно применить к лимитам использования Go",
+  "workspace.referral.rewards.title": "Реферальные награды",
+  "workspace.referral.rewards.description": "Используйте доступные реферальные кредиты для оплаты использования Go.",
+  "workspace.referral.rewards.subtitle": "Использовано {{applied}} / {{total}} наград.",
+  "workspace.referral.rewards.empty": "Реферальных наград пока нет.",
+  "workspace.referral.table.reward": "Награда",
+  "workspace.referral.table.referral": "Описание",
+  "workspace.referral.table.date": "Дата",
+  "workspace.referral.reward.description.inviter": "Приглашён {{email}}",
+  "workspace.referral.reward.description.invitee": "Приглашены пользователем {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "Оформите подписку для разблокировки",
+  "workspace.referral.reward.action.view": "Посмотреть награду",
+  "workspace.referral.reward.action.applied": "Награда использована",
+  "workspace.referral.reward.source.pendingInviter": "Ожидание его подписки",
+  "workspace.referral.reward.source.pendingInvitee": "Подпишитесь, чтобы разблокировать награду",
+  "workspace.referral.reward.source.available": "Награда готова к применению",
+  "workspace.referral.reward.source.applied": "Награда использована",
+  "workspace.referral.reward.status.applied": "Награда использована",
+  "workspace.referral.reward.status.pendingInviter": "Оформите подписку для разблокировки",
+  "workspace.referral.reward.status.pendingInvitee": "Оформите подписку для разблокировки",
+  "workspace.referral.apply.noGo": "Оформите подписку для разблокировки",
+  "workspace.referral.apply.preview": "Посмотреть награду",
+  "workspace.referral.apply.action": "Применить",
+  "workspace.referral.apply.confirmTitle": "Применить награду",
+  "workspace.referral.apply.confirmBody":
+    "Используйте {{amount}}, чтобы уменьшить текущее использование этого workspace.",
+  "workspace.referral.apply.confirmAction": "Применить",
 
   "download.title": "OpenCode | Скачать",
   "download.meta.description": "Скачать OpenCode для macOS, Windows и Linux",

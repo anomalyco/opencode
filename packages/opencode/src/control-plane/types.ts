@@ -1,16 +1,17 @@
 import { Schema, Struct } from "effect"
-import { ProjectID } from "@/project/schema"
-import { WorkspaceID } from "./schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import type { InstanceContext } from "@/project/instance-context"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { DeepMutable } from "@opencode-ai/core/schema"
 
 export const WorkspaceInfo = Schema.Struct({
-  id: WorkspaceID,
+  id: WorkspaceV2.ID,
   type: Schema.String,
   name: Schema.String,
-  branch: Schema.NullOr(Schema.String),
-  directory: Schema.NullOr(Schema.String),
-  extra: Schema.NullOr(Schema.Unknown),
-  projectID: ProjectID,
+  branch: Schema.optional(Schema.NullOr(Schema.String)),
+  directory: Schema.optional(Schema.NullOr(Schema.String)),
+  extra: Schema.optional(Schema.NullOr(Schema.Unknown)),
+  projectID: ProjectV2.ID,
 }).annotate({ identifier: "Workspace" })
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>
 
@@ -37,12 +38,22 @@ export type Target =
       headers?: HeadersInit
     }
 
+export type WorkspaceAdapterContext = {
+  readonly instance?: InstanceContext
+  readonly workspaceID?: WorkspaceV2.ID
+}
+
 export type WorkspaceAdapter = {
   name: string
   description: string
-  configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(info: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
-  list?(): WorkspaceListedInfo[] | Promise<WorkspaceListedInfo[]>
-  remove(info: WorkspaceInfo): Promise<void>
-  target(info: WorkspaceInfo): Target | Promise<Target>
+  configure(info: WorkspaceInfo, context?: WorkspaceAdapterContext): WorkspaceInfo | Promise<WorkspaceInfo>
+  create(
+    info: WorkspaceInfo,
+    env: Record<string, string | undefined>,
+    from?: WorkspaceInfo,
+    context?: WorkspaceAdapterContext,
+  ): Promise<void>
+  list?(context?: WorkspaceAdapterContext): WorkspaceListedInfo[] | Promise<WorkspaceListedInfo[]>
+  remove(info: WorkspaceInfo, context?: WorkspaceAdapterContext): Promise<void>
+  target(info: WorkspaceInfo, context?: WorkspaceAdapterContext): Target | Promise<Target>
 }

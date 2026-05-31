@@ -1,9 +1,8 @@
 import { Effect, Layer, Context, Schema } from "effect"
-import { Bus } from "@/bus"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
@@ -67,7 +66,7 @@ function unquoteGitPath(input: string) {
 export interface Interface {
   readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
   readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
-  readonly computeDiff: (input: { messages: MessageV2.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
+  readonly computeDiff: (input: { messages: SessionLegacy.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
@@ -78,9 +77,11 @@ export const layer = Layer.effect(
     const sessions = yield* Session.Service
     const snapshot = yield* Snapshot.Service
     const storage = yield* Storage.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
 
-    const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: MessageV2.WithParts[] }) {
+    const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: {
+      messages: SessionLegacy.WithParts[]
+    }) {
       let from: string | undefined
       let to: string | undefined
       for (const item of input.messages) {
@@ -104,7 +105,7 @@ export const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      const all = yield* sessions.messages({ sessionID: input.sessionID })
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       if (!all.length) return
 
       const diffs = yield* computeDiff({ messages: all })
@@ -117,7 +118,7 @@ export const layer = Layer.effect(
         },
       })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
-      yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
 
       const messages = all.filter(
         (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
@@ -153,14 +154,14 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(Snapshot.defaultLayer),
     Layer.provide(Storage.defaultLayer),
-    Layer.provide(Bus.layer),
+    Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
 
 export const DiffInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 
 export * as SessionSummary from "./summary"

@@ -5,14 +5,20 @@ import { InstanceState } from "@/effect/instance-state"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
-import * as EffectZod from "@opencode-ai/core/effect-zod"
 import { Worktree } from "@/worktree"
 import { Effect, Option } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery } from "../groups/experimental"
+import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery, WorktreeApiError } from "../groups/experimental"
+
+function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
+  return self.pipe(
+    Effect.mapError((error) => new WorktreeApiError({ name: error._tag, data: { message: error.message } })),
+  )
+}
 
 export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "experimental", (handlers) =>
   Effect.gen(function* () {
@@ -23,6 +29,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const project = yield* Project.Service
     const registry = yield* ToolRegistry.Service
     const worktreeSvc = yield* Worktree.Service
+    const sessions = yield* Session.Service
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
@@ -79,12 +86,12 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       const list = yield* registry.tools({
         providerID: ctx.query.provider,
         modelID: ctx.query.model,
-        agent: yield* agents.get(yield* agents.defaultAgent()),
+        agent: yield* agents.defaultInfo(),
       })
       return list.map((item) => ({
         id: item.id,
         description: item.description,
-        parameters: EffectZod.toJsonSchema(item.parameters),
+        parameters: ToolJsonSchema.fromTool(item),
       }))
     })
 
@@ -98,16 +105,16 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     })
 
     const worktreeCreate = Effect.fn("ExperimentalHttpApi.worktreeCreate")(function* (ctx: {
-      payload: Worktree.CreateInput | undefined
+      payload: typeof Worktree.CreateInput.Type | void
     }) {
-      return yield* worktreeSvc.create(ctx.payload)
+      return yield* mapWorktreeError(worktreeSvc.create(ctx.payload ?? undefined))
     })
 
     const worktreeRemove = Effect.fn("ExperimentalHttpApi.worktreeRemove")(function* (input: {
       payload: Worktree.RemoveInput
     }) {
       const ctx = yield* InstanceState.context
-      yield* worktreeSvc.remove(input.payload)
+      yield* mapWorktreeError(worktreeSvc.remove(input.payload))
       yield* project.removeSandbox(ctx.project.id, input.payload.directory)
       return true
     })
@@ -115,27 +122,25 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const worktreeReset = Effect.fn("ExperimentalHttpApi.worktreeReset")(function* (ctx: {
       payload: Worktree.ResetInput
     }) {
-      yield* worktreeSvc.reset(ctx.payload)
+      yield* mapWorktreeError(worktreeSvc.reset(ctx.payload))
       return true
     })
 
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
       const limit = ctx.query.limit ?? 100
-      const sessions = Array.from(
-        Session.listGlobal({
-          directory: ctx.query.directory,
-          roots: ctx.query.roots,
-          start: ctx.query.start,
-          cursor: ctx.query.cursor,
-          search: ctx.query.search,
-          limit: limit + 1,
-          archived: ctx.query.archived,
-        }),
-      )
-      const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+      const all = yield* sessions.listGlobal({
+        directory: ctx.query.directory,
+        roots: ctx.query.roots,
+        start: ctx.query.start,
+        cursor: ctx.query.cursor,
+        search: ctx.query.search,
+        limit: limit + 1,
+        archived: ctx.query.archived,
+      })
+      const list = all.length > limit ? all.slice(0, limit) : all
       return HttpServerResponse.jsonUnsafe(list, {
         headers:
-          sessions.length > limit && list.length > 0
+          all.length > limit && list.length > 0
             ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
             : undefined,
       })

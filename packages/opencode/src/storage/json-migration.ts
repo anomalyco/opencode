@@ -2,9 +2,9 @@ import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import { ProjectTable } from "../project/project.sql"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../session/session.sql"
-import { SessionShareTable } from "../share/share.sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import path from "path"
 import { existsSync } from "fs"
 import { Filesystem } from "@/util/filesystem"
@@ -216,6 +216,12 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         summary_deletions: data.summary?.deletions ?? null,
         summary_files: data.summary?.files ?? null,
         summary_diffs: data.summary?.diffs ?? null,
+        cost: 0,
+        tokens_input: 0,
+        tokens_output: 0,
+        tokens_reasoning: 0,
+        tokens_cache_read: 0,
+        tokens_cache_write: 0,
         revert: data.revert ?? null,
         permission: data.permission ?? null,
         time_created: data.time?.created ?? now,

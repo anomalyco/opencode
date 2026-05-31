@@ -41,7 +41,7 @@ export type ProviderHelper = (input: {
 }) => {
   format: ZenData.Format
   modifyUrl: (providerApi: string, isStream?: boolean) => string
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
+  modifyHeaders: (headers: Headers, apiKey: string, stickyId: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
   createBinaryStreamDecoder: () => ((chunk: Uint8Array) => Uint8Array | undefined) | undefined
   streamSeparator: string
@@ -49,6 +49,7 @@ export type ProviderHelper = (input: {
     parse: (chunk: string) => void
     retrieve: () => any
   }
+  extractUsage: (response: any) => any
   normalizeUsage: (usage: any) => UsageInfo
 }
 

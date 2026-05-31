@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { LLMError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputDelta } from "../../schema"
+import { LLMError, LLMEvent, type ProviderMetadata, type ToolCall } from "../../schema"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
@@ -27,13 +27,13 @@ export type State<K extends StreamKey> = Partial<Record<K, PendingTool>>
 /**
  * Result of adding argument text to one pending tool call. It returns both the
  * next `tools` state and the updated `tool` because parsers often need the
- * current id/name immediately. `event` is present only when new text arrived;
- * metadata-only deltas update identity without emitting `tool-input-delta`.
+ * current id/name immediately. `events` contains lifecycle and delta events
+ * produced by the append; metadata-only deltas update identity without output.
  */
 export interface AppendOutcome<K extends StreamKey> {
   readonly tools: State<K>
   readonly tool: PendingTool
-  readonly event?: ToolInputDelta
+  readonly events: ReadonlyArray<LLMEvent>
 }
 
 /** Create empty accumulator state for one provider stream. */
@@ -49,7 +49,14 @@ const withoutTool = <K extends StreamKey>(tools: State<K>, key: K): State<K> => 
   return next
 }
 
-const inputDelta = (tool: PendingTool, text: string): ToolInputDelta =>
+const inputStart = (tool: PendingTool) =>
+  LLMEvent.toolInputStart({
+    id: tool.id,
+    name: tool.name,
+    providerMetadata: tool.providerMetadata,
+  })
+
+const inputDelta = (tool: PendingTool, text: string) =>
   LLMEvent.toolInputDelta({
     id: tool.id,
     name: tool.name,
@@ -76,11 +83,16 @@ const appendTool = <K extends StreamKey>(
   key: K,
   tool: PendingTool,
   text: string,
-): AppendOutcome<K> => ({
-  tools: withTool(tools, key, tool),
-  tool,
-  event: text.length === 0 ? undefined : inputDelta(tool, text),
-})
+): AppendOutcome<K> => {
+  const events: LLMEvent[] = []
+  if (!tools[key]) events.push(inputStart(tool))
+  if (text.length > 0) events.push(inputDelta(tool, text))
+  return {
+    tools: withTool(tools, key, tool),
+    tool,
+    events,
+  }
+}
 
 export const isError = <K extends StreamKey>(result: AppendOutcome<K> | LLMError): result is LLMError =>
   result instanceof LLMError
@@ -121,7 +133,8 @@ export const appendOrStart = <K extends StreamKey>(
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,
   }
-  if (current && delta.text.length === 0 && current.id === id && current.name === name) return { tools, tool: current }
+  if (current && delta.text.length === 0 && current.id === id && current.name === name)
+    return { tools, tool: current, events: [] }
   return appendTool(tools, key, tool, delta.text)
 }
 
@@ -139,7 +152,7 @@ export const appendExisting = <K extends StreamKey>(
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
   if (!current) return eventError(route, missingToolMessage)
-  if (text.length === 0) return { tools, tool: current }
+  if (text.length === 0) return { tools, tool: current, events: [] }
   return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
 }
 
@@ -152,7 +165,13 @@ export const finish = <K extends StreamKey>(route: string, tools: State<K>, key:
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }
-    return { tools: withoutTool(tools, key), event: yield* toolCall(route, tool) }
+    return {
+      tools: withoutTool(tools, key),
+      events: [
+        LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
+        yield* toolCall(route, tool),
+      ],
+    }
   })
 
 /**
@@ -164,7 +183,13 @@ export const finishWithInput = <K extends StreamKey>(route: string, tools: State
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }
-    return { tools: withoutTool(tools, key), event: yield* toolCall(route, tool, input) }
+    return {
+      tools: withoutTool(tools, key),
+      events: [
+        LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
+        yield* toolCall(route, tool, input),
+      ],
+    }
   })
 
 /**
@@ -179,7 +204,14 @@ export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =
     )
     return {
       tools: empty<K>(),
-      events: yield* Effect.forEach(pending, (tool) => toolCall(route, tool)),
+      events: yield* Effect.forEach(pending, (tool) =>
+        toolCall(route, tool).pipe(
+          Effect.map((call) => [
+            LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
+            call,
+          ]),
+        ),
+      ).pipe(Effect.map((events) => events.flat())),
     }
   })
 

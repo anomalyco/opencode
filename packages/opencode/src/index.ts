@@ -30,15 +30,15 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
-import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { JsonMigration } from "@/storage/json-migration"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { isRecord } from "@/util/record"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -115,7 +115,7 @@ const cli = yargs(args)
       run_id: processMetadata.runID,
     })
 
-    const marker = path.join(Global.Path.data, "opencode.db")
+    const marker = Database.path()
     if (!(await Filesystem.exists(marker))) {
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
@@ -125,8 +125,9 @@ const cli = yargs(args)
       const reset = "\x1b[0m"
       let last = -1
       if (tty) process.stderr.write("\x1b[?25l")
+      const sqlite = new (await import("bun:sqlite")).Database(marker)
       try {
-        await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
+        await JsonMigration.run(drizzle({ client: sqlite }), {
           progress: (event) => {
             const percent = Math.floor((event.current / event.total) * 100)
             if (percent === last && event.current !== event.total) return
@@ -144,6 +145,7 @@ const cli = yargs(args)
           },
         })
       } finally {
+        sqlite.close()
         if (tty) process.stderr.write("\x1b[?25h")
         else {
           process.stderr.write(`sqlite-migration:done${EOL}`)
@@ -203,13 +205,6 @@ try {
   }
 } catch (e) {
   let data: Record<string, any> = {}
-  if (e instanceof NamedError) {
-    const obj = e.toObject()
-    Object.assign(data, {
-      ...obj.data,
-    })
-  }
-
   if (e instanceof Error) {
     Object.assign(data, {
       name: e.name,
@@ -217,6 +212,16 @@ try {
       cause: e.cause?.toString(),
       stack: e.stack,
     })
+  }
+
+  if (e instanceof NamedError) {
+    const obj = e.toObject()
+    if (isRecord(obj.data)) {
+      for (const [key, value] of Object.entries(obj.data)) {
+        if (key === "name" || key === "stack" || key === "cause") continue
+        data[key] = value
+      }
+    }
   }
 
   if (e instanceof ResolveMessage) {
