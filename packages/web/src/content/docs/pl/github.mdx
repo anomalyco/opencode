@@ -64,13 +64,13 @@ Można też uszkodzić to rozwiązanie.
               persist-credentials: false
 
           - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
-           env:
-             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-           with:
-             model: anthropic/claude-sonnet-4-20250514
-             # share: true
-             # github_token: xxxx
+            uses: anomalyco/opencode/github@latest
+            env:
+              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+            with:
+              model: anthropic/claude-sonnet-4-20250514
+              # share: true
+              # github_token: xxxx
    ```
 
 3. **Przechowuj klucze API w tajemnicy**
