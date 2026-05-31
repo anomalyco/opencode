@@ -227,4 +227,8 @@ export type ElectronAPI = {
   setBackgroundColor: (color: string) => Promise<void>
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
+  fetchExternal: (
+    url: string,
+    options?: { method?: string; headers?: Record<string, string>; body?: string },
+  ) => Promise<{ ok: boolean; status: number; statusText: string; body: string }>
 }

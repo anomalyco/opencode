@@ -8,6 +8,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
+import { FetchProviderModels } from "@/components/fetch-provider-models"
 import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -55,6 +56,20 @@ export function DialogCustomProvider(props: Props) {
       "models",
       produce((rows) => {
         rows.push(modelRow())
+      }),
+    )
+  }
+
+  const addFetchedModel = (id: string, name: string) => {
+    setForm(
+      "models",
+      produce((rows) => {
+        if (rows.length === 1 && !rows[0].id.trim() && !rows[0].name.trim()) {
+          rows[0].id = id
+          rows[0].name = name
+        } else {
+          rows.push({ ...modelRow(), id, name })
+        }
       }),
     )
   }
@@ -240,6 +255,13 @@ export function DialogCustomProvider(props: Props) {
 
           <div class="flex flex-col gap-3">
             <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+            <FetchProviderModels
+              baseURL={form.baseURL}
+              apiKey={form.apiKey}
+              headers={form.headers}
+              existingModelIDs={new Set(form.models.map((m) => m.id.trim()).filter(Boolean))}
+              onAdd={addFetchedModel}
+            />
             <For each={form.models}>
               {(m, i) => (
                 <div class="flex gap-2 items-start" data-row={m.row}>

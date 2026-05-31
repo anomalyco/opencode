@@ -211,6 +211,9 @@ export type Platform = {
   /** Fetch override */
   fetch?: typeof fetch
 
+  /** Fetch for external APIs — bypasses loopback routing, always uses native HTTP (Tauri only) */
+  fetchExternal?: typeof fetch
+
   /** Get the configured default server URL (platform-specific) */
   getDefaultServer?(): Promise<ServerConnection.Key | null>
 

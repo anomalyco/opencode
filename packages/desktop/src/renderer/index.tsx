@@ -267,6 +267,53 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
       return fetch(input, init)
     },
 
+    fetchExternal: async (input, init) => {
+      const url = input instanceof Request ? input.url : typeof input === "string" ? input : input.toString()
+      const method = init?.method || "GET"
+      const headers: Record<string, string> = {}
+      if (init?.headers) {
+        if (init.headers instanceof Headers) {
+          init.headers.forEach((value, key) => {
+            headers[key] = value
+          })
+        } else if (Array.isArray(init.headers)) {
+          init.headers.forEach(([key, value]) => {
+            headers[key] = value
+          })
+        } else {
+          Object.assign(headers, init.headers)
+        }
+      }
+
+      const result = await desktopApi.fetchExternal(url, {
+        method,
+        headers,
+        body: init?.body ? String(init.body) : undefined,
+      })
+
+      return {
+        ok: result.ok,
+        status: result.status,
+        statusText: result.statusText,
+        headers: new Headers(),
+        json: async () => JSON.parse(result.body),
+        text: async () => result.body,
+        blob: async () => new Blob([result.body]),
+        arrayBuffer: async () => new TextEncoder().encode(result.body).buffer,
+        formData: async () => {
+          throw new Error("formData not supported")
+        },
+        clone: () => {
+          throw new Error("clone not supported")
+        },
+        body: null,
+        bodyUsed: false,
+        redirected: false,
+        type: "basic" as ResponseType,
+        url,
+      } as any as Response
+    },
+
     getWslEnabled: () => isWslEnabled(),
 
     setWslEnabled: async (enabled) => {

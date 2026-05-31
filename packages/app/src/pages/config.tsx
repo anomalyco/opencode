@@ -36,6 +36,7 @@ import {
   type ModelRow,
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
+import { FetchProviderModels } from "@/components/fetch-provider-models"
 import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -1677,6 +1678,7 @@ function CustomEditor(props: {
   onDelete: () => void
   onCreate: () => void
   onSecret: () => void
+  onAddFetchedModel: (id: string, name: string) => void
 }) {
   const language = useLanguage()
 
@@ -1822,6 +1824,15 @@ function CustomEditor(props: {
                 <Button size="small" variant="ghost" icon="plus-small" onClick={props.onAddModel}>
                   {language.t("config.custom.models.add")}
                 </Button>
+              </div>
+              <div class="mb-3">
+                <FetchProviderModels
+                  baseURL={props.form.baseURL}
+                  apiKey={props.form.apiKey}
+                  headers={props.form.headers}
+                  existingModelIDs={new Set(props.form.models.map((m) => m.id.trim()).filter(Boolean))}
+                  onAdd={props.onAddFetchedModel}
+                />
               </div>
               <div class="flex flex-col gap-3">
                 <For each={props.form.models}>
@@ -3609,6 +3620,15 @@ export default function ConfigPage() {
     setState("custom", "models", (rows) => [...rows, blankModelRow()])
   }
 
+  function addFetchedCustomModel(id: string, name: string) {
+    setState("custom", "models", (rows) => {
+      if (rows.length === 1 && !rows[0].id.trim() && !rows[0].name.trim()) {
+        return [{ ...rows[0], id, name }]
+      }
+      return [...rows, { ...blankModelRow(), id, name }]
+    })
+  }
+
   function removeCustomModel(index: number) {
     if (state.custom.models.length <= 1) return
     setState("custom", "models", (rows) => rows.filter((_, idx) => idx !== index))
@@ -4647,6 +4667,7 @@ export default function ConfigPage() {
                     onDelete={() => void deleteCustom()}
                     onCreate={createCustomProvider}
                     onSecret={toggleCustomSecret}
+                    onAddFetchedModel={addFetchedCustomModel}
                   />
                 </Show>
               </Match>

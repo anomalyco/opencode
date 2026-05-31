@@ -290,6 +290,54 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
   })
+
+  ipcMain.handle(
+    "fetch-external",
+    async (
+      _event: IpcMainInvokeEvent,
+      url: string,
+      options?: { method?: string; headers?: Record<string, string>; body?: string },
+    ) => {
+      return new Promise<{ ok: boolean; status: number; statusText: string; body: string }>((resolve, reject) => {
+        const urlObj = new URL(url)
+        const isHttps = urlObj.protocol === "https:"
+        const lib = isHttps ? require("https") : require("http")
+
+        const reqOptions = {
+          hostname: urlObj.hostname,
+          port: urlObj.port || (isHttps ? 443 : 80),
+          path: urlObj.pathname + urlObj.search,
+          method: options?.method || "GET",
+          headers: options?.headers || {},
+        }
+
+        const req = lib.request(reqOptions, (res: any) => {
+          let body = ""
+          res.on("data", (chunk: Buffer) => {
+            body += chunk.toString()
+          })
+          res.on("end", () => {
+            resolve({
+              ok: res.statusCode >= 200 && res.statusCode < 300,
+              status: res.statusCode,
+              statusText: res.statusMessage || "",
+              body,
+            })
+          })
+        })
+
+        req.on("error", (err: Error) => {
+          reject(err)
+        })
+
+        if (options?.body) {
+          req.write(options.body)
+        }
+
+        req.end()
+      })
+    },
+  )
 }
 
 export function sendSqliteMigrationProgress(win: BrowserWindow, progress: SqliteMigrationProgress) {

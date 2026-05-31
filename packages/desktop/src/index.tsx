@@ -722,6 +722,10 @@ const createPlatform = (): DesktopPlatform => {
       return input instanceof Request ? tauriFetch(input) : tauriFetch(input, init)
     },
 
+    fetchExternal: async (input, init) => {
+      return input instanceof Request ? tauriFetch(input) : tauriFetch(input, init)
+    },
+
     getWslEnabled: async () => {
       const next = await commands.getWslConfig().catch(() => null)
       if (next) return next.enabled
