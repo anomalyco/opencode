@@ -53,6 +53,7 @@ function sessionRow(info: SessionLegacy.SessionInfo): typeof SessionTable.$infer
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
     summary_diffs: info.summary?.diffs ? [...info.summary.diffs] : undefined,
+    metadata: info.metadata,
     cost: info.cost ?? 0,
     tokens_input: (info.tokens ?? { input: 0 }).input,
     tokens_output: (info.tokens ?? { output: 0 }).output,

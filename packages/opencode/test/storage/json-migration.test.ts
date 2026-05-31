@@ -4,7 +4,7 @@ import { drizzle, SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import path from "path"
 import fs from "fs/promises"
-import { readFileSync, readdirSync } from "fs"
+import { existsSync, readFileSync, readdirSync } from "fs"
 import { JsonMigration } from "@/storage/json-migration"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -82,7 +82,7 @@ function createTestDb() {
   const dir = path.join(import.meta.dirname, "../../../core/migration")
   const entries = readdirSync(dir, { withFileTypes: true })
   const migrations = entries
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && existsSync(path.join(dir, entry.name, "migration.sql")))
     .map((entry) => ({
       sql: readFileSync(path.join(dir, entry.name, "migration.sql"), "utf-8"),
       timestamp: Number(entry.name.split("_")[0]),

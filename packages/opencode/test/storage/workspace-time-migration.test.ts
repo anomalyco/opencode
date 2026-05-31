@@ -2,14 +2,18 @@ import { describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
-import { readFileSync, readdirSync } from "fs"
+import { existsSync, readFileSync, readdirSync } from "fs"
 import path from "path"
 
 const target = "20260507164347_add_workspace_time"
 
 function migrations() {
   return readdirSync(path.join(import.meta.dirname, "../../../core/migration"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(path.join(import.meta.dirname, "../../../core/migration", entry.name, "migration.sql")),
+    )
     .map((entry) => ({
       name: entry.name,
       timestamp: Number(entry.name.split("_")[0]),
