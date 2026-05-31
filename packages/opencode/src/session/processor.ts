@@ -228,14 +228,18 @@ export const layer = Layer.effect(
 
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
         const match = yield* readToolCall(toolCallID)
-        if (!match || match.part.state.status !== "running") return false
+        if (!match) return false
+        const state = match.part.state
+        if (state.status !== "pending" && state.status !== "running") return false
+        const end = Date.now()
+        const start = state.status === "running" ? state.time.start : end
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "error",
-            input: match.part.state.input,
+            input: state.input,
             error: errorMessage(error),
-            time: { start: match.part.state.time.start, end: Date.now() },
+            time: { start, end },
           },
         })
         if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
@@ -524,7 +528,7 @@ export const layer = Layer.effect(
             if (
               recentParts.length !== DOOM_LOOP_THRESHOLD ||
               !recentParts.every(
-                (part) =>
+                (part: SessionLegacy.Part) =>
                   part.type === "tool" &&
                   part.tool === value.name &&
                   part.state.status !== "pending" &&

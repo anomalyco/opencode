@@ -768,6 +768,187 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
   ),
 )
 
+it.live("session.processor effect tests marks schema-invalid pending tool calls as error before cleanup", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const gate = defer<void>()
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call_invalid",
+                          type: "function",
+                          function: { name: "lookup", arguments: "" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [{ index: 0, function: { arguments: "{}" } }],
+                    },
+                  },
+                ],
+              },
+            ],
+            wait: gate.promise,
+            tail: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "tool_calls" }],
+              },
+            ],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionLegacy.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "tool" }],
+            tools: {
+              lookup: tool({
+                description: "Look up information",
+                inputSchema: z.object({ query: z.string() }),
+                execute: async (input) => ({
+                  title: "Weather lookup",
+                  output: `result:${input.query}`,
+                  metadata: { source: "test" },
+                }),
+              }),
+            },
+          })
+          .pipe(Effect.forkChild)
+
+        yield* llm.wait(1)
+        const call = yield* waitFor(
+          MessageV2.parts(msg.id).pipe(
+            Effect.map((parts) => parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")),
+            Effect.provideService(Database.Service, database),
+          ),
+          "timed out waiting for tool part",
+        )
+
+        expect(call.callID).toBe("call_invalid")
+        expect(call.tool).toBe("lookup")
+        expect(call.state.status).toBe("error")
+        if (call.state.status === "error") {
+          expect(call.state.input).toEqual({})
+          expect(call.state.error).toContain("Invalid input")
+          expect(call.state.time.end).toBeDefined()
+        }
+
+        gate.resolve()
+        yield* Fiber.await(run)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests allow empty input for tools with no required args", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.tool("ping", {})
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionLegacy.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "tool" }],
+          tools: {
+            ping: tool({
+              description: "Ping",
+              inputSchema: z.object({}),
+              execute: async () => ({
+                title: "Ping",
+                output: "pong",
+                metadata: {},
+              }),
+            }),
+          },
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(call?.tool).toBe("ping")
+        expect(call?.state.status).toBe("completed")
+        if (call?.state.status === "completed") {
+          expect(call.state.input).toEqual({})
+          expect(call.state.output).toBe("pong")
+        }
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests mark pending tools as aborted on cleanup", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
