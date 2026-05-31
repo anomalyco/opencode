@@ -10,6 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { MCP } from "@/mcp"
 import { Cause, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -105,12 +106,14 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const mcp = yield* MCP.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
+      const mcpToolNames = Object.keys(yield* mcp.tools())
       const runInBackground = params.background === true
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
@@ -158,6 +161,7 @@ export const TaskTool = Tool.define(
               action: "allow" as const,
               permission: item,
             })) ?? []),
+            ...mcpToolNames.map((t) => ({ pattern: "*", action: "allow" as const, permission: t })),
           ],
         }))
 
@@ -200,6 +204,7 @@ export const TaskTool = Tool.define(
             ...(next.permission.some((rule) => rule.permission === "todowrite") ? {} : { todowrite: false }),
             ...(next.permission.some((rule) => rule.permission === id) ? {} : { task: false }),
             ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+            ...Object.fromEntries(mcpToolNames.map((t) => [t, false])),
           },
           parts,
         })
