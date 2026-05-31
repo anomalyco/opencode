@@ -30,6 +30,41 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
 
+/**
+ * Replace `obj.text` with a lazy getter backed by an array of chunks so
+ * streaming text/reasoning deltas can be appended in O(1) instead of
+ * accumulated via `text += delta` (which is O(N²) once anything reads
+ * `.text` between writes — V8/JSC flatten the rope on every read and then
+ * re-copy on every subsequent `+=`).
+ *
+ * `_chunks` is non-enumerable so it does NOT leak through
+ * `JSON.stringify` / `structuredClone` / `{...obj}` to consumers. The
+ * `.text` getter materializes on first read, caches the joined string back
+ * into `_chunks` (so subsequent reads stay O(1)), and the setter resets
+ * `_chunks = [v]` so `obj.text = "..."` reassignments still work as
+ * expected. Same shape as the fix landed in vercel/ai for
+ * `processUIMessageStream` / `DefaultStreamTextResult`.
+ */
+function installChunkedText(obj: { text: string }): void {
+  Object.defineProperty(obj, "_chunks", {
+    value: [obj.text || ""],
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  })
+  Object.defineProperty(obj, "text", {
+    get(): string {
+      const c = (this as any)._chunks as string[]
+      return c.length === 1 ? c[0] : ((this as any)._chunks = [c.join("")])[0]
+    },
+    set(v: string) {
+      ;(this as any)._chunks = [v]
+    },
+    enumerable: true,
+    configurable: true,
+  })
+}
+
 export type Result = "compact" | "stop" | "continue"
 
 export type Event = LLM.Event
@@ -248,12 +283,19 @@ export const layer: Layer.Layer<
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            installChunkedText(ctx.reasoningMap[value.id])
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
           case "reasoning-delta":
             if (!(value.id in ctx.reasoningMap)) return
-            ctx.reasoningMap[value.id].text += value.text
+            // O(N) chunk-append instead of O(N²) string concat. For
+            // thinking-mode models emitting 1500+ reasoning tokens per turn
+            // over 80+ turns, `text += value.text` here pegs JSC's GC with
+            // hundreds of MB of cumulative memmove work. The lazy getter
+            // installed at reasoning-start joins chunks on read; here we
+            // just push.
+            ;(ctx.reasoningMap[value.id] as any)._chunks.push(value.text)
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
@@ -578,12 +620,15 @@ export const layer: Layer.Layer<
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            installChunkedText(ctx.currentText)
             yield* session.updatePart(ctx.currentText)
             return
 
           case "text-delta":
             if (!ctx.currentText) return
-            ctx.currentText.text += value.text
+            // Same O(N²) fix as reasoning-delta above. The lazy getter
+            // installed at text-start joins chunks on read; here we just push.
+            ;(ctx.currentText as any)._chunks.push(value.text)
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.currentText.sessionID,
