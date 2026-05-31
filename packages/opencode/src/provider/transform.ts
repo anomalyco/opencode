@@ -59,12 +59,53 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+/**
+ * Extract the version [major, minor] from a Claude model ID.
+ * Handles patterns like "claude-opus-4.6", "opus-4.6", "claude-4.6-sonnet",
+ * "sonnet-4-6", "claude-sonnet-4p6", etc.
+ */
+function claudeVersion(apiId: string): [number, number] | undefined {
+  const id = apiId.toLowerCase()
+  if (!id.includes("claude") && !id.includes("opus") && !id.includes("sonnet") && !id.includes("haiku")) return undefined
+  // Match patterns: opus-4.6, sonnet-4-6, claude-4.6-opus, haiku-4.7, etc.
+  const match = /(?:opus|sonnet|haiku|claude)-(\d+)[.-](\d+)|(\d+)[.-](\d+)-(?:opus|sonnet|haiku|claude)/i.exec(id)
+  if (!match) return undefined
+  const major = Number(match[1] ?? match[3])
+  const minor = Number(match[2] ?? match[4])
+  return [major, minor]
+}
+
+/**
+ * Determines if a model supports assistant message prefill.
+ * Claude models >= 4.6 do not support prefill across all providers.
+ */
+export function supportsAssistantPrefill(model: Provider.Model): boolean {
+  const ver = claudeVersion(model.api.id)
+  if (!ver) return true
+  const [major, minor] = ver
+  if (major > 4 || (major === 4 && minor >= 6)) return false
+  return true
+}
+
+/**
+ * Strip trailing assistant messages for models that don't support prefill.
+ */
+function stripTrailingAssistant(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  if (supportsAssistantPrefill(model)) return msgs
+  while (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
+    msgs = msgs.slice(0, -1)
+  }
+  return msgs
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
+  // Strip trailing assistant messages for models that don't support prefill
+  msgs = stripTrailingAssistant(msgs, model)
   const sanitizeToolResultOutput = (content: ToolResultPart) => {
     if (content.output.type === "text" || content.output.type === "error-text") {
       content.output.value = sanitizeSurrogates(content.output.value)

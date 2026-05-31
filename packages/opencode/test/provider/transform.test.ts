@@ -1578,14 +1578,17 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "text", text: "Answer" },
         ],
       },
+      { role: "user", content: "Follow up" },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, bedrockModel, {})
 
-    expect(result).toHaveLength(2)
+    // Empty assistant is removed, non-empty assistant with text is kept (not trailing)
+    expect(result).toHaveLength(3)
     expect(result[0].content).toBe("Hello")
     expect(result[1].content).toHaveLength(1)
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+    expect(result[2].content).toBe("Follow up")
   })
 
   test("does not filter for non-anthropic providers", () => {
@@ -3847,5 +3850,119 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.supportsAssistantPrefill", () => {
+  function createModel(apiId: string, npm = "@ai-sdk/anthropic") {
+    return {
+      id: `test/${apiId}`,
+      providerID: "anthropic",
+      api: { id: apiId, url: "https://api.anthropic.com", npm },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+    } as any
+  }
+
+  test("returns false for Claude opus-4.6", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-opus-4.6"))).toBe(false)
+  })
+
+  test("returns false for Claude sonnet-4.6", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-sonnet-4.6"))).toBe(false)
+  })
+
+  test("returns false for Claude opus-4.7", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-opus-4.7-20260301"))).toBe(false)
+  })
+
+  test("returns false for Claude sonnet-5.0", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-sonnet-5.0"))).toBe(false)
+  })
+
+  test("returns false for dash-separated version opus-4-6", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-opus-4-6"))).toBe(false)
+  })
+
+  test("returns false for inverted pattern claude-4.6-opus", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-4.6-opus"))).toBe(false)
+  })
+
+  test("returns true for Claude opus-4.5 (older than 4.6)", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-opus-4.5"))).toBe(true)
+  })
+
+  test("returns true for Claude 3.5 sonnet (older model)", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-3-5-sonnet-20241022"))).toBe(true)
+  })
+
+  test("returns true for non-Claude model", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("gpt-4o", "@ai-sdk/openai"))).toBe(true)
+  })
+
+  test("returns false for GitHub Copilot Claude 4.6", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("claude-sonnet-4.6", "@ai-sdk/github-copilot"))).toBe(false)
+  })
+
+  test("returns false for OpenRouter Claude 4.6", () => {
+    expect(ProviderTransform.supportsAssistantPrefill(createModel("anthropic/claude-opus-4.6", "@openrouter/ai-sdk-provider"))).toBe(false)
+  })
+})
+
+describe("ProviderTransform.message - strips trailing assistant for Claude >= 4.6", () => {
+  function createModel(apiId: string) {
+    return {
+      id: `test/${apiId}`,
+      providerID: "anthropic",
+      api: { id: apiId, url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 200000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-01-01",
+    } as any
+  }
+
+  test("strips trailing assistant message for Claude 4.6", () => {
+    const msgs = [
+      { role: "user" as const, content: "hello" },
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "hi" }] },
+    ]
+    const result = ProviderTransform.message(msgs, createModel("claude-opus-4.6"), {})
+    expect(result[result.length - 1].role).not.toBe("assistant")
+  })
+
+  test("preserves trailing assistant message for Claude 3.5", () => {
+    const msgs = [
+      { role: "user" as const, content: "hello" },
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "hi" }] },
+    ]
+    const result = ProviderTransform.message(msgs, createModel("claude-3-5-sonnet-20241022"), {})
+    expect(result[result.length - 1].role).toBe("assistant")
   })
 })
