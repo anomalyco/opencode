@@ -33,3 +33,5 @@ export class MemoryRelation extends Schema.Class<MemoryRelation>("MemoryRelation
   relation: Schema.String,
   weight: Schema.Number,
 }) {}
+
+export * as SelfImprovementSchema from "./schema"

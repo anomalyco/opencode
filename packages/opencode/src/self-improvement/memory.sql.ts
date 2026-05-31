@@ -18,3 +18,5 @@ export const memoryTable = sqliteTable("self_improvement_memory", {
   time_last_evolved: integer("time_last_evolved"),
   heartbeat_at: integer("heartbeat_at"),
 })
+
+export * as SelfImprovementMemory from "./memory.sql"
