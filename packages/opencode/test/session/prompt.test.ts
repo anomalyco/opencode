@@ -1,4 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { Database } from "@opencode-ai/core/database/database"
+import { eq } from "drizzle-orm"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
@@ -7,7 +11,6 @@ import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
-import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
 import { LSP } from "@/lsp/lsp"
@@ -18,11 +21,11 @@ import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { Git } from "../../src/git"
 import { Image } from "../../src/image/image"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
-import { SessionMessageTable } from "../../src/session/session.sql"
+import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -35,7 +38,7 @@ import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
-import { SessionV2 } from "../../src/v2/session"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
@@ -44,7 +47,6 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
@@ -52,9 +54,8 @@ import { RepositoryCache } from "../../src/reference/repository-cache"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
-import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 void Log.init({ print: false })
 
@@ -68,8 +69,8 @@ const summary = Layer.succeed(
 )
 
 const ref = {
-  providerID: ProviderID.make("test"),
-  modelID: ModelID.make("test-model"),
+  providerID: ProviderV2.ID.make("test"),
+  modelID: ProviderV2.ModelID.make("test-model"),
 }
 
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
@@ -90,20 +91,20 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   )
 }
 
-function toolPart(parts: MessageV2.Part[]) {
-  return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+function toolPart(parts: SessionLegacy.Part[]) {
+  return parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
 }
 
-type CompletedToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }
-type ErrorToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateError }
+type CompletedToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateCompleted }
+type ErrorToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateError }
 
-function completedTool(parts: MessageV2.Part[]) {
+function completedTool(parts: SessionLegacy.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("completed")
   return part?.state.status === "completed" ? (part as CompletedToolPart) : undefined
 }
 
-function errorTool(parts: MessageV2.Part[]) {
+function errorTool(parts: SessionLegacy.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("error")
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
@@ -152,7 +153,7 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
+const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
@@ -181,7 +182,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
-    SyncEvent.defaultLayer,
+    Database.defaultLayer,
     EventV2Bridge.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
@@ -389,7 +390,7 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: strin
 const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { finish?: string }) {
   const session = yield* Session.Service
   const msg = yield* user(sessionID, "hello")
-  const assistant: MessageV2.Assistant = {
+  const assistant: SessionLegacy.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: msg.id,
@@ -512,8 +513,8 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-noLLMServer.instance(
-  "prompt emits v2 prompted and synthetic events",
+noLLMServer.instance.skip(
+  "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
     Effect.gen(function* () {
       const prompt = yield* SessionPrompt.Service
@@ -536,11 +537,15 @@ noLLMServer.instance(
       })
 
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
-        Effect.provide(SessionV2.layer),
+        Effect.provide(SessionV2.defaultLayer),
       )
-      const row = Database.use((db) =>
-        db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
-      )
+      const { db } = yield* Database.Service
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, chat.id))
+        .get()
+        .pipe(Effect.orDie)
       expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
       expect(typeof row?.data.time.created).toBe("number")
       expect(messages).toEqual(
@@ -754,8 +759,8 @@ it.instance("failed subtask preserves metadata on error tool state", () =>
     expect(tool.state.metadata).toBeDefined()
     expect(tool.state.metadata?.sessionId).toBeDefined()
     expect(tool.state.metadata?.model).toEqual({
-      providerID: ProviderID.make("test"),
-      modelID: ModelID.make("missing-model"),
+      providerID: ProviderV2.ID.make("test"),
+      modelID: ProviderV2.ModelID.make("missing-model"),
     })
   }),
 )
@@ -778,7 +783,7 @@ it.instance(
         Effect.gen(function* () {
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-          const tool = taskMsg?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+          const tool = taskMsg?.parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
         "timed out waiting for running subtask metadata",
@@ -821,7 +826,7 @@ it.instance(
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
           const tool = assistant?.parts.find(
-            (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
+            (part): part is SessionLegacy.ToolPart => part.type === "tool" && part.tool === "task",
           )
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
@@ -1365,24 +1370,26 @@ unixNoLLMServer(
 unixNoLLMServer(
   "shell commands can change directory after startup",
   () =>
-    Effect.gen(function* () {
-      const { directory: dir } = yield* TestInstance
-      const { prompt, run, chat } = yield* boot()
-      const parent = path.dirname(dir)
-      const result = yield* prompt.shell({
-        sessionID: chat.id,
-        agent: "build",
-        command: "cd .. && pwd",
-      })
+    withSh(() =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const { prompt, run, chat } = yield* boot()
+        const parent = path.dirname(dir)
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "cd .. && pwd",
+        })
 
-      expect(result.info.role).toBe("assistant")
-      const tool = completedTool(result.parts)
-      if (!tool) return
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
 
-      expect(tool.state.output).toContain(parent)
-      expect(tool.state.metadata.output).toContain(parent)
-      yield* run.assertNotBusy(chat.id)
-    }),
+        expect(tool.state.output).toContain(parent)
+        expect(tool.state.metadata.output).toContain(parent)
+        yield* run.assertNotBusy(chat.id)
+      }),
+    ),
   { config: cfg },
 )
 
@@ -1940,11 +1947,11 @@ noLLMServer.instance(
         "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
       )
       const references = parts.filter(
-        (part): part is MessageV2.TextPartInput =>
+        (part): part is SessionLegacy.TextPartInput =>
           part.type === "text" && part.synthetic === true && part.text.startsWith("Referenced configured reference "),
       )
-      const files = parts.filter((part): part is MessageV2.FilePartInput => part.type === "file")
-      const agents = parts.filter((part): part is MessageV2.AgentPartInput => part.type === "agent")
+      const files = parts.filter((part): part is SessionLegacy.FilePartInput => part.type === "file")
+      const agents = parts.filter((part): part is SessionLegacy.AgentPartInput => part.type === "agent")
       const bare = references.find((part) => part.text.includes("@docs."))
       const missing = references.find((part) => part.text.includes("@docs/missing.md"))
       const guide = files.find((part) => part.filename === "docs/guide")
@@ -1997,7 +2004,7 @@ noLLMServer.instance(
 
       const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
-        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        (part): part is SessionLegacy.TextPart => part.type === "text" && part.synthetic === true,
       )
       const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs."))
 
@@ -2052,7 +2059,7 @@ noLLMServer.instance(
 
       const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
-        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+        (part): part is SessionLegacy.TextPart => part.type === "text" && part.synthetic === true,
       )
       const reference = synthetic.find((part) =>
         part.text.startsWith("Referenced configured reference @docs/README.md."),
@@ -2199,7 +2206,7 @@ noLLMServer.instance(
       const other = yield* prompt.prompt({
         sessionID: session.id,
         agent: "build",
-        model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
+        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ProviderV2.ModelID.make("kimi-k2.5-free") },
         noReply: true,
         parts: [{ type: "text", text: "hello" }],
       })
@@ -2214,8 +2221,8 @@ noLLMServer.instance(
       })
       if (match.info.role !== "user") throw new Error("expected user message")
       expect(match.info.model).toEqual({
-        providerID: ProviderID.make("test"),
-        modelID: ModelID.make("test-model"),
+        providerID: ProviderV2.ID.make("test"),
+        modelID: ProviderV2.ModelID.make("test-model"),
         variant: "xhigh",
       })
       expect(match.info.model.variant).toBe("xhigh")

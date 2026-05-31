@@ -1,6 +1,5 @@
 import { Config } from "@/config/config"
-import { BusEvent } from "@/bus/bus-event"
-import { SyncEvent } from "@/sync"
+import { EventV2 } from "@opencode-ai/core/event"
 import "@/server/event"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -15,7 +14,14 @@ const GlobalEventSchema = Schema.Struct({
   directory: Schema.String,
   project: Schema.optional(Schema.String),
   workspace: Schema.optional(Schema.String),
-  payload: Schema.Union([...BusEvent.effectPayloads(), ...SyncEvent.effectPayloads()]),
+  payload: Schema.Union(
+    EventV2.registry
+      .values()
+      .map((definition) =>
+        Schema.Struct({ id: Schema.String, type: Schema.Literal(definition.type), properties: definition.data }),
+      )
+      .toArray(),
+  ),
 }).annotate({ identifier: "GlobalEvent" })
 
 export const GlobalUpgradeInput = Schema.Struct({

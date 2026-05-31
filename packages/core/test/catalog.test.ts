@@ -16,12 +16,7 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
 const it = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(PluginV2.defaultLayer),
-    Layer.provideMerge(Policy.defaultLayer),
-    Layer.provideMerge(locationLayer),
-  ),
+  Catalog.locationLayer.pipe(Layer.provideMerge(EventV2.defaultLayer), Layer.provideMerge(locationLayer)),
 )
 
 describe("CatalogV2", () => {
@@ -163,6 +158,32 @@ describe("CatalogV2", () => {
       yield* Effect.yieldNow
 
       expect((yield* catalog.provider.get(providerID)).name).toBe("After")
+    }),
+  )
+
+  it.effect("ignores plugin additions from another location", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const plugin = yield* PluginV2.Service
+      let invoked = 0
+
+      yield* plugin.add({
+        id: PluginV2.ID.make("test-transform"),
+        effect: Effect.succeed({
+          "catalog.transform": () => Effect.sync(() => invoked++),
+        }),
+      })
+      yield* Effect.yieldNow
+      expect(invoked).toBe(1)
+
+      yield* events.publish(
+        PluginV2.Event.Added,
+        { id: PluginV2.ID.make("test-transform") },
+        { location: { directory: AbsolutePath.make("other") } },
+      )
+      yield* Effect.yieldNow
+
+      expect(invoked).toBe(1)
     }),
   )
 

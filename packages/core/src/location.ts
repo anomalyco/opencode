@@ -36,5 +36,3 @@ export const layer = (ref: Ref) =>
       })
     }),
   )
-
-export const defaultLayer = (ref: Ref) => layer(ref).pipe(Layer.provide(Project.defaultLayer))

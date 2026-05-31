@@ -6,7 +6,7 @@ import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(AgentV2.defaultLayer)
+const it = testEffect(AgentV2.locationLayer)
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigAgentPlugin.Plugin", () => {
