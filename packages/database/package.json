@@ -1,0 +1,25 @@
+{
+  "name": "@opencode-ai/database",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test",
+    "db": "bun drizzle-kit"
+  },
+  "dependencies": {
+    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
+    "@effect/sql-sqlite-bun": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "ulid": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "drizzle-kit": "catalog:"
+  }
+}

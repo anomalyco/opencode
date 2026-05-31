@@ -290,6 +290,21 @@
         "@types/semver": "catalog:",
       },
     },
+    "packages/database": {
+      "name": "@opencode-ai/database",
+      "dependencies": {
+        "@effect/sql-sqlite-bun": "catalog:",
+        "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+        "ulid": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "drizzle-kit": "catalog:",
+      },
+    },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
       "version": "1.15.12",
@@ -1678,6 +1693,8 @@
     "@opencode-ai/console-support": ["@opencode-ai/console-support@workspace:packages/console/support"],
 
     "@opencode-ai/core": ["@opencode-ai/core@workspace:packages/core"],
+
+    "@opencode-ai/database": ["@opencode-ai/database@workspace:packages/database"],
 
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
 
