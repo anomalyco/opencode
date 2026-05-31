@@ -7,12 +7,13 @@ import { AgentV2 } from "./agent"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
-    const result = Layer.fresh(
-      Layer.mergeAll(Catalog.defaultLayer, PluginBoot.defaultLayer, Config.defaultLayer, AgentV2.defaultLayer).pipe(
-        Layer.provideMerge(Location.defaultLayer(ref)),
-      ),
-    )
-    return result
+    const layer = Layer.mergeAll(
+      Catalog.defaultLayer,
+      PluginBoot.defaultLayer,
+      Config.defaultLayer,
+      AgentV2.defaultLayer,
+    ).pipe(Layer.provideMerge(Location.defaultLayer(ref)))
+    return Layer.fresh(layer)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [],
