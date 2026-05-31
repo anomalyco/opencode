@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/cli"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+version = "0.1.0"
+
+[workspace.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+dirs = "6.0"
+filetime = "0.2"
+libc = "0.2"
+rusqlite = { version = "0.35", features = ["bundled"] }
+tempfile = "3.20"
+thiserror = "2.0"
+ulid = "1.2"
+walkdir = "2.5"

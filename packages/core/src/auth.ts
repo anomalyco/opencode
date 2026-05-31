@@ -122,6 +122,7 @@ export interface Interface {
   readonly remove: (id: ID) => Effect.Effect<void, Error>
   readonly activate: (id: ID) => Effect.Effect<void, Error>
   readonly active: (serviceID: ServiceID) => Effect.Effect<Info | undefined, Error>
+  readonly activeAll: () => Effect.Effect<Map<ServiceID, Info>, Error>
   readonly forService: (serviceID: ServiceID) => Effect.Effect<Info[], Error>
 }
 
@@ -214,6 +215,19 @@ export const layer = Layer.effect(
         return (
           data.accounts[data.active[serviceID]] ?? Object.values(data.accounts).find((a) => a.serviceID === serviceID)
         )
+      }),
+
+      activeAll: Effect.fn("Auth.activeAll")(function* () {
+        const data = yield* SynchronizedRef.get(state)
+        const result = new Map<ServiceID, Info>()
+        for (const account of Object.values(data.accounts)) {
+          if (!result.has(account.serviceID)) result.set(account.serviceID, account)
+        }
+        for (const [serviceID, id] of Object.entries(data.active)) {
+          const account = data.accounts[id]
+          if (account) result.set(ServiceID.make(serviceID), account)
+        }
+        return result
       }),
 
       forService: Effect.fn("Auth.list")(function* (serviceID) {

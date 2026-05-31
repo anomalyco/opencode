@@ -101,8 +101,8 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   endpoint: Endpoint,
   options: Options,
 }) {
-  static empty(providerID: ID) {
-    return new Info({
+  static empty(providerID: ID): Info {
+    return {
       id: providerID,
       name: providerID,
       enabled: false,
@@ -118,6 +118,6 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
           request: {},
         },
       },
-    })
+    }
   }
 }
