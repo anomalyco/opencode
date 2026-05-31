@@ -63,7 +63,6 @@ type PromptInput = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
-  subagents: Accessor<number>
   resources: Accessor<RunResource[]>
   commands: Accessor<RunCommand[] | undefined>
   tuiConfig: RunTuiConfig
@@ -79,7 +78,6 @@ type PromptInput = {
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
-  onSubagentMenu?: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
@@ -98,6 +96,7 @@ export type PromptState = {
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
   replaceDraft: (text: string) => void
+  replacePrompt: (prompt: RunPrompt) => void
   bind: (area?: TextareaRenderable) => void
 }
 
@@ -888,6 +887,7 @@ export function createPromptState(input: PromptInput): PromptState {
     if (current === "command") return false
     if (current === "model") return false
     if (current === "variant") return false
+    if (current === "queued-menu") return false
     if (current === "subagent-menu") return false
     return true
   }
@@ -957,17 +957,6 @@ export function createPromptState(input: PromptInput): PromptState {
     mode: OPENCODE_BASE_MODE,
     enabled: input.prompt() && !visible(),
     bindings: [
-      {
-        key: "down",
-        desc: "View subagents",
-        group: "Prompt",
-        cmd() {
-          if (!area || area.isDestroyed) return false
-          if (area.plainText.length !== 0) return false
-          if (input.subagents() === 0) return false
-          input.onSubagentMenu?.()
-        },
-      },
       {
         key: "!",
         desc: "Shell mode",
@@ -1199,6 +1188,7 @@ export function createPromptState(input: PromptInput): PromptState {
       scheduleRows()
     },
     replaceDraft,
+    replacePrompt: restore,
     bind,
   }
 }

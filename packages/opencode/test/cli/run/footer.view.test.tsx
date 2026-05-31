@@ -10,6 +10,7 @@ import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
   RunModelSelectBody,
+  RunQueuedPromptSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "@/cli/cmd/run/footer.command"
@@ -189,7 +190,8 @@ async function renderFooter(input: { tuiConfig?: RunTuiConfig; onCycle?: () => v
           onVariantSelect={() => {}}
           onRows={() => {}}
           onLayout={() => {}}
-          onStatus={() => {}}
+           onStatus={() => {}}
+           onQueuedRemove={async () => true}
         />
       </OpencodeKeymapProvider>
     )
@@ -276,11 +278,13 @@ test("direct command panel renders grouped command palette", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           commands={commands}
           subagents={subagents}
+          queued={() => []}
           variants={variants}
           variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
           onSubagent={() => {}}
+          onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
           onCommand={() => {}}
@@ -334,11 +338,13 @@ test("direct command panel shows subagent entry when available", async () => {
           theme={() => RUN_THEME_FALLBACK.footer}
           commands={commands}
           subagents={subagents}
+          queued={() => []}
           variants={variants}
           variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
           onSubagent={() => {}}
+          onQueued={() => {}}
           onVariant={() => {}}
           onVariantCycle={() => {}}
           onCommand={() => {}}
@@ -407,6 +413,36 @@ test("direct subagent panel renders active subagents", async () => {
   }
 })
 
+test("direct queued prompt panel renders pending prompt actions", async () => {
+  const [prompts] = createSignal([
+    { messageID: "m-1", partID: "p-1", prompt: { text: "fix the auth test", parts: [] } },
+  ])
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_SUBAGENT_PANEL_ROWS}>
+        <RunQueuedPromptSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          prompts={prompts}
+          onClose={() => {}}
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      </box>
+    ),
+    { width: 100, height: RUN_SUBAGENT_PANEL_ROWS },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Queued prompts")
+    expect(app.captureCharFrame()).toContain("fix the auth test")
+    expect(app.captureCharFrame()).toContain("queued")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 // OpenTUI currently segfaults when the full footer view suite creates several
 // keymap-backed test renderers in one process. Re-enable after the runtime fix.
 test.skip("direct footer opens command panel through keymap binding", async () => {
@@ -462,11 +498,11 @@ test("direct footer keeps leader variant binding inactive when leader is disable
   }
 })
 
-test("direct footer shows subagent indicator while prompt is running", async () => {
+test("direct footer shows editable prompts and additional queued work while running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
     status: "",
-    queue: 0,
+    queue: 3,
     model: "gpt-5",
     duration: "",
     usage: "",
@@ -502,6 +538,9 @@ test("direct footer shows subagent indicator while prompt is running", async () 
           state={state}
           view={view}
           subagent={subagents}
+          queuedPrompts={() => [
+            { messageID: "m-queued", partID: "p-queued", prompt: { text: "follow up", parts: [] } },
+          ]}
           theme={RUN_THEME_FALLBACK}
           tuiConfig={tuiConfig}
           agent="opencode"
@@ -518,6 +557,7 @@ test("direct footer shows subagent indicator while prompt is running", async () 
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
+          onQueuedRemove={async () => true}
         />
       </OpencodeKeymapProvider>
     )
@@ -525,19 +565,21 @@ test("direct footer shows subagent indicator while prompt is running", async () 
 
   const app = await testRender(
     () => (
-      <box width={100} height={8}>
+      <box width={160} height={8}>
         <Harness />
       </box>
     ),
     {
-      width: 100,
+      width: 160,
       height: 8,
     },
   )
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("interrupt · 1 agent · ↓ to view")
+    expect(app.captureCharFrame()).toContain("interrupt · 1 agent · ctrl+x down to view · 1 queued prompt · ctrl+x q")
+    expect(app.captureCharFrame()).toContain("2 queued")
+    expect(app.captureCharFrame()).not.toContain("agent ·  ·")
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

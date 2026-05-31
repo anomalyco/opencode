@@ -18,6 +18,7 @@ import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
   RunModelSelectBody,
+  RunQueuedPromptSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "./footer.command"
@@ -35,6 +36,7 @@ import {
 } from "@/cli/cmd/tui/keymap"
 import type {
   FooterPromptRoute,
+  FooterQueuedPrompt,
   FooterState,
   FooterSubagentState,
   FooterView,
@@ -79,6 +81,7 @@ type RunFooterViewProps = {
   state: () => FooterState
   view?: () => FooterView
   subagent?: () => FooterSubagentState
+  queuedPrompts?: () => FooterQueuedPrompt[]
   theme?: RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
@@ -100,6 +103,7 @@ type RunFooterViewProps = {
   onLayout: (input: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }) => void
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
+  onQueuedRemove: (messageID: string) => Promise<boolean>
 }
 
 export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
@@ -119,13 +123,15 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const [route, setRoute] = createSignal<FooterPromptRoute>({ type: "composer" })
   const [subagentMenuRows, setSubagentMenuRows] = createSignal(RUN_SUBAGENT_PANEL_ROWS)
+  const queuedPrompts = createMemo(() => props.queuedPrompts?.() ?? [])
   const prompt = createMemo(() => active().type === "prompt" && route().type === "composer")
   const selectingSubagent = createMemo(() => active().type === "prompt" && route().type === "subagent-menu")
+  const selectingQueued = createMemo(() => active().type === "prompt" && route().type === "queued-menu")
   const inspecting = createMemo(() => active().type === "prompt" && route().type === "subagent")
   const commanding = createMemo(() => active().type === "prompt" && route().type === "command")
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
-  const panel = createMemo(() => selectingSubagent() || commanding() || modeling() || varianting())
+  const panel = createMemo(() => selectingQueued() || selectingSubagent() || commanding() || modeling() || varianting())
   const selected = createMemo(() => {
     const current = route()
     return current.type === "subagent" ? current.sessionID : undefined
@@ -150,6 +156,11 @@ export function RunFooterView(props: RunFooterViewProps) {
       count,
       label: count === 1 ? "agent" : "agents",
     }
+  })
+  const queuedIndicator = createMemo(() => {
+    const count = queuedPrompts().length
+    if (count === 0) return
+    return { count, label: count === 1 ? "prompt" : "prompts" }
   })
   const detail = createMemo(() => {
     const current = route()
@@ -180,11 +191,28 @@ export function RunFooterView(props: RunFooterViewProps) {
         props.tuiConfig,
       ) ?? "",
   )
+  const queuedShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeyBindings(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.queued_prompts"] })
+          .get("session.queued_prompts"),
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const subagentShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeyBindings(
+        keymap.getCommandBindings({ visibility: "registered", commands: ["session.child.first"] }).get("session.child.first"),
+        props.tuiConfig,
+      ) ?? "",
+  )
   const hints = createMemo(() => hintFlags(term().width))
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const queue = createMemo(() => props.state().queue)
+  const additionalQueue = createMemo(() => Math.max(0, queue() - queuedPrompts().length))
   const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
   const interruptKey = createMemo(() => interrupt() || "/exit")
@@ -248,6 +276,12 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onSubagentSelect?.(undefined)
   }
 
+  const openQueuedMenu = () => {
+    if (queuedPrompts().length === 0) return
+    setRoute({ type: "queued-menu" })
+    props.onSubagentSelect?.(undefined)
+  }
+
   const closePanel = () => {
     setRoute({ type: "composer" })
   }
@@ -282,7 +316,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     directory: props.directory,
     findFiles: props.findFiles,
     agents: props.agents,
-    subagents: () => tabs().length,
     resources: props.resources,
     commands: props.commands,
     tuiConfig: props.tuiConfig,
@@ -298,7 +331,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     onInputClear: props.onInputClear,
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
-    onSubagentMenu: openSubagentMenu,
     onRows: props.onRows,
     onStatus: props.onStatus,
   })
@@ -336,6 +368,34 @@ export function RunFooterView(props: RunFooterViewProps) {
     ],
   }))
 
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && tabs().length > 0,
+    commands: [
+      {
+        name: "session.child.first",
+        title: "View subagents",
+        category: "Session",
+        run: openSubagentMenu,
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.child.first"),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
+    commands: [
+      {
+        name: "session.queued_prompts",
+        title: "Manage queued prompts",
+        category: "Session",
+        run: openQueuedMenu,
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.queued_prompts"),
+  }))
+
   createEffect(() => {
     const current = route()
     if (current.type !== "subagent") {
@@ -362,6 +422,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
 
   createEffect(() => {
+    if (route().type !== "queued-menu" || queuedPrompts().length > 0) return
+    closePanel()
+  })
+
+  createEffect(() => {
     if (active().type === "prompt") {
       return
     }
@@ -371,6 +436,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       current.type !== "command" &&
       current.type !== "model" &&
       current.type !== "variant" &&
+      current.type !== "queued-menu" &&
       current.type !== "subagent-menu"
     ) {
       return
@@ -449,16 +515,32 @@ export function RunFooterView(props: RunFooterViewProps) {
                         onRows={setSubagentMenuRows}
                       />
                     </Match>
+                    <Match when={selectingQueued()}>
+                      <RunQueuedPromptSelectBody
+                        theme={theme}
+                        prompts={queuedPrompts}
+                        onClose={closePanel}
+                        onDelete={(item) => void props.onQueuedRemove(item.messageID)}
+                        onEdit={async (item) => {
+                          if (!(await props.onQueuedRemove(item.messageID))) return
+                          closePanel()
+                          queueMicrotask(() => composer.replacePrompt(item.prompt))
+                        }}
+                        onRows={setSubagentMenuRows}
+                      />
+                    </Match>
                     <Match when={commanding()}>
                       <RunCommandMenuBody
                         theme={theme}
                         commands={props.commands}
                         subagents={tabs}
+                        queued={queuedPrompts}
                         variants={props.variants}
                         variantCycle={variantCycle()}
                         onClose={closePanel}
                         onModel={openModel}
                         onSubagent={openSubagentMenu}
+                        onQueued={openQueuedMenu}
                         onVariant={openVariant}
                         onVariantCycle={() => {
                           props.onCycle()
@@ -615,7 +697,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                     gap={1}
                     flexShrink={0}
                   >
-                    <Show when={busy() || exiting() || duration().length > 0 || subagentIndicator()}>
+                    <Show when={busy() || exiting() || duration().length > 0 || queuedIndicator() || subagentIndicator()}>
                       <box id="run-direct-footer-hint-left" flexDirection="row" gap={1} flexShrink={0} marginLeft={1}>
                         <Show when={exiting()}>
                           <text id="run-direct-footer-hint-exit" fg={theme().highlight} wrapMode="none" truncate>
@@ -665,8 +747,21 @@ export function RunFooterView(props: RunFooterViewProps) {
                               </Show>
                               {info().count} <span style={{ fg: theme().muted }}>{info().label}</span>
                               <span style={{ fg: theme().muted }}> · </span>
-                              <span style={{ fg: theme().highlight }}>↓</span>
+                              <span style={{ fg: theme().highlight }}>{subagentShortcut() || "leader+down"}</span>
                               <span style={{ fg: theme().muted }}> to view</span>
+                            </text>
+                          )}
+                        </Show>
+                        <Show when={queuedIndicator()}>
+                          {(info) => (
+                            <text id="run-direct-footer-queued-label" fg={theme().text} wrapMode="none" truncate>
+                              <Show when={busy() || exiting() || duration().length > 0 || subagentIndicator()}>
+                                <span style={{ fg: theme().muted }}>· </span>
+                              </Show>
+                              {info().count} <span style={{ fg: theme().muted }}>queued {info().label}</span>
+                              <span style={{ fg: theme().muted }}> · </span>
+                              <span style={{ fg: theme().highlight }}>{queuedShortcut() || "leader+q"}</span>
+                              <span style={{ fg: theme().muted }}> to edit/remove</span>
                             </text>
                           )}
                         </Show>
@@ -686,9 +781,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                         when={shell()}
                         fallback={
                           <>
-                            <Show when={queue() > 0}>
+                            <Show when={additionalQueue() > 0}>
                               <text id="run-direct-footer-queue" fg={theme().muted} wrapMode="none" truncate>
-                                {queue()} queued
+                                {additionalQueue()} queued
                               </text>
                             </Show>
                             <Show when={usage().length > 0}>
