@@ -227,4 +227,20 @@ describe("session.list", () => {
       }),
     { git: true },
   )
+
+  it.instance(
+    "includes metadata in listed sessions",
+    () =>
+      Effect.gen(function* () {
+        const meta = { source: "sdk", trace: { id: "abc" } }
+        const created = yield* withSession({ title: "meta-session", metadata: meta })
+
+        const listed = (yield* SessionNs.Service.use((session) => session.list({ search: "meta-session" }))).find(
+          (item) => item.id === created.id,
+        )
+
+        expect(listed?.metadata).toEqual(meta)
+      }),
+    { git: true },
+  )
 })

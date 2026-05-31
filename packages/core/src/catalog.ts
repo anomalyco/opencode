@@ -317,4 +317,8 @@ export const layer = Layer.effect(
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(PluginV2.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(PluginV2.defaultLayer),
+  Layer.provide(Policy.defaultLayer),
+)
