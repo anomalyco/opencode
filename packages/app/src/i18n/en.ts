@@ -420,6 +420,7 @@ export const dict = {
   "language.uk": "Українська",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
+  "language.vi": "Tiếng việt",
 
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
