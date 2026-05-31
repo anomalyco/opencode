@@ -412,6 +412,37 @@ describe("ACP service sessions", () => {
     expect(await Effect.runPromise(service.closeSession({ sessionId: "missing" }))).toEqual({})
   })
 
+  it("cancel aborts the backing session and keeps the ACP session", async () => {
+    const { service, aborts } = makeService()
+    const created = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await Effect.runPromise(service.cancel({ sessionId: created.sessionId }))
+
+    // The running turn was aborted via the core session API.
+    expect(aborts).toEqual([created.sessionId])
+    // Unlike closeSession, the ACP session is still present afterwards so
+    // the client can keep prompting.
+    const stillUsable = await Effect.runPromise(
+      service.setSessionConfigOption({ sessionId: created.sessionId, configId: "effort", value: "high" }),
+    )
+    expect(stillUsable).toBeDefined()
+  })
+
+  it("does not fail cancel when the backing abort fails", async () => {
+    const sessionService = ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+      ACPSession.Service.use((service) => Effect.succeed(service)),
+    )
+    const sdk = {
+      session: {
+        abort: () => Promise.reject(new Error("nope")),
+      },
+    } as unknown as OpencodeClient
+    const canceling = ACPService.make({ sdk, session: sessionService })
+    await Effect.runPromise(sessionService.create({ id: "ses_cancel", cwd: "/workspace" }))
+
+    await Effect.runPromise(canceling.cancel({ sessionId: "ses_cancel" }))
+  })
+
   it("forks a session, loads fork state, and returns config options", async () => {
     const { service, forks } = makeService([
       {

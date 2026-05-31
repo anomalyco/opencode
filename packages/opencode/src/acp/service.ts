@@ -563,8 +563,22 @@ export function make(input: {
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
       return promptResponse(undefined, params.messageId)
     }),
-    cancel: Effect.fn("ACP.cancel")(function* (_input: CancelNotification) {
-      return yield* new ACPError.UnsupportedOperationError({ method: "session/cancel" })
+    cancel: Effect.fn("ACP.cancel")(function* (params: CancelNotification) {
+      const current = yield* session.get(params.sessionId)
+      // Abort the running turn via the core session API. Mirrors the
+      // closeSession abort path, but leaves the ACP session in place so
+      // the client can keep prompting after cancelling.
+      yield* request(
+        () =>
+          input.sdk.session.abort({ directory: current.cwd, sessionID: current.id }, { throwOnError: true }),
+        "session",
+      ).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            log.error("failed to abort session on cancel", { error, sessionID: params.sessionId })
+          }),
+        ),
+      )
     }),
   }
 }
