@@ -219,7 +219,7 @@ describe("installation", () => {
       Effect.gen(function* () {
         yield* Installation.use.upgrade("winget", "9.9.9")
         expect(commands).toContain(
-          "winget upgrade --id SST.opencode --exact --disable-interactivity --accept-package-agreements --accept-source-agreements",
+          "winget upgrade --id SST.opencode --exact --force --disable-interactivity --accept-package-agreements --accept-source-agreements",
         )
       }),
     )

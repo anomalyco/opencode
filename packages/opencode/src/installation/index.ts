@@ -326,6 +326,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
               "--id",
               "SST.opencode",
               "--exact",
+              "--force",
               "--disable-interactivity",
               "--accept-package-agreements",
               "--accept-source-agreements",
