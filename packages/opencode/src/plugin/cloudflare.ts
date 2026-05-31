@@ -7,7 +7,7 @@ export async function CloudflareWorkersAuthPlugin(_input: PluginInput): Promise<
           type: "text" as const,
           key: "accountId",
           message: "Enter your Cloudflare Account ID",
-          placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+          placeholder: "Account ID",
         },
       ]
     : []
@@ -34,7 +34,7 @@ export async function CloudflareAIGatewayAuthPlugin(_input: PluginInput): Promis
             type: "text" as const,
             key: "accountId",
             message: "Enter your Cloudflare Account ID",
-            placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+            placeholder: "Account ID",
           },
         ]
       : []),

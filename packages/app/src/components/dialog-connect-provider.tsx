@@ -9,7 +9,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, For, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useServerSDK } from "@/context/server-sdk"
@@ -123,6 +123,12 @@ export function DialogConnectProvider(props: { provider: string }) {
     if (value.type === "api") return language.t("provider.connect.method.apiKey")
     return value.label ?? ""
   }
+  const apiKeyDescription = () => {
+    if (provider().id === "cloudflare-workers-ai") {
+      return "Enter your Cloudflare Account ID and your Workers AI API key to connect your account and use Cloudflare Workers AI models in OpenCode."
+    }
+    return language.t("provider.connect.apiKey.description", { provider: provider().name })
+  }
 
   function formatError(value: unknown, fallback: string): string {
     if (value && typeof value === "object" && "data" in value) {
@@ -151,11 +157,16 @@ export function DialogConnectProvider(props: { provider: string }) {
     const method = methods()[index]
     dispatch({ type: "method.select", index })
 
+    if (method.type === "oauth" && method.prompts?.length && !inputs) {
+      dispatch({ type: "auth.prompt" })
+      return
+    }
+
+    if (method.type === "api") {
+      return
+    }
+
     if (method.type === "oauth") {
-      if (method.prompts?.length && !inputs) {
-        dispatch({ type: "auth.prompt" })
-        return
-      }
       dispatch({ type: "auth.pending" })
       const start = Date.now()
       await serverSDK.client.provider.oauth
@@ -190,7 +201,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     }
   }
 
-  function OAuthPromptsView() {
+  function PromptsView() {
     const [formStore, setFormStore] = createStore({
       value: {} as Record<string, string>,
       index: 0,
@@ -198,8 +209,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     const prompts = createMemo<NonNullable<ProviderAuthMethod["prompts"]>>(() => {
       const value = method()
-      if (value?.type !== "oauth") return []
-      return value.prompts ?? []
+      return value?.prompts ?? []
     })
     const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
       if (!prompt.when) return true
@@ -389,29 +399,50 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   function ApiAuthView() {
+    type Prompt = NonNullable<ProviderAuthMethod["prompts"]>[number]
     const [formStore, setFormStore] = createStore({
-      value: "",
-      error: undefined as string | undefined,
+      apiKey: "",
+      metadata: {} as Record<string, string>,
+      errors: {} as Record<string, string | undefined>,
     })
+    const prompts = createMemo(() => method()?.prompts ?? [])
+    const matches = (prompt: Prompt, value: Record<string, string>) => {
+      if (!prompt.when) return true
+      const actual = value[prompt.when.key]
+      if (actual === undefined) return false
+      return prompt.when.op === "eq" ? actual === prompt.when.value : actual !== prompt.when.value
+    }
+    const visiblePrompts = createMemo(() => prompts().filter((prompt) => matches(prompt, formStore.metadata)))
+    const firstTextPrompt = createMemo(() => visiblePrompts().find((prompt) => prompt.type === "text"))
 
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
 
-      const form = e.currentTarget as HTMLFormElement
-      const formData = new FormData(form)
-      const apiKey = formData.get("apiKey") as string
-
-      if (!apiKey?.trim()) {
-        setFormStore("error", language.t("provider.connect.apiKey.required"))
-        return
+      const errors: Record<string, string | undefined> = {}
+      const metadata: Record<string, string> = {}
+      for (const prompt of visiblePrompts()) {
+        const value = formStore.metadata[prompt.key]?.trim() ?? ""
+        if (!value) {
+          errors[prompt.key] = prompt.message
+          continue
+        }
+        metadata[prompt.key] = value
       }
 
-      setFormStore("error", undefined)
+      const apiKey = formStore.apiKey.trim()
+      if (!apiKey) {
+        errors.apiKey = language.t("provider.connect.apiKey.required")
+      }
+
+      setFormStore("errors", errors)
+      if (Object.keys(errors).some((key) => errors[key])) return
+
       await serverSDK.client.auth.set({
         providerID: props.provider,
         auth: {
           type: "api",
           key: apiKey,
+          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         },
       })
       await complete()
@@ -434,22 +465,73 @@ export function DialogConnectProvider(props: { provider: string }) {
             </div>
           </Match>
           <Match when={true}>
-            <div class="text-14-regular text-text-base">
-              {language.t("provider.connect.apiKey.description", { provider: provider().name })}
-            </div>
+            <div class="text-14-regular text-text-base">{apiKeyDescription()}</div>
           </Match>
         </Switch>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+          <For each={visiblePrompts()}>
+            {(prompt) => (
+              <Switch>
+                <Match when={prompt.type === "text"}>
+                  <TextField
+                    autofocus={firstTextPrompt()?.key === prompt.key ? true : undefined}
+                    type="text"
+                    label={prompt.message}
+                    placeholder={prompt.type === "text" ? prompt.placeholder : undefined}
+                    name={prompt.key}
+                    value={formStore.metadata[prompt.key] ?? ""}
+                    onChange={(value) => {
+                      setFormStore("metadata", prompt.key, value)
+                      setFormStore("errors", prompt.key, undefined)
+                    }}
+                    validationState={formStore.errors[prompt.key] ? "invalid" : undefined}
+                    error={formStore.errors[prompt.key]}
+                  />
+                </Match>
+                <Match when={prompt.type === "select"}>
+                  <div class="w-full flex flex-col gap-1.5">
+                    <div class="text-14-regular text-text-base">{prompt.message}</div>
+                    <List
+                      items={prompt.type === "select" ? prompt.options : []}
+                      key={(x) => x.value}
+                      current={prompt.type === "select"
+                        ? prompt.options.find((x) => x.value === formStore.metadata[prompt.key])
+                        : undefined}
+                      onSelect={(value) => {
+                        if (!value) return
+                        setFormStore("metadata", prompt.key, value.value)
+                        setFormStore("errors", prompt.key, undefined)
+                      }}
+                    >
+                      {(option) => (
+                        <div class="w-full flex items-center gap-x-2">
+                          <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
+                            <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
+                          </div>
+                          <span>{option.label}</span>
+                          <span class="text-14-regular text-text-weak">{option.hint}</span>
+                        </div>
+                      )}
+                    </List>
+                    <div class="text-14-regular text-text-critical-base">{formStore.errors[prompt.key]}</div>
+                  </div>
+                </Match>
+              </Switch>
+            )}
+          </For>
           <TextField
-            autofocus
+            autofocus={firstTextPrompt() ? undefined : true}
             type="text"
             label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
             placeholder={language.t("provider.connect.apiKey.placeholder")}
             name="apiKey"
-            value={formStore.value}
-            onChange={(v) => setFormStore("value", v)}
-            validationState={formStore.error ? "invalid" : undefined}
-            error={formStore.error}
+            value={formStore.apiKey}
+            onChange={(value) => {
+              setFormStore("apiKey", value)
+              setFormStore("errors", "apiKey", undefined)
+            }}
+            validationState={formStore.errors.apiKey ? "invalid" : undefined}
+            error={formStore.errors.apiKey}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
             {language.t("common.continue")}
@@ -620,7 +702,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                 </div>
               </Match>
               <Match when={store.state === "prompt"}>
-                <OAuthPromptsView />
+                <PromptsView />
               </Match>
               <Match when={store.state === "error"}>
                 <div class="text-14-regular text-text-base">
