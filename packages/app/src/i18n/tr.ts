@@ -536,6 +536,7 @@ export const dict = {
 
   "session.files.selectToOpen": "Açmak için bir dosya seçin",
   "session.files.all": "Tüm dosyalar",
+  "session.files.addToContext": "Dosyayı bağlama ekle",
   "session.files.empty": "Dosya yok",
   "session.files.binaryContent": "İkili dosya (içerik görüntülenemiyor)",
 

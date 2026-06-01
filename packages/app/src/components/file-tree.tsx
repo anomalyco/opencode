@@ -202,6 +202,8 @@ export default function FileTree(props: {
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
+  onContextAdd?: (path: string) => void
+  contextLabel?: string
 
   _filter?: Filter
   _marks?: Set<string>
@@ -441,6 +443,8 @@ export default function FileTree(props: {
                         active={props.active}
                         draggable={props.draggable}
                         onFileClick={props.onFileClick}
+                        onContextAdd={props.onContextAdd}
+                        contextLabel={props.contextLabel}
                         _filter={filter()}
                         _marks={marks()}
                         _deeps={deeps()}
@@ -452,51 +456,103 @@ export default function FileTree(props: {
                 </Collapsible>
               </Match>
               <Match when={node.type === "file"}>
-                <FileTreeNode
-                  node={node}
-                  level={level}
-                  active={props.active}
-                  nodeClass={props.nodeClass}
-                  draggable={draggable()}
-                  kinds={kinds()}
-                  marks={marks()}
-                  as="button"
-                  type="button"
-                  onClick={() => props.onFileClick?.(node)}
+                <div
+                  classList={{
+                    "group/filenode w-full min-w-0 h-6 flex items-center justify-start gap-x-1 rounded-md pr-1.5 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors": true,
+                    "bg-surface-base-active": node.path === props.active,
+                    [props.nodeClass ?? ""]: !!props.nodeClass,
+                  }}
+                  style={`padding-left: ${Math.max(0, 8 + level * 12 - 24)}px`}
                 >
-                  <div class="w-4 shrink-0" />
-                  <Switch>
-                    <Match when={node.ignored}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style="color: var(--icon-weak-base)"
-                        mono
-                      />
-                    </Match>
-                    <Match when={active()}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style={kindTextColor(kind()!)}
-                        mono
-                      />
-                    </Match>
-                    <Match when={!node.ignored}>
-                      <span class="filetree-iconpair size-4">
+                  <button
+                    type="button"
+                    class="flex-1 min-w-0 h-full flex items-center justify-start gap-x-1.5 rounded-md px-0 py-0 text-left cursor-pointer min-w-0"
+                    draggable={draggable()}
+                    onDragStart={(event: DragEvent) => {
+                      if (!draggable()) return
+                      event.dataTransfer?.setData("text/plain", `file:${node.path}`)
+                      event.dataTransfer?.setData("text/uri-list", pathToFileUrl(node.path))
+                      if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
+                      withFileDragImage(event)
+                    }}
+                    onClick={() => props.onFileClick?.(node)}
+                  >
+                    <div class="w-4 shrink-0" />
+                    <Switch>
+                      <Match when={node.ignored}>
                         <FileIcon
                           node={node}
-                          class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
-                        />
-                        <FileIcon
-                          node={node}
-                          class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style="color: var(--icon-weak-base)"
                           mono
                         />
+                      </Match>
+                      <Match when={active()}>
+                        <FileIcon
+                          node={node}
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style={kindTextColor(kind()!)}
+                          mono
+                        />
+                      </Match>
+                      <Match when={!node.ignored}>
+                        <span class="filetree-iconpair size-4">
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                          />
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                            mono
+                          />
+                        </span>
+                      </Match>
+                    </Switch>
+                    <span
+                      classList={{
+                        "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
+                        "text-text-weaker": node.ignored,
+                        "text-text-weak": !node.ignored && !active(),
+                      }}
+                      style={active() ? kindTextColor(kind()!) : undefined}
+                    >
+                      {node.name}
+                    </span>
+                  </button>
+                  <Show when={props.onContextAdd && !node.ignored}>
+                    <button
+                      type="button"
+                      aria-label={props.contextLabel}
+                      class="shrink-0 flex items-center justify-center size-5 opacity-0 group-hover/filenode:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer border-none"
+                      style={{
+                        background: "var(--icon-interactive-base)",
+                        color: "var(--white)",
+                        "border-radius": "var(--radius-md)",
+                        "box-shadow": "var(--shadow-xs)",
+                        "font-size": "14px",
+                        "line-height": "1",
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation()
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        event.preventDefault()
+                        props.onContextAdd?.(node.path)
+                      }}
+                    >
+                      +
+                    </button>
+                  </Show>
+                  <Show when={kind()}>
+                    {(value) => (
+                      <span class="shrink-0 w-4 text-center text-12-medium" style={kindTextColor(value())}>
+                        {kindLabel(value())}
                       </span>
-                    </Match>
-                  </Switch>
-                </FileTreeNode>
+                    )}
+                  </Show>
+                </div>
               </Match>
             </Switch>
           )
