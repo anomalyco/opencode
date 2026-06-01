@@ -31,6 +31,8 @@ export type RunCommand = NonNullable<Awaited<ReturnType<OpencodeClient["command"
 export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provider"]["list"]>>["data"]>["all"][number]
 
 export type RunPrompt = {
+  messageID?: string
+  partID?: string
   text: string
   parts: RunPromptPart[]
   mode?: "shell"
@@ -38,6 +40,12 @@ export type RunPrompt = {
     name: string
     arguments: string
   }
+}
+
+export type FooterQueuedPrompt = {
+  messageID: string
+  partID: string
+  prompt: RunPrompt
 }
 
 export type RunAgent = NonNullable<Awaited<ReturnType<OpencodeClient["app"]["agents"]>>["data"]>[number]
@@ -162,6 +170,7 @@ export type FooterView =
 
 export type FooterPromptRoute =
   | { type: "composer" }
+  | { type: "queued-menu" }
   | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
@@ -221,6 +230,10 @@ export type FooterEvent =
   | {
       type: "queue"
       queue: number
+    }
+  | {
+      type: "queued.prompts"
+      prompts: FooterQueuedPrompt[]
     }
   | {
       type: "first"
@@ -302,6 +315,7 @@ export type StreamCommit = {
 export type FooterApi = {
   readonly isClosed: boolean
   onPrompt(fn: (input: RunPrompt) => void): () => void
+  onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void
   onClose(fn: () => void): () => void
   event(next: FooterEvent): void
   append(commit: StreamCommit): void
