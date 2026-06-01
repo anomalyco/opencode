@@ -665,14 +665,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (id.includes("grok")) return {}
 
   switch (model.api.npm) {
-    case "@openrouter/ai-sdk-provider":
-      if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) return {}
-      return Object.fromEntries(
-        (id.includes("gpt") ? openaiCompatibleReasoningEfforts(id) : OPENAI_EFFORTS).map((effort) => [
-          effort,
-          { reasoning: { effort } },
-        ]),
-      )
+    case "@openrouter/ai-sdk-provider": {
+      const efforts = id.includes("gpt")
+        ? openaiCompatibleReasoningEfforts(id)
+        : id.includes("gemini-3") || id.includes("claude")
+          ? OPENAI_EFFORTS
+          : WIDELY_SUPPORTED_EFFORTS
+      return Object.fromEntries(efforts.map((effort) => [effort, { reasoning: { effort } }]))
+    }
 
     case "ai-gateway-provider": {
       // Cloudflare AI Gateway routes every upstream through its OpenAI-compatible
