@@ -17,7 +17,7 @@ import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import * as ProviderError from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
-import { isMedia } from "@/util/media"
+import { isMedia, isTextMime } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -675,14 +675,30 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         type: "content",
         value: [
           ...(outputObject.text ? [{ type: "text", text: outputObject.text }] : []),
-          ...attachments.map((attachment) => ({
-            type: "media",
-            mediaType: attachment.mime,
-            data: iife(() => {
+          ...attachments.flatMap((attachment): Array<{ type: string; [key: string]: string }> => {
+            // Images and PDFs are supported as media by providers
+            if (isMedia(attachment.mime)) {
+              return [
+                {
+                  type: "media",
+                  mediaType: attachment.mime,
+                  data: iife(() => {
+                    const commaIndex = attachment.url.indexOf(",")
+                    return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+                  }),
+                },
+              ]
+            }
+            // Text-based files (csv, json, xml, etc.) decoded to text to avoid
+            // unsupported file-data content parts in providers like Anthropic
+            if (isTextMime(attachment.mime)) {
               const commaIndex = attachment.url.indexOf(",")
-              return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-            }),
-          })),
+              const base64 = commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+              return [{ type: "text", text: Buffer.from(base64, "base64").toString("utf-8") }]
+            }
+            // Other binary files cannot be sent as media; use a placeholder
+            return [{ type: "text", text: `[Binary file: ${attachment.mime}]` }]
+          }),
         ],
       }
     }

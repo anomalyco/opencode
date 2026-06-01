@@ -9,6 +9,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { ModelID } from "@/provider/schema"
 import { Plugin } from "@/plugin"
+import { isTextMime } from "@/util/media"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
@@ -164,12 +165,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               const { resource } = contentItem
               if (resource.text) textParts.push(resource.text)
               if (resource.blob) {
-                attachments.push({
-                  type: "file",
-                  mime: resource.mimeType ?? "application/octet-stream",
-                  url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                  filename: resource.uri,
-                })
+                const mime = resource.mimeType ?? "application/octet-stream"
+                if (isTextMime(mime)) {
+                  textParts.push(Buffer.from(resource.blob, "base64").toString("utf-8"))
+                } else {
+                  attachments.push({
+                    type: "file",
+                    mime,
+                    url: `data:${mime};base64,${resource.blob}`,
+                    filename: resource.uri,
+                  })
+                }
               }
             }
           }

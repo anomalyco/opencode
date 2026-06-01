@@ -12,6 +12,28 @@ export function isImageAttachment(mime: string) {
   return mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
 }
 
+export function isTextMime(mime: string) {
+  if (mime.startsWith("text/")) return true
+  const textTypes = [
+    "application/json",
+    "application/xml",
+    "application/javascript",
+    "application/typescript",
+    "application/x-yaml",
+    "application/yaml",
+    "application/toml",
+    "application/x-sh",
+    "application/sql",
+    "application/graphql",
+    "application/x-httpd-php",
+    "application/xhtml+xml",
+    "application/ld+json",
+  ]
+  if (textTypes.includes(mime)) return true
+  if (mime.endsWith("+xml") || mime.endsWith("+json")) return true
+  return false
+}
+
 export function sniffAttachmentMime(bytes: Uint8Array, fallback: string) {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
