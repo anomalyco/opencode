@@ -1,6 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
+  "toolSearch": {
+    "enabled": true,
+    "strategy": "regex"
+  },
   "permission": {},
   "reference": {
     "effect": "github.com/Effect-TS/effect-smol",

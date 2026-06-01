@@ -19,7 +19,7 @@ if (Bun.argv.includes("--check")) {
 await $`bun drizzle-kit generate`.cwd(path.join(root, "packages/core"))
 
 const sqlMigrations = (await Array.fromAsync(new Bun.Glob("*/migration.sql").scan({ cwd: sqlDir })))
-  .map((file) => file.split("/")[0])
+  .map((file) => file.replaceAll("\\", "/").split("/")[0])
   .filter((name) => name !== undefined)
   .sort()
 
@@ -56,7 +56,7 @@ export default { ...config, out: ${JSON.stringify(output)} }
     }
 
     const migrations = before
-      .map((entry) => entry.path.split("/")[0])
+      .map((entry) => entry.path.replaceAll("\\", "/").split("/")[0])
       .filter((name, index, all) => name !== undefined && all.indexOf(name) === index)
       .sort()
     for (const name of migrations) {
