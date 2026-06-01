@@ -135,7 +135,6 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
                     input_price: 500,
                     output_price: 3000,
                     cache_price: 50,
-                    context_max: 200000,
                   },
                 },
               },
@@ -149,6 +148,23 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
                 supports: {
                   streaming: true,
                   tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "incomplete-internal-model",
+              name: "Incomplete Internal Model",
+              version: "incomplete-internal-model-2026-06-01",
+              capabilities: {
+                family: "internal",
+                limits: {
+                  max_output_tokens: 1,
+                  max_prompt_tokens: 1,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: false,
                 },
               },
             },
@@ -169,6 +185,7 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
       write: 1,
     },
   })
+  expect(models["incomplete-internal-model"]).toBeUndefined()
 })
 
 test("clears existing variants so refreshed models calculate provider-specific variants", async () => {

@@ -24,7 +24,6 @@ export const schema = Schema.Struct({
                 cache_price: Schema.Number,
                 input_price: Schema.Number,
                 output_price: Schema.Number,
-                context_max: Schema.Number,
               }),
             }),
           ),
@@ -33,7 +32,7 @@ export const schema = Schema.Struct({
       capabilities: Schema.Struct({
         family: Schema.String,
         limits: Schema.Struct({
-          max_context_window_tokens: Schema.Number,
+          max_context_window_tokens: Schema.optional(Schema.Number),
           max_output_tokens: Schema.Number,
           max_prompt_tokens: Schema.Number,
           vision: Schema.optional(
@@ -88,7 +87,7 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     // API response wins
     status: "active",
     limit: {
-      context: remote.capabilities.limits.max_context_window_tokens,
+      context: remote.capabilities.limits.max_context_window_tokens ?? remote.capabilities.limits.max_prompt_tokens,
       input: remote.capabilities.limits.max_prompt_tokens,
       output: remote.capabilities.limits.max_output_tokens,
     },
@@ -192,7 +191,14 @@ export async function get(
 
   const result = { ...existing }
   const remote = new Map(
-    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
+    data.data
+      .filter(
+        (m) =>
+          m.model_picker_enabled &&
+          m.policy?.state !== "disabled" &&
+          m.capabilities.limits.max_context_window_tokens !== undefined,
+      )
+      .map((m) => [m.id, m] as const),
   )
 
   // prune existing models whose api.id isn't in the endpoint response
