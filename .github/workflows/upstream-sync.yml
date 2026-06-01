@@ -103,14 +103,16 @@ jobs:
 
           Validation (typecheck + tests) passed ✅. Awaiting team review before merge into \`$TARGET_BRANCH\`."
 
-          existing=$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
             gh pr edit "$existing" \
+              --repo "$GITHUB_REPOSITORY" \
               --title "chore: nightly upstream sync $date" \
               --body "$body"
             echo "Updated existing PR #$existing"
           else
             gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
               --title "chore: nightly upstream sync $date" \
               --body "$body" \
               --head "$SYNC_BRANCH" \
@@ -132,14 +134,16 @@ jobs:
 
           This draft PR is opened anyway so the team has a review surface for the sync attempt. See the workflow logs for conflict details."
 
-          existing=$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
             gh pr edit "$existing" \
+              --repo "$GITHUB_REPOSITORY" \
               --title "chore: upstream sync conflict review $date" \
               --body "$body"
             echo "Updated existing conflict review PR #$existing"
           else
             gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
               --draft \
               --title "chore: upstream sync conflict review $date" \
               --body "$body" \
@@ -153,6 +157,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "⚠️ Upstream sync conflict — $(date +%Y-%m-%d)" \
             --body "The nightly upstream sync from \`sst/opencode\` detected merge conflicts on $(date +%Y-%m-%d).
 
@@ -174,8 +179,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "⚠️ Upstream sync validation failed — $(date +%Y-%m-%d)" \
             --body "The nightly upstream sync from \`sst/opencode\` merged successfully on $(date +%Y-%m-%d) but failed validation (typecheck or tests).
 
           The sync branch \`$SYNC_BRANCH\` has been pushed. Manual review is required before merging into \`$TARGET_BRANCH\`." \
             --label bug
+ 
