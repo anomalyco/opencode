@@ -1,7 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import * as Log from "@opencode-ai/core/util/log"
+import { Log } from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
@@ -280,6 +280,8 @@ const live: Layer.Layer<
       return {
         type: "ai-sdk" as const,
         result: streamText({
+          // Copilot returns the authoritative billed amount only in provider-specific response fields.
+          includeRawChunks: input.model.providerID.includes("github-copilot"),
           onError(error) {
             l.error("stream error", {
               error,

@@ -63,6 +63,26 @@
     --v2-state-fg-info: var(--v2-blue-800);
     --v2-state-border-info: var(--v2-blue-300);
 
+    /* ── Project avatar ── */
+    --v2-avatar-bg-orange: var(--v2-orange-700);
+    --v2-avatar-border-orange: var(--v2-orange-800);
+    --v2-avatar-bg-yellow: var(--v2-yellow-700);
+    --v2-avatar-border-yellow: var(--v2-yellow-800);
+    --v2-avatar-bg-cyan: var(--v2-cyan-700);
+    --v2-avatar-border-cyan: var(--v2-cyan-800);
+    --v2-avatar-bg-green: var(--v2-green-700);
+    --v2-avatar-border-green: var(--v2-green-800);
+    --v2-avatar-bg-red: var(--v2-red-700);
+    --v2-avatar-border-red: var(--v2-red-800);
+    --v2-avatar-bg-pink: var(--v2-pink-700);
+    --v2-avatar-border-pink: var(--v2-pink-800);
+    --v2-avatar-bg-blue: var(--v2-blue-700);
+    --v2-avatar-border-blue: var(--v2-blue-800);
+    --v2-avatar-bg-purple: var(--v2-purple-700);
+    --v2-avatar-border-purple: var(--v2-purple-800);
+    --v2-avatar-bg-gray: var(--v2-grey-700);
+    --v2-avatar-border-gray: var(--v2-grey-800);
+
     /* ── Elevation ── */
     --v2-elevation-raised:
       0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8),
@@ -285,6 +305,25 @@
     --v2-illustration-illustration-layer-01: var(--v2-grey-300);
     --v2-illustration-illustration-layer-02: var(--v2-grey-400);
     --v2-illustration-illustration-layer-03: var(--v2-grey-500);
+
+    --v2-avatar-bg-orange: var(--v2-orange-700);
+    --v2-avatar-border-orange: var(--v2-orange-800);
+    --v2-avatar-bg-yellow: var(--v2-yellow-700);
+    --v2-avatar-border-yellow: var(--v2-yellow-800);
+    --v2-avatar-bg-cyan: var(--v2-cyan-700);
+    --v2-avatar-border-cyan: var(--v2-cyan-800);
+    --v2-avatar-bg-green: var(--v2-green-700);
+    --v2-avatar-border-green: var(--v2-green-800);
+    --v2-avatar-bg-red: var(--v2-red-700);
+    --v2-avatar-border-red: var(--v2-red-800);
+    --v2-avatar-bg-pink: var(--v2-pink-700);
+    --v2-avatar-border-pink: var(--v2-pink-800);
+    --v2-avatar-bg-blue: var(--v2-blue-700);
+    --v2-avatar-border-blue: var(--v2-blue-800);
+    --v2-avatar-bg-purple: var(--v2-purple-700);
+    --v2-avatar-border-purple: var(--v2-purple-800);
+    --v2-avatar-bg-gray: var(--v2-grey-700);
+    --v2-avatar-border-gray: var(--v2-grey-800);
   }
 
   /* Explicit dark mode via data attribute (Storybook toggle, runtime JS) */
@@ -345,6 +384,25 @@
     --v2-state-bg-info: var(--v2-blue-1200);
     --v2-state-fg-info: var(--v2-blue-500);
     --v2-state-border-info: var(--v2-blue-900);
+
+    --v2-avatar-bg-orange: var(--v2-orange-1100);
+    --v2-avatar-border-orange: var(--v2-orange-600);
+    --v2-avatar-bg-yellow: var(--v2-yellow-1100);
+    --v2-avatar-border-yellow: var(--v2-yellow-700);
+    --v2-avatar-bg-cyan: var(--v2-cyan-1000);
+    --v2-avatar-border-cyan: var(--v2-cyan-700);
+    --v2-avatar-bg-green: var(--v2-green-1000);
+    --v2-avatar-border-green: var(--v2-green-600);
+    --v2-avatar-bg-red: var(--v2-red-1000);
+    --v2-avatar-border-red: var(--v2-red-700);
+    --v2-avatar-bg-pink: var(--v2-pink-1000);
+    --v2-avatar-border-pink: var(--v2-pink-700);
+    --v2-avatar-bg-blue: var(--v2-blue-900);
+    --v2-avatar-border-blue: var(--v2-blue-500);
+    --v2-avatar-bg-purple: var(--v2-purple-1000);
+    --v2-avatar-border-purple: var(--v2-purple-600);
+    --v2-avatar-bg-gray: var(--v2-grey-700);
+    --v2-avatar-border-gray: var(--v2-grey-500);
 
     --v2-elevation-raised:
       0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30),

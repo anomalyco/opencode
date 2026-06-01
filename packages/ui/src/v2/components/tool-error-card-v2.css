@@ -16,7 +16,6 @@
   padding: 0 0 0 10px;
   gap: 8px;
   border-left: 2px solid var(--tec-border);
-  font-family: var(--v2-font-family-sans), var(--sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 
   [data-slot="tool-error-card-trigger"] {

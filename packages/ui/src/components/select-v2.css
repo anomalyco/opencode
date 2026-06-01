@@ -1,0 +1,87 @@
+[data-component="select"][data-trigger-style="settings-v2"] [data-slot="select-select-trigger"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  height: 24px;
+  padding: 4px 4px 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  cursor: pointer;
+}
+
+[data-component="select"][data-trigger-style="settings-v2"] [data-slot="select-select-trigger-value"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: fit-content;
+  height: 13px;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-weight: 530;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -0.04px;
+  font-variant-numeric: tabular-nums;
+  font-variation-settings: "slnt" 0;
+}
+
+[data-component="select"][data-trigger-style="settings-v2"] [data-slot="select-select-trigger"]:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2.5px;
+}
+
+[data-component="select"][data-trigger-style="settings-v2"]
+  [data-slot="select-select-trigger"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="select"][data-trigger-style="settings-v2"]
+  [data-slot="select-select-trigger"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="select"][data-trigger-style="settings-v2"] [data-slot="select-select-trigger"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+[data-component="select"][data-trigger-style="settings-v2"] [data-slot="select-select-trigger-icon"] {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-component="select"][data-trigger-style="settings-v2"]
+  [data-slot="select-select-trigger-icon"]
+  [data-slot="icon-svg"] {
+  margin-inline: -5px;
+  color: #3a3a3a;
+}
+
+[data-component="select-content"][data-trigger-style="settings-v2"] {
+  min-width: 160px;
+  border-radius: 8px;
+  padding: 0;
+
+  [data-slot="select-select-content-list"] {
+    padding: 4px;
+  }
+
+  [data-slot="select-select-item"] {
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+  }
+}

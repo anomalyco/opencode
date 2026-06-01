@@ -1,17 +1,17 @@
 // Serial prompt queue for direct interactive mode.
 //
 // Prompts arrive from the footer (user types and hits enter) and queue up
-// here. The queue drains one turn at a time: it appends the user row to
-// scrollback, calls input.run() to execute the turn through the stream
-// transport, and waits for completion before starting the next prompt.
+// here. The queue drains one turn at a time; ordinary prompts waiting behind
+// an active ordinary turn are exposed for edit/removal until they begin.
 //
 // The queue also handles /exit, /quit, and /new commands, empty-prompt rejection,
 // and tracks per-turn wall-clock duration for the footer status line.
 //
 // Resolves when the footer closes and all in-flight work finishes.
 import * as Locale from "@/util/locale"
+import { MessageID, PartID } from "@/session/schema"
 import { isExitCommand, isNewCommand } from "./prompt.shared"
-import type { FooterApi, FooterEvent, RunPrompt } from "./types"
+import type { FooterApi, FooterEvent, FooterQueuedPrompt, RunPrompt } from "./types"
 
 type Trace = {
   write(type: string, data?: unknown): void
@@ -34,6 +34,8 @@ export type QueueInput = {
 
 type State = {
   queue: RunPrompt[]
+  queued: FooterQueuedPrompt[]
+  active?: RunPrompt
   ctrl?: AbortController
   closed: boolean
 }
@@ -51,15 +53,15 @@ function defer<T = void>(): Deferred<T> {
 
 // Runs the prompt queue until the footer closes.
 //
-// Subscribes to footer prompt events, queues them, and drains one at a
-// time through input.run(). If the user submits multiple prompts while
-// a turn is running, they queue up and execute in order. The footer shows
-// the queue depth so the user knows how many are pending.
+// Subscribes to footer prompt events and drains operations through input.run().
+// Ordinary prompts submitted during an ordinary active turn remain local and
+// are exposed by the footer for edit/removal until their turn begins.
 export async function runPromptQueue(input: QueueInput): Promise<void> {
   const stop = defer<{ type: "closed" }>()
   const done = defer()
   const state: State = {
     queue: [],
+    queued: [],
     closed: input.footer.isClosed,
   }
   let draining: Promise<void> | undefined
@@ -67,6 +69,24 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
   const emit = (next: FooterEvent, row: Record<string, unknown>) => {
     input.trace?.write("ui.patch", row)
     input.footer.event(next)
+  }
+
+  const syncQueue = () => {
+    const queue = state.queue.length
+    emit({ type: "queue", queue }, { queue })
+    emit(
+      {
+        type: "queued.prompts",
+        prompts: [...state.queued],
+      },
+      { queued: state.queued.length },
+    )
+  }
+
+  const removeLocalQueued = (queued: FooterQueuedPrompt) => {
+    if (!state.queued.includes(queued)) return
+    state.queued = state.queued.filter((item) => item !== queued)
+    syncQueue()
   }
 
   const finish = () => {
@@ -84,6 +104,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
 
     state.closed = true
     state.queue.length = 0
+    state.queued.length = 0
     state.ctrl?.abort()
     stop.resolve({ type: "closed" })
     finish()
@@ -102,16 +123,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             continue
           }
 
+          const queued = state.queued.find((item) => item.prompt === prompt)
+          if (queued) removeLocalQueued(queued)
+
           if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
-            emit(
-              {
-                type: "queue",
-                queue: state.queue.length,
-              },
-              {
-                queue: state.queue.length,
-              },
-            )
+            syncQueue()
             if (!input.onNewSession) {
               emit(
                 {
@@ -146,6 +162,15 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             continue
           }
 
+          const sent =
+            prompt.mode === "shell"
+              ? prompt
+              : {
+                  ...prompt,
+                  messageID: prompt.messageID ?? queued?.messageID ?? MessageID.ascending(),
+                }
+          state.active = sent
+
           emit(
             {
               type: "turn.send",
@@ -167,18 +192,24 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               break
             }
 
-            if (prompt.mode !== "shell") {
-              const commit = { kind: "user", text: prompt.text, phase: "start", source: "system" } as const
+            if (sent.mode !== "shell") {
+              const commit = {
+                kind: "user",
+                text: sent.text,
+                phase: "start",
+                source: "system",
+                messageID: sent.messageID,
+              } as const
               input.trace?.write("ui.commit", commit)
               input.footer.append(commit)
             }
-            input.onSend?.(prompt)
+            input.onSend?.(sent)
 
             if (state.closed) {
               break
             }
 
-            const task = input.run(prompt, ctrl.signal).then(
+            const task = input.run(sent, ctrl.signal).then(
               () => ({ type: "done" as const }),
               (error) => ({ type: "error" as const, error }),
             )
@@ -207,6 +238,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
                 duration,
               },
             )
+            state.active = undefined
           }
         }
       } catch (error) {
@@ -241,16 +273,28 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       return
     }
 
+    const active = state.active
+    if (
+      active &&
+      active.mode !== "shell" &&
+      !active.command &&
+      prompt.mode !== "shell" &&
+      !prompt.command &&
+      !isNewCommand(prompt.text)
+    ) {
+      const queued: FooterQueuedPrompt = {
+        messageID: MessageID.ascending(),
+        partID: PartID.ascending(),
+        prompt,
+      }
+      state.queued = [...state.queued, queued]
+      state.queue.push(prompt)
+      syncQueue()
+      return
+    }
+
     state.queue.push(prompt)
-    emit(
-      {
-        type: "queue",
-        queue: state.queue.length,
-      },
-      {
-        queue: state.queue.length,
-      },
-    )
+    syncQueue()
     if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
       drain()
       return
@@ -274,6 +318,13 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
   const offClose = input.footer.onClose(() => {
     close()
   })
+  const offRemoveQueued = input.footer.onQueuedRemove((messageID) => {
+    const queued = state.queued.find((item) => item.messageID === messageID)
+    if (!queued) return false
+    state.queue = state.queue.filter((prompt) => prompt !== queued.prompt)
+    removeLocalQueued(queued)
+    return true
+  })
 
   try {
     if (state.closed) {
@@ -289,6 +340,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
   } finally {
     offPrompt()
     offClose()
+    offRemoveQueued()
     close()
     await draining?.catch(() => {})
   }

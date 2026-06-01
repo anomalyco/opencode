@@ -43,9 +43,9 @@
   transition: transform 140ms ease-out;
 
   border-radius: 8px;
-  color: var(--text-text-base);
-  background: var(--background-bg-layer-01);
-  box-shadow: var(--elevation-floating);
+  color: var(--v2-text-text-base);
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
 
   &[data-opened] {
     animation: toastV2PopIn 140ms ease-out;
@@ -71,9 +71,10 @@
     height: 20px;
     min-width: 16px;
     min-height: 20px;
+    color: var(--v2-icon-icon-base);
 
     [data-component="icon"] {
-      color: var(--text-text-base);
+      color: var(--v2-icon-icon-base);
       width: 16px;
       height: 16px;
       display: inline-flex;
@@ -109,11 +110,10 @@
   }
 
   [data-slot="toast-v2-title"] {
-    color: var(--text-text-base);
+    color: var(--v2-text-text-base);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: "Inter Variable";
     font-size: 13px;
     font-style: normal;
     font-weight: 530;
@@ -124,11 +124,10 @@
   }
 
   [data-slot="toast-v2-description"] {
-    color: var(--text-text-muted);
+    color: var(--v2-text-text-muted);
     text-wrap-style: pretty;
     overflow-wrap: anywhere;
     word-break: break-word;
-    font-family: "Inter Variable";
     font-size: 13px;
     font-style: normal;
     font-weight: 440;
@@ -147,7 +146,6 @@
 
   [data-slot="toast-v2-actions"] [data-component="button-v2"] {
     min-height: 24px;
-    font-family: "Inter Variable";
     font-size: 13px;
     font-style: normal;
     font-weight: 530;
@@ -166,9 +164,25 @@
     border: 0;
     border-radius: 4px;
     background: transparent;
+    color: var(--v2-icon-icon-muted);
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+
+    &:hover {
+      background: var(--v2-overlay-simple-overlay-hover);
+      color: var(--v2-icon-icon-base);
+    }
+
+    &:active {
+      background: var(--v2-overlay-simple-overlay-pressed);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: 2px;
+    }
 
     svg {
       width: 16px;

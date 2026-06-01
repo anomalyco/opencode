@@ -81,8 +81,10 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Gemini 3.5 Flash       | gemini-3.5-flash       | `https://opencode.ai/zen/v1/models/gemini-3.5-flash` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`   | `@ai-sdk/google`            |
+| Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5.1                | glm-5.1                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -91,9 +93,9 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Kimi K2.6              | kimi-k2.6              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
 Die [Model-ID](/docs/config/#models) in deiner OpenCode-Konfiguration verwendet das Format `opencode/<model-id>`. Für GPT 5.5 würdest du zum Beispiel `opencode/gpt-5.5` in deiner Konfiguration verwenden.
 
@@ -128,6 +130,7 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50       | $3.125       |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |

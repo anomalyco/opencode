@@ -1,16 +1,28 @@
-import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, createMemo, lazy, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { SettingsList } from "./settings-list"
+
+const ButtonV2 = lazy(() => import("@opencode-ai/ui/v2/button-v2").then((module) => ({ default: module.ButtonV2 })))
+const IconV2 = lazy(() => import("@opencode-ai/ui/v2/icon").then((module) => ({ default: module.Icon })))
+const IconButtonV2 = lazy(() =>
+  import("@opencode-ai/ui/v2/icon-button-v2").then((module) => ({ default: module.IconButtonV2 })),
+)
+const TextInputV2 = lazy(() =>
+  import("@opencode-ai/ui/v2/text-input-v2").then((module) => ({ default: module.TextInputV2 })),
+)
+const SettingsListV2 = lazy(() =>
+  import("./settings-v2/parts/list").then((module) => ({ default: module.SettingsListV2 })),
+)
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"
@@ -257,7 +269,7 @@ function useKeyCapture(input: {
   })
 }
 
-export const SettingsKeybinds: Component = () => {
+export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
@@ -371,85 +383,178 @@ export const SettingsKeybinds: Component = () => {
     if (store.active) command.keybinds(true)
   })
 
-  return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
-          <div class="flex items-center justify-between gap-4">
-            <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
-            <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
-              {language.t("settings.shortcuts.reset.button")}
-            </Button>
-          </div>
+  const emptyResults = (
+    <Show when={store.filter && !hasResults()}>
+      <div
+        classList={{
+          "flex flex-col items-center justify-center py-12 text-center": !props.v2,
+          "settings-v2-shortcuts-status": props.v2,
+        }}
+      >
+        <span
+          classList={{
+            "text-14-regular text-text-weak": !props.v2,
+          }}
+        >
+          {language.t("settings.shortcuts.search.empty")}
+        </span>
+        <Show when={store.filter}>
+          <span
+            classList={{
+              "text-14-regular text-text-strong mt-1": !props.v2,
+              "settings-v2-shortcuts-status-filter": props.v2,
+            }}
+          >
+            &quot;{store.filter}&quot;
+          </span>
+        </Show>
+      </div>
+    </Show>
+  )
 
-          <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
-            <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
-            <TextField
-              variant="ghost"
-              type="text"
+  const List = props.v2 ? SettingsListV2 : SettingsList
+
+  const groups = (
+    <div
+      classList={{
+        "settings-v2-shortcuts flex flex-col gap-8": props.v2,
+        "flex flex-col gap-8 max-w-[720px]": !props.v2,
+      }}
+    >
+      <For each={GROUPS}>
+        {(group) => (
+          <Show when={(filtered().get(group) ?? []).length > 0}>
+            <div
+              classList={{
+                "settings-v2-section": props.v2,
+                "flex flex-col gap-1": !props.v2,
+              }}
+            >
+              <h3
+                classList={{
+                  "settings-v2-section-title": props.v2,
+                  "text-14-medium text-text-strong pb-2": !props.v2,
+                }}
+              >
+                {language.t(groupKey[group])}
+              </h3>
+              <List>
+                <For each={filtered().get(group) ?? []}>
+                  {(id) => (
+                    <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                      <span
+                        classList={{
+                          "text-14-regular text-text-strong": !props.v2,
+                        }}
+                      >
+                        {title(id)}
+                      </span>
+                      <button
+                        type="button"
+                        data-keybind-id={id}
+                        classList={{
+                          "settings-v2-keybind-button": props.v2,
+                          "settings-v2-keybind-button--active": props.v2 && store.active === id,
+                          "h-8 px-3 rounded-md text-12-regular": !props.v2,
+                          "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
+                            !props.v2 && store.active !== id,
+                          "border border-border-weak-base bg-surface-inset-base text-text-weak":
+                            !props.v2 && store.active === id,
+                        }}
+                        onClick={() => start(id)}
+                      >
+                        <Show
+                          when={store.active === id}
+                          fallback={command.keybind(id) || language.t("settings.shortcuts.unassigned")}
+                        >
+                          {language.t("settings.shortcuts.pressKeys")}
+                        </Show>
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </List>
+            </div>
+          </Show>
+        )}
+      </For>
+      {emptyResults}
+    </div>
+  )
+
+  return (
+    <Show
+      when={props.v2}
+      fallback={
+        <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+          <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+            <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
+              <div class="flex items-center justify-between gap-4">
+                <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
+                <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
+                  {language.t("settings.shortcuts.reset.button")}
+                </Button>
+              </div>
+
+              <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
+                <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
+                <TextField
+                  variant="ghost"
+                  type="text"
+                  value={store.filter}
+                  onChange={(v) => setStore("filter", v)}
+                  placeholder={language.t("settings.shortcuts.search.placeholder")}
+                  spellcheck={false}
+                  autocorrect="off"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  class="flex-1"
+                />
+                <Show when={store.filter}>
+                  <IconButton icon="circle-x" variant="ghost" onClick={() => setStore("filter", "")} />
+                </Show>
+              </div>
+            </div>
+          </div>
+          {groups}
+        </div>
+      }
+    >
+      <>
+        <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
+          <div class="settings-v2-tab-header-row">
+            <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
+            <ButtonV2 variant="ghost" onClick={resetAll} disabled={!hasOverrides()}>
+              {language.t("settings.shortcuts.reset.button")}
+            </ButtonV2>
+          </div>
+          <div class="settings-v2-tab-search">
+            <TextInputV2
+              type="search"
+              appearance="base"
               value={store.filter}
-              onChange={(v) => setStore("filter", v)}
+              onInput={(event) => setStore("filter", event.currentTarget.value)}
               placeholder={language.t("settings.shortcuts.search.placeholder")}
               spellcheck={false}
               autocorrect="off"
               autocomplete="off"
               autocapitalize="off"
-              class="flex-1"
+              aria-label={language.t("settings.shortcuts.search.placeholder")}
             />
             <Show when={store.filter}>
-              <IconButton icon="circle-x" variant="ghost" onClick={() => setStore("filter", "")} />
+              <IconButtonV2
+                type="button"
+                variant="ghost-muted"
+                size="small"
+                class="settings-v2-tab-search-clear"
+                icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
+                onClick={() => setStore("filter", "")}
+              />
             </Show>
           </div>
         </div>
-      </div>
-
-      <div class="flex flex-col gap-8 max-w-[720px]">
-        <For each={GROUPS}>
-          {(group) => (
-            <Show when={(filtered().get(group) ?? []).length > 0}>
-              <div class="flex flex-col gap-1">
-                <h3 class="text-14-medium text-text-strong pb-2">{language.t(groupKey[group])}</h3>
-                <SettingsList>
-                  <For each={filtered().get(group) ?? []}>
-                    {(id) => (
-                      <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-                        <span class="text-14-regular text-text-strong">{title(id)}</span>
-                        <button
-                          type="button"
-                          data-keybind-id={id}
-                          classList={{
-                            "h-8 px-3 rounded-md text-12-regular": true,
-                            "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
-                              store.active !== id,
-                            "border border-border-weak-base bg-surface-inset-base text-text-weak": store.active === id,
-                          }}
-                          onClick={() => start(id)}
-                        >
-                          <Show
-                            when={store.active === id}
-                            fallback={command.keybind(id) || language.t("settings.shortcuts.unassigned")}
-                          >
-                            {language.t("settings.shortcuts.pressKeys")}
-                          </Show>
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                </SettingsList>
-              </div>
-            </Show>
-          )}
-        </For>
-
-        <Show when={store.filter && !hasResults()}>
-          <div class="flex flex-col items-center justify-center py-12 text-center">
-            <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.search.empty")}</span>
-            <Show when={store.filter}>
-              <span class="text-14-regular text-text-strong mt-1">"{store.filter}"</span>
-            </Show>
-          </div>
-        </Show>
-      </div>
-    </div>
+        <div class="settings-v2-tab-body">{groups}</div>
+      </>
+    </Show>
   )
 }

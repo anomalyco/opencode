@@ -111,7 +111,14 @@ export const layer = Layer.effect(
         const existing = hooks.find((item) => item.id === input.id)
         if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
         const scope = yield* Scope.make()
-        const result = yield* input.effect.pipe(Scope.provide(scope))
+        const result = yield* input.effect.pipe(
+          Scope.provide(scope),
+          Effect.withSpan("Plugin.load", {
+            attributes: {
+              "plugin.id": input.id,
+            },
+          }),
+        )
         hooks = [
           ...hooks.filter((item) => item.id !== input.id),
           {
