@@ -4,10 +4,11 @@ import * as Tool from "./tool"
 
 const Parameters = Schema.Struct({
   name: Schema.String.annotate({
-    description: "The exact name of the tool to call (from search_data results)",
+    description: 'The exact tool name as returned by search_data (e.g. "calculator"). Must match exactly.',
   }),
   args: Schema.String.annotate({
-    description: "JSON-encoded arguments matching the tool's input schema",
+    description:
+      'JSON-encoded arguments matching the tool\'s input schema from search_data. Example: if search_data shows "expression (string)", pass \'{"expression": "2 + 3"}\'.',
   }),
 })
 
@@ -18,7 +19,7 @@ export const CallTool = Tool.define(
 
     return {
       description:
-        "Call a tool discovered via search_data. Provide the tool name and JSON-encoded arguments matching the tool's input schema.",
+        "Execute a tool discovered via search_data. Use this when you need a specialized capability not in your standard toolkit. First use search_data to find the tool and see its input schema, then call it here with the exact name and JSON-encoded arguments matching that schema.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {

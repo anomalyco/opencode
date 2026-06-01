@@ -19,7 +19,7 @@ export const SearchDataTool = Tool.define(
 
     return {
       description:
-        "Search across all available tools and data. Returns ranked results matching your query. Use this to discover dynamic tools, then call them with call_tool.",
+        "Search across all available tools, skills, notes, and other data. Returns ranked results with names, descriptions, and schemas. After finding a tool, use call_tool to execute it by name with JSON-encoded arguments matching its input schema.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -27,8 +27,14 @@ export const SearchDataTool = Tool.define(
           const results = yield* runtime.searchCatalog(params.query)
 
           const lines = results.slice(0, limit).map((sig) => {
-            const inputKeys = Object.keys(sig.input).join(", ") || "none"
-            const outputKeys = Object.keys(sig.output).join(", ") || "any"
+            const inputKeys =
+              Object.entries(sig.input)
+                .map(([k, t]) => `${k} (${t})`)
+                .join(", ") || "none"
+            const outputKeys =
+              Object.entries(sig.output)
+                .map(([k, t]) => `${k} (${t})`)
+                .join(", ") || "any"
             return [
               `[tool] ${sig.name} (score: ${sig.score.toFixed(2)})`,
               `  ${sig.description}`,
