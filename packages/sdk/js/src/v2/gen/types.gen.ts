@@ -1910,6 +1910,7 @@ export type Config = {
     mcp_timeout?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
+  status_light?: boolean
 }
 
 export type Model = {

@@ -451,29 +451,57 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
 
+  const STATUS_GREEN = "\u{1F7E2} "
+  const STATUS_YELLOW = "\u{1F7E1} "
+  const STATUS_RED = "\u{1F534} "
+
+  const trafficLight = createMemo(() => {
+    if (!sync.data.config.status_light) return ""
+    if (route.data.type === "home") return STATUS_GREEN
+    if (route.data.type !== "session") return ""
+    const sessionStatus = sync.data.session_status?.[route.data.sessionID]
+    if (!sessionStatus || sessionStatus.type === "idle") return STATUS_GREEN
+    const messages = sync.data.message[route.data.sessionID]
+    if (!messages) return STATUS_GREEN
+    const pendingInput = (sync.data.permission?.[route.data.sessionID]?.length ?? 0) > 0
+      || (sync.data.question?.[route.data.sessionID]?.length ?? 0) > 0
+    if (pendingInput) return STATUS_GREEN
+    const lastAssistant = messages.findLast((m) => m.role === "assistant")
+    if (!lastAssistant) return STATUS_YELLOW
+    const parts = sync.data.part[lastAssistant.id]
+    if (!parts) return STATUS_YELLOW
+    const hasRunningTool = parts.some(
+      (p) => p.type === "tool" && (p.state?.status === "running" || p.state?.status === "pending"),
+    )
+    if (hasRunningTool) return STATUS_RED
+    const hasTextOutput = parts.some((p) => p.type === "text" && !p.synthetic && !p.ignored)
+    if (hasTextOutput) return STATUS_RED
+    return STATUS_YELLOW
+  })
+
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle(trafficLight() + "OpenCode")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle(trafficLight() + "OpenCode")
         return
       }
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(trafficLight() + `OC | ${title}`)
       return
     }
 
     if (route.data.type === "plugin") {
-      renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      renderer.setTerminalTitle(trafficLight() + `OC | ${route.data.id}`)
     }
   })
 

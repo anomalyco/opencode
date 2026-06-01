@@ -307,6 +307,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  status_light: Schema.optional(Schema.Boolean).annotate({
+    description: "Show traffic light status indicator in terminal title",
+  }),
 }).annotate({ identifier: "Config" })
 
 // Uses the shared `DeepMutable` from `@opencode-ai/core/schema`. See the definition
