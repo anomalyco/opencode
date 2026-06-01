@@ -86,6 +86,7 @@ const AnthropicServerToolResultType = Schema.Literals([
   "web_search_tool_result",
   "code_execution_tool_result",
   "web_fetch_tool_result",
+  "tool_search_tool_result",
 ])
 type AnthropicServerToolResultType = Schema.Schema.Type<typeof AnthropicServerToolResultType>
 
@@ -136,6 +137,7 @@ const AnthropicTool = Schema.Struct({
   description: Schema.String,
   input_schema: JsonObject,
   cache_control: Schema.optional(AnthropicCacheControl),
+  defer_loading: Schema.optional(Schema.Boolean),
 })
 type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
 
@@ -254,12 +256,36 @@ const signatureFromMetadata = (metadata: ProviderMetadata | undefined): string |
   return typeof anthropic.signature === "string" ? anthropic.signature : undefined
 }
 
-const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
-  name: tool.name,
-  description: tool.description,
-  input_schema: tool.inputSchema,
-  cache_control: cacheControl(breakpoints, tool.cache),
-})
+const stripExamples = (schema: unknown): unknown => {
+  if (typeof schema !== "object" || schema === null) return schema
+  const copy = { ...schema } as Record<string, unknown>
+  if ("examples" in copy) {
+    delete copy.examples
+  }
+  if ("properties" in copy && typeof copy.properties === "object" && copy.properties !== null) {
+    const props = { ...copy.properties } as Record<string, unknown>
+    for (const key of Object.keys(props)) {
+      props[key] = stripExamples(props[key])
+    }
+    copy.properties = props
+  }
+  return copy
+}
+
+const lowerTool = (
+  breakpoints: Cache.Breakpoints,
+  tool: ToolDefinition,
+  hasSearchTool: boolean,
+): AnthropicTool => {
+  const inputSchema = hasSearchTool ? (stripExamples(tool.inputSchema) as any) : tool.inputSchema
+  return {
+    name: tool.name,
+    description: tool.description,
+    input_schema: inputSchema,
+    cache_control: cacheControl(breakpoints, tool.cache),
+    defer_loading: tool.deferLoading,
+  }
+}
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   ProviderShared.matchToolChoice("Anthropic Messages", toolChoice, {
@@ -290,6 +316,13 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
   if (name === "web_search") return "web_search_tool_result"
   if (name === "code_execution") return "code_execution_tool_result"
   if (name === "web_fetch") return "web_fetch_tool_result"
+  if (
+    name === "tool_search" ||
+    name === "tool_search_tool" ||
+    name === "tool_search_tool_regex" ||
+    name === "tool_search_tool_bm25"
+  )
+    return "tool_search_tool_result"
   return undefined
 }
 
@@ -428,6 +461,12 @@ const lowerThinking = Effect.fn("AnthropicMessages.lowerThinking")(function* (re
   return { type: "enabled" as const, budget_tokens: budget }
 })
 
+const isSearchTool = (name: string): boolean =>
+  name === "tool_search" ||
+  name === "tool_search_tool" ||
+  name === "tool_search_tool_regex" ||
+  name === "tool_search_tool_bm25"
+
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const generation = request.generation
@@ -435,10 +474,23 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
+
+  const hasSearchTool = request.tools.some((t) => isSearchTool(t.name))
   const tools =
     request.tools.length === 0 || request.toolChoice?.type === "none"
       ? undefined
-      : request.tools.map((tool) => lowerTool(breakpoints, tool))
+      : request.tools.map((tool) => lowerTool(breakpoints, tool, hasSearchTool))
+
+  if (tools) {
+    const allDeferred = tools.every((t) => t.defer_loading === true)
+    if (allDeferred) {
+      return yield* invalid("All tools have defer_loading set. At least one tool must be non-deferred.")
+    }
+    const deferredSearchTools = tools.filter((t) => isSearchTool(t.name) && t.defer_loading === true)
+    if (deferredSearchTools.length > 0) {
+      return yield* invalid(`Search tool '${deferredSearchTools[0].name}' cannot be deferred.`)
+    }
+  }
   const system =
     request.system.length === 0
       ? undefined
@@ -542,6 +594,7 @@ const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = 
   web_search_tool_result: "web_search",
   code_execution_tool_result: "code_execution",
   web_fetch_tool_result: "web_fetch",
+  tool_search_tool_result: "tool_search",
 }
 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType => type in SERVER_TOOL_RESULT_NAMES

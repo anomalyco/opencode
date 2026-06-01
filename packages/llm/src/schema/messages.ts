@@ -186,6 +186,7 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  deferLoading: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace ToolDefinition {

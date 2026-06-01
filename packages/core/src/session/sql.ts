@@ -136,3 +136,20 @@ export const PermissionTable = sqliteTable("permission", {
   ...Timestamps,
   data: text({ mode: "json" }).notNull().$type<PermissionV2.Ruleset>(),
 })
+
+export const MetricsTable = sqliteTable(
+  "metrics",
+  {
+    id: text().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    tool_name: text().notNull(),
+    cost: real().notNull().default(0),
+    tokens_input: integer().notNull().default(0),
+    tokens_output: integer().notNull().default(0),
+    time_created: integer().notNull(),
+  },
+  (table) => [index("metrics_session_idx").on(table.session_id)],
+)

@@ -286,6 +286,16 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  toolSearch: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable tool search (deferred loading) to support massive tool catalogs",
+      }),
+      strategy: Schema.optional(Schema.Literals(["regex", "bm25"])).annotate({
+        description: "Search strategy to discover tools on-demand ('regex' or 'bm25')",
+      }),
+    }),
+  ),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

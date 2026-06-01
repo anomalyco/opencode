@@ -1,0 +1,10 @@
+[project]
+name = "rlm-server"
+version = "0.1.0"
+description = "RLM Python Execution Server for OpenCode"
+requires-python = ">=3.11"
+dependencies = [
+    "rlms>=0.1.0",
+    "ipython>=8.0.0",
+    "ipykernel>=6.0.0",
+]

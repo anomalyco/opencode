@@ -16,6 +16,7 @@ import { isRecord } from "@/util/record"
 type ToolInput = {
   readonly description?: string
   readonly inputSchema?: unknown
+  readonly deferLoading?: boolean
 }
 
 export type RequestInput = {
@@ -129,6 +130,7 @@ const tools = (input: Record<string, ToolInput> | undefined): ToolDefinition[] =
       name,
       description: item.description ?? "",
       inputSchema: schema(item.inputSchema),
+      deferLoading: item.deferLoading,
     }),
   )
 

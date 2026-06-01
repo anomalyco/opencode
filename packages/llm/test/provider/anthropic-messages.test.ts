@@ -731,4 +731,100 @@ describe("Anthropic Messages route", () => {
       expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
+
+  it.effect("prepares deferred tools and strips examples if search tool is present", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "tool_search_tool_regex",
+              description: "Search tools",
+              inputSchema: { type: "object" },
+            },
+            {
+              name: "get_weather",
+              description: "Get weather",
+              inputSchema: {
+                type: "object",
+                properties: { location: { type: "string" } },
+                examples: [{ location: "San Francisco" }],
+              },
+              deferLoading: true,
+            },
+          ],
+          prompt: "What is the weather?",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          name: "tool_search_tool_regex",
+          description: "Search tools",
+          input_schema: { type: "object" },
+        },
+        {
+          name: "get_weather",
+          description: "Get weather",
+          input_schema: {
+            type: "object",
+            properties: { location: { type: "string" } },
+          },
+          defer_loading: true,
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects request if all tools are deferred", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "get_weather",
+              description: "Get weather",
+              inputSchema: { type: "object" },
+              deferLoading: true,
+            },
+          ],
+          prompt: "What is the weather?",
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("All tools have defer_loading set")
+    }),
+  )
+
+  it.effect("rejects request if the search tool itself is deferred", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "tool_search_tool_regex",
+              description: "Search tools",
+              inputSchema: { type: "object" },
+              deferLoading: true,
+            },
+            {
+              name: "get_weather",
+              description: "Get weather",
+              inputSchema: { type: "object" },
+              deferLoading: false,
+            },
+          ],
+          prompt: "What is the weather?",
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Search tool 'tool_search_tool_regex' cannot be deferred")
+    }),
+  )
 })

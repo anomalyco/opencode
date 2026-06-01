@@ -1,4 +1,7 @@
 import { Agent } from "@/agent/agent"
+import { Config } from "@/config/config"
+import { Database } from "@opencode-ai/core/database/database"
+import { recordToolMetrics } from "@/metrics"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -33,6 +36,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   promptOps: TaskPromptOps
 }) {
   using _ = log.time("resolveTools")
+  const database = yield* Database.Service
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
@@ -74,16 +78,27 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         .pipe(Effect.orDie),
   })
 
+  const config = yield* Config.Service
+  const cfg = yield* config.get()
+  const searchEnabled = cfg.toolSearch?.enabled ?? false
+  const strategy = cfg.toolSearch?.strategy ?? "regex"
+
+  const isSearchTool = (name: string): boolean =>
+    name === "tool_search" ||
+    name === "tool_search_tool" ||
+    name === "tool_search_tool_regex" ||
+    name === "tool_search_tool_bm25"
+
   for (const item of yield* registry.tools({
     modelID: ProviderV2.ModelID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
   })) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
-    tools[item.id] = tool({
+    const sdkTool = tool({
       description: item.description,
       inputSchema: jsonSchema(schema),
-      execute(args, options) {
+      execute(args: any, options) {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
@@ -93,6 +108,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             const result = yield* item.execute(args, ctx)
+            yield* recordToolMetrics({
+              sessionID: ctx.sessionID,
+              toolName: item.id,
+              cost: 0,
+              tokensInput: 0,
+              tokensOutput: 0,
+            }).pipe(Effect.provideService(Database.Service, database))
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -114,6 +136,62 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           }),
         )
       },
+    })
+    if (searchEnabled && !isSearchTool(item.id)) {
+      (sdkTool as any).deferLoading = true
+    }
+    tools[item.id] = sdkTool
+  }
+
+  if (searchEnabled) {
+    const searchToolName = `tool_search_tool_${strategy}`
+    tools[searchToolName] = tool({
+      description: `Search for available tools using ${strategy} pattern matching.`,
+      inputSchema: jsonSchema({
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query" },
+        },
+        required: ["query"],
+      }),
+      async execute(args) {
+        const query = String(args.query)
+        const regex = new RegExp(query, "i")
+        const matching: string[] = []
+
+        // Registry tools
+        const allRegistry = await run.promise(registry.all())
+        for (const item of allRegistry) {
+          if (item.id.match(regex) || item.description?.match(regex)) {
+            matching.push(item.id)
+          }
+        }
+
+        // MCP tools
+        const mcpTools = await run.promise(mcp.tools())
+        for (const [name, def] of Object.entries(mcpTools)) {
+          if (name.match(regex) || def.description?.match(regex)) {
+            matching.push(name)
+          }
+        }
+
+        const toolReferences = matching.slice(0, 5).map((name) => ({
+          type: "tool_reference" as const,
+          tool_name: name,
+        }))
+
+        return {
+          title: "Tool Search Results",
+          metadata: {},
+          output: `Found matching tools: ${matching.slice(0, 5).join(", ")}`,
+          content: [
+            {
+              type: "tool_search_tool_search_result",
+              tool_references: toolReferences,
+            },
+          ]
+        } as any
+      }
     })
   }
 
@@ -146,6 +224,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               },
             }),
           )
+          yield* recordToolMetrics({
+            sessionID: ctx.sessionID,
+            toolName: key,
+            cost: 0,
+            tokensInput: 0,
+            tokensOutput: 0,
+          }).pipe(Effect.provideService(Database.Service, database))
           yield* plugin.trigger(
             "tool.execute.after",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },

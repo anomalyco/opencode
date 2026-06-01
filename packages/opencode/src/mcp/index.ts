@@ -155,7 +155,7 @@ function listTools(key: string, client: MCPClient, timeout: number) {
 }
 
 // Convert MCP tool definition to AI SDK Tool type
-function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
+function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number, deferLoading?: boolean): Tool {
   const inputSchema = mcpTool.inputSchema
 
   // Spread first, then override type to ensure it's always "object"
@@ -166,7 +166,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
     additionalProperties: false,
   }
 
-  return dynamicTool({
+  const sdkTool = dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
     execute: async (args: unknown) => {
@@ -183,6 +183,12 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
       )
     },
   })
+
+  if (deferLoading) {
+    (sdkTool as any).deferLoading = true
+  }
+
+  return sdkTool
 }
 
 function defs(key: string, client: MCPClient, timeout?: number) {
@@ -674,9 +680,10 @@ export const layer = Layer.effect(
       const cfg = yield* cfgSvc.get()
       const config = cfg.mcp ?? {}
       const defaultTimeout = cfg.experimental?.mcp_timeout
+      const searchEnabled = cfg.toolSearch?.enabled ?? false
 
       const connectedClients = Object.entries(s.clients).filter(
-        ([clientName]) => s.status[clientName]?.status === "connected",
+         ([clientName]) => s.status[clientName]?.status === "connected",
       )
 
       yield* Effect.forEach(
@@ -694,7 +701,12 @@ export const layer = Layer.effect(
 
             const timeout = entry?.timeout ?? defaultTimeout
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(
+                mcpTool,
+                client,
+                timeout,
+                searchEnabled,
+              )
             }
           }),
         { concurrency: "unbounded" },
