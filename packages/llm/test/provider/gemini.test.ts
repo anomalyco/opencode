@@ -1,17 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import { sseEvents, sseRaw } from "../lib/sse"
 
-const model = Gemini.model({
-  id: "gemini-2.5-flash",
-  baseURL: "https://generativelanguage.test/v1beta/",
-  headers: { "x-goog-api-key": "test" },
-})
+const model = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-2.5-flash" })
 
 const request = LLM.request({
   id: "req_1",

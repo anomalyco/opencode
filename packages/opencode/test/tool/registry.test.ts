@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -22,28 +23,35 @@ import { Provider } from "@/provider/provider"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
-import { ProviderID, ModelID } from "@/provider/schema"
+import { RepositoryCache } from "@/reference/repository-cache"
+
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
 
-const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+type RegistryLayerOptions = {
+  flags?: Partial<RuntimeFlags.Info>
+  plugin?: Layer.Layer<Plugin.Service>
+}
+
+const registryLayer = (opts: RegistryLayerOptions = {}) =>
   ToolRegistry.layer
     .pipe(
       Layer.provide(configLayer),
-      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(opts.plugin ?? Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
@@ -51,24 +59,50 @@ const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
       Layer.provide(Provider.defaultLayer),
-      Layer.provide(Git.defaultLayer),
+      Layer.provide(Layer.mergeAll(Git.defaultLayer, RepositoryCache.defaultLayer)),
       Layer.provide(Reference.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
-      Layer.provide(Bus.layer),
+      Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
-      Layer.provide(node),
+      Layer.provide(Layer.mergeAll(node, Database.defaultLayer)),
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(RuntimeFlags.layer(flags)))
+    .pipe(Layer.provide(RuntimeFlags.layer(opts.flags ?? {})))
+
+// Fake Plugin.Service that returns a single plugin whose `tool` map contains
+// one definition with `args: undefined`. Used to exercise the plugin entry
+// point of `fromPlugin` for the #27451 / #27630 regression.
+const brokenPluginLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    init: () => Effect.void,
+    trigger: ((_name: unknown, _input: unknown, output: unknown) =>
+      Effect.succeed(output)) as Plugin.Interface["trigger"],
+    list: () =>
+      Effect.succeed([
+        {
+          tool: {
+            broken_plugin_tool: {
+              description: "plugin tool with missing args",
+              args: undefined as unknown as Record<string, never>,
+              execute: async () => "ok",
+            },
+          },
+        },
+      ]),
+  }),
+)
 
 const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
-const scout = testEffect(Layer.mergeAll(registryLayer({ experimentalScout: true }), node, Agent.defaultLayer))
-const background = testEffect(
-  Layer.mergeAll(registryLayer({ experimentalBackgroundSubagents: true }), node, Agent.defaultLayer),
+const scout = testEffect(
+  Layer.mergeAll(registryLayer({ flags: { experimentalScout: true } }), node, Agent.defaultLayer),
+)
+const withBrokenPlugin = testEffect(
+  Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
 
 afterEach(async () => {
@@ -96,7 +130,7 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("hides task_status unless experimental background subagents are enabled", () =>
+  it.instance("does not expose task_status", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
@@ -112,22 +146,13 @@ describe("tool.registry", () => {
       const build = yield* agent.get("build")
       if (!build) throw new Error("build agent not found")
       const task = (yield* registry.tools({
-        providerID: ProviderID.opencode,
-        modelID: ModelID.make("test"),
+        providerID: ProviderV2.ID.opencode,
+        modelID: ProviderV2.ModelID.make("test"),
         agent: build,
       })).find((tool) => tool.id === "task")
 
       expect(task?.jsonSchema).toBeDefined()
       expect((task?.jsonSchema?.properties as Record<string, unknown> | undefined)?.background).toBeUndefined()
-    }),
-  )
-
-  background.instance("shows task_status when experimental background subagents are enabled", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const ids = yield* registry.ids()
-
-      expect(ids).toContain("task_status")
     }),
   )
 
@@ -182,6 +207,57 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
       expect(ids).toContain("mixed")
       expect(ids).not.toContain("mixed_helper")
+    }),
+  )
+
+  // Regression for #27451 / #27630: a custom tool that omits `args` must not
+  // crash registry initialization with
+  // `Object.entries requires that input parameter not be null or undefined`.
+  // Pre-1.14.49 the code path was `z.object(def.args)`, and `z.object(undefined)`
+  // silently produced an empty schema — so the tool registered as no-args.
+  // Preserve that tolerance.
+  it.instance("tolerates a custom tool exporting null/undefined args (no-args fallback)", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "noargs.ts"),
+          [
+            "export default {",
+            "  description: 'tool with no args',",
+            "  args: undefined,",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      // Built-in tools must still load — a single malformed custom tool must
+      // not poison the whole registry.
+      expect(ids).toContain("read")
+      const loaded = (yield* registry.all()).find((t) => t.id === "noargs")
+      if (!loaded) throw new Error("noargs tool was not loaded")
+      expect(loaded.jsonSchema).toMatchObject({ type: "object", properties: {} })
+    }),
+  )
+
+  // Same regression, plugin entry point. The original reports (#27451, #27630)
+  // came in through `plugin.list()` — `oh-my-opencode` was registering a tool
+  // with `args: undefined` and crashing every message submit. The file-scan
+  // and plugin-list loops both funnel through `fromPlugin`, but covering both
+  // entry points means a future refactor that splits them won't silently lose
+  // protection.
+  withBrokenPlugin.instance("tolerates a plugin tool registered with null/undefined args", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("read")
+      expect(ids).toContain("broken_plugin_tool")
     }),
   )
 
@@ -248,8 +324,8 @@ describe("tool.registry", () => {
 
       const agents = yield* Agent.Service
       const promptTools = yield* registry.tools({
-        providerID: ProviderID.opencode,
-        modelID: ModelID.make("test"),
+        providerID: ProviderV2.ID.opencode,
+        modelID: ProviderV2.ModelID.make("test"),
         agent: yield* agents.defaultInfo(),
       })
       const promptTool = promptTools.find((tool) => tool.id === "sql")

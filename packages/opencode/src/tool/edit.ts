@@ -11,7 +11,7 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
-import { Bus } from "../bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
@@ -61,7 +61,7 @@ export const EditTool = Tool.define(
     const lsp = yield* LSP.Service
     const afs = yield* AppFileSystem.Service
     const format = yield* Format.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
 
     return {
       description: DESCRIPTION,
@@ -108,8 +108,8 @@ export const EditTool = Tool.define(
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
                 }
-                yield* bus.publish(File.Event.Edited, { file: filePath })
-                yield* bus.publish(FileWatcher.Event.Updated, {
+                yield* events.publish(File.Event.Edited, { file: filePath })
+                yield* events.publish(FileWatcher.Event.Updated, {
                   file: filePath,
                   event: existed ? "change" : "add",
                 })
@@ -152,8 +152,8 @@ export const EditTool = Tool.define(
               if (yield* format.file(filePath)) {
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
               }
-              yield* bus.publish(File.Event.Edited, { file: filePath })
-              yield* bus.publish(FileWatcher.Event.Updated, {
+              yield* events.publish(File.Event.Edited, { file: filePath })
+              yield* events.publish(FileWatcher.Event.Updated, {
                 file: filePath,
                 event: "change",
               })

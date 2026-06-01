@@ -1,4 +1,5 @@
 import path from "path"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
@@ -19,15 +20,16 @@ import type {
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
-import { ModelsDev } from "@opencode-ai/core/models"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { InstanceRef } from "@/effect/instance-ref"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
 import { Provider } from "@/provider/provider"
-import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionPrompt } from "@/session/prompt"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -159,7 +161,7 @@ export { parseGitHubRemote }
  * Returns null for non-text responses (signals summary needed).
  * Throws only for truly empty responses.
  */
-export function extractResponseText(parts: MessageV2.Part[]): string | null {
+export function extractResponseText(parts: SessionLegacy.Part[]): string | null {
   const textPart = parts.findLast((p) => p.type === "text")
   if (textPart) return textPart.text
 
@@ -435,6 +437,9 @@ export const GithubRunCommand = effectCmd({
     const sessionSvc = yield* Session.Service
     const sessionShare = yield* SessionShare.Service
     const sessionPrompt = yield* SessionPrompt.Service
+    const events = yield* EventV2Bridge.Service
+    const runLocalEffect = <A, E>(effect: Effect.Effect<A, E>) =>
+      Effect.runPromise(effect.pipe(Effect.provideService(InstanceRef, ctx)))
     yield* Effect.promise(async () => {
       const isMock = args.token || args.event
 
@@ -548,7 +553,7 @@ export const GithubRunCommand = effectCmd({
 
         // Setup opencode session
         const repoData = await fetchRepo()
-        session = await Effect.runPromise(
+        session = await runLocalEffect(
           sessionSvc.create({
             permission: [
               {
@@ -559,11 +564,11 @@ export const GithubRunCommand = effectCmd({
             ],
           }),
         )
-        subscribeSessionEvents()
+        await subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
-          await Effect.runPromise(sessionShare.share(session.id))
+          await runLocalEffect(sessionShare.share(session.id))
           return session.id.slice(-8)
         })()
         console.log("opencode session", session.id)
@@ -870,7 +875,7 @@ export const GithubRunCommand = effectCmd({
         return { userPrompt: prompt, promptFiles: imgData }
       }
 
-      function subscribeSessionEvents() {
+      async function subscribeSessionEvents() {
         const TOOL: Record<string, [string, string]> = {
           todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
           bash: ["Shell", UI.Style.TEXT_DANGER_BOLD],
@@ -893,33 +898,38 @@ export const GithubRunCommand = effectCmd({
         }
 
         let text = ""
-        Bus.subscribe(MessageV2.Event.PartUpdated, (evt) => {
-          if (evt.properties.part.sessionID !== session.id) return
-          //if (evt.properties.part.messageID === messageID) return
-          const part = evt.properties.part
+        await runLocalEffect(
+          events.listen((evt) => {
+            if (evt.type !== MessageV2.Event.PartUpdated.type) return Effect.void
+            const data = evt.data as EventV2.Data<typeof MessageV2.Event.PartUpdated>
+            if (data.part.sessionID !== session.id) return Effect.void
+            //if (evt.properties.part.messageID === messageID) return
+            const part = data.part
 
-          if (part.type === "tool" && part.state.status === "completed") {
-            const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
-            const title =
-              part.state.title || Object.keys(part.state.input).length > 0
-                ? JSON.stringify(part.state.input)
-                : "Unknown"
-            console.log()
-            printEvent(color, tool, title)
-          }
-
-          if (part.type === "text") {
-            text = part.text
-
-            if (part.time?.end) {
-              UI.empty()
-              UI.println(UI.markdown(text))
-              UI.empty()
-              text = ""
-              return
+            if (part.type === "tool" && part.state.status === "completed") {
+              const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
+              const title =
+                part.state.title || Object.keys(part.state.input).length > 0
+                  ? JSON.stringify(part.state.input)
+                  : "Unknown"
+              console.log()
+              printEvent(color, tool, title)
             }
-          }
-        })
+
+            if (part.type === "text") {
+              text = part.text
+
+              if (part.time?.end) {
+                UI.empty()
+                UI.println(UI.markdown(text))
+                UI.empty()
+                text = ""
+                return Effect.void
+              }
+            }
+            return Effect.void
+          }),
+        )
       }
 
       async function summarize(response: string) {
@@ -936,7 +946,7 @@ export const GithubRunCommand = effectCmd({
       async function chat(message: string, files: PromptFiles = []) {
         console.log("Sending message to opencode...")
 
-        return Effect.runPromise(
+        return runLocalEffect(
           Effect.gen(function* () {
             const prompt = sessionPrompt
             const result = yield* prompt.prompt({

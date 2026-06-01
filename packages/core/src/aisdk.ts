@@ -3,6 +3,7 @@ export * as AISDK from "./aisdk"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Cause, Context, Effect, Layer, Schema } from "effect"
 import { ModelV2 } from "./model"
+import { EventV2 } from "./event"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
 
@@ -169,4 +170,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(PluginV2.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer))))
