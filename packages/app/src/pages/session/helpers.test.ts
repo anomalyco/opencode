@@ -2,13 +2,47 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  beginContentTabOpen,
+  createOpenDiffTab,
   createOpenReviewFile,
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
   shouldFocusTerminalOnKeyDown,
+  shouldSuppressPseudoTab,
 } from "./helpers"
+
+describe("shouldSuppressPseudoTab", () => {
+  test("blocks preview while a content tab is opening", async () => {
+    expect(shouldSuppressPseudoTab("preview")).toBe(false)
+    beginContentTabOpen(() => {})
+    expect(shouldSuppressPseudoTab("preview")).toBe(true)
+    expect(shouldSuppressPseudoTab("review")).toBe(true)
+    expect(shouldSuppressPseudoTab("file://src/a.ts")).toBe(false)
+    await new Promise<void>((resolve) => queueMicrotask(() => requestAnimationFrame(() => resolve())))
+    expect(shouldSuppressPseudoTab("preview")).toBe(false)
+  })
+})
+
+describe("createOpenDiffTab", () => {
+  test("opens and activates diff tab", () => {
+    const calls: string[] = []
+    const open = createOpenDiffTab({
+      tabForPath: (path) => {
+        calls.push(`tab:${path}`)
+        return `diff://${path}`
+      },
+      openTab: (tab) => calls.push(`open:${tab}`),
+      setActive: (tab) => calls.push(`active:${tab}`),
+      openReviewPanel: () => calls.push("panel"),
+    })
+
+    open("src/a.ts")
+
+    expect(calls).toEqual(["panel", "tab:src/a.ts", "open:diff://src/a.ts", "active:diff://src/a.ts"])
+  })
+})
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -30,8 +64,11 @@ describe("createOpenReviewFile", () => {
   })
 })
 
+const flushPseudoGuard = () =>
+  new Promise<void>((resolve) => queueMicrotask(() => requestAnimationFrame(() => resolve())))
+
 describe("createOpenSessionFileTab", () => {
-  test("activates the opened file tab", () => {
+  test("activates the opened file tab", async () => {
     const calls: string[] = []
     const openTab = createOpenSessionFileTab({
       normalizeTab: (value) => {
@@ -52,15 +89,33 @@ describe("createOpenSessionFileTab", () => {
 
     expect(calls).toEqual([
       "normalize:src/a.ts",
-      "open:file://src/a.ts",
       "path:file://src/a.ts",
+      "open:file://src/a.ts",
       "load:src/a.ts",
       "review",
       "active:file://src/a.ts",
     ])
+    await flushPseudoGuard()
   })
 
-  test("opens review panel for preview tab", () => {
+  test("activates diff tab without loading file", async () => {
+    const calls: string[] = []
+    const openTab = createOpenSessionFileTab({
+      normalizeTab: (value) => value,
+      openTab: (tab) => calls.push(`open:${tab}`),
+      pathFromTab: (tab) => tab.slice("diff://".length),
+      loadFile: (path) => calls.push(`load:${path}`),
+      openReviewPanel: () => calls.push("review"),
+      setActive: (tab) => calls.push(`active:${tab}`),
+    })
+
+    openTab("diff://src/a.ts")
+
+    expect(calls).toEqual(["open:diff://src/a.ts", "review", "active:diff://src/a.ts"])
+    await flushPseudoGuard()
+  })
+
+  test("opens review panel for preview tab", async () => {
     const calls: string[] = []
     const openTab = createOpenSessionFileTab({
       normalizeTab: (value) => value,
@@ -74,6 +129,7 @@ describe("createOpenSessionFileTab", () => {
     openTab("preview")
 
     expect(calls).toEqual(["open:preview", "panel"])
+    await flushPseudoGuard()
   })
 })
 
@@ -150,6 +206,27 @@ describe("createSessionTabs", () => {
       expect(result.activeTab()).toBe("norm:src/a.ts")
       expect(result.activeFileTab()).toBe("norm:src/a.ts")
       expect(result.closableTab()).toBe("norm:src/a.ts")
+      dispose()
+    })
+  })
+
+  test("normalizes the effective diff tab", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: "diff://src/a.ts" as string | undefined,
+        all: ["diff://src/a.ts"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) =>
+          tab.startsWith("file://") || tab.startsWith("diff://") ? tab.slice(tab.indexOf("://") + 3) : undefined,
+        normalizeTab: (tab) =>
+          tab.startsWith("file://") || tab.startsWith("diff://") ? `norm:${tab.slice(tab.indexOf("://") + 3)}` : tab,
+      })
+
+      expect(result.activeTab()).toBe("norm:src/a.ts")
+      expect(result.activeFileTab()).toBe("norm:src/a.ts")
       dispose()
     })
   })

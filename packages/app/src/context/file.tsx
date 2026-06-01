@@ -250,6 +250,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       normalize: path.normalize,
       tab: path.tab,
       pathFromTab: path.pathFromTab,
+      diffTab: path.diffTab,
+      pathFromDiffTab: path.pathFromDiffTab,
       tree: {
         list: tree.listDir,
         refresh: (input: string) => tree.listDir(input, { force: true }),

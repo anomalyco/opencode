@@ -22,6 +22,7 @@ import { useLayout } from "@/context/layout"
 import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
+import { DiffTabContent } from "@/pages/session/diff-tab"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
@@ -31,7 +32,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 export function SessionSidePanel(props: {
   reviewPanel: JSX.Element
   activeDiff?: string
-  focusReviewDiff: (path: string) => void
+  onChangeFileClick: (path: string) => void
   reviewSnap: boolean
   size: Sizing
 }) {
@@ -130,9 +131,15 @@ export function SessionSidePanel(props: {
     return file.tree.children("").length === 0
   })
 
+  const pathFromContentTab = (tab: string) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab)
+
   const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
+    if (tab.startsWith("file://")) return file.tab(tab)
+    if (tab.startsWith("diff://")) {
+      const path = file.pathFromDiffTab(tab)
+      if (path) return file.diffTab(path)
+    }
+    return tab
   }
 
   const openReviewPanel = () => {
@@ -142,7 +149,7 @@ export function SessionSidePanel(props: {
   const openTab = createOpenSessionFileTab({
     normalizeTab,
     openTab: tabs().open,
-    pathFromTab: file.pathFromTab,
+    pathFromTab: pathFromContentTab,
     loadFile: file.load,
     openReviewPanel,
     setActive: tabs().setActive,
@@ -150,7 +157,7 @@ export function SessionSidePanel(props: {
 
   const tabState = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
+    pathFromTab: pathFromContentTab,
     normalizeTab,
     review: reviewTab,
     preview: previewTab,
@@ -204,7 +211,7 @@ export function SessionSidePanel(props: {
       files: tabs()
         .all()
         .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
-          const path = file.pathFromTab(tab)
+          const path = pathFromContentTab(tab)
           if (!path) return acc
 
           const selected = file.selectedLines(path)
@@ -369,13 +376,22 @@ export function SessionSidePanel(props: {
                   </Show>
 
                   <Show when={activeFileTab()} keyed>
-                    {(tab) => <FileTabContent tab={tab} />}
+                    {(tab) => (
+                      <Switch>
+                        <Match when={file.pathFromDiffTab(tab)}>
+                          <DiffTabContent tab={tab} />
+                        </Match>
+                        <Match when={true}>
+                          <FileTabContent tab={tab} />
+                        </Match>
+                      </Switch>
+                    )}
                   </Show>
                 </Tabs>
                 <DragOverlay>
                   <Show when={store.activeDraggable} keyed>
                     {(tab) => {
-                      const path = file.pathFromTab(tab)
+                      const path = pathFromContentTab(tab)
                       return (
                         <div data-component="tabs-drag-preview">
                           <Show when={path}>{(p) => <FileVisual active path={p()} />}</Show>
@@ -439,7 +455,7 @@ export function SessionSidePanel(props: {
                           kinds={kinds()}
                           draggable={false}
                           active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          onFileClick={(node) => props.onChangeFileClick(node.path)}
                           onContextAdd={onContextAdd()}
                           contextLabel={language.t("session.files.addToContext")}
                           contextFolderLabel={language.t("session.files.addFolderToContext")}

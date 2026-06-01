@@ -28,6 +28,9 @@ export default defineConfig({
     env: {
       VITE_OPENCODE_SERVER_HOST: serverHost,
       VITE_OPENCODE_SERVER_PORT: serverPort,
+      ...(process.env.PLAYWRIGHT_PRODUCTION_LAYOUT === "1"
+        ? { VITE_PRODUCTION_LAYOUT: "true" }
+        : {}),
     },
   },
   use: {

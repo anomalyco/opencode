@@ -47,10 +47,12 @@ import { sessionBusy } from "@/components/prompt-input/composer-state"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
+  createOpenDiffTab,
   createOpenReviewFile,
   createSessionTabs,
   createSizing,
   focusTerminalById,
+  isDiffTab,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -410,9 +412,15 @@ export default function Page() {
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
+  const pathFromContentTab = (tab: string) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab)
+
   function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
+    if (tab.startsWith("file://")) return file.tab(tab)
+    if (tab.startsWith("diff://")) {
+      const path = file.pathFromDiffTab(tab)
+      if (path) return file.diffTab(path)
+    }
+    return tab
   }
 
   function normalizeTabs(list: string[]) {
@@ -439,7 +447,7 @@ export default function Page() {
   const previewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
+    pathFromTab: pathFromContentTab,
     normalizeTab,
     review: reviewTab,
     preview: previewTab,
@@ -488,6 +496,7 @@ export default function Page() {
   createEffect(() => {
     const tab = activeFileTab()
     if (!tab) return
+    if (isDiffTab(tab)) return
 
     const path = file.pathFromTab(tab)
     if (path) file.load(path)
@@ -1088,6 +1097,7 @@ export default function Page() {
       activeFileTab,
       (active) => {
         if (!active) return
+        if (isDiffTab(active)) return
         if (fileTreeTab() !== "changes") return
         showAllFiles()
       },
@@ -1131,9 +1141,34 @@ export default function Page() {
 
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
+    if (reviewTab()) tabs().setActive("review")
     view().review.openPath(path)
     setTree({ activeDiff: path, pendingDiff: path })
   }
+
+  const openDiffTab = createOpenDiffTab({
+    tabForPath: file.diffTab,
+    openTab: tabs().open,
+    setActive: tabs().setActive,
+    openReviewPanel,
+  })
+
+  const openChangeFile = (path: string) => {
+    if (env.productionLayout()) {
+      openDiffTab(path)
+      return
+    }
+    focusReviewDiff(path)
+  }
+
+  const activeDiffPath = createMemo(() => {
+    const tab = activeFileTab()
+    if (tab) {
+      const fromDiff = file.pathFromDiffTab(tab)
+      if (fromDiff) return fromDiff
+    }
+    return tree.activeDiff
+  })
 
   createEffect(() => {
     const pending = tree.pendingDiff
@@ -1870,8 +1905,8 @@ export default function Page() {
           <SessionPanelColumn class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0" />
           <SessionSidePanel
             reviewPanel={reviewPanel()}
-            activeDiff={tree.activeDiff}
-            focusReviewDiff={focusReviewDiff}
+            activeDiff={activeDiffPath()}
+            onChangeFileClick={openChangeFile}
             reviewSnap={ui.reviewSnap}
             size={size}
           />
@@ -1923,8 +1958,8 @@ export default function Page() {
 
         <SessionSidePanel
           reviewPanel={reviewPanel()}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
+          activeDiff={activeDiffPath()}
+          onChangeFileClick={openChangeFile}
           reviewSnap={ui.reviewSnap}
           size={size}
         />

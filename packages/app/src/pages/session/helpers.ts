@@ -103,6 +103,43 @@ export const shouldFocusTerminalOnKeyDown = (event: Pick<KeyboardEvent, "key" | 
   return !(event.ctrlKey || event.metaKey || event.altKey)
 }
 
+export const isDiffTab = (tab: string) => tab.startsWith("diff://")
+
+const pseudoTab = (tab: string) => tab === "preview" || tab === "review"
+
+let suppressPseudo = 0
+
+export const shouldSuppressPseudoTab = (tab: string) => suppressPseudo > 0 && pseudoTab(tab)
+
+/** Ignore Kobalte fallback to preview/review while a file or diff tab is opening. */
+export const beginContentTabOpen = (fn: () => void) => {
+  suppressPseudo++
+  fn()
+  queueMicrotask(() => {
+    requestAnimationFrame(() => {
+      suppressPseudo--
+    })
+  })
+}
+
+export const createOpenDiffTab = (input: {
+  tabForPath: (path: string) => string
+  openTab: (tab: string) => void
+  setActive: (tab: string) => void
+  openReviewPanel: () => void
+}) => {
+  return (path: string) => {
+    beginContentTabOpen(() => {
+      batch(() => {
+        input.openReviewPanel()
+        const tab = input.tabForPath(path)
+        input.openTab(tab)
+        input.setActive(tab)
+      })
+    })
+  }
+}
+
 export const createOpenReviewFile = (input: {
   showAllFiles: () => void
   tabForPath: (path: string) => string
@@ -111,16 +148,18 @@ export const createOpenReviewFile = (input: {
   loadFile: (path: string) => any | Promise<void>
 }) => {
   return (path: string) => {
-    batch(() => {
-      input.showAllFiles()
-      const maybePromise = input.loadFile(path)
-      const open = () => {
-        const tab = input.tabForPath(path)
-        input.openTab(tab)
-        input.setActive(tab)
-      }
-      if (maybePromise instanceof Promise) maybePromise.then(open)
-      else open()
+    beginContentTabOpen(() => {
+      batch(() => {
+        input.showAllFiles()
+        const maybePromise = input.loadFile(path)
+        const open = () => {
+          const tab = input.tabForPath(path)
+          input.openTab(tab)
+          input.setActive(tab)
+        }
+        if (maybePromise instanceof Promise) maybePromise.then(open)
+        else open()
+      })
     })
   }
 }
@@ -134,18 +173,28 @@ export const createOpenSessionFileTab = (input: {
   setActive: (tab: string) => void
 }) => {
   return (value: string) => {
-    const next = input.normalizeTab(value)
-    input.openTab(next)
+    if (shouldSuppressPseudoTab(value)) return
 
+    const next = input.normalizeTab(value)
     const path = input.pathFromTab(next)
+
     if (!path) {
+      input.openTab(next)
       if (next === "review" || next === "preview") input.openReviewPanel()
       return
     }
 
-    input.loadFile(path)
-    input.openReviewPanel()
-    input.setActive(next)
+    beginContentTabOpen(() => {
+      input.openTab(next)
+      if (isDiffTab(next)) {
+        input.openReviewPanel()
+        input.setActive(next)
+        return
+      }
+      input.loadFile(path)
+      input.openReviewPanel()
+      input.setActive(next)
+    })
   }
 }
 

@@ -12,10 +12,12 @@ export type OpenSessionFileInput = {
 
 export type OpenSessionFileDeps = {
   commentInReview: (path: string) => boolean
+  productionLayout: () => boolean
   reviewPanel: { opened: () => boolean; open: () => void }
   fileTree: { opened: () => boolean; open: () => void; setTab: (tab: "changes" | "all") => void }
   tabs: { setActive: (tab: string) => void; open: (tab: string) => void }
   tabForPath: (path: string) => string
+  openDiffTab: (path: string) => void
   normalizePath: (path: string) => string
   expandTree: (dir: string) => void
   loadFile: (path: string) => void | Promise<void>
@@ -95,6 +97,11 @@ export function createOpenSessionFile(deps: OpenSessionFileDeps) {
       if (!deps.reviewPanel.opened()) deps.reviewPanel.open()
       deps.fileTree.setTab("changes")
       applySelection()
+      if (deps.productionLayout()) {
+        deps.openDiffTab(input.path)
+        if (input.commentFocus) queueCommentFocus(deps, input.commentFocus)
+        return
+      }
       deps.tabs.setActive("review")
       if (input.commentFocus) queueCommentFocus(deps, input.commentFocus)
       return

@@ -32,7 +32,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const language = useLanguage()
   const command = useCommand()
   const sortable = createSortable(props.tab)
-  const path = createMemo(() => file.pathFromTab(props.tab))
+  const path = createMemo(() => file.pathFromTab(props.tab) ?? file.pathFromDiffTab(props.tab))
   const content = createMemo(() => {
     const value = path()
     if (!value) return

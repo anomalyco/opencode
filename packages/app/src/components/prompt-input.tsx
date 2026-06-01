@@ -42,8 +42,9 @@ import { usePermission } from "@/context/permission"
 import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useClientEnv } from "@/context/client-env"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { createSessionTabs } from "@/pages/session/helpers"
+import { createOpenDiffTab, createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
@@ -146,6 +147,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
+  const env = useClientEnv()
   const comments = useComments()
   const dialog = useDialog()
   const providers = useProviders()
@@ -206,9 +208,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const activeFileTab = createSessionTabs({
     tabs,
-    pathFromTab: files.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
+    pathFromTab: (tab) => files.pathFromTab(tab) ?? files.pathFromDiffTab(tab),
+    normalizeTab: (tab) => {
+      if (tab.startsWith("file://")) return files.tab(tab)
+      if (tab.startsWith("diff://")) {
+        const path = files.pathFromDiffTab(tab)
+        if (path) return files.diffTab(path)
+      }
+      return tab
+    },
   }).activeFileTab
+
+  const openDiffTab = createOpenDiffTab({
+    tabForPath: files.diffTab,
+    openTab: tabs().open,
+    setActive: tabs().setActive,
+    openReviewPanel: () => {
+      if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    },
+  })
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -221,10 +239,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const openSessionFile = createOpenSessionFile({
     commentInReview,
+    productionLayout: env.productionLayout,
     reviewPanel: view().reviewPanel,
     fileTree: layout.fileTree,
     tabs: tabs(),
     tabForPath: files.tab,
+    openDiffTab,
     normalizePath: files.normalize,
     expandTree: files.tree.expand,
     loadFile: files.load,

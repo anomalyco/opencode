@@ -60,14 +60,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return false
     return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
   }
-  const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
   const tabState = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab,
+    pathFromTab: (tab) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab),
+    normalizeTab: (tab) => {
+      if (tab.startsWith("file://")) return file.tab(tab)
+      if (tab.startsWith("diff://")) {
+        const path = file.pathFromDiffTab(tab)
+        if (path) return file.diffTab(path)
+      }
+      return tab
+    },
     review: actions.review,
     hasReview,
   })

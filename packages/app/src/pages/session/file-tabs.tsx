@@ -21,7 +21,7 @@ import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
-function FileCommentMenu(props: {
+export function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
   deleteLabel: string
@@ -56,7 +56,7 @@ function FileCommentMenu(props: {
 
 type ScrollPos = { x: number; y: number }
 
-function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
+export function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
   let restoreFrame: number | undefined
@@ -190,8 +190,15 @@ export function FileTabContent(props: { tab: string }) {
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+    pathFromTab: (tab) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab),
+    normalizeTab: (tab) => {
+      if (tab.startsWith("file://")) return file.tab(tab)
+      if (tab.startsWith("diff://")) {
+        const path = file.pathFromDiffTab(tab)
+        if (path) return file.diffTab(path)
+      }
+      return tab
+    },
   }).activeFileTab
 
   let find: FileSearchHandle | null = null

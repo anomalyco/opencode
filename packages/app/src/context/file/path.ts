@@ -140,12 +140,24 @@ export function createPathHelpers(scope: () => string) {
     return normalize(tabValue)
   }
 
+  const diffTab = (input: string) => {
+    const value = normalize(input)
+    return `diff://${encodeFilePath(value)}`
+  }
+
+  const pathFromDiffTab = (tabValue: string) => {
+    if (!tabValue.startsWith("diff://")) return
+    return normalize(`file://${tabValue.slice("diff://".length)}`)
+  }
+
   const normalizeDir = (input: string) => normalize(input).replace(/\/+$/, "")
 
   return {
     normalize,
     tab,
     pathFromTab,
+    diffTab,
+    pathFromDiffTab,
     normalizeDir,
   }
 }
