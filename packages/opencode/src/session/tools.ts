@@ -14,10 +14,10 @@ import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
-import * as Session from "./session"
+import { Session } from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
-import * as Log from "@opencode-ai/core/util/log"
+import { Log } from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -121,7 +121,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     const execute = item.execute
     if (!execute) continue
 
-    const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
+    const schema = asSchema(item.inputSchema).jsonSchema
     const transformed = ProviderTransform.schema(input.model, schema)
     item.inputSchema = jsonSchema(transformed)
     item.execute = (args, opts) =>

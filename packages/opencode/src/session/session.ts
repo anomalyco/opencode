@@ -25,7 +25,7 @@ import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import * as Log from "@opencode-ai/core/util/log"
+import { Log } from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
@@ -47,10 +47,6 @@ const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
-
-function createDefaultTitle(isChild = false) {
-  return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
-}
 
 export function isDefaultTitle(title: string) {
   return new RegExp(
@@ -581,7 +577,7 @@ export const layer: Layer.Layer<
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
-        title: input.title ?? createDefaultTitle(!!input.parentID),
+        title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString(),
         agent: input.agent,
         model: input.model,
         metadata: input.metadata,
