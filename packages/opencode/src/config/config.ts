@@ -302,6 +302,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      max_retries: Schema.optional(PositiveInt).annotate({
+        description:
+          "Maximum number of retry attempts for transient provider errors before stopping the session. When not set, retries are unbounded.",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),
