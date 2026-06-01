@@ -52,9 +52,10 @@ export const isHttpInteraction = InteractionSchema.guards.http
 
 export const isWebSocketInteraction = InteractionSchema.guards.websocket
 
-export const httpInteractions = (cassette: Cassette) => cassette.interactions.filter(isHttpInteraction)
+export const httpInteractions = (interactions: ReadonlyArray<Interaction>) => interactions.filter(isHttpInteraction)
 
-export const webSocketInteractions = (cassette: Cassette) => cassette.interactions.filter(isWebSocketInteraction)
+export const webSocketInteractions = (interactions: ReadonlyArray<Interaction>) =>
+  interactions.filter(isWebSocketInteraction)
 
 export const CassetteSchema = Schema.Struct({
   version: Schema.Literal(1),

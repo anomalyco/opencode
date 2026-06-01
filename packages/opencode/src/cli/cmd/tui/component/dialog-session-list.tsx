@@ -7,6 +7,7 @@ import { Locale } from "@/util/locale"
 import { useProject } from "@tui/context/project"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
+import { useLocal } from "../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { createDebouncedSignal } from "../util/signal"
@@ -25,10 +26,13 @@ export function DialogSessionList() {
   const project = useProject()
   const { theme } = useTheme()
   const sdk = useSDK()
+  const local = useLocal()
   const toast = useToast()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
+  const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
+  const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
@@ -49,13 +53,22 @@ export function DialogSessionList() {
       const workspaceID = await (async () => {
         if (selection.type === "none") return null
         if (selection.type === "existing") return selection.workspaceID
-        const result = await sdk.client.experimental.workspace
-          .create({ type: selection.workspaceType, branch: null })
-          .catch(() => undefined)
+        let result
+        try {
+          result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
+        } catch (err) {
+          toast.show({
+            title: "Failed to create workspace",
+            message: errorMessage(err),
+            variant: "error",
+          })
+          return
+        }
         const workspace = result?.data
         if (!workspace) {
           toast.show({
-            message: `Failed to create workspace: ${errorMessage(result?.error ?? "no response")}`,
+            title: "Failed to create workspace",
+            message: errorMessage(result?.error ?? "no response"),
             variant: "error",
           })
           return
@@ -128,6 +141,17 @@ export function DialogSessionList() {
 
   const [browseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
 
+  const quickSwitchHint = createMemo(() => {
+    const first = quickSwitch1()
+    const last = quickSwitch9()
+    if (!first || !last) return undefined
+    return quickSwitchRange(first, last)
+  })
+  const quickSwitchFooterHints = createMemo(() => {
+    const hint = quickSwitchHint()
+    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+  })
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
     const sessionMap = new Map(
@@ -139,46 +163,62 @@ export function DialogSessionList() {
     const searchResult = searchResults()
     const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
 
-    return displayOrder
-      .map((id) => sessionMap.get(id))
-      .filter((x) => x !== undefined)
-      .map((x) => {
-        const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
+    const pinned = local.session.pinned().filter((id) => sessionMap.has(id))
+    const pinnedSet = new Set(pinned)
+    const slotByID = new Map<string, number>(local.session.slots().map((id, i) => [id, i + 1]))
 
-        let footer: JSX.Element | string = ""
-        if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-          if (x.workspaceID) {
-            footer = workspace ? (
-              <WorkspaceLabel
-                type={workspace.type}
-                name={workspace.name}
-                status={project.workspace.status(x.workspaceID) ?? "error"}
-              />
-            ) : (
-              <WorkspaceLabel type="unknown" name={x.workspaceID} status="error" />
-            )
-          }
-        } else {
-          footer = Locale.time(x.time.updated)
-        }
+    function buildOption(id: string, category: string) {
+      const x = sessionMap.get(id)
+      if (!x) return undefined
+      const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
 
-        const date = new Date(x.time.updated)
-        let category = date.toDateString()
-        if (category === today) {
-          category = "Today"
+      let footer: JSX.Element | string = ""
+      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+        if (x.workspaceID) {
+          footer = workspace ? (
+            <WorkspaceLabel
+              type={workspace.type}
+              name={workspace.name}
+              status={project.workspace.status(x.workspaceID) ?? "error"}
+            />
+          ) : (
+            <WorkspaceLabel type="unknown" name={x.workspaceID} status="error" />
+          )
         }
-        const isDeleting = toDelete() === x.id
-        const status = sync.data.session_status?.[x.id]
-        const isWorking = status?.type === "busy" || status?.type === "retry"
-        return {
-          title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
-          bg: isDeleting ? theme.error : undefined,
-          value: x.id,
-          category,
-          footer,
-          gutter: isWorking ? () => <Spinner /> : undefined,
-        }
+      } else {
+        footer = Locale.time(x.time.updated)
+      }
+
+      const isDeleting = toDelete() === x.id
+      const status = sync.data.session_status?.[x.id]
+      const isWorking = status?.type === "busy" || status?.type === "retry"
+      const slot = slotByID.get(x.id)
+      const gutter = isWorking
+        ? () => <Spinner />
+        : slot !== undefined
+          ? () => <text fg={theme.accent}>{slot}</text>
+          : undefined
+      return {
+        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
+        bg: isDeleting ? theme.error : undefined,
+        value: x.id,
+        category,
+        footer,
+        gutter,
+      }
+    }
+
+    const remaining = displayOrder
+      .filter((id) => !pinnedSet.has(id))
+      .map((id) => {
+        const x = sessionMap.get(id)
+        if (!x) return undefined
+        const label = new Date(x.time.updated).toDateString()
+        return buildOption(id, label === today ? "Today" : label)
       })
+      .filter((x) => x !== undefined)
+
+    return [...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined), ...remaining]
   })
 
   onMount(() => {
@@ -203,6 +243,13 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       actions={[
+        {
+          command: "session.pin.toggle",
+          title: "pin/unpin",
+          onTrigger: (option: { value: string }) => {
+            local.session.togglePin(option.value)
+          },
+        },
         {
           command: "session.delete",
           title: "delete",
@@ -259,6 +306,13 @@ export function DialogSessionList() {
           },
         },
       ]}
+      footerHints={quickSwitchFooterHints()}
     />
   )
+}
+
+function quickSwitchRange(first: string, last: string) {
+  const prefix = first.slice(0, -1)
+  if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
+  return `${first} through ${last}`
 }

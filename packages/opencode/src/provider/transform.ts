@@ -1,11 +1,9 @@
 import type { ModelMessage, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
-import type { JSONSchema } from "zod/v4/core"
 import type * as Provider from "./provider"
-import type * as ModelsDev from "./models"
+import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -17,7 +15,12 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
-export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+export const OUTPUT_TOKEN_MAX = 32_000
+
+// OpenAI Responses `include` value that returns the encrypted reasoning state
+// needed for stateless multi-turn reasoning (store: false). Hoisted so every
+// branch that requests it stays in lockstep.
+const INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"] as const
 
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
@@ -593,11 +596,25 @@ function openaiCompatibleReasoningEfforts(id: string) {
   return gpt5CodexReasoningEfforts(apiId) ?? versionedGpt5ReasoningEfforts(apiId) ?? OPENAI_EFFORTS
 }
 
+function anthropicOpus47OrLater(apiId: string) {
+  // Matches "opus-4.7" (Anthropic/Bedrock/Vertex) and "claude-4.7-opus" (SAP AI Core inverted).
+  // Greedy \d+ correctly extends to multi-digit majors (e.g. "claude-10.0-opus") for forward compatibility.
+  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  const major = Number(version[1] ?? version[3])
+  const minor = Number(version[2] ?? version[4])
+  return major > 4 || (major === 4 && minor >= 7)
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
+  if (anthropicOpus47OrLater(apiId)) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
-  if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
+  if (
+    ["opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus", "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet"].some((v) =>
+      apiId.includes(v),
+    )
+  ) {
     return ["low", "medium", "high", "max"]
   }
   return null
@@ -618,18 +635,11 @@ function googleThinkingBudgetMax(apiId: string) {
   return 24_576
 }
 
-function googleSmallThinkingConfig(apiId: string) {
-  const levels = googleThinkingLevelEfforts(apiId)
-  if (apiId.toLowerCase().includes("gemini-3")) {
-    return { thinkingLevel: levels.includes("minimal") ? "minimal" : levels.includes("low") ? "low" : "high" }
-  }
-  return { thinkingBudget: googleThinkingBudgetMax(apiId) === 32_768 ? 128 : 0 }
-}
-
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
+  const adaptiveOpus = anthropicOpus47OrLater(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
     id.includes("deepseek-chat") ||
@@ -693,6 +703,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               {
                 thinking: {
                   type: "adaptive",
+                  // Opus 4.7+ flips the API default for `display` to "omitted", which
+                  // returns empty thinking blocks. Force "summarized" so summaries
+                  // survive (4.6/Sonnet 4.6 already default to "summarized").
+                  ...(adaptiveOpus ? { display: "summarized" } : {}),
                 },
                 effort,
               },
@@ -766,7 +780,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"],
+            include: INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -800,7 +814,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"],
+            include: INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -813,7 +827,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"],
+            include: INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -838,9 +852,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             {
               thinking: {
                 type: "adaptive",
-                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
-                  ? { display: "summarized" }
-                  : {}),
+                ...(adaptiveOpus ? { display: "summarized" } : {}),
               },
               effort,
             },
@@ -877,9 +889,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               reasoningConfig: {
                 type: "adaptive",
                 maxReasoningEffort: effort,
-                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
-                  ? { display: "summarized" }
-                  : {}),
+                ...(adaptiveOpus ? { display: "summarized" } : {}),
               },
             },
           ]),
@@ -995,6 +1005,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               {
                 thinking: {
                   type: "adaptive",
+                  ...(adaptiveOpus ? { display: "summarized" } : {}),
                 },
                 effort,
               },
@@ -1135,18 +1146,17 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
+  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
+    result["reasoningSummary"] = "auto"
+    return result
+  }
+
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
-      // Only inject reasoningSummary for providers that support it natively.
-      // @ai-sdk/openai-compatible proxies (e.g. LiteLLM) do not understand this
-      // parameter and return "Unknown parameter: 'reasoningSummary'".
-      if (
-        input.model.api.npm === "@ai-sdk/openai" ||
-        input.model.api.npm === "@ai-sdk/azure" ||
-        input.model.api.npm === "@ai-sdk/github-copilot"
-      ) {
-        result["reasoningSummary"] = "auto"
+      result["reasoningSummary"] = "auto"
+      if (input.model.api.npm === "@ai-sdk/openai") {
+        result["include"] = INCLUDE_ENCRYPTED_REASONING
       }
     }
 
@@ -1163,7 +1173,7 @@ export function options(input: {
 
     if (input.model.providerID.startsWith("opencode")) {
       result["promptCacheKey"] = input.sessionID
-      result["include"] = ["reasoning.encrypted_content"]
+      result["include"] = INCLUDE_ENCRYPTED_REASONING
       result["reasoningSummary"] = "auto"
     }
   }
@@ -1185,40 +1195,27 @@ export function options(input: {
 }
 
 export function smallOptions(model: Provider.Model) {
+  const small = Object.values(model.variants ?? {})[0] ?? {}
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||
     model.api.npm === "@ai-sdk/github-copilot"
   ) {
-    if (model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("-chat")) {
-        if (gpt5Version(model.api.id) === undefined) return { store: false }
-        return { store: false, reasoningEffort: "medium" }
-      }
-      if (model.api.id.includes("search-api")) return { store: false }
-      if (model.api.id.includes("5.") || model.api.id.includes("5-mini")) {
-        return { store: false, reasoningEffort: "low" }
-      }
-      return { store: false, reasoningEffort: "minimal" }
-    }
-    return { store: false }
-  }
-  if (model.providerID === "google") {
-    // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
-    return { thinkingConfig: googleSmallThinkingConfig(model.api.id) }
+    const base = { store: false }
+    return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
-    if (model.api.id.includes("google")) {
+    if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
-    return { reasoningEffort: "minimal" }
   }
 
   if (model.providerID === "venice") {
+    if (Object.keys(small).length > 0) return small
     return { veniceParameters: { disableThinking: true } }
   }
 
-  return {}
+  return small
 }
 
 // Maps model ID prefix to provider slug used in providerOptions.
@@ -1277,11 +1274,11 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   return { [key]: options }
 }
 
-export function maxOutputTokens(model: Provider.Model): number {
-  return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
+  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
 }
 
-export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
+export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
     if (schema.type === "object" && schema.properties) {
@@ -1312,7 +1309,10 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
       return result
     }
 
-    schema = sanitizeMoonshot(schema) as JSONSchema.BaseSchema | JSONSchema7
+    const sanitized = sanitizeMoonshot(schema)
+    if (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized)) {
+      schema = sanitized
+    }
   }
 
   // Convert integer enums to string enums for Google/Gemini
@@ -1394,7 +1394,7 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
     schema = sanitizeGemini(schema)
   }
 
-  return schema as JSONSchema7
+  return schema
 }
 
 export * as ProviderTransform from "./transform"

@@ -1,6 +1,6 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@opencode-ai/llm"
-import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/route"
+import { LLM, LLMClient, ProviderID, Tool } from "@opencode-ai/llm"
+import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
 /**
@@ -18,18 +18,18 @@ const apiKey = Config.redacted("OPENAI_API_KEY")
 
 // 1. Pick a model. The provider helper records provider identity, protocol
 // choice, capabilities, deployment options, authentication, and defaults.
-const model = OpenAI.model("gpt-4o-mini", {
+const model = OpenAI.configure({
   apiKey,
   generation: { maxTokens: 160 },
   providerOptions: {
     openai: { store: false },
   },
-})
+}).model("gpt-4o-mini")
 
 // 2. Build a provider-neutral request. This is useful when reusing one request
 // across generate and stream examples.
 //
-// Options can live on both the model and the request:
+// Options can live on both the configured route/provider facade and the request:
 //
 //   - `generation`: common controls such as max tokens, temperature, topP/topK,
 //     penalties, seed, and stop sequences.
@@ -39,7 +39,7 @@ const model = OpenAI.model("gpt-4o-mini", {
 //   - `http`: last-resort serializable overlays for final request body, headers,
 //     and query params. Prefer typed `providerOptions` when a field is stable.
 //
-// Model options are defaults. Request options override them for this call.
+// Route/provider options are defaults. Request options override them for this call.
 const request = LLM.request({
   model,
   system: "You are concise and practical.",
@@ -78,7 +78,7 @@ const streamText = LLM.stream(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
       if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
-      if (event.type === "request-finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
+      if (event.type === "finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
     }),
   ),
   Stream.runDrain,
@@ -184,8 +184,8 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
   stream: {
     event: Schema.String,
     initial: () => undefined,
-    step: (_, frame) => Effect.succeed([undefined, [{ type: "text-delta", text: frame }]] as const),
-    onHalt: () => [{ type: "request-finish", reason: "stop" }],
+    step: (_, frame) => Effect.succeed([undefined, [{ type: "text-delta", id: "text-0", text: frame }]] as const),
+    onHalt: () => [{ type: "finish", reason: "stop" }],
   },
 })
 
@@ -193,19 +193,22 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
 // axes that the protocol deliberately does not know: URL, auth, and framing.
 const FakeAdapter = Route.make({
   id: "fake-echo",
+  provider: "fake-echo",
   protocol: FakeProtocol,
-  endpoint: Endpoint.path("/v1/echo"),
+  endpoint: Endpoint.path("/v1/echo", { baseURL: "https://fake.local" }),
   auth: Auth.passthrough,
   framing: Framing.sse,
 })
 
-// A provider module exports a Provider definition. The default `model` helper
-// sets provider identity, protocol id, and the route id resolved by the registry.
-const fakeEchoModel = Route.model(FakeAdapter, { provider: "fake-echo", baseURL: "https://fake.local" })
-const FakeEcho = Provider.make({
+// A provider module exports a configured facade. Configuration happens before
+// model selection; model selectors accept ids only.
+const FakeEcho = {
   id: ProviderID.make("fake-echo"),
-  model: (id: string, options: ProviderModelOptions = {}) => fakeEchoModel({ id, ...options }),
-})
+  configure: () => ({
+    id: ProviderID.make("fake-echo"),
+    model: (id: string) => FakeAdapter.model({ id }),
+  }),
+}
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through
 // body conversion, validation, endpoint, auth, and HTTP construction without
@@ -213,7 +216,7 @@ const FakeEcho = Provider.make({
 const inspectFakeProvider = Effect.gen(function* () {
   const prepared = yield* LLMClient.prepare(
     LLM.request({
-      model: FakeEcho.model("tiny-echo"),
+      model: FakeEcho.configure().model("tiny-echo"),
       prompt: "Show me the provider pipeline.",
     }),
   )
@@ -227,7 +230,8 @@ const inspectFakeProvider = Effect.gen(function* () {
 // enabled at a time so the tutorial can demonstrate generate, prepare, stream,
 // or tool-loop behavior without spending tokens on every example.
 const requestExecutorLayer = RequestExecutor.defaultLayer
-const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
+const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
+const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
 
 const program = Effect.gen(function* () {
   // yield* generateOnce
@@ -237,6 +241,6 @@ const program = Effect.gen(function* () {
   // yield* generateStructuredObject
   // yield* generateDynamicObject.pipe(Effect.andThen((response) => Effect.sync(() => console.log(response.object))))
   yield* streamWithTools
-}).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer)))
+}).pipe(Effect.provide(Layer.mergeAll(llmDeps, llmClientLayer)))
 
 Effect.runPromise(program)

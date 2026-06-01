@@ -11,6 +11,7 @@ import {
   type MediaPart,
   type ToolResultPart,
 } from "../schema"
+export { isRecord } from "../utils/record"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -18,13 +19,6 @@ export const encodeJson = Schema.encodeSync(Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
-
-/**
- * Plain-record narrowing. Excludes arrays so routes checking nested JSON
- * Schema fragments don't accidentally treat a tuple as a key/value bag.
- */
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 /**
  * Streaming tool-call accumulator. Adapters that build a tool call across
@@ -42,6 +36,13 @@ export interface ToolAccumulator {
  * supplied total; otherwise falls back to `inputTokens + outputTokens` only
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
+ *
+ * Under the additive `LLM.Usage` contract, `inputTokens` and `outputTokens`
+ * are the non-cached input and visible output only. The provider-supplied
+ * `total` is the source of truth when present; the computed fallback
+ * under-counts cache and reasoning by design and exists mainly so
+ * Anthropic-style providers (which don't surface a total) still get a
+ * sensible aggregate on the input + output axes.
  */
 export const totalTokens = (
   inputTokens: number | undefined,
@@ -51,6 +52,35 @@ export const totalTokens = (
   if (total !== undefined) return total
   if (inputTokens === undefined && outputTokens === undefined) return undefined
   return (inputTokens ?? 0) + (outputTokens ?? 0)
+}
+
+/**
+ * Subtract `subtrahend` from `total`, clamping to zero if the provider
+ * reports a non-sensical breakdown (e.g. `cached_tokens > prompt_tokens`).
+ * Used by protocol mappers when deriving a non-overlapping breakdown field
+ * from a provider's inclusive total — `nonCachedInputTokens` from
+ * `inputTokens - cacheReadInputTokens - cacheWriteInputTokens`.
+ *
+ * If `total` is `undefined`, returns `undefined` (we don't fabricate
+ * counts). If `subtrahend` is `undefined`, returns `total` unchanged. The
+ * provider-native breakdown stays available on `Usage.native` for debugging.
+ */
+export const subtractTokens = (total: number | undefined, subtrahend: number | undefined): number | undefined => {
+  if (total === undefined) return undefined
+  if (subtrahend === undefined) return total
+  return Math.max(0, total - subtrahend)
+}
+
+/**
+ * Sum a list of optional token counts, returning `undefined` only when
+ * every value is `undefined` (so we don't fabricate a `0`). Used by
+ * protocol mappers to derive the inclusive `inputTokens` total from a
+ * provider that natively reports a non-overlapping breakdown
+ * (e.g. Anthropic, whose `input_tokens` is already non-cached only).
+ */
+export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
+  if (values.every((value) => value === undefined)) return undefined
+  return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
@@ -92,10 +122,21 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
 export const mediaBytes = (part: MediaPart) =>
   typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
 
+export const mediaBase64 = (part: MediaPart) => {
+  if (typeof part.data !== "string" || !part.data.startsWith("data:")) return mediaBytes(part)
+  return part.data.slice(part.data.indexOf(",") + 1)
+}
+
+export const mediaDataUrl = (part: MediaPart) =>
+  typeof part.data === "string" && part.data.startsWith("data:")
+    ? part.data
+    : `data:${part.mediaType};base64,${mediaBytes(part)}`
+
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
+  if (part.result.type === "content") return encodeJson(part.result.value)
   return encodeJson(part.result.value)
 }
 

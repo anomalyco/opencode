@@ -1,0 +1,150 @@
+/* [data-component="dialog-trigger"] { } */
+
+[data-component="dialog-overlay"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background-color: var(--overlay-simple-overlay-scrim);
+}
+
+[data-component="dialog"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+
+  [data-slot="dialog-container"] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 480px;
+    height: 368px;
+    background: var(--background-bg-layer-01);
+    box-shadow: var(--elevation-overlay);
+    border-radius: 6px;
+    overflow: visible;
+    pointer-events: auto;
+
+    [data-slot="dialog-content"] {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      align-self: stretch;
+      width: 100%;
+      max-height: 100%;
+      flex: 1;
+      overflow: auto;
+
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      &::-webkit-scrollbar {
+        display: none;
+      }
+
+      [data-slot="dialog-header"] {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        padding: 16px;
+        gap: 8px;
+        flex-shrink: 0;
+        align-self: stretch;
+
+        [data-slot="dialog-title-group"] {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        [data-slot="dialog-title"] {
+          margin: 0;
+          font-family: "Inter", var(--v2-font-family-sans);
+          font-weight: 530;
+          font-size: 15px;
+          line-height: 100%;
+          letter-spacing: -0.13px;
+          color: var(--text-text-base);
+          font-variation-settings: "slnt" 0;
+        }
+
+        [data-slot="dialog-description"] {
+          font-family: "Inter", var(--v2-font-family-sans);
+          font-weight: 440;
+          font-size: 13px;
+          line-height: 100%;
+          letter-spacing: -0.04px;
+          color: var(--text-text-muted);
+          font-variation-settings: "slnt" 0;
+        }
+
+        [data-slot="dialog-close-button"] {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          width: 24px;
+          height: 24px;
+          border-radius: 4px;
+          flex-shrink: 0;
+          cursor: pointer;
+
+          &:hover {
+            background: var(--overlay-simple-overlay-hover);
+          }
+        }
+      }
+
+      [data-slot="dialog-footer"] {
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-end;
+        align-items: flex-start;
+        padding: 16px;
+        gap: 8px;
+        align-self: stretch;
+        flex-shrink: 0;
+      }
+
+      [data-slot="dialog-body"] {
+        width: 100%;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+
+        &:focus-visible {
+          outline: none;
+        }
+      }
+      &:focus-visible {
+        outline: none;
+      }
+    }
+  }
+
+  &[data-fit] {
+    [data-slot="dialog-container"] {
+      height: auto;
+
+      [data-slot="dialog-content"] {
+        min-height: 0;
+      }
+    }
+  }
+
+  &[data-size="large"] [data-slot="dialog-container"] {
+    width: 640px;
+    height: 480px;
+  }
+
+  &[data-size="x-large"] [data-slot="dialog-container"] {
+    width: 800px;
+    height: 560px;
+  }
+}

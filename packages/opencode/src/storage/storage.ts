@@ -1,8 +1,6 @@
 import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { NamedError } from "@opencode-ai/core/util/error"
-import z from "zod"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
@@ -16,14 +14,15 @@ type Migration = (
   git: Git.Interface,
 ) => Effect.Effect<void, AppFileSystem.Error>
 
-export const NotFoundError = NamedError.create(
-  "NotFoundError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("NotFoundError", {
+  message: Schema.String,
+}) {
+  static isInstance(input: unknown): input is NotFoundError {
+    return input instanceof NotFoundError
+  }
+}
 
-export type Error = AppFileSystem.Error | InstanceType<typeof NotFoundError>
+export type Error = AppFileSystem.Error | NotFoundError
 
 const RootFile = Schema.Struct({
   path: Schema.optional(
@@ -249,7 +248,7 @@ export const layer = Layer.effect(
       }),
     )
 
-    const fail = (target: string): Effect.Effect<never, InstanceType<typeof NotFoundError>> =>
+    const fail = (target: string): Effect.Effect<never, NotFoundError> =>
       Effect.fail(new NotFoundError({ message: `Resource not found: ${target}` }))
 
     const wrap = <A>(target: string, body: Effect.Effect<A, AppFileSystem.Error>) =>

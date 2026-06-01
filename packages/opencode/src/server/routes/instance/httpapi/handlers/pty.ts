@@ -10,13 +10,13 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@/server/shared/pty-ticket"
-import { Effect } from "effect"
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { Effect, Option, Schema } from "effect"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import * as ApiError from "../errors"
-import { CursorQuery, Params, PtyPaths } from "../groups/pty"
+import { CursorQuery, PtyConnectApi } from "../groups/pty"
 import { WebSocketTracker } from "../websocket-tracker"
 
 function validOrigin(request: HttpServerRequest.HttpServerRequest, opts: CorsOptions | undefined) {
@@ -46,33 +46,67 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     })
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
-      const info = yield* pty.get(ctx.params.ptyID)
-      if (!info) return yield* ApiError.notFound("Session not found")
-      return info
+      return yield* pty.get(ctx.params.ptyID).pipe(
+        Effect.catchTag("Pty.NotFoundError", (error) =>
+          Effect.fail(
+            new ApiError.PtyNotFoundError({
+              ptyID: error.ptyID,
+              message: `PTY session not found: ${error.ptyID}`,
+            }),
+          ),
+        ),
+      )
     })
 
     const update = Effect.fn("PtyHttpApi.update")(function* (ctx: {
       params: { ptyID: PtyID }
       payload: typeof Pty.UpdateInput.Type
     }) {
-      const info = yield* pty.update(ctx.params.ptyID, {
-        ...ctx.payload,
-        size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
-      })
-      if (!info) return yield* ApiError.notFound("Session not found")
-      return info
+      return yield* pty
+        .update(ctx.params.ptyID, {
+          ...ctx.payload,
+          size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
+        })
+        .pipe(
+          Effect.catchTag("Pty.NotFoundError", (error) =>
+            Effect.fail(
+              new ApiError.PtyNotFoundError({
+                ptyID: error.ptyID,
+                message: `PTY session not found: ${error.ptyID}`,
+              }),
+            ),
+          ),
+        )
     })
 
     const remove = Effect.fn("PtyHttpApi.remove")(function* (ctx: { params: { ptyID: PtyID } }) {
-      yield* pty.remove(ctx.params.ptyID)
+      yield* pty.remove(ctx.params.ptyID).pipe(
+        Effect.catchTag("Pty.NotFoundError", (error) =>
+          Effect.fail(
+            new ApiError.PtyNotFoundError({
+              ptyID: error.ptyID,
+              message: `PTY session not found: ${error.ptyID}`,
+            }),
+          ),
+        ),
+      )
       return true
     })
 
     const connectToken = Effect.fn("PtyHttpApi.connectToken")(function* (ctx: { params: { ptyID: PtyID } }) {
       const request = yield* HttpServerRequest.HttpServerRequest
       if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
-        return yield* new HttpApiError.Forbidden({})
-      if (!(yield* pty.get(ctx.params.ptyID))) return yield* ApiError.notFound("Session not found")
+        return yield* new ApiError.PtyForbiddenError({ message: "Invalid PTY connect token request" })
+      yield* pty.get(ctx.params.ptyID).pipe(
+        Effect.catchTag("Pty.NotFoundError", (error) =>
+          Effect.fail(
+            new ApiError.PtyNotFoundError({
+              ptyID: error.ptyID,
+              message: `PTY session not found: ${error.ptyID}`,
+            }),
+          ),
+        ),
+      )
       return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
     })
 
@@ -87,33 +121,39 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
   }),
 )
 
-export const ptyConnectRoute = HttpRouter.use((router) =>
+export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-connect", (handlers) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
-    yield* router.add(
-      "GET",
-      PtyPaths.connect,
-      Effect.gen(function* () {
-        const params = yield* HttpRouter.schemaPathParams(Params)
-        if (!(yield* pty.get(params.ptyID))) return HttpServerResponse.empty({ status: 404 })
 
-        const query = yield* HttpServerRequest.schemaSearchParams(CursorQuery)
-        const request = yield* HttpServerRequest.HttpServerRequest
-        const ticket = new URL(request.url, "http://localhost").searchParams.get(PTY_CONNECT_TICKET_QUERY)
+    return handlers.handleRaw(
+      "connect",
+      Effect.fn("PtyHttpApi.connect")(function* (ctx: {
+        params: { ptyID: PtyID }
+        request: HttpServerRequest.HttpServerRequest
+      }) {
+        const exists = yield* pty.get(ctx.params.ptyID).pipe(
+          Effect.as(true),
+          Effect.catchTag("Pty.NotFoundError", () => Effect.succeed(false)),
+        )
+        if (!exists) return HttpServerResponse.empty({ status: 404 })
+
+        const query = Schema.decodeUnknownOption(CursorQuery)(yield* HttpServerRequest.ParsedSearchParams)
+        if (Option.isNone(query)) return HttpServerResponse.empty({ status: 400 })
+        const ticket = new URL(ctx.request.url, "http://localhost").searchParams.get(PTY_CONNECT_TICKET_QUERY)
         if (ticket) {
-          const valid = validOrigin(request, cors)
-            ? yield* tickets.consume({ ticket, ptyID: params.ptyID, ...(yield* PtyTicket.scope) })
+          const valid = validOrigin(ctx.request, cors)
+            ? yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
             : false
           if (!valid) return HttpServerResponse.empty({ status: 403 })
         }
-        const parsedCursor = query.cursor === undefined ? undefined : Number(query.cursor)
+        const parsedCursor = query.value.cursor === undefined ? undefined : Number(query.value.cursor)
         const cursor =
           parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1
             ? parsedCursor
             : undefined
-        const socket = yield* Effect.orDie(request.upgrade)
+        const socket = yield* Effect.orDie(ctx.request.upgrade)
         const write = yield* socket.writer
         const closeAccepted = (event: Socket.CloseEvent) =>
           socket
@@ -147,18 +187,17 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
             writeScoped(write(new Socket.CloseEvent(code, reason)))
           },
         }
-        const handler = yield* pty.connect(params.ptyID, adapter, cursor)
-        if (!handler) {
-          yield* closeAccepted(new Socket.CloseEvent(4404, "session not found"))
-          return HttpServerResponse.empty()
-        }
+        const handler = yield* pty
+          .connect(ctx.params.ptyID, adapter, cursor)
+          .pipe(
+            Effect.catchTag("Pty.NotFoundError", () =>
+              closeAccepted(new Socket.CloseEvent(4404, "session not found")).pipe(Effect.as(undefined)),
+            ),
+          )
+        if (!handler) return HttpServerResponse.empty()
 
-        // No `pending[]`-style early-frame buffer (the legacy Hono handler had one).
-        // `request.upgrade` returns a Socket without running the WS handshake; the
-        // handshake fires inside `socket.runRaw` below, AFTER `pty.connect` resolves
-        // and the message callback is registered. The client therefore can't fire
-        // `open` and start sending until the listener is already wired. Don't move
-        // `runRaw` ahead of `pty.connect` without re-introducing a buffer.
+        // The handshake runs inside `socket.runRaw`, after the input callback is
+        // registered, so the client cannot send frames before PTY input is wired.
         yield* socket
           .runRaw((message) => handlePtyInput(handler, message))
           .pipe(

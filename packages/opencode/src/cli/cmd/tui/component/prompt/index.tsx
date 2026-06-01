@@ -25,10 +25,11 @@ import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "@tui/context/editor"
 import { MessageID, PartID } from "@/session/schema"
+import { promptOffsetWidth } from "@/cli/cmd/prompt-display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
-import { assign } from "./part"
+import { assign, expandPastedTextPlaceholders, expandTrackedPastedText } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -40,6 +41,7 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
+import { errorMessage } from "@/util/error"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
@@ -59,13 +61,11 @@ import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
-import { useCommandPalette } from "../../context/command-palette"
-import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
   sessionID?: string
-  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -152,7 +152,6 @@ export function Prompt(props: PromptProps) {
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
-  const command = useCommandPalette()
   const keymap = useOpencodeKeymap()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
@@ -203,7 +202,6 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
-  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -220,14 +218,25 @@ export function Prompt(props: PromptProps) {
 
   async function createWorkspace(selection: Extract<WorkspaceSelection, { type: "new" }>) {
     setCreatingWorkspace(true)
-    const result = await sdk.client.experimental.workspace
-      .create({ type: selection.workspaceType, branch: null })
-      .catch(() => undefined)
-    if (result == undefined || result.error || !result.data) {
+    let result
+    try {
+      result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
+    } catch (err) {
       selectWorkspace(undefined)
       setCreatingWorkspace(false)
       toast.show({
-        message: "Creating workspace failed",
+        title: "Creating workspace failed",
+        message: errorMessage(err),
+        variant: "error",
+      })
+      return
+    }
+    if (result.error || !result.data) {
+      selectWorkspace(undefined)
+      setCreatingWorkspace(false)
+      toast.show({
+        title: "Creating workspace failed",
+        message: errorMessage(result.error ?? "no response"),
         variant: "error",
       })
       return
@@ -337,6 +346,7 @@ export function Prompt(props: PromptProps) {
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
+    const session = sync.session.get(props.sessionID)
     const msg = sync.data.message[props.sessionID] ?? []
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
@@ -347,7 +357,7 @@ export function Prompt(props: PromptProps) {
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+    const cost = session?.cost ?? 0
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
@@ -512,7 +522,14 @@ export function Prompt(props: PromptProps) {
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
           const value = text
-          const content = await Editor.open({ value, renderer })
+          const content = await Editor.open({
+            value,
+            renderer,
+            cwd:
+              (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
+              project.instance.directory() ||
+              process.cwd(),
+          })
           if (!content) return
 
           input.setText(content)
@@ -628,7 +645,7 @@ export function Prompt(props: PromptProps) {
   }))
 
   useBindings(() => ({
-    enabled: command.matcher,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
@@ -712,7 +729,6 @@ export function Prompt(props: PromptProps) {
       ...input.traits,
       ...computePromptTraits({
         mode: store.mode,
-        disabled: !!props.disabled,
         autocompleteVisible: !!auto()?.visible,
       }),
     }
@@ -927,13 +943,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          !props.disabled &&
-          !auto()?.visible &&
-          input !== undefined &&
-          (input.cursorOffset === 0 || input.visualCursor.visualRow === 0)
-        )
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -942,12 +952,12 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== 0) {
-              input.cursorOffset = 0
-              return
+              if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
+              return false
             }
 
             const item = history.move(-1, input.plainText)
-            if (!item) return
+            if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
@@ -965,13 +975,7 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          !props.disabled &&
-          !auto()?.visible &&
-          input !== undefined &&
-          (input.cursorOffset === input.plainText.length || input.visualCursor.visualRow === input.height - 1)
-        )
+        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
       })(),
       commands: [
         {
@@ -980,12 +984,16 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== input.plainText.length) {
-              input.cursorOffset = input.plainText.length
-              return
+              if (
+                input.scrollY + input.visualCursor.visualRow ===
+                Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
+              )
+                input.cursorOffset = input.plainText.length
+              return false
             }
 
             const item = history.move(1, input.plainText)
-            if (!item) return
+            if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
@@ -998,7 +1006,24 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  let submitting = false
   async function submit() {
+    // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
+    // input's native onSubmit racing another dispatch). Without this guard,
+    // a second call slips past the empty-input check before the first call
+    // clears `store.prompt.input`, then awaits its own `session.create` and
+    // ultimately reads the now-empty store — sending a phantom empty prompt
+    // to a freshly created session.
+    if (submitting) return false
+    submitting = true
+    try {
+      return await submitInner()
+    } finally {
+      submitting = false
+    }
+  }
+
+  async function submitInner() {
     setWarpNotice(undefined)
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -1054,7 +1079,7 @@ export function Prompt(props: PromptProps) {
     if (sessionID == null) {
       const workspace = workspaceSelection()
       const workspaceID = iife(() => {
-        if (!workspace) return defaultWorkspaceID()
+        if (!workspace) return undefined
         if (workspace.type === "none") return undefined
         if (workspace.type === "existing") return workspace.workspaceID
         return undefined
@@ -1085,23 +1110,15 @@ export function Prompt(props: PromptProps) {
     }
 
     const messageID = MessageID.ascending()
-    let inputText = store.prompt.input
-
-    // Expand pasted text inline before submitting
-    const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
-    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
-
-    for (const extmark of sortedExtmarks) {
-      const partIndex = store.extmarkToPartIndex.get(extmark.id)
-      if (partIndex !== undefined) {
-        const part = store.prompt.parts[partIndex]
-        if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
-          inputText = before + part.text + after
-        }
-      }
-    }
+    const inputText = expandTrackedPastedText(
+      store.prompt.input,
+      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+        const partIndex = store.extmarkToPartIndex.get(extmark.id)
+        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+        if (part?.type !== "text") return []
+        return [{ start: extmark.start, end: extmark.end, text: part.text }]
+      }),
+    )
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
@@ -1218,9 +1235,9 @@ export function Prompt(props: PromptProps) {
   const exit = useExit()
 
   function pasteText(text: string, virtualText: string) {
-    const currentOffset = input.visualCursor.offset
+    const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
-    const extmarkEnd = extmarkStart + virtualText.length
+    const extmarkEnd = extmarkStart + promptOffsetWidth(virtualText)
 
     input.insertText(virtualText + " ")
 
@@ -1312,7 +1329,7 @@ export function Prompt(props: PromptProps) {
   }
 
   async function pasteAttachment(file: { filename?: string; filepath?: string; content: string; mime: string }) {
-    const currentOffset = input.visualCursor.offset
+    const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
     const pdf = file.mime === "application/pdf"
     const count = store.prompt.parts.filter((x) => {
@@ -1415,17 +1432,7 @@ export function Prompt(props: PromptProps) {
     | undefined
   >(() => {
     const selected = workspaceSelection()
-    if (!selected) {
-      const workspaceID = defaultWorkspaceID()
-      if (props.sessionID || !workspaceID) return
-      const workspace = project.workspace.get(workspaceID)
-      return {
-        type: "existing",
-        workspaceType: workspace?.type ?? "unknown",
-        workspaceName: workspace?.name ?? workspaceID,
-        status: project.workspace.status(workspaceID) ?? "error",
-      }
-    }
+    if (!selected) return
     if (selected.type === "none") return
     if (props.sessionID && !workspaceCreating()) return
     if (selected.type === "new") {
@@ -1443,7 +1450,10 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const agent = local.agent.current()
+    const agent =
+      status().type !== "idle"
+        ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
+        : local.agent.current()
     const color = agent ? local.agent.color(agent.name) : theme.border
     return {
       frames: createFrames({
@@ -1462,11 +1472,13 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
+  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
 
   return (
     <>
-      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
+          width="100%"
           border={["left"]}
           borderColor={borderHighlight()}
           customBorderChars={{
@@ -1481,14 +1493,16 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
+            width="100%"
           >
             <textarea
+              width="100%"
               placeholder={placeholderText()}
               placeholderColor={theme.textMuted}
               textColor={leader() ? theme.textMuted : theme.text}
               focusedTextColor={leader() ? theme.textMuted : theme.text}
               minHeight={1}
-              maxHeight={6}
+              maxHeight={maxHeight()}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
@@ -1535,6 +1549,9 @@ export function Prompt(props: PromptProps) {
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
+                Object.assign(r, {
+                  getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.parts),
+                })
                 setInputTarget(r)
                 if (promptPartTypeId === 0) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")

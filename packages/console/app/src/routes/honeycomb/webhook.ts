@@ -12,11 +12,20 @@ const basePayload = z.object({
   url: z.string(),
 })
 
-const groups = z.object({ group: z.object({ key: z.string(), value: z.string() }).array() }).array()
+const groups = z
+  .object({
+    result: z.union([z.number(), z.string()]).nullish(),
+    group: z.object({ key: z.string(), value: z.string() }).array(),
+  })
+  .array()
 
 const honeycombWebhookPayload = z.discriminatedUnion("type", [
   basePayload.extend({
     type: z.literal("model_http_errors"),
+    groups,
+  }),
+  basePayload.extend({
+    type: z.literal("model_low_tps"),
     groups,
   }),
   basePayload.extend({
@@ -29,14 +38,25 @@ const honeycombWebhookPayload = z.discriminatedUnion("type", [
 ])
 
 const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayload>) => {
-  const group =
-    payload.type === "model_http_errors" ? "model" : payload.type === "provider_http_errors" ? "provider" : undefined
-  const names = payload.type === "custom" ? [] : payload.groups.flatMap((item) => item.group.map((g) => g.value))
+  const names =
+    payload.type === "custom"
+      ? []
+      : payload.groups.flatMap((item) =>
+          item.group.map((g) => {
+            const result = item.result == null ? undefined : Number(item.result)
+            return `- ${g.value}${
+              result !== undefined && Number.isFinite(result)
+                ? payload.type === "model_low_tps"
+                  ? ` (${Math.round(result)} TPS)`
+                  : ` (${Math.round(result * 100)}% errors)`
+                : ""
+            }`
+          }),
+        )
 
   const content = [
     `[**${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}**](${payload.url})`,
-    group && names.length > 0 ? `Affected ${group}s:` : undefined,
-    ...names.map((name) => `- ${name}`),
+    ...names,
     "",
     `<@&${DISCORD_ALERT_ROLE_ID}>`,
   ]

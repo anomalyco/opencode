@@ -6,8 +6,9 @@ import { createEffect, createMemo, createResource, type ParentProps, Show } from
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
-import { SyncProvider, useSync } from "@/context/sync"
+import { useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+import { Schema } from "effect"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -40,6 +41,15 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   )
 }
 
+export const ProjectDirString = Schema.String.pipe(Schema.brand("ProjectDirString"))
+export type ProjectDirString = Schema.Schema.Type<typeof ProjectDirString>
+
+export function decodeDirectory(dir: string): ProjectDirString | undefined {
+  const decoded = decode64(dir)
+  if (!decoded) return
+  return ProjectDirString.make(decoded)
+}
+
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const language = useLanguage()
@@ -48,7 +58,7 @@ export default function Layout(props: ParentProps) {
 
   const resolved = createMemo(() => {
     if (!params.dir) return ""
-    return decode64(params.dir) ?? ""
+    return decodeDirectory(params.dir) ?? ""
   })
 
   createEffect(() => {
@@ -71,10 +81,8 @@ export default function Layout(props: ParentProps) {
   return (
     <Show when={resolved()} keyed>
       {(resolved) => (
-        <SDKProvider directory={() => resolved}>
-          <SyncProvider>
-            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-          </SyncProvider>
+        <SDKProvider directory={resolved}>
+          <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
         </SDKProvider>
       )}
     </Show>

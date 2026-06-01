@@ -11,6 +11,7 @@ import type {
   Provider,
   PermissionRequest,
   QuestionRequest,
+  Session,
   SessionStatus,
   TextPart,
   Config as SdkConfig,
@@ -76,6 +77,11 @@ export type TuiKeys = {
 }
 
 export type TuiKeymap = Keymap<Renderable, KeyEvent>
+
+export type TuiModeApi = {
+  current: () => string
+  push: (mode: string) => () => void
+}
 
 /**
  * Legacy `api.command` shape kept so v1 plugins can initialize. Remove in v2.
@@ -204,7 +210,6 @@ export type TuiPromptRef = {
 
 export type TuiPromptProps = {
   sessionID?: string
-  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -223,6 +228,76 @@ export type TuiToast = {
   title?: string
   message: string
   duration?: number
+}
+
+export type TuiAttentionWhen = "always" | "focused" | "blurred"
+
+export const TuiAttentionSoundNames = ["default", "question", "permission", "error", "done", "subagent_done"] as const
+export type TuiAttentionSoundName = (typeof TuiAttentionSoundNames)[number]
+
+export type TuiAttentionSound =
+  | boolean
+  | {
+      name?: TuiAttentionSoundName
+      volume?: number
+      when?: TuiAttentionWhen
+    }
+
+export type TuiAttentionNotification =
+  | boolean
+  | {
+      when?: TuiAttentionWhen
+    }
+
+export type TuiAttentionSoundPack = {
+  id: string
+  name?: string
+  sounds: Partial<Record<TuiAttentionSoundName, string>>
+}
+
+export type TuiAttentionSoundPackInfo = {
+  id: string
+  name?: string
+  active: boolean
+  builtin: boolean
+}
+
+export type TuiAttentionSoundboardActivateOptions = {
+  persist?: boolean
+}
+
+export type TuiAttentionSoundboard = {
+  registerPack(pack: TuiAttentionSoundPack): () => void
+  activate(id: string, options?: TuiAttentionSoundboardActivateOptions): boolean
+  current(): string
+  list(): ReadonlyArray<TuiAttentionSoundPackInfo>
+}
+
+export type TuiAttentionNotifyInput = {
+  title?: string
+  message: string
+  notification?: TuiAttentionNotification
+  sound?: TuiAttentionSound
+}
+
+export type TuiAttentionNotifySkipReason =
+  | "attention_disabled"
+  | "empty_message"
+  | "blurred"
+  | "focused"
+  | "focus_unknown"
+  | "renderer_destroyed"
+
+export type TuiAttentionNotifyResult = {
+  ok: boolean
+  notification: boolean
+  sound: boolean
+  skipped?: TuiAttentionNotifySkipReason
+}
+
+export type TuiAttention = {
+  notify(input: TuiAttentionNotifyInput): Promise<TuiAttentionNotifyResult>
+  soundboard: TuiAttentionSoundboard
 }
 
 export type TuiThemeCurrent = {
@@ -310,6 +385,7 @@ export type TuiState = {
   readonly vcs: { branch?: string } | undefined
   session: {
     count: () => number
+    get: (sessionID: string) => Session | undefined
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>
@@ -331,9 +407,19 @@ type TuiBindingLookupView = {
   omit: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
 }
 
+type TuiAttentionConfigView = {
+  enabled: boolean
+  notifications: boolean
+  sound: boolean
+  volume: number
+  sound_pack: string
+  sounds: Partial<Record<TuiAttentionSoundName, string>>
+}
+
 type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
   NonNullable<PluginConfig["tui"]> & {
     leader_timeout: number
+    attention: TuiAttentionConfigView
     plugin_enabled?: Record<string, boolean>
     keybinds: TuiBindingLookupView
   }
@@ -371,12 +457,9 @@ export type TuiHostSlotMap = {
   app_bottom: {}
   home_logo: {}
   home_prompt: {
-    workspace_id?: string
     ref?: (ref: TuiPromptRef | undefined) => void
   }
-  home_prompt_right: {
-    workspace_id?: string
-  }
+  home_prompt_right: {}
   session_prompt: {
     session_id: string
     visible?: boolean
@@ -497,6 +580,7 @@ export type TuiWorkspace = {
 
 export type TuiPluginApi = {
   app: TuiApp
+  attention: TuiAttention
   /**
    * Legacy `api.command` API kept so v1 plugins can initialize. Remove in v2.
    *
@@ -506,6 +590,7 @@ export type TuiPluginApi = {
   command?: TuiCommandApi
   keys: TuiKeys
   keymap: TuiKeymap
+  mode: TuiModeApi
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void
