@@ -1,7 +1,8 @@
 import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
+import { promptSame } from "./prompt.shared"
 import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
-import type { FooterPatch, StreamCommit } from "./types"
+import type { FooterPatch, RunPrompt, StreamCommit } from "./types"
 
 type ReplayInput = {
   messages: SessionMessages
@@ -185,4 +186,77 @@ export function replaySession(input: ReplayInput): SessionReplay {
     commits,
     patch: replayPatch(data, patch),
   }
+}
+
+export function replayLocalPromptTail(messages: SessionMessages, history: RunPrompt[]): StreamCommit[] {
+  const prompt = history.at(-1)
+  if (!prompt || !prompt.text.trim() || prompt.mode === "shell") {
+    return []
+  }
+
+  if (prompt.messageID && messages.some((message) => message.info.id === prompt.messageID)) {
+    return []
+  }
+
+  const persisted = messages.findLast((message) => message.info.role === "user")
+  if (!prompt.messageID && persisted && promptSame(messagePrompt(persisted), prompt)) {
+    return []
+  }
+
+  return [
+    {
+      kind: "user",
+      text: prompt.text,
+      phase: "start",
+      source: "system",
+      ...(prompt.messageID ? { messageID: prompt.messageID } : {}),
+    },
+  ]
+}
+
+export function replayActiveText(data: SessionData, current: SessionData): StreamCommit[] {
+  return [...current.part.entries()].flatMap(([partID, kind]) => {
+    if (kind === "user" || current.end.has(partID) || data.ids.has(partID)) {
+      return []
+    }
+
+    const text = current.text.get(partID) ?? ""
+    const existing = data.text.get(partID) ?? ""
+    const sent = current.sent.get(partID) ?? 0
+    const existingSent = data.sent.get(partID) ?? 0
+    const visible = current.visible.get(partID) ?? ""
+    const existingVisible = data.visible.get(partID) ?? ""
+    if (!text.startsWith(existing) || existingSent > sent || !visible.startsWith(existingVisible)) {
+      return []
+    }
+
+    data.part.set(partID, kind)
+    data.text.set(partID, text)
+    data.sent.set(partID, sent)
+    data.visible.set(partID, visible)
+    const messageID = current.msg.get(partID)
+    if (messageID) {
+      data.msg.set(partID, messageID)
+      const role = current.role.get(messageID)
+      if (role) {
+        data.role.set(messageID, role)
+      }
+    }
+
+    const chunk = visible.slice(existingVisible.length)
+    if (!chunk) {
+      return []
+    }
+
+    return [
+      {
+        kind,
+        text: chunk,
+        phase: "progress",
+        source: kind,
+        ...(messageID ? { messageID } : {}),
+        partID,
+      },
+    ] satisfies StreamCommit[]
+  })
 }

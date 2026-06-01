@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { replaySession } from "@/cli/cmd/run/session-replay"
+import { replayLocalPromptTail, replaySession } from "@/cli/cmd/run/session-replay"
 import type { SessionMessages } from "@/cli/cmd/run/session.shared"
 
 function userMessage(id: string, text: string): SessionMessages[number] {
@@ -155,5 +155,32 @@ describe("run session replay", () => {
         status: "running bash",
       }),
     )
+  })
+
+  test("adds only a locally submitted prompt missing from persisted history", () => {
+    expect(replayLocalPromptTail([userMessage("msg-user-1", "persisted")], [{ text: "pending", parts: [] }])).toEqual([
+      {
+        kind: "user",
+        text: "pending",
+        phase: "start",
+        source: "system",
+      },
+    ])
+    expect(replayLocalPromptTail([userMessage("msg-user-1", "pending")], [{ text: "pending", parts: [] }])).toEqual([])
+    expect(
+      replayLocalPromptTail(
+        [userMessage("msg-user-1", "pending")],
+        [{ text: "pending", parts: [], messageID: "msg-user-local" }],
+      ),
+    ).toEqual([
+      {
+        kind: "user",
+        text: "pending",
+        phase: "start",
+        source: "system",
+        messageID: "msg-user-local",
+      },
+    ])
+    expect(replayLocalPromptTail([], [{ text: "pwd", parts: [], mode: "shell" }])).toEqual([])
   })
 })

@@ -139,6 +139,8 @@ function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
   return Object.keys(providers.find((item) => item.id === model.providerID)?.models?.[model.modelID]?.variants ?? {})
 }
 
+const REPLAY_RESIZE_DELAY = 100
+
 async function resolveExitTitle(
   ctx: BootContext,
   input: RunRuntimeInput,
@@ -510,6 +512,36 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         return next
       }
 
+      let replayResizeTimer: ReturnType<typeof setTimeout> | undefined
+      const offResize = input.replay
+        ? shell.onResize(() => {
+            if (replayResizeTimer) {
+              clearTimeout(replayResizeTimer)
+            }
+
+            replayResizeTimer = setTimeout(() => {
+              replayResizeTimer = undefined
+              if (footer.isClosed || !state.stream) {
+                return
+              }
+
+              void state.stream
+                .then((item) =>
+                  item.handle.replayOnResize({
+                    localPrompts: () => state.history,
+                    reset: () =>
+                      shell.resetForReplay({
+                        sessionTitle: state.sessionTitle,
+                        sessionID: state.sessionID,
+                        history: state.history,
+                      }),
+                  }),
+                )
+                .catch(() => {})
+            }, REPLAY_RESIZE_DELAY)
+          })
+        : () => {}
+
       const runQueue = async () => {
         let includeFiles = true
         if (state.demo) {
@@ -683,6 +715,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         try {
           await runQueue()
         } finally {
+          if (replayResizeTimer) {
+            clearTimeout(replayResizeTimer)
+          }
+          offResize()
           await state.stream?.then((item) => item.handle.close()).catch(() => {})
         }
       } finally {
