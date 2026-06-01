@@ -438,25 +438,11 @@ export default function FileTree(props: {
                         <div class="size-4 flex shrink-0 items-center justify-center text-icon-weak">
                           <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
                         </div>
-                        <Show
-                          when={active()}
-                          fallback={
-                            <FileIcon
-                              node={node}
-                              expanded={expanded()}
-                              class="size-4 shrink-0 filetree-icon filetree-icon--mono"
-                              mono
-                            />
-                          }
-                        >
-                          <FileIcon
-                            node={node}
-                            expanded={expanded()}
-                            class="size-4 shrink-0 filetree-icon filetree-icon--mono"
-                            style={kindTextColor(kind()!)}
-                            mono
-                          />
-                        </Show>
+                        <FileIcon
+                          node={node}
+                          expanded={expanded()}
+                          class="size-4 shrink-0 filetree-icon"
+                        />
                       </FileTreeNode>
                     </Collapsible.Trigger>
                     <Show when={props.onContextAdd && !node.ignored}>
