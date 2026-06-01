@@ -15,6 +15,7 @@ import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
 import { Database } from "./database/database"
 import { PermissionV2 } from "./permission"
+import { SessionV2 } from "./session"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -40,5 +41,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     AppFileSystem.defaultLayer,
     Global.defaultLayer,
     Database.defaultLayer,
+    SessionV2.defaultLayer,
   ],
 }) {}

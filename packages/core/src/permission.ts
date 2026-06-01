@@ -5,30 +5,24 @@ import { eq } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventV2 } from "./event"
 import { Location } from "./location"
+import { AgentV2 } from "./agent"
 import { SessionV2 } from "./session"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 import { Wildcard } from "./util/wildcard"
 import { PermissionTable } from "./permission/sql"
+import { PermissionSchema } from "./permission/schema"
+
+export { Effect, Rule, Ruleset } from "./permission/schema"
+type Effect = PermissionSchema.Effect
+type Rule = PermissionSchema.Rule
+type Ruleset = PermissionSchema.Ruleset
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
   Schema.brand("PermissionV2.ID"),
   withStatics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + Identifier.ascending()) })),
 )
 export type ID = typeof ID.Type
-
-export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
-export type Effect = typeof Effect.Type
-
-export const Rule = Schema.Struct({
-  action: Schema.String,
-  resource: Schema.String,
-  effect: Effect,
-}).annotate({ identifier: "PermissionV2.Rule" })
-export type Rule = typeof Rule.Type
-
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
-export type Ruleset = typeof Ruleset.Type
 
 export const Source = Schema.Union([
   Schema.Struct({
@@ -61,7 +55,6 @@ export const AssertInput = Schema.Struct({
   remember: Schema.Array(Schema.String).pipe(Schema.optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   source: Source.pipe(Schema.optional),
-  rules: Ruleset,
 }).annotate({ identifier: "PermissionV2.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
 
@@ -71,6 +64,12 @@ export const ReplyInput = Schema.Struct({
   message: Schema.String.pipe(Schema.optional),
 }).annotate({ identifier: "PermissionV2.ReplyInput" })
 export type ReplyInput = typeof ReplyInput.Type
+
+export const AskResult = Schema.Struct({
+  id: ID,
+  effect: PermissionSchema.Effect,
+}).annotate({ identifier: "PermissionV2.AskResult" })
+export type AskResult = typeof AskResult.Type
 
 export const Event = {
   Asked: EventV2.define({ type: "permission.v2.asked", schema: Request.fields }),
@@ -91,7 +90,7 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
 }) {}
 
 export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
-  rules: Ruleset,
+  rules: PermissionSchema.Ruleset,
 }) {}
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("PermissionV2.NotFoundError", {
@@ -117,8 +116,8 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
 }
 
 export interface Interface {
-  readonly ask: (input: AssertInput) => EffectRuntime.Effect<Request>
-  readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error>
+  readonly ask: (input: AssertInput) => EffectRuntime.Effect<AskResult, SessionV2.NotFoundError>
+  readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error | SessionV2.NotFoundError>
   readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
   readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionV2.ID) => EffectRuntime.Effect<ReadonlyArray<Request>>
@@ -129,7 +128,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 interface Pending {
   readonly request: Request
-  readonly rules: Ruleset
   readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
@@ -139,6 +137,8 @@ export const layer = Layer.effect(
     const { db } = yield* Database.Service
     const events = yield* EventV2.Service
     const location = yield* Location.Service
+    const agents = yield* AgentV2.Service
+    const sessions = yield* SessionV2.Service
     const pending = new Map<ID, Pending>()
 
     yield* EffectRuntime.addFinalizer(() =>
@@ -163,15 +163,31 @@ export const layer = Layer.effect(
       return rows.map((row): Rule => ({ action: row.action, resource: row.resource, effect: "allow" }))
     })
 
-    const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
-      const rules = [...input.rules, ...(yield* remembered())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, rules).effect)
-      const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
-      return { effect, rules }
+    const configured = EffectRuntime.fn("PermissionV2.configured")(function* (sessionID: SessionV2.ID) {
+      const session = yield* sessions.get(sessionID)
+      if (!session.agent) return []
+      return (yield* agents.get(AgentV2.ID.make(session.agent)))?.permissions ?? []
     })
 
-    const create = EffectRuntime.fnUntraced(function* (input: AssertInput) {
-      const request: Request = {
+    function denied(input: AssertInput, rules: Ruleset) {
+      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
+    }
+
+    function relevant(input: AssertInput, rules: Ruleset) {
+      return rules.filter((rule) => Wildcard.match(input.action, rule.action))
+    }
+
+    const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
+      const rules = yield* configured(input.sessionID)
+      if (denied(input, rules)) return { effect: "deny" as const, rules }
+      const all = [...rules, ...(yield* remembered())]
+      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+      const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
+      return { effect, rules: all }
+    })
+
+    function request(input: AssertInput): Request {
+      return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
         action: input.action,
@@ -180,27 +196,32 @@ export const layer = Layer.effect(
         metadata: input.metadata,
         source: input.source,
       }
+    }
+
+    const create = EffectRuntime.fnUntraced(function* (request: Request) {
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-      const item = { request, rules: input.rules, deferred }
+      const item = { request, deferred }
       pending.set(request.id, item)
       yield* events.publish(Event.Asked, request)
       return item
     })
 
     const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
-      const pending = yield* create(input)
-      return pending.request
+      const result = yield* evaluateInput(input)
+      const value = request(input)
+      if (result.effect === "ask") yield* create(value)
+      return { id: value.id, effect: result.effect }
     })
 
     const assert = EffectRuntime.fn("PermissionV2.assert")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
       if (result.effect === "deny") {
         return yield* new DeniedError({
-          rules: result.rules.filter((candidate) => Wildcard.match(input.action, candidate.action)),
+          rules: relevant(input, result.rules),
         })
       }
       if (result.effect === "allow") return
-      const item = yield* create(input)
+      const item = yield* create(request(input))
       return yield* Deferred.await(item.deferred).pipe(
         EffectRuntime.ensuring(
           EffectRuntime.sync(() => {
@@ -257,9 +278,15 @@ export const layer = Layer.effect(
 
       const rememberedRules = yield* remembered()
       for (const [id, item] of pending) {
-        const rules = [...item.rules, ...rememberedRules]
+        const input = { ...item.request }
+        const rules = yield* configured(item.request.sessionID).pipe(
+          EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),
+        )
+        if (!rules) continue
+        if (denied(input, rules)) continue
+        const effective = [...rules, ...rememberedRules]
         if (
-          !item.request.resources.every((resource) => evaluate(item.request.action, resource, rules).effect === "allow")
+          !item.request.resources.every((resource) => evaluate(item.request.action, resource, effective).effect === "allow")
         )
           continue
         pending.delete(id)
@@ -288,4 +315,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer
+export const locationLayer = layer.pipe(Layer.provideMerge(AgentV2.locationLayer))
