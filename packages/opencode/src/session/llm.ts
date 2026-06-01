@@ -26,6 +26,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
+import { ReasoningToolGuard } from "./llm/reasoning-tool-guard"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 
@@ -335,6 +336,12 @@ const live: Layer.Layer<
                   return args.params
                 },
               },
+              // Drop tool calls a reasoning model emits *inside* its <think> block so
+              // they are never executed prematurely. No-op unless the stream emits
+              // reasoning parts; opt out per model with options.suppressToolCallsInReasoning: false.
+              ...(input.model.options?.["suppressToolCallsInReasoning"] === false
+                ? []
+                : [ReasoningToolGuard.middleware()]),
             ],
           }),
           experimental_telemetry: {
