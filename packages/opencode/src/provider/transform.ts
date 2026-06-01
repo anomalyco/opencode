@@ -346,18 +346,25 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
+  // Anthropic supports a 1-hour cache TTL via cache_control.ttl, which keeps the
+  // cache warm through gaps longer than the default 5 minutes (reviewing output,
+  // editing, thinking). It is opt-in because 1h cache writes are billed at a
+  // higher rate (~2x base input vs ~1.25x for 5m), so it only pays off when a
+  // session resumes after >5m but within the hour. The ttl field only affects
+  // Anthropic models routed through these gateways; non-Anthropic models ignore it.
+  const ttl = anthropicCacheTtl()
   const providerOptions = {
     anthropic: {
       cacheControl: { type: "ephemeral" },
     },
     openrouter: {
-      cacheControl: { type: "ephemeral", ttl: "1h" },
+      cacheControl: { type: "ephemeral", ...(ttl ? { ttl } : {}) },
     },
     bedrock: {
       cachePoint: { type: "default" },
     },
     openaiCompatible: {
-      cache_control: { type: "ephemeral" },
+      cache_control: { type: "ephemeral", ...(ttl ? { ttl } : {}) },
     },
     copilot: {
       copilot_cache_control: { type: "ephemeral" },
@@ -391,6 +398,15 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   }
 
   return msgs
+}
+
+// Resolves the Anthropic cache TTL from env, mirroring Claude Code semantics:
+// default 5m (returns undefined), opt into 1h with OPENCODE_ANTHROPIC_PROMPT_CACHING_1H,
+// and force 5m with OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M (overrides the opt-in).
+function anthropicCacheTtl(): "1h" | undefined {
+  if (process.env.OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M === "1") return undefined
+  if (process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H === "1") return "1h"
+  return undefined
 }
 
 function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {

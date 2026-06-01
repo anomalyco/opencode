@@ -2285,7 +2285,6 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       openrouter: {
         cacheControl: {
           type: "ephemeral",
-          ttl: "1h",
         },
       },
       bedrock: {
@@ -2309,6 +2308,58 @@ describe("ProviderTransform.message - cache control on gateway", () => {
         },
       },
     })
+  })
+
+  test("OPENCODE_ANTHROPIC_PROMPT_CACHING_1H opts gateways into 1h ttl", () => {
+    const previous = process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H
+    process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H = "1"
+    try {
+      const model = createModel({
+        providerID: "anthropic",
+        api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      })
+      const msgs = [
+        { role: "system", content: "You are a helpful assistant" },
+        { role: "user", content: "Hello" },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+      expect(result[0].providerOptions.openrouter.cacheControl).toEqual({ type: "ephemeral", ttl: "1h" })
+      expect(result[0].providerOptions.openaiCompatible.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
+      // anthropic-native and other gateways are unaffected by the ttl knob
+      expect(result[0].providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H
+      else process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H = previous
+    }
+  })
+
+  test("OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M overrides the 1h opt-in", () => {
+    const previous1h = process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H
+    const previous5m = process.env.OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M
+    process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H = "1"
+    process.env.OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M = "1"
+    try {
+      const model = createModel({
+        providerID: "anthropic",
+        api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      })
+      const msgs = [
+        { role: "system", content: "You are a helpful assistant" },
+        { role: "user", content: "Hello" },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+      expect(result[0].providerOptions.openrouter.cacheControl).toEqual({ type: "ephemeral" })
+      expect(result[0].providerOptions.openaiCompatible.cache_control).toEqual({ type: "ephemeral" })
+    } finally {
+      if (previous1h === undefined) delete process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H
+      else process.env.OPENCODE_ANTHROPIC_PROMPT_CACHING_1H = previous1h
+      if (previous5m === undefined) delete process.env.OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M
+      else process.env.OPENCODE_ANTHROPIC_FORCE_PROMPT_CACHING_5M = previous5m
+    }
   })
 
   test("google-vertex-anthropic applies cache control", () => {
