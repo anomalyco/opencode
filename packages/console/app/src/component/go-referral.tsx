@@ -2,7 +2,6 @@ import { action, json, query, useAction, useSubmission } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
 import { withActor } from "~/context/auth.withActor"
 import { Modal } from "~/component/modal"
 import { IconCheck, IconCopy } from "~/component/icon"
@@ -10,7 +9,7 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
-import { clearReferralCookie, referralCodeFromCookieHeader } from "~/lib/referral-invite"
+import { createReferralFromCookie } from "~/lib/referral-invite"
 import "./go-referral.css"
 
 type GoReferralSummary = Awaited<ReturnType<typeof Referral.summary>>
@@ -28,18 +27,7 @@ const emptyUsagePreview = {
 export const queryGoReferral = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
-    const event = getRequestEvent()
-    const referralCode = referralCodeFromCookieHeader(event?.request.headers.get("cookie") ?? null)
-    if (referralCode) {
-      await Referral.createFromAccount({
-        accountID: Actor.account(),
-        referralCode,
-      }).catch((error) => {
-        console.error("Referral create failed", error)
-      })
-      event?.response.headers.append("set-cookie", clearReferralCookie())
-    }
-
+    await createReferralFromCookie()
     return Referral.summary()
   }, workspaceID)
 }, "go.referral.get")

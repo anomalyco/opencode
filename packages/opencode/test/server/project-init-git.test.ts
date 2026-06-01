@@ -1,17 +1,18 @@
 import { afterEach, describe, expect } from "bun:test"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Layer } from "effect"
+import { HttpClientResponse } from "effect/unstable/http"
 import path from "path"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
-import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
 
@@ -23,18 +24,16 @@ afterEach(async () => {
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const testInstanceStore = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
 
-const it = testEffect(Layer.mergeAll(AppFileSystem.defaultLayer, Snapshot.defaultLayer, testInstanceStore))
+const it = testEffect(
+  Layer.mergeAll(AppFileSystem.defaultLayer, Snapshot.defaultLayer, testInstanceStore, httpApiLayer),
+)
 
 function request(directory: string, url: string, init: RequestInit = {}) {
-  return Effect.promise(() => {
-    const headers = new Headers(init.headers)
-    headers.set("x-opencode-directory", directory)
-    return Promise.resolve(Server.Default().app.request(url, { ...init, headers }))
-  })
+  return requestInDirectory(url, directory, init)
 }
 
-function json<T>(response: Response) {
-  return Effect.promise(() => response.json() as Promise<T>)
+function json<T>(response: HttpClientResponse.HttpClientResponse) {
+  return response.json.pipe(Effect.map((value) => value as T))
 }
 
 function collectGlobalEvents() {

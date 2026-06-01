@@ -1,8 +1,9 @@
 import { test, expect } from "bun:test"
 import os from "os"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
@@ -11,11 +12,11 @@ import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
-const bus = Bus.layer
+const events = EventV2Bridge.defaultLayer
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const env = Layer.mergeAll(
-  Permission.layer.pipe(Layer.provide(bus)),
-  bus,
+  Permission.layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(events)),
+  events,
   CrossSpawnSpawner.defaultLayer,
   InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
 )
@@ -653,12 +654,14 @@ it.instance(
   "ask - publishes asked event",
   () =>
     Effect.gen(function* () {
-      const bus = yield* Bus.Service
+      const events = yield* EventV2Bridge.Service
       const seen = yield* Deferred.make<Permission.Request>()
-      const unsub = yield* bus.subscribeCallback(Permission.Event.Asked, (event) => {
-        Deferred.doneUnsafe(seen, Effect.succeed(event.properties))
+      const unsub = yield* events.listen((event) => {
+        if (event.type === Permission.Event.Asked.type)
+          Deferred.doneUnsafe(seen, Effect.succeed(event.data as Permission.Request))
+        return Effect.void
       })
-      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+      yield* Effect.addFinalizer(() => unsub)
 
       const fiber = yield* ask({
         sessionID: SessionID.make("session_test"),
@@ -913,7 +916,7 @@ it.instance(
   "reply - publishes replied event",
   () =>
     Effect.gen(function* () {
-      const bus = yield* Bus.Service
+      const events = yield* EventV2Bridge.Service
       const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }>()
 
       const fiber = yield* ask({
@@ -928,10 +931,15 @@ it.instance(
 
       yield* waitForPending(1)
 
-      const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
-        Deferred.doneUnsafe(seen, Effect.succeed(event.properties))
+      const unsub = yield* events.listen((event) => {
+        if (event.type === Permission.Event.Replied.type)
+          Deferred.doneUnsafe(
+            seen,
+            Effect.succeed(event.data as { sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }),
+          )
+        return Effect.void
       })
-      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+      yield* Effect.addFinalizer(() => unsub)
 
       yield* reply({ requestID: PermissionID.make("per_test7"), reply: "once" })
       yield* Fiber.join(fiber)

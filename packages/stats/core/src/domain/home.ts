@@ -330,13 +330,9 @@ function createBuckets(window: DateWindow, range: UsageRange): Bucket[] {
   const count =
     range === "1D"
       ? 1
-      : range === "2W"
-        ? 14
-        : range === "1M"
-          ? 4
-          : range === "2M"
-            ? 8
-            : Math.max(1, Math.min(7, Math.ceil(span / DAY_MS)))
+      : range === "1W" || range === "2W" || range === "1M" || range === "2M" || range === "3M"
+        ? Math.ceil(span / DAY_MS)
+        : Math.max(1, Math.min(7, Math.ceil(span / DAY_MS)))
   const size = span / count
   return Array.from({ length: count }, (_, index) => {
     const start = window.start + index * size
@@ -443,14 +439,13 @@ function periodKeyTime(value: string) {
   return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
 }
 
-function formatBucketLabel(start: number, end: number, range: UsageRange) {
+function formatBucketLabel(start: number, _end: number, range: UsageRange) {
   const date = new Date(start)
   if (range === "YTD") return months[date.getUTCMonth()]
   if (range === "ALL")
     return date.getUTCFullYear() === new Date().getUTCFullYear()
       ? months[date.getUTCMonth()]
       : String(date.getUTCFullYear())
-  if (range === "1M" || range === "2M") return `${formatDay(start)} - ${formatDay(end - DAY_MS)}`
   return formatDay(start)
 }
 

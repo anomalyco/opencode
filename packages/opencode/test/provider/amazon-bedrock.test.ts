@@ -6,9 +6,10 @@ import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Provider } from "@/provider/provider"
-import { ProviderID } from "../../src/provider/schema"
+
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer))
 
@@ -62,8 +63,8 @@ it.instance(
       yield* set("AWS_REGION", "us-east-1")
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "eu-west-1" } } } } },
 )
@@ -73,8 +74,8 @@ it.instance("Bedrock: falls back to AWS_REGION env var when no config region", (
     yield* set("AWS_REGION", "eu-west-1")
     yield* set("AWS_PROFILE", "default")
     const providers = yield* list
-    expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-    expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+    expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+    expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
   }),
 )
 
@@ -87,8 +88,8 @@ it.instance(
       yield* set("AWS_ACCESS_KEY_ID", "")
       yield* set("AWS_BEARER_TOKEN_BEDROCK", "")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("eu-west-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "eu-west-1" } } } } },
 )
@@ -100,8 +101,8 @@ it.instance(
       yield* set("AWS_PROFILE", "default")
       yield* set("AWS_ACCESS_KEY_ID", "test-key-id")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("us-east-1")
     }),
   {
     config: {
@@ -116,8 +117,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.endpoint).toBe(
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.endpoint).toBe(
         "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com",
       )
     }),
@@ -141,8 +142,8 @@ it.instance(
       yield* set("AWS_PROFILE", "")
       yield* set("AWS_ACCESS_KEY_ID", "")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].options?.region).toBe("us-east-1")
     }),
   { config: { provider: { "amazon-bedrock": { options: { region: "us-east-1" } } } } },
 )
@@ -157,8 +158,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     }),
   {
     config: {
@@ -178,8 +179,10 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["global.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(
+        providers[ProviderV2.ID.amazonBedrock].models["global.anthropic.claude-opus-4-5-20251101-v1:0"],
+      ).toBeDefined()
     }),
   {
     config: {
@@ -199,8 +202,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     }),
   {
     config: {
@@ -220,8 +223,8 @@ it.instance(
     Effect.gen(function* () {
       yield* set("AWS_PROFILE", "default")
       const providers = yield* list
-      expect(providers[ProviderID.amazonBedrock]).toBeDefined()
-      expect(providers[ProviderID.amazonBedrock].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock]).toBeDefined()
+      expect(providers[ProviderV2.ID.amazonBedrock].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     }),
   {
     config: {
