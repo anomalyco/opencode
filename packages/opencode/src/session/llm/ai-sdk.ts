@@ -267,6 +267,8 @@ export function toLLMEvents(
     case "abort":
     case "source":
     case "file":
+    case "tool-output-denied":
+    case "tool-approval-request":
       return Effect.succeed([])
 
     case "raw":
@@ -274,10 +276,6 @@ export function toLLMEvents(
         state.copilotTotalNanoAiu = copilotTotalNanoAiu(event.rawValue) ?? state.copilotTotalNanoAiu
         return []
       })
-
-    case "tool-output-denied":
-    case "tool-approval-request":
-      return Effect.succeed([])
 
     default: {
       const _exhaustive: never = event
