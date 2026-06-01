@@ -228,14 +228,8 @@ export const layer: Layer.Layer<
         }
 
         yield* initDynamic().pipe(Effect.provideService(ToolRuntime, runtime))
-        const dynamic = yield* resolveDynamic().pipe(
-          Effect.provideService(ToolRuntime, runtime),
-          Effect.catchTag("ToolRuntimeError", (e) => {
-            log.warn("failed to resolve dynamic tools", { error: e.message })
-            return Effect.succeed([] as Tool.Def[])
-          }),
-        )
-        custom.push(...dynamic)
+        // resolveDynamic is called per-turn in all() to pick up tools
+        // activated by import_tool since the last turn
 
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
@@ -294,7 +288,14 @@ export const layer: Layer.Layer<
 
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return [...s.builtin, ...s.custom] as Tool.Def[]
+      const dynamic = yield* resolveDynamic().pipe(
+        Effect.provideService(ToolRuntime, runtime),
+        Effect.catchTag("ToolRuntimeError", (e) => {
+          log.warn("failed to resolve dynamic tools", { error: e.message })
+          return Effect.succeed([] as Tool.Def[])
+        }),
+      )
+      return [...s.builtin, ...dynamic, ...s.custom] as Tool.Def[]
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
