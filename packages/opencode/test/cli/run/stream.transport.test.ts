@@ -816,6 +816,123 @@ describe("run stream transport", () => {
     }
   })
 
+  test("coalesces active resize requests into one trailing replay", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const firstReset = defer()
+    const resetA = mock(() => firstReset.promise)
+    const resetB = mock(() => Promise.resolve())
+    const resetC = mock(() => Promise.resolve())
+    const transport = await createSessionTransport({
+      sdk: sdk({ stream: src.stream }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      const active = transport.replayOnResize({ localRows: () => [], reset: resetA })
+      await waitFor(() => (resetA.mock.calls.length === 1 ? true : undefined))
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetB })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetC })).toBe(false)
+      expect(resetB).not.toHaveBeenCalled()
+
+      firstReset.resolve()
+      expect(await active).toBe(true)
+      expect(resetA).toHaveBeenCalledTimes(1)
+      expect(resetB).not.toHaveBeenCalled()
+      expect(resetC).toHaveBeenCalledTimes(1)
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("keeps coalescing resize requests while buffered events drain", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const firstReset = defer()
+    const statusGate = defer()
+    const statusStarted = defer()
+    const promptSent = defer()
+    let blockStatus = false
+    const resetA = mock(() => firstReset.promise)
+    const resetB = mock(() => Promise.resolve())
+    const resetC = mock(() => Promise.resolve())
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        promptAsync: async () => {
+          promptSent.resolve()
+          return ok(undefined)
+        },
+        status: async () => {
+          if (blockStatus) {
+            statusStarted.resolve()
+            await statusGate.promise
+          }
+          return ok(statusMap(true))
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { text: "active", parts: [] },
+      files: [],
+      includeFiles: false,
+    })
+
+    try {
+      await promptSent.promise
+      await Bun.sleep(10)
+      const active = transport.replayOnResize({ localRows: () => [], reset: resetA })
+      await waitFor(() => (resetA.mock.calls.length === 1 ? true : undefined))
+      blockStatus = true
+      src.push(busy())
+      src.push(idle())
+      await Bun.sleep(10)
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetB })).toBe(false)
+      firstReset.resolve()
+      await Promise.race([
+        statusStarted.promise,
+        Bun.sleep(1_000).then(() => {
+          throw new Error("timed out waiting for buffered status drain")
+        }),
+      ])
+
+      expect(await transport.replayOnResize({ localRows: () => [], reset: resetC })).toBe(false)
+      expect(resetC).not.toHaveBeenCalled()
+      blockStatus = false
+      statusGate.resolve()
+
+      expect(
+        await Promise.race([
+          active,
+          Bun.sleep(1_000).then(() => {
+            throw new Error("timed out waiting for trailing resize replay")
+          }),
+        ]),
+      ).toBe(true)
+      expect(resetB).not.toHaveBeenCalled()
+      expect(resetC).toHaveBeenCalledTimes(1)
+    } finally {
+      src.close()
+      await transport.close()
+      await turn
+    }
+  })
+
   test("preserves assistant deltas not yet persisted when replaying during a live stream", async () => {
     const src = eventFeed()
     const ui = footer()

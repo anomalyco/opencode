@@ -141,7 +141,7 @@ function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
   return Object.keys(providers.find((item) => item.id === model.providerID)?.models?.[model.modelID]?.variants ?? {})
 }
 
-const REPLAY_RESIZE_DELAY = 100
+const REPLAY_RESIZE_DELAY = 250
 const LOCAL_REPLAY_ROW_LIMIT = 100
 
 async function resolveExitTitle(

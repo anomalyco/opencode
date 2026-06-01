@@ -453,6 +453,7 @@ function createLayer(input: StreamInput) {
         let booting = true
         let replaying = false
         let replayDisabled = false
+        let replayPending: SessionResizeReplayInput | undefined
         const buffered: Event[] = []
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
@@ -962,21 +963,40 @@ function createLayer(input: StreamInput) {
               yield* applyEvent(event)
             }
 
-            if (!changed) {
+            const arrived = buffered.splice(0)
+            if (!changed && arrived.length === 0) {
               buffered.push(...next)
               return
             }
 
-            pending = next
+            pending = [...next, ...arrived]
           }
         })
 
-        const replayOnResize = Effect.fn("RunStreamTransport.replayOnResize")(function* (
-          next: SessionResizeReplayInput,
-        ) {
-          if (!input.replay || replayDisabled || booting || replaying || closed || input.footer.isClosed) {
+        const replayOnResize: (next: SessionResizeReplayInput) => Effect.Effect<boolean> = Effect.fn(
+          "RunStreamTransport.replayOnResize",
+        )(function* (next: SessionResizeReplayInput) {
+          if (!input.replay || replayDisabled || booting || closed || input.footer.isClosed) {
             return false
           }
+
+          if (replaying) {
+            replayPending = next
+            return false
+          }
+
+          const finish: () => Effect.Effect<void> = Effect.fnUntraced(function* () {
+            yield* drainBuffered()
+            const pending = replayPending
+            replayPending = undefined
+            if (!pending || replayDisabled || closed || input.footer.isClosed) {
+              replaying = false
+              return
+            }
+
+            replaying = false
+            yield* replayOnResize(pending).pipe(Effect.asVoid)
+          })
 
           replayedParts.clear()
           replaying = true
@@ -987,12 +1007,11 @@ function createLayer(input: StreamInput) {
             Effect.exit,
           )
           if (Exit.isFailure(source)) {
-            replaying = false
             input.trace?.write("replay.resize.abort", {
               sessionID: input.sessionID,
               phase: "snapshot",
             })
-            yield* drainBuffered()
+            yield* finish()
             return false
           }
 
@@ -1031,26 +1050,23 @@ function createLayer(input: StreamInput) {
             catch: (error) => error,
           }).pipe(Effect.exit)
           if (Exit.isFailure(snapshot)) {
-            replaying = false
             input.trace?.write("replay.resize.abort", {
               sessionID: input.sessionID,
               phase: "snapshot",
             })
-            yield* drainBuffered()
+            yield* finish()
             return false
           }
 
           const idle = yield* Effect.promise(() => input.footer.idle()).pipe(Effect.exit)
           if (Exit.isFailure(idle) || closed || input.footer.isClosed) {
-            replaying = false
-            yield* drainBuffered()
+            yield* finish()
             return false
           }
 
           const reset = yield* Effect.promise(() => next.reset()).pipe(Effect.exit)
           if (Exit.isFailure(reset)) {
             replayDisabled = true
-            replaying = false
             input.trace?.write("replay.resize.disable", {
               sessionID: input.sessionID,
               phase: "reset",
@@ -1061,7 +1077,7 @@ function createLayer(input: StreamInput) {
               phase: "start",
               source: "system",
             })
-            yield* drainBuffered()
+            yield* finish()
             return false
           }
 
@@ -1080,8 +1096,6 @@ function createLayer(input: StreamInput) {
           }
 
           syncFooter([], snapshot.value.patch, currentSubagentState())
-          replaying = false
-          yield* drainBuffered()
           const rebuilt = yield* Effect.promise(() => input.footer.idle()).pipe(Effect.exit)
           if (Exit.isFailure(rebuilt)) {
             replayDisabled = true
@@ -1095,12 +1109,14 @@ function createLayer(input: StreamInput) {
               phase: "start",
               source: "system",
             })
+            yield* finish()
             return false
           }
 
           input.trace?.write("replay.resize.complete", {
             sessionID: input.sessionID,
           })
+          yield* finish()
           return true
         })
 
