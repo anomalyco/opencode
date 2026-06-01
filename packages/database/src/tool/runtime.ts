@@ -14,6 +14,7 @@ export class ToolRuntimeError extends Schema.TaggedErrorClass<ToolRuntimeError>(
 interface ToolInstance {
   fn: (args: any) => any
   signature: ToolSignature
+  lastUsedAt: number
 }
 
 export interface ScoredSignature extends ToolSignature {
@@ -38,6 +39,8 @@ export interface ToolRuntimeInterface {
 
   setMaxActive(n: number): Effect.Effect<void, never>
 }
+
+const ACTIVE_TTL_MS = 5 * 60 * 1000
 
 const buildAndImport = Effect.fn("ToolRuntime.buildAndImport")(function* (name: string, filePath: string) {
   const outdir = path.join(os.tmpdir(), "opencode-tools", `${name}-${Date.now()}`)
@@ -82,7 +85,7 @@ const buildAndImport = Effect.fn("ToolRuntime.buildAndImport")(function* (name: 
     output: toolFile.tool.schema.output,
   }
 
-  return { fn: mod.default as (args: any) => any, signature }
+  return { fn: mod.default as (args: any) => any, signature, lastUsedAt: 0 }
 })
 
 const touchUsage = (order: string[], name: string): void => {
@@ -91,7 +94,7 @@ const touchUsage = (order: string[], name: string): void => {
   order.push(name)
 }
 
-const evictLRU = Effect.fn("ToolRuntime.evictLRU")(function* (active: Map<string, ToolInstance>, usageOrder: string[]) {
+const evictLRU = (active: Map<string, ToolInstance>, usageOrder: string[]): string | undefined => {
   while (usageOrder.length > 0) {
     const oldest = usageOrder.shift()!
     if (active.has(oldest)) {
@@ -99,7 +102,47 @@ const evictLRU = Effect.fn("ToolRuntime.evictLRU")(function* (active: Map<string
       return oldest
     }
   }
-})
+}
+
+const evictExpired = (active: Map<string, ToolInstance>, usageOrder: string[]): void => {
+  const now = Date.now()
+  const expired: string[] = []
+  for (const [name, instance] of active) {
+    if (now - instance.lastUsedAt > ACTIVE_TTL_MS) expired.push(name)
+  }
+  for (const name of expired) {
+    active.delete(name)
+    const idx = usageOrder.indexOf(name)
+    if (idx >= 0) usageOrder.splice(idx, 1)
+  }
+}
+
+const ensureActive = (
+  name: string,
+  catalog: Map<string, ToolInstance>,
+  active: Map<string, ToolInstance>,
+  usageOrder: string[],
+  maxActive: number,
+): ToolInstance | null => {
+  const existing = active.get(name)
+  if (existing) {
+    touchUsage(usageOrder, name)
+    existing.lastUsedAt = Date.now()
+    return existing
+  }
+
+  const instance = catalog.get(name)
+  if (!instance) return null
+
+  if (active.size >= maxActive) {
+    evictLRU(active, usageOrder)
+  }
+
+  active.set(name, instance)
+  instance.lastUsedAt = Date.now()
+  touchUsage(usageOrder, name)
+  return instance
+}
 
 const DEFAULT_MAX_ACTIVE = 20
 
@@ -122,13 +165,12 @@ export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterfa
         }),
 
         execute: Effect.fn("ToolRuntime.execute")(function* (name, args) {
-          const tool = active.get(name)
+          const tool = ensureActive(name, catalog, active, usageOrder, maxActive)
           if (!tool) {
             return yield* new ToolRuntimeError({
-              message: `Tool "${name}" is not active. Use import_tool to activate it first.`,
+              message: `Tool "${name}" not found. Register it first.`,
             })
           }
-          touchUsage(usageOrder, name)
           return yield* Effect.try({
             try: () => tool.fn(args),
             catch: (cause) => new ToolRuntimeError({ message: `Tool "${name}" execution failed`, cause }),
@@ -164,14 +206,16 @@ export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterfa
 
           if (active.has(name)) {
             touchUsage(usageOrder, name)
+            instance.lastUsedAt = Date.now()
             return instance.signature
           }
 
           if (active.size >= maxActive) {
-            yield* evictLRU(active, usageOrder)
+            evictLRU(active, usageOrder)
           }
 
           active.set(name, instance)
+          instance.lastUsedAt = Date.now()
           touchUsage(usageOrder, name)
           return instance.signature
         }),
@@ -187,6 +231,7 @@ export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterfa
         }),
 
         list: Effect.fn("ToolRuntime.list")(function* () {
+          evictExpired(active, usageOrder)
           return Array.from(active.values()).map((t) => t.signature)
         }),
 

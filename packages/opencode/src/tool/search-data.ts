@@ -19,7 +19,7 @@ export const SearchDataTool = Tool.define(
 
     return {
       description:
-        "Search across all available tools and data. Returns ranked results matching your query. Use this to discover dynamic tools that you can import with import_tool.",
+        "Search across all available tools and data. Returns ranked results matching your query. Use this to discover dynamic tools, then call them with call_tool.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {

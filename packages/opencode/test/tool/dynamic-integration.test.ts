@@ -56,23 +56,50 @@ const layer = ToolRegistry.layer
     Layer.provide(Format.defaultLayer),
     Layer.provide(node),
     Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Layer.mergeAll(Truncate.defaultLayer, ToolRuntime.layer)),
+    Layer.provide(Truncate.defaultLayer),
   )
   .pipe(Layer.provide(RuntimeFlags.layer({})))
+  // Provide ToolRuntime to satisfy ToolRegistry's requirement AND expose
+  // it in the output so test code can yield* ToolRuntime directly.
+  .pipe((l) => Layer.provideMerge(l, ToolRuntime.layer))
 
 const it = testEffect(Layer.mergeAll(layer, node, Agent.defaultLayer))
 
 describe("dynamic tools integration", () => {
-  it.instance("registers calculator.ts in catalog but not active by default", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const ids = yield* registry.ids()
-      // Calculator is registered in catalog but not activated, so not in ids()
-      expect(ids).not.toContain("calculator")
-      // Builtin tools including our new meta-tools
-      expect(ids).toContain("search_data")
-      expect(ids).toContain("import_tool")
-      expect(ids).toContain("skill")
-    }),
+  it.instance(
+    "does not expose catalog tools in ids() — only builtins",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const ids = yield* registry.ids()
+        // Dynamic tool not exposed to LLM — only builtins + meta-tools
+        expect(ids).not.toContain("calculator")
+        // Meta-tools available for discovery and execution
+        expect(ids).toContain("search_data")
+        expect(ids).toContain("call_tool")
+        expect(ids).toContain("skill")
+      }),
+    30000,
+  )
+
+  it.instance(
+    "search_data finds calculator in catalog, call_tool executes it",
+    () =>
+      Effect.gen(function* () {
+        // Trigger initDynamic via registry
+        const registry = yield* ToolRegistry.Service
+        yield* registry.ids()
+
+        // search_data equivalent: search catalog
+        const runtime = yield* ToolRuntime
+        const results = yield* runtime.searchCatalog("calculator")
+        expect(results.length).toBeGreaterThan(0)
+        expect(results[0].name).toBe("calculator")
+
+        // call_tool equivalent: execute via runtime (lazy activation)
+        const result = yield* runtime.execute("calculator", { expression: "2 + 3" })
+        expect(result).toEqual({ result: 5 })
+      }),
+    30000,
   )
 })

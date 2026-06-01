@@ -1,5 +1,6 @@
 import { ToolRuntime } from "@opencode-ai/database/tool/runtime"
-import { initDynamic, resolveDynamic } from "./dynamic"
+import { initDynamic } from "./dynamic"
+import { CallTool } from "./call-tool"
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
@@ -24,7 +25,6 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { SearchDataTool } from "./search-data"
-import { ImportTool } from "./import-tool"
 import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
@@ -139,7 +139,7 @@ export const layer: Layer.Layer<
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const searchDataTool = yield* SearchDataTool
-    const importToolTool = yield* ImportTool
+    const callToolTool = yield* CallTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -228,8 +228,6 @@ export const layer: Layer.Layer<
         }
 
         yield* initDynamic().pipe(Effect.provideService(ToolRuntime, runtime))
-        // resolveDynamic is called per-turn in all() to pick up tools
-        // activated by import_tool since the last turn
 
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
@@ -247,7 +245,7 @@ export const layer: Layer.Layer<
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           searchData: Tool.init(searchDataTool),
-          importTool: Tool.init(importToolTool),
+          callTool: Tool.init(callToolTool),
           repo_clone: Tool.init(repoClone),
           repo_overview: Tool.init(repoOverview),
           skill: Tool.init(skilltool),
@@ -273,7 +271,7 @@ export const layer: Layer.Layer<
             tool.todo,
             tool.search,
             tool.searchData,
-            tool.importTool,
+            tool.callTool,
             ...(flags.experimentalScout ? [tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
@@ -288,14 +286,7 @@ export const layer: Layer.Layer<
 
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
-      const dynamic = yield* resolveDynamic().pipe(
-        Effect.provideService(ToolRuntime, runtime),
-        Effect.catchTag("ToolRuntimeError", (e) => {
-          log.warn("failed to resolve dynamic tools", { error: e.message })
-          return Effect.succeed([] as Tool.Def[])
-        }),
-      )
-      return [...s.builtin, ...dynamic, ...s.custom] as Tool.Def[]
+      return [...s.builtin, ...s.custom] as Tool.Def[]
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
