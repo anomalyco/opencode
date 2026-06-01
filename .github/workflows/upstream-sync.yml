@@ -19,7 +19,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  workflows: write
 
 jobs:
   sync:
@@ -84,6 +83,9 @@ jobs:
         if: steps.merge.outputs.result == 'conflict'
         run: |
           git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
+          # Restore our workflow files (GITHUB_TOKEN can't push workflow changes)
+          git checkout "origin/$TARGET_BRANCH" -- .github/workflows/ || true
+          git commit -m "chore: restore fork workflow files for sync PR" --allow-empty
           git push origin "$SYNC_BRANCH" --force-with-lease
 
       - name: Run typecheck
