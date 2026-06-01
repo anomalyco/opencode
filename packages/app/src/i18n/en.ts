@@ -534,6 +534,8 @@ export const dict = {
   "home.projects.back": "Back to projects",
   "home.project.add": "Add project",
   "home.sessions.search.placeholder": "Search sessions",
+  "home.sessions.search.sessions": "Sessions",
+  "home.sessions.search.noResults": "No sessions found for {{query}}",
   "home.sessions.empty": "No sessions found",
   "home.sessions.empty.description": "Start a new session for this project",
   "home.sessions.search.empty": "No matching sessions",
