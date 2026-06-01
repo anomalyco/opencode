@@ -29,3 +29,7 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# 개발을 위해 AI 관련 파일 스킬이 없어서 코드 제너레이트가 일괄 적이지 않아 추가합니다
+
+/.agents/**/*
