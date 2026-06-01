@@ -187,7 +187,8 @@ type RouteRequirements =
 export function createRoutes(
   options?: CorsOptions & { basePath?: string },
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, docRoute, uiRouteWithBasePath(options?.basePath)).pipe(
+  const uiRoute = uiRouteWithBasePath(options?.basePath)
+  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
     Layer.provide([
       errorLayer,
       compressionLayer,

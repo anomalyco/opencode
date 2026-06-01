@@ -36,7 +36,7 @@ const options = {
   },
 }
 
-function normalizeBasePath(input: string | undefined): string {
+export function normalizeBasePath(input: string | undefined): string {
   if (!input) return ""
   let p = input.trim()
   if (!p || p === "/") return ""
@@ -71,7 +71,7 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
-  const basePathExplicitlySet = process.argv.includes("--base-path")
+  const basePathExplicitlySet = process.argv.some((a) => a === "--base-path" || a.startsWith("--base-path="))
   const basePath = normalizeBasePath(
     basePathExplicitlySet ? args["base-path"] : (config?.server?.basePath ?? args["base-path"]),
   )

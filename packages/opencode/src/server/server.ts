@@ -205,9 +205,10 @@ function serverLayer(opts: { port: number; hostname: string; basePath?: string }
     server.emit = ((event: string, ...args: unknown[]) => {
       if (event === "request" || event === "upgrade") {
         const req = args[0] as IncomingMessage
-        if (req.url === bp && event === "request") {
+        const [pathname, query] = (req.url ?? "").split("?", 2)
+        if (pathname === bp && event === "request") {
           const res = args[1] as ServerResponse
-          res.writeHead(301, { Location: bp + "/" })
+          res.writeHead(301, { Location: bp + "/" + (query ? "?" + query : "") })
           res.end()
           return true
         } else if (req.url && req.url.startsWith(bp + "/")) {
