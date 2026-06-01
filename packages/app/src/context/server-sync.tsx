@@ -218,6 +218,16 @@ export function createServerSyncContext() {
           description: formatServerError(err, language.t),
         })
       })
+      void queryClient
+        .fetchQuery(queryOptionsApi.mcp(directoryKey(directory)))
+        .then((data) => setStore("mcp", reconcile(data, { merge: false })))
+        .catch((err) => {
+          showToast({
+            variant: "error",
+            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+            description: formatServerError(err, language.t),
+          })
+        })
     },
     onDispose: (directory) => {
       const key = directoryKey(directory)
