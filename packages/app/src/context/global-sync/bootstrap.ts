@@ -305,7 +305,11 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
-      input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk))),
+      input.mcp &&
+        (() =>
+          input.queryClient
+            .fetchQuery(loadMcpQuery(input.directory, input.sdk))
+            .then((data) => input.setStore("mcp", reconcile(data, { merge: false })))),
       () =>
         input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
           const project = getFilename(input.directory)
@@ -315,7 +319,7 @@ export async function bootstrapDirectory(input: {
             description: formatServerError(err, input.translate),
           })
         }),
-    ].filter(Boolean) as (() => Promise<any>)[]
+    ].filter(Boolean) as Array<() => Promise<unknown>>
 
     await waitForPaint()
     const slowErrs = errors(await runAll(slow))
