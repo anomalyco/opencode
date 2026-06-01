@@ -1,6 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
@@ -12,7 +14,7 @@ import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { Filesystem } from "@/util/filesystem"
 import { LLMEvent, LLMResponse } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
@@ -24,6 +26,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
 
@@ -40,7 +43,7 @@ const replayOpenAIOAuth = {
 type RecordedScenario = {
   readonly id: string
   readonly name: string
-  readonly providerID: ProviderID
+  readonly providerID: ProviderV2.ID
   readonly modelID: string
   readonly cassette: string
   readonly protocol: string
@@ -87,7 +90,7 @@ function decodeRecordOpenAIOAuth() {
 }
 
 const providerConfig = (input: {
-  readonly providerID: ProviderID
+  readonly providerID: ProviderV2.ID
   readonly name: string
   readonly env: string[]
   readonly npm: string
@@ -112,7 +115,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "openai-api-key",
     name: "OpenAI API key",
-    providerID: ProviderID.openai,
+    providerID: ProviderV2.ID.openai,
     modelID: "gpt-4.1-mini",
     cassette: "session/native-openai-tool-loop",
     protocol: "openai-responses",
@@ -120,7 +123,7 @@ const RECORDED_SCENARIOS = [
     canRecord: () => Boolean(envValue("OPENCODE_RECORD_OPENAI_API_KEY", "OPENAI_API_KEY")),
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.openai,
+        providerID: ProviderV2.ID.openai,
         name: "OpenAI",
         env: ["OPENAI_API_KEY"],
         npm: "@ai-sdk/openai",
@@ -135,7 +138,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "openai-oauth",
     name: "OpenAI OAuth",
-    providerID: ProviderID.openai,
+    providerID: ProviderV2.ID.openai,
     modelID: "gpt-5.5",
     cassette: "session/native-openai-oauth-tool-loop",
     protocol: "openai-responses",
@@ -146,7 +149,7 @@ const RECORDED_SCENARIOS = [
     stableID: "openai-oauth",
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.openai,
+        providerID: ProviderV2.ID.openai,
         name: "OpenAI",
         env: ["OPENAI_API_KEY"],
         npm: "@ai-sdk/openai",
@@ -158,7 +161,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "opencode-proxy",
     name: "OpenCode proxy",
-    providerID: ProviderID.opencode,
+    providerID: ProviderV2.ID.opencode,
     modelID: "gpt-5.2-codex",
     cassette: "session/native-zen-tool-loop",
     protocol: "openai-responses",
@@ -166,7 +169,7 @@ const RECORDED_SCENARIOS = [
     canRecord: () => Boolean(process.env.OPENCODE_RECORD_CONSOLE_TOKEN && process.env.OPENCODE_RECORD_ZEN_ORG_ID),
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.opencode,
+        providerID: ProviderV2.ID.opencode,
         name: "OpenCode Zen",
         env: ["OPENCODE_CONSOLE_TOKEN"],
         npm: "@ai-sdk/openai-compatible",
@@ -181,7 +184,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "anthropic-api-key",
     name: "Anthropic API key",
-    providerID: ProviderID.anthropic,
+    providerID: ProviderV2.ID.anthropic,
     modelID: "claude-haiku-4-5-20251001",
     cassette: "session/native-anthropic-tool-loop",
     protocol: "anthropic-messages",
@@ -189,7 +192,7 @@ const RECORDED_SCENARIOS = [
     canRecord: () => Boolean(envValue("OPENCODE_RECORD_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")),
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.anthropic,
+        providerID: ProviderV2.ID.anthropic,
         name: "Anthropic",
         env: ["ANTHROPIC_API_KEY"],
         npm: "@ai-sdk/anthropic",
@@ -276,6 +279,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(LocationServiceMap.layer),
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
   const recordedClient = LLMClient.layer.pipe(
@@ -336,10 +340,25 @@ const weatherTool = tool({
 })
 
 const toolRoundtrip = (
+  events: ReadonlyArray<LLMEvent>,
   call: { readonly id: string; readonly name: string; readonly input: unknown },
   result: JSONValue,
 ): ModelMessage[] => [
-  { role: "assistant", content: [{ type: "tool-call", toolCallId: call.id, toolName: call.name, input: call.input }] },
+  {
+    role: "assistant",
+    content: [
+      ...events.filter(LLMEvent.is.reasoningEnd).map((part) => ({
+        type: "reasoning" as const,
+        text: events
+          .filter(LLMEvent.is.reasoningDelta)
+          .filter((event) => event.id === part.id)
+          .map((event) => event.text)
+          .join(""),
+        providerMetadata: part.providerMetadata,
+      })),
+      { type: "tool-call", toolCallId: call.id, toolName: call.name, input: call.input },
+    ],
+  },
   {
     role: "tool",
     content: [
@@ -356,7 +375,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
 
     const stableID = scenario.stableID ?? scenario.providerID
     const sessionID = SessionID.make(`session-recorded-${stableID}-loop`)
-    const modelID = ModelID.make(model.id)
+    const modelID = ProviderV2.ModelID.make(model.id)
     const agent = {
       name: "test",
       mode: "primary",
@@ -377,7 +396,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
         time: { created: 0 },
         agent: agent.name,
         model: { providerID: scenario.providerID, modelID },
-      } satisfies MessageV2.User,
+      } satisfies SessionLegacy.User,
       sessionID,
       model: resolved,
       agent,
@@ -395,7 +414,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
 
     const turn2 = yield* collect({
       ...base,
-      messages: [userMessage, ...toolRoundtrip(toolCall!, WEATHER_RESULT)],
+      messages: [userMessage, ...toolRoundtrip(turn1, toolCall!, WEATHER_RESULT)],
     })
 
     expect(LLMResponse.text({ events: turn2 })).toMatch(/Paris is sunny/i)

@@ -2,7 +2,7 @@ import type { HttpRecorder } from "@opencode-ai/http-recorder"
 import { describe } from "bun:test"
 import { Effect } from "effect"
 import type { Model } from "../src"
-import { goldenScenarioTags, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
+import { goldenScenarioTags, goldenScenarioTitle, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
 import { recordedTests } from "./recorded-test"
 import { kebab } from "./recorded-utils"
 
@@ -34,14 +34,6 @@ type TargetInput = {
 }
 
 const scenarioInput = (input: ScenarioInput) => (typeof input === "string" ? { id: input } : input)
-
-const scenarioTitle = (id: GoldenScenarioID) => {
-  if (id === "text") return "streams text"
-  if (id === "tool-call") return "streams tool call"
-  if (id === "reasoning") return "uses reasoning"
-  if (id === "image") return "reads image text"
-  return "drives a tool loop"
-}
 
 const defaultPrefix = (target: TargetInput) => {
   if (target.prefix) return target.prefix
@@ -77,7 +69,7 @@ const runTarget = (target: TargetInput) => {
   describe(`${target.name} recorded`, () => {
     target.scenarios.forEach((raw) => {
       const input = scenarioInput(raw)
-      const name = input.name ?? scenarioTitle(input.id)
+      const name = input.name ?? goldenScenarioTitle(input.id)
       recorded.effect.with(
         name,
         {

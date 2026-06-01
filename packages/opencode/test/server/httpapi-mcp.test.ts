@@ -109,6 +109,10 @@ describe("mcp HttpApi", () => {
         expect(added.status).toBe(200)
         expect(yield* json(added)).toMatchObject({ added: { status: "disabled" } })
 
+        const addedDisconnected = yield* request(handler, "/mcp/added/disconnect", tmp.directory, { method: "POST" })
+        expect(addedDisconnected.status).toBe(200)
+        expect(yield* json(addedDisconnected)).toBe(true)
+
         const connected = yield* request(handler, "/mcp/demo/connect", tmp.directory, { method: "POST" })
         expect(connected.status).toBe(200)
         expect(yield* json(connected)).toBe(true)
@@ -191,5 +195,37 @@ describe("mcp HttpApi", () => {
         },
       },
     },
+  )
+
+  it.instance(
+    "returns typed not found errors for missing MCP servers",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = yield* handlerScoped
+
+        for (const input of [
+          { method: "POST", route: "/mcp/missing/auth" },
+          { method: "POST", route: "/mcp/missing/auth/authenticate" },
+          { method: "POST", route: "/mcp/missing/auth/callback", body: JSON.stringify({ code: "code" }) },
+          { method: "DELETE", route: "/mcp/missing/auth" },
+          { method: "POST", route: "/mcp/missing/connect" },
+          { method: "POST", route: "/mcp/missing/disconnect" },
+        ]) {
+          const response = yield* request(handler, input.route, tmp.directory, {
+            method: input.method,
+            headers: input.body ? { "content-type": "application/json" } : undefined,
+            body: input.body,
+          })
+
+          expect(response.status).toBe(404)
+          expect(yield* json(response)).toEqual({
+            _tag: "McpServerNotFoundError",
+            name: "missing",
+            message: "MCP server not found: missing",
+          })
+        }
+      }),
+    { config: { mcp: {} } },
   )
 })

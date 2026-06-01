@@ -4,7 +4,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { CerebrasPlugin } from "@opencode-ai/core/plugin/provider/cerebras"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { it, model, provider } from "./provider-helper"
+import { it, model } from "./provider-helper"
 
 const cerebrasOptions: Record<string, unknown>[] = []
 
@@ -24,8 +24,8 @@ describe("CerebrasPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(CerebrasPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         catalog.provider.update(ProviderV2.ID.make("cerebras"), (item) => {
           item.endpoint = { type: "aisdk", package: "@ai-sdk/cerebras" }
           item.options.headers.Existing = "1"
@@ -43,8 +43,8 @@ describe("CerebrasPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(CerebrasPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => catalog.provider.update(ProviderV2.ID.make("groq"), () => {}))
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => catalog.provider.update(ProviderV2.ID.make("groq"), () => {}))
       expect((yield* catalog.provider.get(ProviderV2.ID.make("groq"))).options.headers).toEqual({})
     }),
   )
