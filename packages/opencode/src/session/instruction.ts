@@ -82,13 +82,13 @@ export const layer: Layer.Layer<
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
       }
       const src = origin?.source
-      const base = (() => {
-        if (src === "OPENCODE_CONFIG_CONTENT") return ctx.directory
-        if (!src || src.startsWith("http://") || src.startsWith("https://")) return global.config
-        if (path.resolve(src) === path.resolve(global.config)) return global.config
-        return path.dirname(path.resolve(src))
+      const [base, stop] = (() => {
+        if (src === "OPENCODE_CONFIG_CONTENT") return [ctx.directory, ctx.worktree] as const
+        if (!src || src.startsWith("http://") || src.startsWith("https://")) return [global.config, global.config] as const
+        if (path.resolve(src) === path.resolve(global.config)) return [global.config, global.config] as const
+        return [path.dirname(path.resolve(src)), ctx.worktree] as const
       })()
-      return yield* fs.globUp(instruction, base, base).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      return yield* fs.globUp(instruction, base, stop).pipe(Effect.catch(() => Effect.succeed([] as string[])))
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
