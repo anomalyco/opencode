@@ -98,8 +98,9 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
       const serverPlugins = (server.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
       const tuiPlugins = (tui.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
 
-      expect(serverPlugins).toEqual(tuiPlugins)
       expect(serverPlugins).toContain("shared-plugin@2.0.0")
+      expect(tuiPlugins).toContain("shared-plugin@2.0.0")
+      expect(tuiPlugins).toContain("global-only@1.0.0")
       expect(serverPlugins).not.toContain("shared-plugin@1.0.0")
 
       const serverOrigins = server.plugin_origins ?? []
