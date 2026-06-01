@@ -12,12 +12,6 @@ import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
-const files = (disableClaudeCodePrompt: boolean) => [
-  "AGENTS.md",
-  ...(disableClaudeCodePrompt ? [] : ["CLAUDE.md"]),
-  "CONTEXT.md", // deprecated
-]
-
 function extract(messages: SessionLegacy.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
@@ -65,7 +59,11 @@ export const layer: Layer.Layer<
       path.join(global.config, "AGENTS.md"),
       ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
     ]
-    const instructionFiles = files(flags.disableClaudeCodePrompt)
+    const instructionFiles = [
+      "AGENTS.md",
+      ...(!flags.disableClaudeCodePrompt ? ["CLAUDE.md"] : []),
+      "CONTEXT.md", // deprecated
+    ]
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>

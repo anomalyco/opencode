@@ -384,10 +384,19 @@ export const layer: Layer.Layer<
 
     function cleanDirectory(target: string) {
       return Effect.tryPromise({
-        try: () =>
-          import("fs/promises").then((fsp) =>
-            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
-          ),
+        try: async () => {
+          const fsp = await import("fs/promises")
+          const attempts = process.platform === "win32" ? 50 : 5
+          for (const attempt of Array.from({ length: attempts }, (_, i) => i)) {
+            try {
+              await fsp.rm(target, { recursive: true, force: true })
+              return
+            } catch (error) {
+              if (attempt === attempts - 1) throw error
+              await new Promise((resolve) => setTimeout(resolve, 100))
+            }
+          }
+        },
         catch: (error) =>
           new RemoveFailedError({ message: errorMessage(error) || "Failed to remove git worktree directory" }),
       })

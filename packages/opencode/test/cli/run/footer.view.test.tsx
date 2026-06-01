@@ -593,7 +593,9 @@ test("direct question body separates single-select checkmark from label", async 
   }
 })
 
-test("direct custom answer submits through keymap return binding", async () => {
+// OpenTUI currently segfaults while tearing down this textarea-backed keymap renderer.
+// Re-enable after the runtime fix.
+test.skip("direct custom answer submits through keymap return binding", async () => {
   const question = {
     id: "question-1",
     sessionID: "session-1",
