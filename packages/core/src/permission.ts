@@ -2,18 +2,29 @@ export * as PermissionV2 from "./permission"
 
 import { Schema } from "effect"
 import { Wildcard } from "./util/wildcard"
+import { Identifier } from "./id/id"
+import { Newtype } from "./schema"
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Action" })
+export class PermissionID extends Newtype<PermissionID>()(
+  "PermissionID",
+  Schema.String.check(Schema.isStartsWith("per")),
+) {
+  static ascending(id?: string): PermissionID {
+    return this.make(Identifier.ascending("permission", id))
+  }
+}
+
+export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Action" })
 export type Action = typeof Action.Type
 
 export const Rule = Schema.Struct({
   permission: Schema.String,
   pattern: Schema.String,
   action: Action,
-}).annotate({ identifier: "PermissionV2.Rule" })
+}).annotate({ identifier: "Permission.Rule" })
 export type Rule = typeof Rule.Type
 
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
 export type Ruleset = typeof Ruleset.Type
 
 const EDIT_TOOLS = ["edit", "write", "apply_patch"]

@@ -57,7 +57,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
-- **Qwen3.5 Plus**
+- **MiniMax M3**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -75,7 +75,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 - **주간 한도** — 사용량 $30
 - **월간 한도** — 사용량 $60
 
-한도는 달러 금액 기준으로 정의됩니다. 즉, 실제 요청 횟수는 사용하는 모델에 따라 달라집니다. MiniMax M2.5처럼 저렴한 모델은 더 많은 요청이 가능하고, GLM-5.1처럼 비용이 더 높은 모델은 더 적은 요청이 가능합니다.
+한도는 달러 금액 기준으로 정의됩니다. 즉, 실제 요청 횟수는 사용하는 모델에 따라 달라집니다. DeepSeek V4 Flash처럼 저렴한 모델은 더 많은 요청이 가능하고, GLM-5.1처럼 비용이 더 높은 모델은 더 적은 요청이 가능합니다.
 
 아래 표는 일반적인 Go 사용 패턴을 기준으로 한 예상 요청 횟수를 보여줍니다.
 
@@ -87,26 +87,44 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | Kimi K2.6         | 1,150             | 2,880          | 5,750          |
 | MiMo-V2.5         | 30,100            | 75,200         | 150,400        |
 | MiMo-V2.5-Pro     | 3,250             | 8,150          | 16,300         |
+| MiniMax M3        | 1,400             | 3,500          | 7,000          |
 | MiniMax M2.7      | 3,400             | 8,500          | 17,000         |
 | MiniMax M2.5      | 6,300             | 15,900         | 31,800         |
 | Qwen3.7 Max       | 950               | 2,390          | 4,770          |
 | Qwen3.6 Plus      | 3,300             | 8,200          | 16,300         |
-| Qwen3.5 Plus      | 10,200            | 25,200         | 50,500         |
 | DeepSeek V4 Pro   | 3,450             | 8,550          | 17,150         |
 | DeepSeek V4 Flash | 31,650            | 79,050         | 158,150        |
 
-예상치는 관찰된 평균 요청 패턴을 기준으로 합니다.
+이 예상치는 관찰된 평균 요청 패턴을 기준으로 합니다.
 
 - GLM-5/5.1 — 요청당 입력 700, 캐시 52,000, 출력 토큰 150
 - Kimi K2.5/K2.6 — 요청당 입력 870, 캐시 55,000, 출력 토큰 200
 - DeepSeek V4 Pro — 요청당 입력 750, 캐시 82,000, 출력 토큰 290
 - DeepSeek V4 Flash — 요청당 입력 790, 캐시 68,000, 출력 토큰 280
+- MiniMax M3 — 요청당 입력 810, 캐시 62,000, 출력 토큰 225
 - MiniMax M2.7/M2.5 — 요청당 입력 300, 캐시 55,000, 출력 토큰 125
 - Qwen3.7 Max — 요청당 입력 420, 캐시 66,000, 출력 토큰 200
 - Qwen3.6 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
-- Qwen3.5 Plus — 요청당 입력 410, 캐시 47,000, 출력 토큰 140
 - MiMo-V2.5 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5-Pro — 요청당 입력 790, 캐시 86,000, 출력 토큰 305
+
+이 예상치는 또한 1M tokens당 다음 가격을 기준으로 합니다.
+
+| Model             | Input | Output | Cached Read | Cached Write |
+| ----------------- | ----- | ------ | ----------- | ------------ |
+| GLM-5.1           | $1.40 | $4.40  | $0.26       | -            |
+| GLM-5             | $1.00 | $3.20  | $0.20       | -            |
+| Kimi K2.6         | $0.95 | $4.00  | $0.16       | -            |
+| Kimi K2.5         | $0.60 | $3.00  | $0.10       | -            |
+| MiMo V2.5         | $0.14 | $0.28  | $0.0028     | -            |
+| MiMo V2.5 Pro     | $1.74 | $3.48  | $0.0145     | -            |
+| MiniMax M3        | $0.60 | $2.40  | $0.12       | $0.75        |
+| MiniMax M2.7      | $0.30 | $1.20  | $0.06       | $0.375       |
+| MiniMax M2.5      | $0.30 | $1.20  | $0.06       | $0.375       |
+| Qwen3.7 Max       | $2.50 | $7.50  | $0.50       | $3.125       |
+| Qwen3.6 Plus      | $0.50 | $3.00  | $0.05       | $0.625       |
+| DeepSeek V4 Pro   | $1.74 | $3.48  | $0.0145     | -            |
+| DeepSeek V4 Flash | $0.14 | $0.28  | $0.0028     | -            |
 
 현재 사용량은 **<a href={console}>console</a>**에서 확인할 수 있습니다.
 
@@ -138,11 +156,11 @@ Zen 잔액에 크레딧도 있다면, console에서 **Use balance** 옵션을 �
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K2.6의 경우 config에서 `opencode-go/kimi-k2.6`를 사용하면 됩니다.
 

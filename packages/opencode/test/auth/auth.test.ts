@@ -169,7 +169,7 @@ describe("Auth", () => {
         })
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
-            if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
+            if (previous === undefined) delete process.env.OPENCODE_AUTH_COxNTENT
             else process.env.OPENCODE_AUTH_CONTENT = previous
           }),
         )

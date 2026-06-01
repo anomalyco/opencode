@@ -52,7 +52,7 @@ beforeAll(async () => {
     useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
       queryGroups.push(options)
       return [
-        { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
+        { isLoading: true, data: undefined },
         { isLoading: false, data: {} },
         { isLoading: false, data: [] },
         { isLoading: false, data: provider },
@@ -123,6 +123,35 @@ describe("createChildStoreManager", () => {
 
       expect(store.status).toBe("loading")
       expect(bootstraps).toEqual(["/project"])
+    } finally {
+      dispose()
+    }
+  })
+
+  test("provides the requested directory while the path query is pending", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap() {},
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+
+      const [store] = manager.child("/project", { bootstrap: false })
+
+      expect(store.path.directory).toBe("/project")
+      expect(store.path.worktree).toBe("")
     } finally {
       dispose()
     }
