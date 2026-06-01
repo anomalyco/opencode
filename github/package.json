@@ -1,0 +1,20 @@
+{
+  "name": "github",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@actions/core": "1.11.1",
+    "@actions/github": "6.0.1",
+    "@octokit/graphql": "9.0.1",
+    "@octokit/rest": "catalog:",
+    "@opencode-ai/sdk": "workspace:*"
+  }
+}

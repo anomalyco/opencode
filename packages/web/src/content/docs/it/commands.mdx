@@ -1,0 +1,322 @@
+---
+title: Comandi
+description: Crea comandi personalizzati per task ripetitivi.
+---
+
+I comandi personalizzati ti permettono di definire un prompt da eseguire quando quel comando viene lanciato nella TUI.
+
+```bash frame="none"
+/my-command
+```
+
+I comandi personalizzati si aggiungono a quelli integrati come `/init`, `/undo`, `/redo`, `/share`, `/help`. [Scopri di piu](/docs/tui#commands).
+
+---
+
+## Creazione file di comando
+
+Crea file markdown nella directory `commands/` per definire comandi personalizzati.
+
+Crea `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Il frontmatter definisce le proprieta del comando. Il contenuto diventa il template.
+
+Usa il comando digitando `/` seguito dal nome del comando.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Configurazione
+
+Puoi aggiungere comandi personalizzati tramite la config di OpenCode o creando file markdown nella directory `commands/`.
+
+---
+
+### JSON
+
+Usa l'opzione `command` nella [config](/docs/config) di OpenCode:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Ora puoi eseguire questo comando nella TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Puoi anche definire comandi usando file markdown. Mettili in:
+
+- Globale: `~/.config/opencode/commands/`
+- Per progetto: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Il nome del file markdown diventa il nome del comando. Per esempio, `test.md` ti permette di eseguire:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Configurazione del prompt
+
+I prompt dei comandi personalizzati supportano diversi placeholder e sintassi speciali.
+
+---
+
+### Argomenti
+
+Passa argomenti ai comandi usando il placeholder `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Esegui il comando con argomenti:
+
+```bash frame="none"
+/component Button
+```
+
+E `$ARGUMENTS` verra sostituito con `Button`.
+
+Puoi anche accedere ai singoli argomenti usando parametri posizionali:
+
+- `$1` - Primo argomento
+- `$2` - Secondo argomento
+- `$3` - Terzo argomento
+- E cosi via...
+
+Per esempio:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Esegui il comando:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Questo sostituisce:
+
+- `$1` con `config.json`
+- `$2` con `src`
+- `$3` con `{ "key": "value" }`
+
+---
+
+### Output della shell
+
+Usa _!`command`_ per inserire nel prompt l'output di un [comando bash](/docs/tui#bash-commands).
+
+Per esempio, per creare un comando personalizzato che analizzi la copertura dei test:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Oppure per rivedere modifiche recenti:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+I comandi vengono eseguiti nella root del progetto e il loro output diventa parte del prompt.
+
+---
+
+### Riferimenti ai file
+
+Includi file nel comando usando `@` seguito dal nome del file.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Il contenuto del file viene incluso automaticamente nel prompt.
+
+---
+
+## Opzioni
+
+Vediamo le opzioni di configurazione nel dettaglio.
+
+---
+
+### Template del prompt
+
+L'opzione `template` definisce il prompt che verra inviato all'LLM quando il comando viene eseguito.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Questa e un'opzione di config **obbligatoria**.
+
+---
+
+### Descrizione
+
+Usa l'opzione `description` per fornire una breve descrizione di cosa fa il comando.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+Questo viene mostrato come descrizione nella TUI quando digiti il comando.
+
+---
+
+### Agente
+
+Usa la config `agent` per specificare opzionalmente quale [agente](/docs/agents) deve eseguire il comando.
+Se e un [subagent](/docs/agents/#subagents), il comando attiva per default l'invocazione di un subagent.
+Per disabilitare questo comportamento, imposta `subtask` a `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Questa e un'opzione di config **opzionale**. Se non specificata, usa l'agente corrente.
+
+---
+
+### Sottotask
+
+Usa il booleano `subtask` per forzare il comando ad attivare l'invocazione di un [subagent](/docs/agents/#subagents).
+E utile se vuoi evitare che il comando inquini il contesto principale e **forza** l'agente ad agire come subagent,
+anche se `mode` e impostato su `primary` nella configurazione dell'[agente](/docs/agents).
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Questa e un'opzione di config **opzionale**.
+
+---
+
+### Modello
+
+Usa la config `model` per sovrascrivere il modello predefinito per questo comando.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Questa e un'opzione di config **opzionale**.
+
+---
+
+## Comandi integrati
+
+opencode include diversi comandi integrati come `/init`, `/undo`, `/redo`, `/share`, `/help`; [scopri di piu](/docs/tui#commands).
+
+:::note
+I comandi personalizzati possono sovrascrivere quelli integrati.
+:::
+
+Se definisci un comando personalizzato con lo stesso nome, sovrascrivera il comando integrato.

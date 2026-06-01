@@ -1,0 +1,188 @@
+---
+title: GitLab
+description: Koristite OpenCode u GitLab problemima i zahtjevima za spajanje.
+---
+
+OpenCode se integriše sa vašim GitLab radnim tokom kroz vaš GitLab CI/CD cevovod ili sa GitLab Duo.
+U oba slučaja, OpenCode će se pokrenuti na vašim GitLab pokretačima.
+
+---
+
+## GitLab CI
+
+OpenCode radi u redovnom GitLab cevovodu. Možete ga ugraditi u cjevovod kao [CI komponenta](https://docs.gitlab.com/ee/ci/components/)
+Ovdje koristimo CI/CD komponentu kreiranu u zajednici za OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+
+---
+
+### Funkcije
+
+- **Koristite prilagođenu konfiguraciju po poslu**: Konfigurirajte OpenCode s prilagođenim konfiguracijskim direktorijem, na primjer `./config/#custom-directory` da omogućite ili onemogućite funkcionalnost po OpenCode pozivanju.
+- **Minimalno podešavanje**: CI komponenta postavlja OpenCode u pozadini, samo trebate kreirati OpenCode konfiguraciju i početnu prompt.
+- **Fleksibilno**: CI komponenta podržava nekoliko ulaza za prilagođavanje njenog ponašanja
+
+---
+
+### Podešavanje
+
+1. Sačuvajte JSON za autentifikaciju OpenCode kao CI varijable okruženja tipa datoteke pod **Postavke** > **CI/CD** > **Varijable**. Obavezno ih označite kao "Maskirane i skrivene".
+2. Dodajte sljedeće u svoju `.gitlab-ci.yml` datoteku.
+
+```yaml title=".gitlab-ci.yml"
+include:
+  - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+    inputs:
+      config_dir: ${CI_PROJECT_DIR}/opencode-config
+      auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+      command: optional-custom-command
+      message: "Your prompt here"
+```
+
+Za više unosa i slučajeva upotrebe [pogledajte dokumente docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) za ovu komponentu.
+
+---
+
+## GitLab Duo
+
+OpenCode se integriše sa vašim GitLab tokovom rada.
+Spomenite `@opencode` u komentaru i OpenCode će izvršiti zadatke unutar vašeg GitLab CI cevovoda.
+
+---
+
+### Funkcije
+
+- **Problemi trijaže**: Zamolite OpenCode da ispita problem i objasni vam ga.
+- **Popravi i implementiraj**: Zamolite OpenCode da popravi problem ili implementira funkciju.
+  To će kreirati novu granu i pokrenuti zahtjev za spajanje s promjenama.
+- **Secure**: OpenCode radi na vašim GitLab pokretačima.
+
+---
+
+### Podešavanje
+
+OpenCode radi u vašem GitLab CI/CD cevovodu, evo šta će vam trebati da ga postavite:
+:::tip
+Pogledajte [**GitLab dokumente**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) za ažurirane upute.
+:::
+
+1.  Konfigurirajte svoje GitLab okruženje
+2.  Postavite CI/CD
+3.  Nabavite API ključ dobavljača AI modela
+4.  Kreirajte nalog usluge
+5.  Konfigurirajte CI/CD varijable
+6.  Kreirajte konfiguracijski fajl toka, evo primjera:
+
+        <details>
+
+    <summary>Konfiguracija toka</summary>
+
+    ```yaml
+    image: node:22-slim
+    commands:
+      - echo "Installing opencode"
+      - npm install --global opencode-ai
+      - echo "Installing glab"
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
+      - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
+      - apt-get install --yes glab
+      - echo "Configuring glab"
+      - echo $GITLAB_HOST
+      - echo "Creating OpenCode auth configuration"
+      - mkdir --parents ~/.local/share/opencode
+      - |
+        cat > ~/.local/share/opencode/auth.json << EOF
+        {
+          "anthropic": {
+            "type": "api",
+            "key": "$ANTHROPIC_API_KEY"
+          }
+        }
+        EOF
+      - echo "Configuring git"
+      - git config --global user.email "opencode@gitlab.com"
+      - git config --global user.name "OpenCode"
+      - echo "Testing glab"
+      - glab issue list
+      - echo "Running OpenCode"
+      - |
+        opencode run "
+        You are an AI assistant helping with GitLab operations.
+
+        Context: $AI_FLOW_CONTEXT
+        Task: $AI_FLOW_INPUT
+        Event: $AI_FLOW_EVENT
+
+        Please execute the requested task using the available GitLab tools.
+        Be thorough in your analysis and provide clear explanations.
+
+        <important>
+        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
+
+        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
+        You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
+        </important>
+        "
+      - git checkout --branch $CI_WORKLOAD_REF origin/$CI_WORKLOAD_REF
+      - echo "Checking for git changes and pushing if any exist"
+      - |
+        if ! git diff --quiet || ! git diff --cached --quiet || [ --not --zero "$(git ls-files --others --exclude-standard)" ]; then
+          echo "Git changes detected, adding and pushing..."
+          git add .
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit"
+          else
+            echo "Committing changes to branch: $CI_WORKLOAD_REF"
+            git commit --message "Codex changes"
+            echo "Pushing changes up to $CI_WORKLOAD_REF"
+            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            echo "Changes successfully pushed"
+          fi
+        else
+          echo "No git changes detected, skipping push"
+        fi
+    variables:
+      - ANTHROPIC_API_KEY
+      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_HOST
+    ```
+
+        </details>
+
+Možete vidjeti [GitLab CLI agenti docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) za detaljna uputstva.
+
+---
+
+### Primjeri
+
+Evo nekoliko primjera kako možete koristiti OpenCode u GitLab.
+:::tip
+Možete konfigurirati da koristite drugu frazu okidača od `@opencode`.
+:::
+
+- **Objasnite problem**
+  Dodajte ovaj komentar u izdanje GitLaba.
+
+```
+  @opencode explain this issue
+```
+
+OpenCode će pročitati problem i odgovoriti jasnim objašnjenjem.
+
+- **Reši problem**
+  U izdanju GitLaba recite:
+
+```
+  @opencode fix this
+```
+
+OpenCode će kreirati novu granu, implementirati promjene i otvoriti zahtjev za spajanje s promjenama.
+
+- **Pregledajte zahtjeve za pridruživanje**
+  Ostavite sljedeći komentar na zahtjev za spajanje GitLab-a.
+
+```
+  @opencode review this merge request
+```
+
+OpenCode će pregledati zahtjev za spajanje i dati povratne informacije.

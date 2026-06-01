@@ -1,0 +1,142 @@
+---
+title: Web
+description: 在浏览器中使用 OpenCode。
+---
+
+OpenCode 可以作为 Web 应用在浏览器中运行，无需终端即可获得同样强大的 AI 编码体验。
+
+![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+
+## 快速开始
+
+运行以下命令启动 Web 界面：
+
+```bash
+opencode web
+```
+
+这会在 `127.0.0.1` 上启动一个本地服务器，使用随机可用端口，并自动在默认浏览器中打开 OpenCode。
+
+:::caution
+如果未设置 `OPENCODE_SERVER_PASSWORD`，服务器将没有安全保护。本地使用没有问题，但在网络访问时应当设置密码。
+:::
+
+:::tip[Windows 用户]
+为获得最佳体验，建议从 [WSL](/docs/windows-wsl) 而非 PowerShell 运行 `opencode web`。这可以确保正确的文件系统访问和终端集成。
+:::
+
+---
+
+## 配置
+
+你可以通过命令行标志或[配置文件](/docs/config)来配置 Web 服务器。
+
+### 端口
+
+默认情况下，OpenCode 会选择一个可用端口。你也可以指定端口：
+
+```bash
+opencode web --port 4096
+```
+
+### 主机名
+
+默认情况下，服务器绑定到 `127.0.0.1`（仅限本地访问）。要使 OpenCode 在网络中可访问：
+
+```bash
+opencode web --hostname 0.0.0.0
+```
+
+使用 `0.0.0.0` 时，OpenCode 会同时显示本地地址和网络地址：
+
+```
+  Local access:       http://localhost:4096
+  Network access:     http://192.168.1.100:4096
+```
+
+### mDNS 发现
+
+启用 mDNS 可以让你的服务器在本地网络中被自动发现：
+
+```bash
+opencode web --mdns
+```
+
+这会自动将主机名设置为 `0.0.0.0`，并将服务器广播为 `opencode.local`。
+
+你可以自定义 mDNS 域名，以便在同一网络中运行多个实例：
+
+```bash
+opencode web --mdns --mdns-domain myproject.local
+```
+
+### CORS
+
+要为 CORS 添加额外的允许域名（适用于自定义前端）：
+
+```bash
+opencode web --cors https://example.com
+```
+
+### 身份验证
+
+要保护服务器访问，可以通过 `OPENCODE_SERVER_PASSWORD` 环境变量设置密码：
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode web
+```
+
+用户名默认为 `opencode`，可以通过 `OPENCODE_SERVER_USERNAME` 进行更改。
+
+---
+
+## 使用 Web 界面
+
+启动后，Web 界面提供对 OpenCode 会话的访问。
+
+### 会话
+
+在主页上查看和管理你的会话。你可以查看活跃的会话，也可以创建新的会话。
+
+![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+
+### 服务器状态
+
+点击"See Servers"可以查看已连接的服务器及其状态。
+
+![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+
+---
+
+## 连接终端
+
+你可以将终端 TUI 连接到正在运行的 Web 服务器：
+
+```bash
+# 启动 Web 服务器
+opencode web --port 4096
+
+# 在另一个终端中连接 TUI
+opencode attach http://localhost:4096
+```
+
+这样你就可以同时使用 Web 界面和终端，共享相同的会话和状态。
+
+---
+
+## 配置文件
+
+你也可以在 `opencode.json` 配置文件中设置服务器选项：
+
+```json
+{
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "cors": ["https://example.com"]
+  }
+}
+```
+
+命令行标志的优先级高于配置文件中的设置。

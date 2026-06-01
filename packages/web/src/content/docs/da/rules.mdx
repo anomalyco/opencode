@@ -1,0 +1,180 @@
+---
+title: Regler
+description: Angiv tilpassede instruktioner til opencode.
+---
+
+Du kan gi tilpassede instruksjoner for at OpenCode ved at oprete en `AGENTS.md`-fil. Dette ligner på Cursors regler. Den inneholder instruksjoner som vil bli inkludert i LLMs kontekst for at tilpasse oppførselen til ditt spesifikke prosjekt.
+
+---
+
+## Initialisering
+
+For at lage en ny `AGENTS.md` fil, kan du kjøre kommandoen `/init` i opencode.
+
+:::tip
+Du bør overgi prosjektets `AGENTS.md`-fil til Git.
+:::
+
+Dette vil skanne prosjektet og alt dets innhold for at forstå hva prosjektet handler om og generere en `AGENTS.md`-fil med det. Dette hjelper opencode at navigere i prosjektet bedre.
+
+Hvis du har en eksisterende `AGENTS.md`-fil, vil denne prøve at tilføje til den.
+
+---
+
+## Eksempel
+
+Du kan også bare lage denne filen manuelt. Her er et eksempel på nogle ting du kan tilføje inn i en `AGENTS.md`-fil.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+Vi tilføjer til prosjektspesifikke instruksjoner her, og dette vil bli delt på tvers av teamet ditt.
+
+---
+
+## Typer
+
+opencode støtter også lesing av `AGENTS.md`-filen fra flere steder. Og dette tjener forskjellige formål.
+
+### Projekt
+
+Plasser en `AGENTS.md` i prosjektroten for prosjektspesifikke regler. Disse gjelder kun når du arbeider i denne katalogen eller dens underkataloger.
+
+### Globalt
+
+Du kan også ha globale regler i en `~/.config/opencode/AGENTS.md`-fil. Dette blir brugt på alle opencode-sessioner.
+
+Siden dette ikke er forpliktet til Git eller delt med teamet ditt, anbefaler vi at bruge dette til at spesifisere eventuelle personlige regler som LLM bør følge.
+
+### Claude Code-kompatibilitet
+
+For brugere som migrerer fra Claude Code, støtter OpenCode Claude Codes filkonvensjoner som fallbacks:
+
+- **Prosjektregler**: `CLAUDE.md` i prosjektkatalogen din (bruges hvis ingen `AGENTS.md` eksisterer)
+- **Globale regler**: `~/.claude/CLAUDE.md` (bruges hvis ingen `~/.config/opencode/AGENTS.md` eksisterer)
+- **Skills**: `~/.claude/skills/` — se [Agent Skills](/docs/skills/) for detaljer
+
+For at deaktivere Claude Code-kompatibilitet, sett en av disse miljøvariablene:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## Prioritet
+
+Når opencode starter, ser den etter regelfiler i denne rekkefølgen:
+
+1. **Lokale filer** ved at gå opp fra nuværende katalog (`AGENTS.md`, `CLAUDE.md`)
+2. **Global fil** på `~/.config/opencode/AGENTS.md`
+3. **Claude Code-fil** på `~/.claude/CLAUDE.md` (med mindre de er deaktivert)
+
+Den første matchende filen vinner i hver kategori. For eksempel, hvis du har både `AGENTS.md` og `CLAUDE.md`, bruges bare `AGENTS.md`. På samme måte har `~/.config/opencode/AGENTS.md` forrang over `~/.claude/CLAUDE.md`.
+
+---
+
+## Brugerdefinerede instruktioner
+
+Du kan spesifisere egendefinerte instruksjonsfiler i din `opencode.json` eller den globale `~/.config/opencode/opencode.json`. Dette lar deg og teamet ditt gjenbruge eksisterende regler i stedet for at måtte duplisere dem til AGENTS.md.
+
+Eksempel:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+Du kan også bruge eksterne URL-er for at laste instruksjoner fra nettet.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Fjerninstruksjoner hentes med 5 sekunders tidsavbrudd.
+
+Alle instruksjonsfilene er kombinert med `AGENTS.md`-filene dine.
+
+---
+
+## Reference til eksterne filer
+
+Selv om opencode ikke automatisk analyserer filreferanser i `AGENTS.md`, kan du oppnå lignende funksjonalitet på to måter:
+
+### Brug af opencode.json
+
+Den anbefalte tilnærmingen er at bruge feltet `instructions` i `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### Manuelle instruktioner i AGENTS.md
+
+Du kan lære opencode at lese eksterne filer ved at gi eksplisitte instruksjoner i `AGENTS.md`. Her er et praktisk eksempel:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+Denne tilnærmingen lar deg:
+
+- Lag modulære, gjenbrugbare regelfiler
+- Del regler på tvers av prosjekter via symbolkoblinger eller git-undermoduler
+- Hold AGENTS.md kortfattet mens du refererer til detaljerte retningslinjer
+- Sørg for at opencode laster filer kun når det er nødvendig for den spesifikke oppgaven
+
+:::tip
+For monorepos eller prosjekter med delte standarder er brug av `opencode.json` med glob-mønstre (som `packages/*/AGENTS.md`) mer vedlikeholdbart enn manuelle instruksjoner.
+:::

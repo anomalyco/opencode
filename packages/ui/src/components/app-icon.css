@@ -1,0 +1,5 @@
+img[data-component="app-icon"] {
+  display: block;
+  box-sizing: border-box;
+  object-fit: contain;
+}

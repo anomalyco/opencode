@@ -1,0 +1,222 @@
+---
+title: "Compétences des agents"
+description: "Définir un comportement réutilisable via les définitions SKILL.md"
+---
+
+Les compétences d'agent permettent à OpenCode de découvrir des instructions réutilisables à partir de votre dépôt ou de votre répertoire personnel.
+Les compétences sont chargées à la demande via l'outil natif `skill` : les agents voient les compétences disponibles et peuvent charger le contenu complet en cas de besoin.
+
+---
+
+## Placer des fichiers
+
+Créez un dossier par nom de compétence et insérez-y un `SKILL.md`.
+OpenCode recherche ces emplacements :
+
+- Configuration du projet : `.opencode/skills/<name>/SKILL.md`
+- Configuration globale : `~/.config/opencode/skills/<name>/SKILL.md`
+- Compatible Projet Claude : `.claude/skills/<name>/SKILL.md`
+- Compatible Global Claude : `~/.claude/skills/<name>/SKILL.md`
+- Compatible avec l'agent de projet : `.agents/skills/<name>/SKILL.md`
+- Compatible avec les agents globaux : `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## Comprendre la découverte
+
+Pour les chemins locaux du projet, OpenCode remonte de votre répertoire de travail actuel jusqu'à ce qu'il atteigne l'arbre de travail git.
+Il charge tout `skills/*/SKILL.md` correspondant dans `.opencode/` et tout `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` correspondant en cours de route.
+
+Les définitions globales sont également chargées à partir de `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` et `~/.agents/skills/*/SKILL.md`.
+
+---
+
+## Écrire un texte de présentation
+
+Chaque `SKILL.md` doit commencer par YAML frontmatter.
+Seuls ces champs sont reconnus :
+
+- `name` (obligatoire)
+- `description` (obligatoire)
+- `license` (facultatif)
+- `compatibility` (facultatif)
+- `metadata` (facultatif, mappage chaîne à chaîne)
+
+Les champs de contenu inconnus sont ignorés.
+
+---
+
+## Valider les noms
+
+`name` doit :
+
+- Comprenant entre 1 et 64 caractères
+- Être alphanumérique en minuscules avec des séparateurs à tiret unique
+- Ne commence ni ne termine par `-`
+- Ne contient pas de `--` consécutifs
+- Faites correspondre le nom du répertoire qui contient `SKILL.md`
+
+Expression régulière équivalente :
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## Suivez les règles de longueur
+
+`description` doit comporter entre 1 et 1 024 caractères.
+Gardez-le suffisamment précis pour que l'agent puisse choisir correctement.
+
+---
+
+## Utiliser un exemple
+
+Créez `.opencode/skills/git-release/SKILL.md` comme ceci :
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## Reconnaître la description de l'outil
+
+OpenCode répertorie les compétences disponibles dans la description de l'outil `skill`.
+Chaque entrée comprend le nom et la description de la compétence :
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+L'agent charge une compétence en appelant l'outil :
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## Configurer les autorisations
+
+Contrôlez les compétences auxquelles les agents peuvent accéder à l'aide d'autorisations basées sur des modèles dans `opencode.json` :
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| Autorisation | Comportement                                                          |
+| ------------ | --------------------------------------------------------------------- |
+| `allow`      | Les compétences se chargent immédiatement                             |
+| `deny`       | Compétence masquée à l'agent, accès refusé                            |
+| `ask`        | L'utilisateur est invité à donner son approbation avant le chargement |
+
+Les modèles prennent en charge les caractères génériques : `internal-*` correspond à `internal-docs`, `internal-tools`, etc.
+
+---
+
+## Remplacement par agent
+
+Accordez à des agents spécifiques des autorisations différentes de celles par défaut globales.
+
+**Pour les agents personnalisés** (dans la rubrique Agent) :
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**Pour les agents intégrés** (dans `opencode.json`) :
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Désactiver l'outil de compétences
+
+Désactivez complètement les compétences pour les agents qui ne devraient pas les utiliser :
+
+**Pour les agents personnalisés** :
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**Pour les agents intégrés** :
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+Lorsqu'elle est désactivée, la section `<available_skills>` est entièrement omise.
+
+---
+
+## Dépanner le chargement
+
+Si une compétence n'apparaît pas :
+
+1. Vérifiez que `SKILL.md` est écrit en majuscules
+2. Vérifiez que le frontmatter inclut `name` et `description`
+3. Assurez-vous que les noms des compétences sont uniques sur tous les sites
+4. Vérifiez les autorisations : les compétences avec `deny` sont masquées aux agents

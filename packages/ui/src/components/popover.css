@@ -1,0 +1,98 @@
+[data-slot="popover-trigger"] {
+  display: inline-flex;
+}
+
+[data-component="popover-content"] {
+  z-index: 50;
+  min-width: 200px;
+  max-width: 320px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-raised-stronger-non-alpha);
+
+  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  background-clip: padding-box;
+  box-shadow: var(--shadow-md);
+
+  transform-origin: var(--kb-popover-content-transform-origin);
+
+  &:focus-within {
+    outline: none;
+  }
+
+  &[data-closed] {
+    animation: popover-close 0.15s ease-out;
+  }
+
+  &[data-expanded] {
+    animation: popover-open 0.15s ease-out;
+  }
+
+  [data-slot="popover-header"] {
+    display: flex;
+    padding: 12px;
+    padding-bottom: 0;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+
+    [data-slot="popover-title"] {
+      flex: 1;
+      color: var(--text-strong);
+      margin: 0;
+
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-base);
+      font-style: normal;
+      font-weight: var(--font-weight-medium);
+      line-height: var(--line-height-large);
+      letter-spacing: var(--letter-spacing-normal);
+    }
+
+    [data-slot="popover-close-button"] {
+      flex-shrink: 0;
+    }
+  }
+
+  [data-slot="popover-description"] {
+    padding: 0 12px;
+    margin: 0;
+    color: var(--text-base);
+
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  [data-slot="popover-body"] {
+    padding: 12px;
+  }
+
+  [data-slot="popover-arrow"] {
+    fill: var(--surface-raised-stronger-non-alpha);
+  }
+}
+
+@keyframes popover-open {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes popover-close {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}

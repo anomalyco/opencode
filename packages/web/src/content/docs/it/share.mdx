@@ -1,0 +1,127 @@
+---
+title: Condivisione
+description: Condividi le tue conversazioni OpenCode.
+---
+
+La funzione di condivisione di OpenCode ti permette di creare link pubblici alle tue conversazioni, cosi puoi collaborare con i colleghi o chiedere aiuto ad altre persone.
+
+:::note
+Le conversazioni condivise sono accessibili pubblicamente a chiunque abbia il link.
+:::
+
+---
+
+## Come funziona
+
+Quando condividi una conversazione, OpenCode:
+
+1. Crea un URL pubblico univoco per la sessione
+2. Sincronizza la cronologia della conversazione sui nostri server
+3. Rende la conversazione accessibile tramite il link condivisibile: `opncd.ai/s/<share-id>`
+
+---
+
+## Condivisione
+
+OpenCode supporta tre modalita di condivisione che controllano come vengono condivise le conversazioni:
+
+---
+
+### Manuale (predefinito)
+
+Per impostazione predefinita, OpenCode usa la condivisione manuale. Le sessioni non vengono condivise automaticamente, ma puoi condividerle manualmente con il comando `/share`:
+
+```
+/share
+```
+
+Questo genera un URL univoco che viene copiato negli appunti.
+
+Per impostare esplicitamente la modalita manuale nel tuo [file di config](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Automatico
+
+Puoi abilitare la condivisione automatica per tutte le nuove conversazioni impostando l'opzione `share` su `"auto"` nel tuo [file di config](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Con la condivisione automatica attiva, ogni nuova conversazione verra condivisa automaticamente e verra generato un link.
+
+---
+
+### Disabilitato
+
+Puoi disabilitare completamente la condivisione impostando l'opzione `share` su `"disabled"` nel tuo [file di config](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+Per applicarlo al tuo team in un progetto specifico, aggiungilo a `opencode.json` nel progetto e versionalo su Git.
+
+---
+
+## Annullare la condivisione
+
+Per smettere di condividere una conversazione e rimuoverla dall'accesso pubblico:
+
+```
+/unshare
+```
+
+Questo rimuove il link di condivisione ed elimina i dati associati alla conversazione.
+
+---
+
+## Privacy
+
+Ci sono alcune cose da tenere a mente quando condividi una conversazione.
+
+---
+
+### Conservazione dati
+
+Le conversazioni condivise restano accessibili finche non le annulli esplicitamente. Questo include:
+
+- La cronologia completa della conversazione
+- Tutti i messaggi e le risposte
+- I metadati della sessione
+
+---
+
+### Raccomandazioni
+
+- Condividi solo conversazioni che non contengono informazioni sensibili.
+- Rivedi il contenuto della conversazione prima di condividerla.
+- Annulla la condivisione quando la collaborazione e conclusa.
+- Evita di condividere conversazioni con codice proprietario o dati riservati.
+- Per progetti sensibili, disabilita completamente la condivisione.
+
+---
+
+## Per le aziende
+
+Per deploy enterprise, la condivisione puo essere:
+
+- **Disabilitata** completamente per requisiti di conformita e sicurezza
+- **Limitata** ai soli utenti autenticati tramite SSO
+- **Self-hosted** sulla tua infrastruttura
+
+[Scopri di piu](/docs/enterprise) su come usare opencode nella tua organizzazione.

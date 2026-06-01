@@ -1,0 +1,57 @@
+---
+title: Netzwerk
+description: Konfigurieren Sie Proxys und benutzerdefinierte Zertifikate.
+---
+
+OpenCode unterstützt Standard-Proxy-Umgebungsvariablen und benutzerdefinierte Zertifikate für Unternehmensnetzwerkumgebungen.
+
+---
+
+## Proxy
+
+OpenCode respektiert Standard-Proxy-Umgebungsvariablen.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+Der TUI kommuniziert mit einem lokalen HTTP-Server. Sie müssen den Proxy für diese Verbindung umgehen, um Routing-Schleifen zu verhindern.
+:::
+
+Sie können den Port und den Hostnamen des Servers mit [CLI flags](/docs/cli#run) konfigurieren.
+
+---
+
+### Authentifizierung
+
+Wenn Ihr Proxy eine Basisauthentifizierung erfordert, geben Sie Anmeldeinformationen in URL ein.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+Vermeiden Sie hartkodierte Passwörter. Verwenden Sie Umgebungsvariablen oder einen sicheren Speicher für Anmeldeinformationen.
+:::
+
+Für Proxys, die eine erweiterte Authentifizierung wie NTLM oder Kerberos erfordern, sollten Sie die Verwendung eines LLM-Gateways in Betracht ziehen, das Ihre Authentifizierungsmethode unterstützt.
+
+---
+
+## Benutzerdefinierte Zertifikate
+
+Wenn Ihr Unternehmen benutzerdefinierte Zertifizierungsstellen für HTTPS-Verbindungen verwendet, konfigurieren Sie OpenCode so, dass es ihnen vertraut.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+Dies funktioniert sowohl für Proxy-Verbindungen als auch für den direkten API-Zugriff.

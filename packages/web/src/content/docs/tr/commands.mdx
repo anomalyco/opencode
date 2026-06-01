@@ -1,0 +1,323 @@
+---
+title: Komutlar
+description: Tekrarlanan görevler için özel komutlar oluşturulur.
+---
+
+Özel komutlar, söz konusu komut TUI'da yürütüldüğünde çalıştırmak istediğiniz istemi belirtmenize olanak tanır.
+
+```bash frame="none"
+/my-command
+```
+
+Özel komutlar, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi komutlara ek olarak sunulur. [Daha fazla bilgi](/docs/tui#commands).
+
+---
+
+## Komut dosyaları oluşturma
+
+Özel komutları tanımlamak için `commands/` dizininde işaretleme dosyaları oluşturun.
+
+`.opencode/commands/test.md` oluştur:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Ön madde komut özelliklerini tanımlar. İçerik şablon haline gelir.
+
+`/` ve ardından komut adını yazarak komutu kullanın.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Yapılandırma
+
+opencode işlemleri aracılığıyla veya `commands/` dizininde işaretleme dosyalarının oluşturulması özel komutlar ile yapılabilir.
+
+---
+
+### JSON
+
+opencode [config](/docs/config)'deki `command` seçeneğini kullanın:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Artık bu komutu TUI'da çalıştırabilirsiniz:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Markdown dosyalarını kullanarak komutları da tanımlayabilirsiniz. Bunları şuraya yerleştirin:
+
+- Küresel: `~/.config/opencode/commands/`
+- Proje başına: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Markdown dosyasının adı komut adı olur. Örneğin, `test.md` şunu sağlar:
+sen koşuyorsun:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## İstem yapılandırması
+
+Özel komut istemleri birçok özel yer tutucuyu ve sözdizimini destekler.
+
+---
+
+### Argümanlar
+
+`$ARGUMENTS` yer tutucusunu kullanarak komutlara argümanları iletin.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Komutu bağımsız değişkenlerle çalıştırın:
+
+```bash frame="none"
+/component Button
+```
+
+Ve `$ARGUMENTS`, `Button` ile değiştirilecektir.
+
+Konumsal parametreleri kullanarak bağımsız değişkenlere de erişebilirsiniz:
+
+- `$1` - İlk argüman
+- `$2` - İkinci argüman
+- `$3` - Üçüncü argüman
+- Ve benzeri...
+
+Örneğin:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Komutu çalıştırın:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Bu şunun yerini alır:
+
+- `$1` ile `config.json`
+- `$2` ile `src`
+- `$3` ile `{ "key": "value" }`
+
+---
+
+### Shell output
+
+İsteminize [bash command](/docs/tui#bash-commands) çıktısını enjekte etmek için \__!`command`_ kullanın.
+
+Örneğin, test kapsamını analiz eden özel bir komut oluşturmak için:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Or to review recent changes:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Komutlar projenizin kök dizininde çalışır ve çıktıları istemin bir parçası olur.
+
+---
+
+### Dosya referansları
+
+Komutunuza `@` ve ardından dosya adını kullanarak dosyaları ekleyin.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Dosya içeriği otomatik olarak istemde yer alır.
+
+---
+
+## Seçenekler
+
+Yapılandırma seçeneklerine ayrıntılı olarak bakalım.
+
+---
+
+### Şablon
+
+`template` seçeneği, komut yürütüldüğünde LLM'ye gönderilecek olan istemi tanımlar.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Bu **gerekli** bir yapılandırma seçeneğidir.
+
+---
+
+### Açıklama
+
+Komutun ne yaptığına ilişkin kısa bir açıklama sağlamak için `description` seçeneğini kullanın.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+Bu, komutu yazdığınızda TUI içindeki açıklama olarak gösterilir.
+
+---
+
+### Ajan
+
+İsteğe bağlı olarak bu komutu hangi [agent](/docs/agents)'nin yürütmesi gerektiğini belirtmek için `agent` yapılandırmasını kullanın.
+Bu bir [subagent](/docs/agents/#subagents) ise, komut varsayılan olarak bir alt aracı çağrısını tetikleyecektir.
+Bu davranışı devre dışı bırakmak için `subtask` öğesini `false` olarak ayarlayın.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Bu **isteğe bağlı** bir yapılandırma seçeneğidir. Belirtilmemişse, varsayılan olarak mevcut temsilciniz kullanılır.
+
+---
+
+### Subtask
+
+Komutu bir [subagent](/docs/agents/#subagents) çağrısını tetiklemeye zorlamak için `subtask` boolean'ını kullanın.
+Bu, komutun birincil bağlamınızı kirletmemesini ve aracıyı bir alt aracı olarak davranmaya **zorlamasını** istiyorsanız kullanışlıdır.
+`mode`, [agent](/docs/agents) yapılandırmasında `primary` olarak ayarlanmış olsa bile.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
+
+---
+
+### Modeli
+
+Bu parçanın varsayılan kodu geçersiz için `model` kontrolünü kullanın.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
+
+---
+
+## Yerleşik
+
+opencode, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](/docs/tui#commands).
+
+:::note
+Özel komutlar yerleşik komutları geçersiz kılabilir.
+:::
+
+Aynı adda özel bir komut tanımlarsanız yerleşik komutu geçersiz kılar.

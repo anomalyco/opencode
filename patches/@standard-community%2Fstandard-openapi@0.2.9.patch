@@ -1,0 +1,16 @@
+diff --git a/dist/vendors/convert.js b/dist/vendors/convert.js
+index 0d615eebfd7cd646937ec1b29f8332db73586ec1..7b146f903c07a9377d676753691cba67781879be 100644
+--- a/dist/vendors/convert.js
++++ b/dist/vendors/convert.js
+@@ -74,7 +74,10 @@ function convertToOpenAPISchema(jsonSchema, context) {
+       $ref: `#/components/schemas/${id}`
+     };
+   } else if (_jsonSchema.$ref) {
+-    const { $ref, $defs } = _jsonSchema;
++    const { $ref, $defs, ...rest } = _jsonSchema;
++    if ($ref.includes("://")) {
++      return Object.keys(rest).length > 0 ? rest : { type: "string" };
++    }
+     const ref = $ref.split("/").pop();
+     context.components.schemas = {
+       ...context.components.schemas,

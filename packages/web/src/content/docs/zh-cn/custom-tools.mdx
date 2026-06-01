@@ -1,0 +1,196 @@
+---
+title: 自定义工具
+description: 创建 LLM 可在 opencode 中调用的工具。
+---
+
+自定义工具是你创建的函数，LLM 可以在对话过程中调用它们。它们与 opencode 的[内置工具](/docs/tools)（如 `read`、`write` 和 `bash`）协同工作。
+
+---
+
+## 创建工具
+
+工具以 **TypeScript** 或 **JavaScript** 文件的形式定义。不过，工具定义可以调用**任何语言**编写的脚本——TypeScript 或 JavaScript 仅用于工具定义本身。
+
+---
+
+### 位置
+
+工具可以在以下位置定义：
+
+- 本地定义：将工具文件放在项目的 `.opencode/tools/` 目录中。
+- 全局定义：将工具文件放在 `~/.config/opencode/tools/` 中。
+
+---
+
+### 结构
+
+创建工具最简单的方式是使用 `tool()` 辅助函数，它提供类型安全和参数校验。
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**文件名**即为**工具名称**。上面的示例创建了一个名为 `database` 的工具。
+
+---
+
+#### 单文件多工具
+
+你也可以从单个文件中导出多个工具。每个导出都会成为**一个独立的工具**，命名格式为 **`<filename>_<exportname>`**：
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+这会创建两个工具：`math_add` 和 `math_multiply`。
+
+---
+
+#### 与内置工具的名称冲突
+
+自定义工具通过工具名称进行索引。如果自定义工具使用了与内置工具相同的名称，则优先使用自定义工具。
+
+例如，这个文件取代了内置的bash工具：
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+除非你有意替换内置工具，否则最好用独特的名字。如果你想禁用内置工具但不想覆盖它，使用 [权限](/docs/permissions).
+:::
+
+---
+
+### 参数
+
+你可以使用 `tool.schema`（即 [Zod](https://zod.dev)）来定义参数类型。
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+你也可以直接导入 [Zod](https://zod.dev) 并返回一个普通对象：
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### 上下文
+
+工具会接收当前会话的上下文信息：
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+使用 `context.directory` 获取会话的工作目录。
+使用 `context.worktree` 获取 git worktree 根目录。
+
+---
+
+## 示例
+
+### 用 Python 编写工具
+
+你可以使用任何语言编写工具。以下示例展示了如何用 Python 实现两数相加。
+
+首先，创建一个 Python 脚本作为工具：
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+然后创建调用该脚本的工具定义：
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+这里我们使用 [`Bun.$`](https://bun.com/docs/runtime/shell) 工具函数来运行 Python 脚本。

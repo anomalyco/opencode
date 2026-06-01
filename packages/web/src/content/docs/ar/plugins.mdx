@@ -1,0 +1,385 @@
+---
+title: الإضافات
+description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
+---
+
+تتيح لك الإضافات توسيع OpenCode عبر ربطها بأحداث مختلفة وتخصيص السلوك. يمكنك إنشاء إضافات لإضافة ميزات جديدة، أو التكامل مع خدمات خارجية، أو تعديل السلوك الافتراضي لـ OpenCode.
+
+للاطلاع على أمثلة، راجع [الإضافات](/docs/ecosystem#plugins) التي أنشأها المجتمع.
+
+---
+
+## استخدام إضافة
+
+هناك طريقتان لتحميل الإضافات.
+
+---
+
+### من ملفات محلية
+
+ضع ملفات JavaScript أو TypeScript في دليل الإضافات.
+
+- `.opencode/plugins/` - إضافات على مستوى المشروع
+- `~/.config/opencode/plugins/` - إضافات عامة
+
+تُحمَّل الملفات في هذه الأدلة تلقائيا عند بدء التشغيل.
+
+---
+
+### من npm
+
+حدّد حزم npm في ملف الإعدادات.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+يتم دعم حزم npm العادية والحزم ذات النطاق (scoped).
+
+تصفّح الإضافات المتاحة في [النظام البيئي](/docs/ecosystem#plugins).
+
+---
+
+### كيفية تثبيت الإضافات
+
+**إضافات npm** تُثبَّت تلقائيا باستخدام Bun عند بدء التشغيل. تُخزَّن الحزم واعتمادياتها مؤقتا في `~/.cache/opencode/node_modules/`.
+
+**الإضافات المحلية** تُحمَّل مباشرة من دليل الإضافات. لاستخدام حزم خارجية، يجب إنشاء `package.json` داخل دليل الإعدادات لديك (راجع [الاعتماديات](#dependencies))، أو نشر الإضافة على npm ثم [إضافتها إلى إعداداتك](/docs/config#plugins).
+
+---
+
+### ترتيب التحميل
+
+تُحمَّل الإضافات من جميع المصادر وتعمل جميع الخطافات بالتتابع. ترتيب التحميل هو:
+
+1. إعدادات عامة (`~/.config/opencode/opencode.json`)
+2. إعدادات المشروع (`opencode.json`)
+3. دليل الإضافات العام (`~/.config/opencode/plugins/`)
+4. دليل إضافات المشروع (`.opencode/plugins/`)
+
+تُحمَّل حزم npm المكررة ذات الاسم والإصدار نفسيهما مرة واحدة. ومع ذلك، تُحمَّل الإضافة المحلية وإضافة npm ذات الاسم المشابه كلتاهما بشكل مستقل.
+
+---
+
+## إنشاء إضافة
+
+الإضافة هي **وحدة JavaScript/TypeScript** تصدّر دالة إضافة واحدة أو أكثر.
+تستقبل كل دالة كائنا للسياق وتعيد كائنا للخطافات.
+
+---
+
+### الاعتماديات
+
+يمكن للإضافات المحلية والأدوات المخصصة استخدام حزم npm خارجية. أضف `package.json` إلى دليل الإعدادات لديك متضمنا الاعتماديات التي تحتاجها.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+يشغّل OpenCode الأمر `bun install` عند بدء التشغيل لتثبيتها. بعد ذلك يمكن لإضافاتك وأدواتك استيرادها.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### البنية الأساسية
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+تستقبل دالة الإضافة ما يلي:
+
+- `project`: معلومات المشروع الحالي.
+- `directory`: دليل العمل الحالي.
+- `worktree`: مسار git worktree.
+- `client`: عميل SDK لـ opencode للتفاعل مع الذكاء الاصطناعي.
+- `$`: واجهة [shell API](https://bun.com/docs/runtime/shell) الخاصة بـ Bun لتنفيذ الأوامر.
+
+---
+
+### دعم TypeScript
+
+بالنسبة لإضافات TypeScript، يمكنك استيراد الأنواع من حزمة الإضافة:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### الأحداث
+
+يمكن للإضافات الاشتراك في الأحداث كما هو موضح أدناه في قسم الأمثلة. فيما يلي قائمة بالأحداث المتاحة.
+
+#### أحداث الأوامر
+
+- `command.executed`
+
+#### أحداث الملفات
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### أحداث التثبيت
+
+- `installation.updated`
+
+#### أحداث LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### أحداث الرسائل
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### أحداث الأذونات
+
+- `permission.asked`
+- `permission.replied`
+
+#### أحداث الخادم
+
+- `server.connected`
+
+#### أحداث الجلسة
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### أحداث Todo
+
+- `todo.updated`
+
+#### أحداث shell
+
+- `shell.env`
+
+#### أحداث الأدوات
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### أحداث واجهة TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## أمثلة
+
+فيما يلي بعض أمثلة الإضافات التي يمكنك استخدامها لتوسيع opencode.
+
+---
+
+### إرسال إشعارات
+
+أرسل إشعارات عند وقوع أحداث معينة:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+نستخدم `osascript` لتشغيل AppleScript على macOS. هنا نستخدمه لإرسال إشعارات.
+
+:::note
+إذا كنت تستخدم تطبيق OpenCode لسطح المكتب، فيمكنه إرسال إشعارات النظام تلقائيا عند جاهزية الرد أو عند حدوث خطأ في جلسة.
+:::
+
+---
+
+### حماية .env
+
+امنع opencode من قراءة ملفات `.env`:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### حقن متغيرات البيئة
+
+احقن متغيرات البيئة في جميع عمليات تنفيذ shell (أدوات الذكاء الاصطناعي وterminal المستخدم):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### أدوات مخصصة
+
+يمكن للإضافات أيضا إضافة أدوات مخصصة إلى opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+تقوم الدالة المساعدة `tool` بإنشاء أداة مخصصة يمكن لـ opencode استدعاؤها. تأخذ دالة مخطط Zod وتعيد تعريف أداة يتضمن:
+
+- `description`: ما الذي تفعله الأداة
+- `args`: مخطط Zod لوسائط الأداة
+- `execute`: الدالة التي تُشغَّل عند استدعاء الأداة
+
+ستكون أدواتك المخصصة متاحة لـ opencode إلى جانب الأدوات المضمنة.
+
+---
+
+### التسجيل
+
+استخدم `client.app.log()` بدلا من `console.log` للتسجيل البنيوي:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+المستويات: `debug`, `info`, `warn`, `error`. راجع [توثيق SDK](https://opencode.ai/docs/sdk) للتفاصيل.
+
+---
+
+### خطافات الضغط
+
+خصّص السياق الذي يتم تضمينه عند ضغط جلسة:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+يعمل الخطاف `experimental.session.compacting` قبل أن ينشئ نموذج اللغة الكبير (LLM) ملخص المتابعة. استخدمه لحقن سياق خاص بالمجال قد يفوته موجّه الضغط الافتراضي.
+
+يمكنك أيضا استبدال موجّه الضغط بالكامل عبر ضبط `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+عند ضبط `output.prompt` فإنه يستبدل موجّه الضغط الافتراضي بالكامل. يتم تجاهل المصفوفة `output.context` في هذه الحالة.

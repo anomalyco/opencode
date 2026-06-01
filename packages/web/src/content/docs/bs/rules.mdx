@@ -1,0 +1,180 @@
+---
+title: Pravila
+description: Postavite prilagodena uputstva za opencode.
+---
+
+Mozete dodati prilagodena uputstva za opencode tako sto kreirate `AGENTS.md` datoteku. Ovo je slicno pravilima u Cursor-u. Sadrzi uputstva koja se ubacuju u LLM kontekst da prilagode ponasanje za vas projekat.
+
+---
+
+## Inicijalizacija
+
+Da kreirate novu `AGENTS.md` datoteku, pokrenite `/init` komandu u opencode.
+
+:::tip
+Preporuceno je da `AGENTS.md` iz projekta commitujete u Git.
+:::
+
+Ovo skenira projekat i njegov sadrzaj, razumije cemu projekat sluzi i generise `AGENTS.md`. Tako opencode bolje navigira kroz kod.
+
+Ako vec imate `AGENTS.md`, komanda ce pokusati da ga dopuni.
+
+---
+
+## Primjer
+
+Datoteku mozete napraviti i rucno. Evo primjera sta mozete staviti u `AGENTS.md`.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+Ovdje dodajete uputstva specificna za projekat koja se dijele sa timom.
+
+---
+
+## Tipovi
+
+opencode podrzava citanje `AGENTS.md` datoteke sa vise lokacija. Svaka lokacija ima drugu svrhu.
+
+### Projekat
+
+Stavite `AGENTS.md` u korijen projekta za pravila specificna za taj projekat. Primjenjuju se samo kada radite u tom direktoriju ili poddirektorijima.
+
+### Globalno
+
+Mozete imati i globalna pravila u `~/.config/opencode/AGENTS.md`. Ona se primjenjuju u svim opencode sesijama.
+
+Posto se ovo ne commituje u Git niti dijeli s timom, najbolje je da ovdje cuvate licna pravila koja LLM treba pratiti.
+
+### Kompatibilnost s Claude Code
+
+Za korisnike koji prelaze sa Claude Code, OpenCode podrzava i Claude konvencije datoteka kao rezervu:
+
+- **Pravila projekta**: `CLAUDE.md` u direktoriju projekta (koristi se ako ne postoji `AGENTS.md`)
+- **Globalna pravila**: `~/.claude/CLAUDE.md` (koristi se ako ne postoji `~/.config/opencode/AGENTS.md`)
+- **Skills**: `~/.claude/skills/` — pogledajte [Agent Skills](/docs/skills/) za detalje
+
+Da iskljucite kompatibilnost sa Claude Code, postavite jednu od ovih varijabli okruzenja:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## Prioritet
+
+Kada se opencode pokrene, trazi datoteke pravila ovim redoslijedom:
+
+1. **Lokalne datoteke** pretrazivanjem prema gore od trenutnog direktorija (`AGENTS.md`, `CLAUDE.md`)
+2. **Globalna datoteka** na `~/.config/opencode/AGENTS.md`
+3. **Claude Code datoteka** na `~/.claude/CLAUDE.md` (osim ako je iskljucena)
+
+Prva pronadena datoteka pobjeduje u svakoj kategoriji. Na primjer, ako imate i `AGENTS.md` i `CLAUDE.md`, koristi se samo `AGENTS.md`. Isto tako, `~/.config/opencode/AGENTS.md` ima prednost nad `~/.claude/CLAUDE.md`.
+
+---
+
+## Prilagođena uputstva
+
+Mozete navesti prilagodene datoteke uputstava u `opencode.json` ili globalnom `~/.config/opencode/opencode.json`. Tako vi i tim ponovo koristite postojeca pravila bez dupliranja u AGENTS.md.
+
+Primjer:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+Mozete koristiti i udaljene URL-ove za ucitavanje uputstava sa weba.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Udaljena uputstva se preuzimaju uz timeout od 5 sekundi.
+
+Sve datoteke uputstava se kombinuju sa vasim `AGENTS.md` datotekama.
+
+---
+
+## Referenciranje eksternih datoteka
+
+Iako opencode ne parsira automatski reference datoteka u `AGENTS.md`, slicno ponasanje mozete dobiti na dva nacina:
+
+### Korištenje opencode.json
+
+Preporuceni pristup je da koristite `instructions` polje u `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### Ručna uputstva u AGENTS.md
+
+Mozete nauciti opencode da cita eksterne datoteke tako sto cete dati eksplicitna uputstva u `AGENTS.md`. Evo prakticnog primjera:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+Ovaj pristup vam omogucava da:
+
+- Kreirate modularne datoteke pravila koje se mogu ponovo koristiti
+- Dijelite pravila izmedu projekata kroz symlinkove ili git submodule
+- Drzite AGENTS.md kratkim dok upucujete na detaljne smjernice
+- Osigurate da opencode ucitava datoteke samo kad su potrebne za konkretan zadatak
+
+:::tip
+Za monorepo projekte ili projekte sa zajednickim standardima, odrzivije je koristiti `opencode.json` sa glob obrascima (npr. `packages/*/AGENTS.md`) nego rucna uputstva.
+:::

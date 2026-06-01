@@ -1,0 +1,190 @@
+---
+title: Regeln
+description: Lege eigene Anweisungen fuer opencode fest.
+---
+
+Du kannst opencode ueber eine `AGENTS.md`-Datei mit eigenen Anweisungen steuern.
+Das ist aehnlich zu den Regeln in Cursor und wird direkt in den LLM-Kontext geladen.
+
+---
+
+## Initialisierung
+
+Um eine neue `AGENTS.md` zu erstellen, fuehre in opencode den Befehl `/init` aus.
+
+:::tip
+Du solltest die `AGENTS.md` deines Projekts in Git committen.
+:::
+
+Der Befehl scannt dein Projekt und erzeugt daraus eine passende `AGENTS.md`.
+So kann opencode sich in deinem Code besser orientieren.
+
+Wenn bereits eine `AGENTS.md` existiert, versucht opencode sie zu erweitern.
+
+---
+
+## Beispiel
+
+Du kannst die Datei auch manuell anlegen.
+Hier ist ein Beispiel, was in einer `AGENTS.md` stehen kann.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+Hier hinterlegst du projektspezifische Regeln, die dein Team gemeinsam nutzt.
+
+---
+
+## Typen
+
+opencode kann `AGENTS.md` aus mehreren Orten lesen.
+Die Orte haben unterschiedliche Zwecke.
+
+### Projekt
+
+Lege eine `AGENTS.md` im Projekt-Root ab, um projektspezifische Regeln zu definieren.
+Diese gelten nur in diesem Verzeichnis und seinen Unterordnern.
+
+### Global
+
+Du kannst auch globale Regeln in `~/.config/opencode/AGENTS.md` speichern.
+Diese gelten in allen opencode-Sitzungen.
+
+Da diese Datei nicht in Git landet und nicht mit dem Team geteilt wird, eignet sie sich fuer persoenliche Regeln.
+
+### Claude Code-Kompatibilität
+
+Wenn du von Claude Code kommst, unterstuetzt OpenCode dessen Dateikonventionen als Fallback:
+
+- **Projektregeln**: `CLAUDE.md` im Projekt (wenn keine `AGENTS.md` existiert)
+- **Globale Regeln**: `~/.claude/CLAUDE.md` (wenn keine `~/.config/opencode/AGENTS.md` existiert)
+- **Skills**: `~/.claude/skills/` - siehe [Agent Skills](/docs/skills/) fuer Details
+
+Um die Claude-Code-Kompatibilitaet zu deaktivieren, setze eine dieser Umgebungsvariablen:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## Rangfolge
+
+Beim Start sucht opencode in dieser Reihenfolge nach Regeldateien:
+
+1. **Lokale Dateien** beim Hochlaufen ab dem aktuellen Verzeichnis (`AGENTS.md`, `CLAUDE.md`)
+2. **Globale Datei** unter `~/.config/opencode/AGENTS.md`
+3. **Claude-Code-Datei** unter `~/.claude/CLAUDE.md` (falls nicht deaktiviert)
+
+Pro Kategorie gewinnt die zuerst passende Datei.
+Wenn sowohl `AGENTS.md` als auch `CLAUDE.md` existieren, wird nur `AGENTS.md` verwendet.
+
+---
+
+## Eigene Anweisungen
+
+Du kannst zusaetzliche Anweisungsdateien in deiner `opencode.json` oder in `~/.config/opencode/opencode.json` angeben.
+So kann dein Team bestehende Regeln wiederverwenden, statt Inhalte in `AGENTS.md` zu duplizieren.
+
+Beispiel:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+Du kannst auch Remote-URLs nutzen, um Regeln aus dem Web zu laden.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Remote-Anweisungen werden mit 5 Sekunden Timeout geladen.
+
+Alle Anweisungsdateien werden mit deinen `AGENTS.md`-Dateien kombiniert.
+
+---
+
+## Externe Dateien referenzieren
+
+opencode parst Datei-Referenzen in `AGENTS.md` nicht automatisch.
+Du erreichst aehnliches Verhalten auf zwei Wegen.
+
+### Mit opencode.json
+
+Empfohlen ist das `instructions`-Feld in der `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### Manuelle Anweisungen in AGENTS.md
+
+Du kannst opencode explizit anweisen, externe Dateien zu lesen.
+Hier ein praxisnahes Beispiel:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+Damit kannst du:
+
+- Modulare, wiederverwendbare Regeldateien erstellen
+- Regeln projektuebergreifend per Symlink oder Git-Submodule teilen
+- `AGENTS.md` kurz halten und auf Detailregeln verweisen
+- Sicherstellen, dass Dateien nur bei Bedarf geladen werden
+
+:::tip
+Fuer Monorepos oder gemeinsame Standards ist `opencode.json` mit Glob-Mustern (z. B. `packages/*/AGENTS.md`) oft wartbarer als manuelle Anweisungen.
+:::

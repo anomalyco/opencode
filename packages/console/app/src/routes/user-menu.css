@@ -1,0 +1,18 @@
+[data-component="user-menu"] {
+  [data-component="dropdown"] {
+    [data-slot="trigger"] span {
+      color: var(--color-text-muted);
+    }
+
+    [data-slot="dropdown"] {
+      form {
+        width: 100%;
+      }
+    }
+
+    [data-slot="item"] {
+      color: var(--color-danger);
+      text-decoration: none;
+    }
+  }
+}
