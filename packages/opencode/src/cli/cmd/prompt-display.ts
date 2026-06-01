@@ -1,6 +1,6 @@
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
-function promptOffsetWidth(value: string) {
+export function promptOffsetWidth(value: string) {
   let width = 0
   for (const part of graphemes.segment(value)) {
     // Textarea offsets count newlines as one position; Bun.stringWidth counts them as zero.

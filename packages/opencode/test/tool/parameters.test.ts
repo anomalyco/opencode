@@ -82,6 +82,13 @@ describe("tool parameters", () => {
         properties: { value: { minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER } },
       })
     })
+
+    test("does not expose defaulted optional keys as nullable", () => {
+      expect(toJsonSchema(WebFetch)).toMatchObject({
+        properties: { format: { type: "string", enum: ["text", "markdown", "html"], default: "markdown" } },
+      })
+      expect(toJsonSchema(WebFetch).properties?.format).not.toHaveProperty("anyOf")
+    })
   })
 
   describe("apply_patch", () => {
@@ -257,8 +264,15 @@ describe("tool parameters", () => {
   })
 
   describe("webfetch", () => {
-    test("accepts url-only", () => {
-      expect(parse(WebFetch, { url: "https://example.com" }).url).toBe("https://example.com")
+    test("defaults omitted format to markdown", () => {
+      expect(parse(WebFetch, { url: "https://example.com" })).toEqual({
+        url: "https://example.com",
+        format: "markdown",
+      })
+      expect(parse(WebFetch, { url: "https://example.com", format: undefined })).toEqual({
+        url: "https://example.com",
+        format: "markdown",
+      })
     })
   })
 

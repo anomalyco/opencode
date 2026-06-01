@@ -21,8 +21,10 @@ export const AccountPlugin = PluginV2.define({
 
     return {
       "catalog.transform": Effect.fn(function* (evt) {
+        const active = yield* accounts.activeAll().pipe(Effect.orDie)
+        if (active.size === 0) return
         for (const item of evt.provider.list()) {
-          const account = yield* accounts.active(Auth.ServiceID.make(item.provider.id)).pipe(Effect.orDie)
+          const account = active.get(Auth.ServiceID.make(item.provider.id))
           if (!account) continue
           evt.provider.update(item.provider.id, (provider) => {
             provider.enabled = {
