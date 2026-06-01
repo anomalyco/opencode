@@ -2,6 +2,125 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## Personal Fork Operations
+
+This repository is William's public personal fork of upstream `anomalyco/opencode`:
+
+- Fork remote: `origin` -> `https://github.com/c0dn/opencode-personal.git`
+- Upstream remote: `upstream` -> `https://github.com/anomalyco/opencode.git`
+- Default branch: `dev`
+- The fork should normally keep only the remote `dev` branch. Feature or sync branches are temporary and should be deleted after merge.
+- Do not rename the binary. Personal releases still install and run as `opencode`.
+
+### What makes this fork custom
+
+The fork carries a small patch stack on top of upstream `dev`:
+
+- CLI updater and installer use GitHub Releases from `c0dn/opencode-personal`.
+- Package-manager upgrades (`npm`, `bun`, `pnpm`, `brew`, `scoop`, `choco`) are blocked for personal builds.
+- Only GitHub-release/curl upgrades are supported.
+- Personal release builds are limited to `linux-x64` and `linux-arm64`.
+- `OPENCODE_BUILD_TARGETS` filters CLI build targets, for example `linux-x64,linux-arm64`.
+
+Key files for the personal release channel:
+
+- `packages/opencode/src/installation/index.ts` - updater source, latest-release lookup, blocked upgrade methods.
+- `install` - installer download URLs and supported platform checks.
+- `packages/opencode/script/build.ts` - `OPENCODE_BUILD_TARGETS` filtering and release asset upload.
+- `packages/opencode/test/installation/installation.test.ts` - updater behavior tests.
+- `.github/workflows/personal-release.yml` - manual personal release workflow.
+- `.github/workflows/sync-upstream.yml` - upstream sync workflow.
+
+### Upstream sync and release mirror flow
+
+The fork syncs from `anomalyco/opencode:dev` using `.github/workflows/sync-upstream.yml`.
+
+- Runs daily at `08:00 UTC` and can be triggered manually with `workflow_dispatch`.
+- Checks out `dev` from this fork.
+- Adds/fetches `upstream` from `https://github.com/anomalyco/opencode.git`.
+- Merges `upstream/dev` into the local `dev` checkout.
+- Runs:
+  - `bun typecheck`
+  - `bun turbo test:ci`
+  - `bun --cwd packages/opencode test:httpapi`
+- Pushes directly to this fork's `dev` only after those checks pass.
+- Detects the latest upstream GitHub Release and, if its upstream tag is contained in `dev`, mirrors it as a personal release named `v<upstream-version>-c0dn.1`.
+- The `-c0dn.1` suffix avoids colliding with upstream tags inherited by the fork while keeping the version tied to the official release.
+
+If the upstream merge conflicts or validation fails, the workflow fails before pushing to `dev`. Resolve manually by merging `upstream/dev` into `dev` locally, preserving the personal release-channel patch.
+
+Manual sync commands:
+
+```bash
+git checkout dev
+git fetch upstream dev
+git merge --no-edit upstream/dev
+bun typecheck
+bun turbo test:ci
+bun --cwd packages/opencode test:httpapi
+git push origin dev
+```
+
+### Personal release flow
+
+Use `.github/workflows/personal-release.yml` to publish personal builds.
+
+- Trigger manually from GitHub Actions.
+- Use versions like `1.15.13-c0dn.1`, `1.15.13-c0dn.2`, etc. Automated upstream mirrors use `v<upstream-version>-c0dn.1`.
+- The workflow creates a GitHub Release, builds Linux CLI artifacts, uploads:
+  - `opencode-linux-x64.tar.gz`
+  - `opencode-linux-arm64.tar.gz`
+- It publishes the release after upload succeeds.
+- It can also be called by `sync-upstream.yml` after a successful upstream sync.
+
+Manual workflow trigger example:
+
+```bash
+gh workflow run personal-release.yml --repo c0dn/opencode-personal --ref dev -f version=1.15.13-c0dn.2
+```
+
+Local install/test command for the current personal release:
+
+```fish
+set tmp (mktemp -d)
+curl -L -o "$tmp/opencode.tar.gz" "https://github.com/c0dn/opencode-personal/releases/download/v1.15.13-c0dn.1/opencode-linux-x64.tar.gz"
+tar -xzf "$tmp/opencode.tar.gz" -C "$tmp"
+mkdir -p "$HOME/.opencode/bin"
+cp "$tmp/opencode" "$HOME/.opencode/bin/opencode"
+chmod +x "$HOME/.opencode/bin/opencode"
+rm -rf "$tmp"
+fish_add_path "$HOME/.opencode/bin"
+opencode --version
+```
+
+### Making personal features
+
+Use normal short-lived branches for personal feature work:
+
+```bash
+git checkout dev
+git pull --ff-only origin dev
+git checkout -b feature/<short-name>
+```
+
+Guidelines:
+
+- Keep personal patches small and isolated so upstream syncs stay easy.
+- Prefer changes that do not overlap with upstream release/updater internals unless the feature requires it.
+- Open a PR from the feature branch into `dev`, or merge locally only when William asks.
+- Delete feature branches after merge to keep the fork clean.
+- Before release, make sure `dev` is not behind upstream and the personal updater tests pass.
+
+Useful validation for this fork:
+
+```bash
+bun --cwd packages/opencode typecheck
+bun --cwd packages/opencode test test/installation/installation.test.ts
+OPENCODE_VERSION=1.15.13-c0dn.0 OPENCODE_BUILD_TARGETS=linux-x64,linux-arm64 bun ./packages/opencode/script/build.ts --skip-embed-web-ui
+```
+
+Use the full upstream test/typecheck workflows when changing broad code paths, but for release-channel-only edits the targeted updater test plus opencode package typecheck is the minimum check.
+
 ## Commits and PR Titles
 
 Use conventional commit-style messages and PR titles: `type(scope): summary`.
