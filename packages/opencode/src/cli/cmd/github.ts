@@ -547,7 +547,12 @@ export const GithubRunCommand = effectCmd({
         }
         // Skip permission check and reactions for repo events (no actor to check, no issue to react to)
         if (isUserEvent) {
-          await assertPermissions()
+          // Skip permission check when using a custom GitHub token, since the caller
+          // manages their own auth and the collaborator API returns "none" for GitHub
+          // App bot actors (e.g. my-bot[bot]) even though they have valid installation tokens.
+          if (!useGithubToken) {
+            await assertPermissions()
+          }
           await addReaction(commentType)
         }
 
