@@ -7,8 +7,8 @@ import "./app.css"
 function AppMeta() {
   return (
     <>
-      <Title>opencode stats</Title>
-      <Meta name="description" content="OpenCode usage and stats." />
+      <Title>OpenCode Stats</Title>
+      <Meta name="description" content="OpenCode usage, market share, token cost, and session cost stats." />
     </>
   )
 }
@@ -16,6 +16,7 @@ function AppMeta() {
 export default function App() {
   return (
     <Router
+      base={import.meta.env.BASE_URL.replace(/\/$/, "")}
       explicitLinks={true}
       root={(props) => (
         <MetaProvider>

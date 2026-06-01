@@ -29,6 +29,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const project = yield* Project.Service
     const registry = yield* ToolRegistry.Service
     const worktreeSvc = yield* Worktree.Service
+    const sessions = yield* Session.Service
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
@@ -127,21 +128,19 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
 
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
       const limit = ctx.query.limit ?? 100
-      const sessions = Array.from(
-        Session.listGlobal({
-          directory: ctx.query.directory,
-          roots: ctx.query.roots,
-          start: ctx.query.start,
-          cursor: ctx.query.cursor,
-          search: ctx.query.search,
-          limit: limit + 1,
-          archived: ctx.query.archived,
-        }),
-      )
-      const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+      const all = yield* sessions.listGlobal({
+        directory: ctx.query.directory,
+        roots: ctx.query.roots,
+        start: ctx.query.start,
+        cursor: ctx.query.cursor,
+        search: ctx.query.search,
+        limit: limit + 1,
+        archived: ctx.query.archived,
+      })
+      const list = all.length > limit ? all.slice(0, limit) : all
       return HttpServerResponse.jsonUnsafe(list, {
         headers:
-          sessions.length > limit && list.length > 0
+          all.length > limit && list.length > 0
             ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
             : undefined,
       })
