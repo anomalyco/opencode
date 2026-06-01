@@ -2218,9 +2218,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    const description =
-      props.metadata.background === true ? `${props.input.description} (background)` : props.input.description
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${description}`]
+    let content = [
+      formatSubagentTitle(
+        Locale.titlecase(props.input.subagent_type ?? "General"),
+        props.input.description,
+        props.metadata.background === true,
+      ),
+    ]
 
     const retrying = retry()
     if (isRunning() && retrying) {
@@ -2264,6 +2268,10 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
 export function formatSubagentToolcalls(count: number) {
   return `${count} toolcall${count === 1 ? "" : "s"}`
+}
+
+export function formatSubagentTitle(agent: string, description: string, background: boolean) {
+  return `${agent} Task${background ? " (background)" : ""} — ${description}`
 }
 
 export function formatCompletedSubagentDetail(toolcalls: number, duration: string) {

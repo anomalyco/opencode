@@ -3,6 +3,7 @@ import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   formatCompletedSubagentDetail,
+  formatSubagentTitle,
   formatSubagentToolcalls,
   InlineToolRow,
 } from "../../../src/cli/cmd/tui/routes/session/index"
@@ -145,6 +146,13 @@ describe("TUI inline tool wrapping", () => {
     expect(formatCompletedSubagentDetail(1, "501ms")).toBe("1 toolcall · 501ms")
     expect(formatCompletedSubagentDetail(2, "501ms")).toBe("2 toolcalls · 501ms")
     expect(formatSubagentToolcalls(0)).toBe("0 toolcalls")
+  })
+
+  test("keeps background state attached to the subagent identity", () => {
+    expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Task — Inspect renderer")
+    expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
+      "Explore Task (background) — Inspect renderer",
+    )
   })
 
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {
