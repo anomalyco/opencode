@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PromptInfo } from "../../../../src/cli/cmd/tui/component/prompt/history"
-import { assign, expandPastedTextPlaceholders, strip } from "../../../../src/cli/cmd/tui/component/prompt/part"
+import { assign, expandTrackedPastedText, strip } from "../../../../src/cli/cmd/tui/component/prompt/part"
 
 describe("prompt part", () => {
   test("strip removes persisted ids from reused file parts", () => {
@@ -45,23 +45,35 @@ describe("prompt part", () => {
     })
   })
 
-  test("expandPastedTextPlaceholders preserves wide characters around pasted text", () => {
-    const parts = [
-      {
-        type: "text" as const,
-        text: "public:\n\tvoid ExecuteTask();\nprivate:",
-        source: {
-          text: {
-            start: 8,
-            end: 26,
-            value: "[Pasted ~3 lines]",
-          },
-        },
-      },
-    ] satisfies PromptInfo["parts"]
+  test("expandTrackedPastedText preserves wide characters around pasted text", () => {
+    const marker = "[Pasted ~3 lines]"
+    const prefix = "你好你好\n"
 
-    expect(expandPastedTextPlaceholders("你好你好\n[Pasted ~3 lines]\n阿斯顿法国红酒看来", parts)).toBe(
+    expect(
+      expandTrackedPastedText(prefix + marker + "\n阿斯顿法国红酒看来", [
+        {
+          start: Bun.stringWidth("你好你好") + 1,
+          end: Bun.stringWidth("你好你好") + 1 + Bun.stringWidth(marker),
+          text: "public:\n\tvoid ExecuteTask();\nprivate:",
+        },
+      ]),
+    ).toBe(
       "你好你好\npublic:\n\tvoid ExecuteTask();\nprivate:\n阿斯顿法国红酒看来",
     )
+  })
+
+  test("expandTrackedPastedText only expands the tracked placeholder occurrence", () => {
+    const marker = "[Pasted ~3 lines]"
+    const prefix = `keep ${marker} then `
+
+    expect(
+      expandTrackedPastedText(prefix + marker + " tail", [
+        {
+          start: Bun.stringWidth(prefix),
+          end: Bun.stringWidth(prefix + marker),
+          text: "alpha\nbeta\ngamma",
+        },
+      ]),
+    ).toBe(`keep ${marker} then alpha\nbeta\ngamma tail`)
   })
 })
