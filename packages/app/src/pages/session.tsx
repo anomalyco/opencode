@@ -37,6 +37,8 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { addLineContext } from "@/utils/doc-line-reference"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
@@ -327,6 +329,7 @@ export default function Page() {
   const sdk = useSDK()
   const settings = useSettings()
   const prompt = usePrompt()
+  const bridge = usePromptDocBridge()
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
@@ -828,20 +831,26 @@ export default function Page() {
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? selectionPreview(input.file, selection)
-    const saved = comments.add({
-      file: input.file,
-      selection: input.selection,
-      comment: input.comment,
-    })
-    prompt.context.add({
-      type: "file",
-      path: input.file,
-      selection,
-      comment: input.comment,
-      commentID: saved.id,
-      commentOrigin: input.origin,
-      preview,
-    })
+    addLineContext(
+      bridge,
+      { file: input.file, selection: input.selection, comment: input.comment, preview },
+      () => {
+        const saved = comments.add({
+          file: input.file,
+          selection: input.selection,
+          comment: input.comment,
+        })
+        prompt.context.add({
+          type: "file",
+          path: input.file,
+          selection,
+          comment: input.comment,
+          commentID: saved.id,
+          commentOrigin: input.origin,
+          preview,
+        })
+      },
+    )
   }
 
   const updateCommentInContext = (input: {

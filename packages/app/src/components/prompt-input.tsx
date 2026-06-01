@@ -75,6 +75,7 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
 import { PromptDrawingShell } from "./prompt-input/drawing-shell"
 import { createPromptDrawing } from "./prompt-input/drawing"
+import { formatSelectedLineLabel } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createPromptDoc } from "./prompt-input/doc"
 import { createPromptContextSync } from "./prompt-input/context-sync"
 import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
@@ -422,18 +423,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   createEffect(() => {
     bridge.setMode(store.mode)
   })
+  const relPath = (path: string) => {
+    const dir = sdk.directory.replace(/\/+$/, "")
+    if (path.startsWith(dir) && (path === dir || path[dir.length] === "/")) {
+      return path.slice(dir.length).replace(/^\/+/, "")
+    }
+    return path
+  }
+
   createEffect(() => {
     bridge.setAddReference((path: string) => {
       if (store.mode !== "doc") return false
-      const dir = sdk.directory.replace(/\/+$/, "")
-      const rel =
-        path.startsWith(dir) && (path === dir || path[dir.length] === "/")
-          ? path.slice(dir.length).replace(/^\/+/, "")
-          : path
-      return doc.addReference(rel)
+      return doc.addReference(relPath(path))
+    })
+    bridge.setAddLineReference((input) => {
+      if (store.mode !== "doc") return false
+      const range = input.selection
+      return doc.addLineReference({
+        path: relPath(input.path),
+        start: range.start,
+        end: range.end,
+        side: range.side,
+        endSide: range.endSide,
+        label: input.label ?? formatSelectedLineLabel(range, language.t),
+        comment: input.comment,
+        preview: input.preview,
+      })
     })
     onCleanup(() => {
       bridge.setAddReference(undefined)
+      bridge.setAddLineReference(undefined)
       bridge.setMode("normal")
     })
   })

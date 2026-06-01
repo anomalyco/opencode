@@ -13,6 +13,8 @@ import { inlineReady } from "./inline-editor"
 import { OpencodeAwarenessSource, OpencodeBlobSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
 import { scheme } from "./theme"
 import { FileReferenceBlockSpec, withFileReferenceSchema } from "./file-reference-block"
+import { LineReferenceBlockSpec, withLineReferenceSchema } from "./line-reference-block"
+import { lineReferenceUrl, normLineRef, type LineRefInput } from "./line-reference-url"
 
 export type DocMountInput = {
   theme: () => "light" | "dark"
@@ -91,7 +93,7 @@ export async function createPage(input: DocMountInput) {
   const [{ PageEditor }, { DocModeExtension, PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider }] =
     await Promise.all([import("@blocksuite/presets"), import("@blocksuite/blocks")])
 
-  const schema = new Schema().register(withFileReferenceSchema(AffineSchemas))
+  const schema = new Schema().register(withLineReferenceSchema(withFileReferenceSchema(AffineSchemas)))
   const page = "page"
   const query = { match: [], mode: "loose" } satisfies Query
   let draft: Doc | undefined
@@ -166,6 +168,7 @@ export async function createPage(input: DocMountInput) {
       togglePrimaryMode: () => "page",
     }),
     ...FileReferenceBlockSpec,
+    ...LineReferenceBlockSpec,
   ]
   editor.hasViewport = true
 
@@ -467,6 +470,36 @@ export async function createPage(input: DocMountInput) {
     return true
   }
 
+  const addLineReference = (ref: LineRefInput) => {
+    if (input.readonly) return false
+    ensureEditable(doc)
+    const parent = doc.getBlockByFlavour("affine:note")[0]
+    if (!parent) return false
+    const norm = normLineRef(ref)
+    const path = ref.path
+    const comment = ref.comment?.trim() ?? ""
+    const preview = ref.preview?.trim() ?? ""
+    doc.addBlock(
+      "opencode:line-reference",
+      {
+        name: getFilename(path),
+        path,
+        url: lineReferenceUrl({ ...ref, ...norm }),
+        start: norm.start,
+        end: norm.end,
+        side: norm.side ?? "",
+        endSide: norm.endSide ?? "",
+        label: ref.label?.trim() ?? "",
+        preview,
+        comment,
+      },
+      parent.id,
+    )
+    onHistory()
+    requestAnimationFrame(() => void focus())
+    return true
+  }
+
   const undo = () => {
     if (!doc.canUndo) return
     doc.undo()
@@ -503,6 +536,7 @@ export async function createPage(input: DocMountInput) {
     refocus,
     addFile,
     addReference,
+    addLineReference,
     onHistory,
     markdown: () =>
       input.sync

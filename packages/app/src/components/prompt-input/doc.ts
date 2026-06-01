@@ -2,6 +2,7 @@ import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpencodeClient, SessionActor } from "@opencode-ai/sdk/v2/client"
 import { createPage, type DocActor, type DocMountInput } from "@/components/blocksuite/blocksuite-doc"
+import type { LineRefInput } from "@/components/blocksuite/line-reference-url"
 import type { DocSyncOpts } from "@/components/blocksuite/opencode-doc-source"
 import { clearActor, loadActor, saveActor } from "./doc-actor"
 
@@ -277,6 +278,8 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const addReference = (path: string) => handle?.addReference(path) ?? false
 
+  const addLineReference = (input: LineRefInput) => handle?.addLineReference(input) ?? false
+
   const actors = () => {
     const list: DocActor[] = handle?.actors() ?? []
     const own = actor()
@@ -327,6 +330,7 @@ export function createPromptDoc(input: PromptDocInput) {
     commitMarkdown,
     addFiles,
     addReference,
+    addLineReference,
     empty,
     advance,
     undo,

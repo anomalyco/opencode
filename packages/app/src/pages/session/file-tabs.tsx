@@ -15,6 +15,8 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { addLineContext } from "@/utils/doc-line-reference"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -183,6 +185,7 @@ export function FileTabContent(props: { tab: string }) {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
+  const bridge = usePromptDocBridge()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
@@ -240,21 +243,26 @@ export function FileTabContent(props: { tab: string }) {
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? buildPreview(input.file, selection)
-
-    const saved = comments.add({
-      file: input.file,
-      selection: input.selection,
-      comment: input.comment,
-    })
-    prompt.context.add({
-      type: "file",
-      path: input.file,
-      selection,
-      comment: input.comment,
-      commentID: saved.id,
-      commentOrigin: input.origin,
-      preview,
-    })
+    addLineContext(
+      bridge,
+      { file: input.file, selection: input.selection, comment: input.comment, preview },
+      () => {
+        const saved = comments.add({
+          file: input.file,
+          selection: input.selection,
+          comment: input.comment,
+        })
+        prompt.context.add({
+          type: "file",
+          path: input.file,
+          selection,
+          comment: input.comment,
+          commentID: saved.id,
+          commentOrigin: input.origin,
+          preview,
+        })
+      },
+    )
   }
 
   const updateCommentInContext = (input: {

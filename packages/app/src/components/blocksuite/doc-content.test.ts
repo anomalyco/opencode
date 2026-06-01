@@ -5,6 +5,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { docMarkdown, docPlain } from "./doc-content"
 import { initDoc } from "./doc-init"
 import { withFileReferenceSchema } from "./file-reference-block"
+import { withLineReferenceSchema } from "./line-reference-block"
 
 type Opts = Parameters<typeof docMarkdown>[1]
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -12,7 +13,7 @@ type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 const cols: DocCollection[] = []
 
 function page() {
-  const schema = new Schema().register(withFileReferenceSchema(AffineSchemas))
+  const schema = new Schema().register(withLineReferenceSchema(withFileReferenceSchema(AffineSchemas)))
   const col = new DocCollection({ schema })
   cols.push(col)
   col.meta.initialize()
@@ -101,6 +102,90 @@ describe("docMarkdown", () => {
 
     expect(out.text).toContain("[.prettierignore](.prettierignore)")
     expect(docPlain(ctx.doc)).toContain(".prettierignore")
+  })
+
+  test("serializes line reference blocks into notes and links", async () => {
+    const ctx = page()
+
+    add(
+      ctx.doc,
+      "opencode:line-reference",
+      {
+        name: "foo.ts",
+        path: "src/foo.ts",
+        url: "src/foo.ts?start=3&end=5",
+        start: 3,
+        end: 5,
+        comment: "check this",
+      },
+      ctx.note,
+    )
+
+    const out = await docMarkdown(
+      ctx.doc,
+      opts(async () => new Response(null, { status: 404 })),
+    )
+
+    expect(out.text).toContain("lines 3 through 5 of src/foo.ts")
+    expect(out.text).toContain("check this")
+    expect(out.text).toContain("[foo.ts L3–5](src/foo.ts?start=3&end=5)")
+    expect(docPlain(ctx.doc)).toContain("foo.ts")
+    expect(docPlain(ctx.doc)).toContain("check this")
+  })
+
+  test("serializes single-line reference", async () => {
+    const ctx = page()
+
+    add(
+      ctx.doc,
+      "opencode:line-reference",
+      {
+        name: "bar.ts",
+        path: "bar.ts",
+        url: "bar.ts?start=5&end=5",
+        start: 5,
+        end: 5,
+        label: "Line 5",
+      },
+      ctx.note,
+    )
+
+    const out = await docMarkdown(
+      ctx.doc,
+      opts(async () => new Response(null, { status: 404 })),
+    )
+
+    expect(out.text).toContain("line 5 of bar.ts")
+    expect(out.text).toContain("[bar.ts Line 5](bar.ts?start=5&end=5)")
+    expect(docPlain(ctx.doc)).toContain("Line 5")
+  })
+
+  test("serializes line reference with diff side", async () => {
+    const ctx = page()
+
+    add(
+      ctx.doc,
+      "opencode:line-reference",
+      {
+        name: "diff.ts",
+        path: "diff.ts",
+        url: "diff.ts?start=10&end=20&side=additions",
+        start: 10,
+        end: 20,
+        side: "additions",
+        label: "Lines 10–20",
+      },
+      ctx.note,
+    )
+
+    const out = await docMarkdown(
+      ctx.doc,
+      opts(async () => new Response(null, { status: 404 })),
+    )
+
+    expect(out.text).toContain("lines 10 through 20 of diff.ts")
+    expect(out.text).toContain("(diff: additions)")
+    expect(out.text).toContain("[diff.ts Lines 10–20](diff.ts?start=10&end=20&side=additions)")
   })
 
   test("serializes attachments into markdown and assets", async () => {
