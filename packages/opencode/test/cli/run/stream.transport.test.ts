@@ -358,6 +358,7 @@ function footer(fn?: (commit: StreamCommit) => void) {
       return closed
     },
     onPrompt: () => () => {},
+    onQueuedRemove: () => () => {},
     onClose: () => () => {},
     event(next) {
       events.push(next)
