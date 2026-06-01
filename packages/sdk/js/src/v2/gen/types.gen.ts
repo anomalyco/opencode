@@ -529,6 +529,9 @@ export type StepFinishPart = {
   type: "step-finish"
   reason: string
   snapshot?: string
+  metadata?: {
+    [key: string]: unknown
+  }
   cost: number
   tokens: {
     total?: number

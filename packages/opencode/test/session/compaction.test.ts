@@ -63,10 +63,11 @@ function createModel(opts: {
   input?: number
   cost?: Provider.Model["cost"]
   npm?: string
+  providerID?: string
 }): Provider.Model {
   return {
     id: "test-model",
-    providerID: "test",
+    providerID: opts.providerID ?? "test",
     name: "Test",
     limit: {
       context: opts.context,
@@ -1337,6 +1338,78 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "stores finish-step provider metadata on the persisted part",
+    () => {
+      const fakeProvider = wide()
+      const stub = llm()
+
+      stub.push(
+        Stream.make(
+          LLMEvent.textStart({ id: "txt-0" }),
+          LLMEvent.textDelta({ id: "txt-0", text: "done" }),
+          LLMEvent.textEnd({ id: "txt-0" }),
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: "stop",
+            usage: basicUsage(),
+            providerMetadata: { openai: { responseId: "resp_1", serviceTier: "flex" } },
+          }),
+          LLMEvent.finish({
+            reason: "stop",
+            usage: basicUsage(),
+          }),
+        ),
+      )
+
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const processors = yield* SessionProcessorModule.SessionProcessor.Service
+        const ssn = yield* SessionNs.Service
+
+        const session = yield* ssn.create({})
+        const prompt = yield* createUserMessage(session.id, "hi")
+        const reply = yield* createAssistantMessage(session.id, prompt.id, test.directory)
+        const model = fakeProvider.model
+        const handle = yield* processors.create({
+          assistantMessage: reply,
+          sessionID: session.id,
+          model,
+        })
+
+        const result = yield* handle.process({
+          user: {
+            id: prompt.id,
+            sessionID: session.id,
+            role: "user",
+            time: prompt.time,
+            agent: prompt.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionLegacy.User,
+          sessionID: session.id,
+          model,
+          agent: {
+            name: "build",
+            mode: "primary",
+            options: {},
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          },
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        })
+
+        const finish = (yield* MessageV2.parts(reply.id)).find(
+          (part): part is SessionLegacy.StepFinishPart => part.type === "step-finish",
+        )
+
+        expect(result).toBe("continue")
+        expect(finish?.metadata).toEqual({ openai: { responseId: "resp_1", serviceTier: "flex" } })
+      }).pipe(withCompaction({ llm: stub.layer, provider: fakeProvider }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "does not allow tool calls while generating the summary",
     () => {
       const stub = llm()
@@ -1674,6 +1747,39 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(3 + 1.5)
   })
 
+  test("applies OpenAI flex discount to cost", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      providerID: "openai",
+      cost: {
+        input: 2,
+        output: 8,
+        cache: { read: 0.5, write: 0 },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({
+        inputTokens: 1_200_000,
+        outputTokens: 250_000,
+        reasoningTokens: 50_000,
+        totalTokens: 1_450_000,
+        cacheReadInputTokens: 200_000,
+      }),
+      metadata: {
+        openai: {
+          serviceTier: "flex",
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(1_000_000)
+    expect(result.tokens.output).toBe(200_000)
+    expect(result.tokens.reasoning).toBe(50_000)
+    expect(result.cost).toBe(1 + 1 + 0.05)
+  })
+
   test("uses matching context cost tier before over-200k fallback", () => {
     const model = createModel({
       context: 1_000_000,
@@ -1715,6 +1821,49 @@ describe("SessionNs.getUsage", () => {
 
     expect(result.tokens.input).toBe(550_000)
     expect(result.cost).toBe(2.75 + 0.6 + 0.05)
+  })
+
+  test("applies OpenAI flex discount after selecting a context cost tier", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      providerID: "openai",
+      cost: {
+        input: 1,
+        output: 2,
+        cache: { read: 0.1, write: 0.5 },
+        tiers: [
+          {
+            input: 4,
+            output: 6,
+            cache: { read: 0.2, write: 1 },
+            tier: { type: "context", size: 200_000 },
+          },
+        ],
+        experimentalOver200K: {
+          input: 100,
+          output: 100,
+          cache: { read: 100, write: 100 },
+        },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({
+        inputTokens: 300_000,
+        outputTokens: 100_000,
+        totalTokens: 400_000,
+        cacheReadInputTokens: 50_000,
+      }),
+      metadata: {
+        openai: {
+          serviceTier: "flex",
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(250_000)
+    expect(result.cost).toBe(0.5 + 0.3 + 0.005)
   })
 
   test("falls back to over-200k pricing when no cost tier matches", () => {

@@ -249,6 +249,61 @@ describe("applyDirectoryEvent", () => {
     }
   })
 
+  test("keeps step-finish parts from live message events", () => {
+    const message = userMessage("msg_1", "ses_1")
+    const [store, setStore] = createStore(
+      baseState({
+        message: { ses_1: [message] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "prt_1",
+            messageID: message.id,
+            sessionID: "ses_1",
+            type: "step-finish",
+            reason: "stop",
+            cost: 0,
+            tokens: {
+              input: 1,
+              output: 1,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            metadata: { openai: { serviceTier: "flex" } },
+          } satisfies Part,
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.part[message.id]).toEqual([
+      {
+        id: "prt_1",
+        messageID: message.id,
+        sessionID: "ses_1",
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: {
+          input: 1,
+          output: 1,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        metadata: { openai: { serviceTier: "flex" } },
+      },
+    ])
+  })
+
   test("cleans caches for trimmed sessions on session.created", () => {
     const dropped = rootSession({ id: "ses_b" })
     const kept = rootSession({ id: "ses_a" })

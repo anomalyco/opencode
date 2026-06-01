@@ -15,8 +15,7 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
-
-const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
+import { includeSessionPart } from "../session-part-filter"
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
@@ -225,7 +224,7 @@ export function applyDirectoryEvent(input: {
     }
     case "message.part.updated": {
       const part = (event.properties as { part: Part }).part
-      if (SKIP_PARTS.has(part.type)) break
+      if (!includeSessionPart(part)) break
       input.setStore(
         produce((draft) => {
           delete draft.part_text_accum_delta[part.id]

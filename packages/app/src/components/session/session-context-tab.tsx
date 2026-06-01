@@ -17,6 +17,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { getSessionContextMetrics } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
+import { formatSessionContextRaw } from "./session-context-raw"
 
 const BREAKDOWN_COLOR: Record<SessionContextBreakdownKey, string> = {
   system: "var(--syntax-info)",
@@ -38,7 +39,7 @@ function Stat(props: { label: string; value: JSX.Element }) {
 function RawMessageContent(props: { message: Message; getParts: (id: string) => Part[]; onRendered: () => void }) {
   const file = createMemo(() => {
     const parts = props.getParts(props.message.id)
-    const contents = JSON.stringify({ message: props.message, parts }, null, 2)
+    const contents = formatSessionContextRaw(props.message, parts)
     return {
       name: `${props.message.role}-${props.message.id}.json`,
       contents,

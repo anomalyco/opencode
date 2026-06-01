@@ -13,8 +13,7 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
-
-const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
+import { includeSessionPart } from "./session-part-filter"
 
 function sortParts(parts: Part[]) {
   return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
@@ -338,7 +337,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         batch(() => {
           input.setStore("message", input.sessionID, reconcile(message, { key: "id" }))
           for (const p of next.part) {
-            const filtered = p.part.filter((x) => !SKIP_PARTS.has(x.type))
+            const filtered = p.part.filter(includeSessionPart)
             if (filtered.length) input.setStore("part", p.id, filtered)
           }
           setMeta("limit", key, message.length)

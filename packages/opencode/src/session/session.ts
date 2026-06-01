@@ -433,13 +433,26 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   }
 
   const contextTokens = inputTokens
-  const costInfo =
+  const baseCostInfo =
     input.model.cost?.tiers
       ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
       .sort((a, b) => b.tier.size - a.tier.size)[0] ??
     (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
       : input.model.cost)
+  // OpenAI reports the selected service tier in metadata but not the billed amount.
+  // Apply flex's discounted rates locally until the catalog carries service-tier pricing.
+  const costInfo =
+    isOpenAIFlex(input.model, input.metadata) && baseCostInfo
+      ? {
+          input: flexRate(baseCostInfo.input),
+          output: flexRate(baseCostInfo.output),
+          cache: {
+            read: flexRate(baseCostInfo.cache.read),
+            write: flexRate(baseCostInfo.cache.write),
+          },
+        }
+      : baseCostInfo
   return {
     cost: safe(
       new Decimal(0)
@@ -454,6 +467,15 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
     ),
     tokens,
   }
+}
+
+function isOpenAIFlex(model: Provider.Model, metadata?: ProviderMetadata) {
+  const openai = metadata?.["openai"]
+  return model.providerID === "openai" && openai?.["serviceTier"] === "flex"
+}
+
+function flexRate(value: number) {
+  return new Decimal(value).div(2).toNumber()
 }
 
 export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusyError", {
