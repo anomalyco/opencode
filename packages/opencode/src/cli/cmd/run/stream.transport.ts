@@ -51,6 +51,8 @@ import type {
   FooterSubagentState,
   FooterSubagentTab,
   FooterView,
+  LocalReplayAnchor,
+  LocalReplayRow,
   RunFilePart,
   RunInput,
   RunPrompt,
@@ -81,6 +83,7 @@ type Wait = {
   tick: number
   armed: boolean
   live: boolean
+  onVisibleOutput?: (anchor: LocalReplayAnchor) => void
   done: Deferred.Deferred<void, unknown>
 }
 
@@ -91,6 +94,7 @@ export type SessionTurnInput = {
   prompt: RunPrompt
   files: RunFilePart[]
   includeFiles: boolean
+  onVisibleOutput?: (anchor: LocalReplayAnchor) => void
   signal?: AbortSignal
 }
 
@@ -102,7 +106,7 @@ export type SessionTransport = {
 }
 
 export type SessionResizeReplayInput = {
-  localRows: () => StreamCommit[]
+  localRows: () => LocalReplayRow[]
   reset: () => Promise<void>
 }
 
@@ -896,6 +900,17 @@ function createLayer(input: StreamInput) {
             limits: input.limits(),
           })
           state.data = next.data
+          const visible = next.commits.at(-1)
+          if (visible) {
+            state.wait?.onVisibleOutput?.({
+              kind: visible.kind,
+              messageID: visible.messageID,
+              partID: visible.partID,
+              ...(visible.partID && state.data.visible.has(visible.partID)
+                ? { visible: state.data.visible.get(visible.partID) }
+                : {}),
+            })
+          }
 
           if (
             event.type === "message.part.updated" &&
@@ -1172,6 +1187,7 @@ function createLayer(input: StreamInput) {
             tick: state.tick,
             armed: false,
             live: false,
+            onVisibleOutput: next.onVisibleOutput,
             done: yield* Deferred.make<void, unknown>(),
           }
           state.wait = item

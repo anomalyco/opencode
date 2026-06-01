@@ -20,7 +20,7 @@ import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { recordRunSpanError, setRunSpanAttributes, withRunSpan } from "./otel"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
-import type { RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
+import type { LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -114,7 +114,7 @@ type RuntimeState = {
   activeVariant: string | undefined
   sessionID: string
   history: RunPrompt[]
-  localRows: StreamCommit[]
+  localRows: LocalReplayRow[]
   sessionTitle?: string
   agent: string | undefined
   switching?: Promise<void>
@@ -379,8 +379,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         },
       })
       const footer = shell.footer
-      const rememberLocal = (commit: StreamCommit) => {
-        state.localRows = [...state.localRows, commit].slice(-LOCAL_REPLAY_ROW_LIMIT)
+      const rememberLocal = (commit: StreamCommit, after?: LocalReplayAnchor) => {
+        state.localRows = [...state.localRows, { commit, after }].slice(-LOCAL_REPLAY_ROW_LIMIT)
       }
 
       const loadCatalog = async (): Promise<void> => {
@@ -662,6 +662,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
 
             await state.switching?.catch(() => {})
 
+            let outputAnchor: LocalReplayAnchor | undefined
             return withRunSpan(
               "RunInteractive.turn",
               {
@@ -692,11 +693,14 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                     prompt,
                     files: input.files,
                     includeFiles,
+                    onVisibleOutput: (anchor) => {
+                      outputAnchor = anchor
+                    },
                     signal,
                   })
                   if (prompt.messageID) {
                     state.localRows = state.localRows.filter(
-                      (commit) => commit.kind !== "user" || commit.messageID !== prompt.messageID,
+                      (row) => row.commit.kind !== "user" || row.commit.messageID !== prompt.messageID,
                     )
                   }
                   includeFiles = false
@@ -716,7 +720,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                     source: "system",
                     messageID: prompt.messageID,
                   } as const
-                  rememberLocal(commit)
+                  rememberLocal(commit, outputAnchor)
                   footer.append(commit)
                 }
               },

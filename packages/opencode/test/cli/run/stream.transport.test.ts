@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpencodeClient, type GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream.transport"
-import type { FooterApi, FooterEvent, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
+import type { FooterApi, FooterEvent, LocalReplayRow, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
 
 type EventStream = Awaited<ReturnType<OpencodeClient["event"]["subscribe"]>>["stream"]
 type GlobalEventStream = Awaited<ReturnType<OpencodeClient["global"]["event"]>>["stream"]
@@ -773,16 +773,18 @@ describe("run stream transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    const localRows: StreamCommit[] = [
-      { kind: "user", text: "pending prompt", phase: "start", source: "system", messageID: "msg-pending" },
+    const localRows: LocalReplayRow[] = [
+      { commit: { kind: "user", text: "pending prompt", phase: "start", source: "system", messageID: "msg-pending" } },
     ]
     const reset = mock(() => {
       localRows.push({
-        kind: "user",
-        text: "sent during reset",
-        phase: "start",
-        source: "system",
-        messageID: "msg-during-reset",
+        commit: {
+          kind: "user",
+          text: "sent during reset",
+          phase: "start",
+          source: "system",
+          messageID: "msg-during-reset",
+        },
       })
       return Promise.resolve()
     })

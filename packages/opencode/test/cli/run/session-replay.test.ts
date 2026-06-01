@@ -180,7 +180,7 @@ describe("run session replay", () => {
       messageID: "msg-user-1",
     } as const
 
-    expect(replayLocalRows([userMessage("msg-user-2", "successful")], [persisted], [failed, error])).toEqual([
+    expect(replayLocalRows([userMessage("msg-user-2", "successful")], [persisted], [{ commit: failed }, { commit: error }])).toEqual([
       failed,
       error,
       persisted,
@@ -203,9 +203,109 @@ describe("run session replay", () => {
       messageID: "msg-user-1",
     } as const
 
-    expect(replayLocalRows([userMessage("msg-user-1", "failed after persistence")], [persisted], [persisted, error])).toEqual([
+    expect(replayLocalRows([userMessage("msg-user-1", "failed after persistence")], [persisted], [{ commit: persisted }, { commit: error }])).toEqual([
       persisted,
       error,
     ])
+  })
+
+  test("keeps a local turn failure below assistant output already visible for that turn", () => {
+    const first = {
+      kind: "user",
+      text: "start",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const answer = {
+      kind: "assistant",
+      text: "partial answer",
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-assistant-1",
+    } as const
+    const error = {
+      kind: "error",
+      text: "stream failed",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const second = {
+      kind: "user",
+      text: "retry",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-2",
+    } as const
+
+    expect(
+      replayLocalRows(
+        [userMessage("msg-user-1", "start"), userMessage("msg-user-2", "retry")],
+        [first, answer, second],
+        [{ commit: error, after: { kind: "assistant", messageID: "msg-assistant-1" } }],
+      ),
+    ).toEqual([first, answer, error, second])
+  })
+
+  test("keeps a local failure above assistant output received after the failure", () => {
+    const first = {
+      kind: "user",
+      text: "start",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const error = {
+      kind: "error",
+      text: "request failed",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const late = {
+      kind: "assistant",
+      text: "late answer",
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-assistant-1",
+    } as const
+
+    expect(replayLocalRows([userMessage("msg-user-1", "start")], [first, late], [{ commit: error }])).toEqual([
+      first,
+      error,
+      late,
+    ])
+  })
+
+  test("inserts a local failure between persisted output chunks spanning that failure", () => {
+    const first = {
+      kind: "user",
+      text: "start",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const complete = {
+      kind: "assistant",
+      text: "before after",
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-assistant-1",
+      partID: "part-1",
+    } as const
+    const error = {
+      kind: "error",
+      text: "stream failed",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+
+    expect(
+      replayLocalRows([userMessage("msg-user-1", "start")], [first, complete], [
+        { commit: error, after: { kind: "assistant", messageID: "msg-assistant-1", partID: "part-1", visible: "before " } },
+      ]),
+    ).toEqual([first, { ...complete, text: "before " }, error, { ...complete, text: "after" }])
   })
 })

@@ -1,7 +1,7 @@
 import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
-import type { FooterPatch, StreamCommit } from "./types"
+import type { FooterPatch, LocalReplayRow, StreamCommit } from "./types"
 
 type ReplayInput = {
   messages: SessionMessages
@@ -187,9 +187,10 @@ export function replaySession(input: ReplayInput): SessionReplay {
   }
 }
 
-export function replayLocalRows(messages: SessionMessages, commits: StreamCommit[], rows: StreamCommit[]): StreamCommit[] {
+export function replayLocalRows(messages: SessionMessages, commits: StreamCommit[], rows: LocalReplayRow[]): StreamCommit[] {
   const persisted = new Set(messages.map((message) => message.info.id))
-  return rows.reduce((out, row) => {
+  return rows.reduce((out, local) => {
+    const row = local.commit
     if (row.kind === "user" && row.messageID && persisted.has(row.messageID)) {
       return out
     }
@@ -198,12 +199,35 @@ export function replayLocalRows(messages: SessionMessages, commits: StreamCommit
       return [...out, row]
     }
 
-    if (persisted.has(row.messageID)) {
-      const after = out.findLastIndex((commit) => commit.messageID === row.messageID)
+    const anchored = local.after
+      ? out.findLastIndex((commit) =>
+          local.after?.partID
+            ? commit.partID === local.after.partID
+            : commit.kind === local.after?.kind && commit.messageID === local.after.messageID,
+        )
+      : -1
+    if (anchored !== -1) {
+      const commit = out[anchored]
+      const visible = local.after?.visible
+      if (commit && visible && commit.text.startsWith(visible) && commit.text.length > visible.length) {
+        return [
+          ...out.slice(0, anchored),
+          { ...commit, text: visible },
+          row,
+          { ...commit, text: commit.text.slice(visible.length) },
+          ...out.slice(anchored + 1),
+        ]
+      }
+
+      return [...out.slice(0, anchored + 1), row, ...out.slice(anchored + 1)]
+    }
+
+    const after = out.findIndex((commit) => commit.kind === "user" && commit.messageID === row.messageID)
+    if (after !== -1) {
       return [...out.slice(0, after + 1), row, ...out.slice(after + 1)]
     }
 
-    const before = out.findIndex((commit) => commit.messageID && row.messageID! < commit.messageID)
+    const before = out.findIndex((commit) => commit.kind === "user" && commit.messageID && row.messageID! < commit.messageID)
     if (before === -1) {
       return [...out, row]
     }
