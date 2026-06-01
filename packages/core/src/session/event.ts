@@ -30,6 +30,88 @@ const options = {
   },
 } as const
 
+const mailboxOptions = {
+  sync: {
+    aggregate: "sessionID",
+    version: 1,
+  },
+} as const
+
+
+export const MailboxState = Schema.Literals(["queued", "processing", "delivered", "failed", "cancelled"]).annotate({
+  identifier: "session.mailbox.state",
+})
+export type MailboxState = typeof MailboxState.Type
+
+export const MailboxKind = Schema.Literals(["user", "inter_agent", "control"]).annotate({
+  identifier: "session.mailbox.kind",
+})
+export type MailboxKind = typeof MailboxKind.Type
+
+export const MailboxDelivery = Schema.Literals(["async", "interrupt"]).annotate({
+  identifier: "session.mailbox.delivery",
+})
+export type MailboxDelivery = typeof MailboxDelivery.Type
+
+const MailboxBase = {
+  timestamp: V2Schema.DateTimeUtcFromMillis,
+  sessionID: SessionSchema.ID,
+  messageID: Schema.String,
+  fromSessionID: SessionSchema.ID.pipe(Schema.optional),
+  rootSessionID: SessionSchema.ID.pipe(Schema.optional),
+  kind: MailboxKind,
+  delivery: MailboxDelivery,
+}
+
+export namespace Mailbox {
+  export const Enqueued = EventV2.define({
+    type: "session.mailbox.enqueued",
+    ...mailboxOptions,
+    schema: {
+      ...MailboxBase,
+    },
+  })
+  export type Enqueued = typeof Enqueued.Type
+
+  export const Processing = EventV2.define({
+    type: "session.mailbox.processing",
+    ...mailboxOptions,
+    schema: {
+      ...MailboxBase,
+      claimID: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Processing = typeof Processing.Type
+
+  export const Delivered = EventV2.define({
+    type: "session.mailbox.delivered",
+    ...mailboxOptions,
+    schema: {
+      ...MailboxBase,
+    },
+  })
+  export type Delivered = typeof Delivered.Type
+
+  export const Failed = EventV2.define({
+    type: "session.mailbox.failed",
+    ...mailboxOptions,
+    schema: {
+      ...MailboxBase,
+      error: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Failed = typeof Failed.Type
+
+  export const Cancelled = EventV2.define({
+    type: "session.mailbox.cancelled",
+    ...mailboxOptions,
+    schema: {
+      ...MailboxBase,
+    },
+  })
+  export type Cancelled = typeof Cancelled.Type
+}
+
 export const UnknownError = Schema.Struct({
   type: Schema.Literal("unknown"),
   message: Schema.String,

@@ -136,3 +136,43 @@ export const PermissionTable = sqliteTable("permission", {
   ...Timestamps,
   data: text({ mode: "json" }).notNull().$type<PermissionV2.Ruleset>(),
 })
+
+export const SessionMailboxTable = sqliteTable(
+  "session_mailbox",
+  {
+    id: text().primaryKey(),
+    from_session_id: text().$type<SessionSchema.ID>(),
+    to_session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    root_session_id: text().$type<SessionSchema.ID>(),
+    kind: text().$type<"user" | "inter_agent" | "control">().notNull(),
+    delivery: text().$type<"async" | "interrupt">().notNull(),
+    state: text().$type<"queued" | "processing" | "delivered" | "failed" | "cancelled">().notNull(),
+    text: text().notNull(),
+    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    claim_id: text(),
+    error: text(),
+    time_created: integer().notNull(),
+    time_updated: integer().notNull(),
+    time_processing: integer(),
+    time_completed: integer(),
+  },
+  (table) => [
+    index("session_mailbox_target_state_kind_fifo_idx").on(
+      table.to_session_id,
+      table.state,
+      table.kind,
+      table.time_created,
+      table.id,
+    ),
+    index("session_mailbox_target_delivery_fifo_idx").on(
+      table.to_session_id,
+      table.delivery,
+      table.time_created,
+      table.id,
+    ),
+    index("session_mailbox_claim_idx").on(table.claim_id),
+  ],
+)
