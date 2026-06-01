@@ -4,11 +4,22 @@ import { defineBlockSchema, type BlockSchemaType, type SchemaToModel } from "@bl
 import { css, html } from "lit"
 import { literal } from "lit/static-html.js"
 
+export type FileNodeType = "file" | "directory"
+
 export type FileReferenceBlockProps = {
   name: string
   path: string
   url: string
+  nodeType?: FileNodeType | ""
 }
+
+const folderIcon = html`<svg fill="none" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+  <path
+    d="M2.08301 2.91675V16.2501H17.9163V5.41675H9.99967L8.33301 2.91675H2.08301Z"
+    stroke="currentColor"
+    stroke-linecap="round"
+  ></path>
+</svg>`
 
 export const FileReferenceBlockSchema = defineBlockSchema({
   flavour: "opencode:file-reference",
@@ -16,6 +27,7 @@ export const FileReferenceBlockSchema = defineBlockSchema({
     name: "",
     path: "",
     url: "",
+    nodeType: "",
   }),
   metadata: {
     version: 1,
@@ -189,9 +201,15 @@ export class FileReferenceBlockComponent extends BlockComponent<FileReferenceBlo
     `
   }
 
+  private icon() {
+    if (this.model.nodeType === "directory") return folderIcon
+    return getAttachmentFileIcons(this.ext())
+  }
+
   override connectedCallback() {
     super.connectedCallback()
     this.setAttribute("contenteditable", "false")
+    if (this.model.nodeType === "directory") this.dataset.nodeType = "directory"
     this.tabIndex = 0
     this.hover.setReference(this)
     this.addEventListener("click", this.press)
@@ -210,7 +228,7 @@ export class FileReferenceBlockComponent extends BlockComponent<FileReferenceBlo
     return html`
       <div class="wrap" contenteditable="false">
         <a class="card" href=${this.model.url || this.model.path} title=${this.model.path}>
-          <span class="icon">${getAttachmentFileIcons(this.ext())}</span>
+          <span class="icon">${this.icon()}</span>
           <span class="body">
             <span class="name">${this.model.name || this.model.path}</span>
             <span class="path">${this.model.path}</span>

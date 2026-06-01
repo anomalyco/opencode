@@ -479,6 +479,7 @@ export const dict = {
   "session.files.selectToOpen": "Selecione um arquivo para abrir",
   "session.files.all": "Todos os arquivos",
   "session.files.addToContext": "Adicionar arquivo ao documento",
+  "session.files.addFolderToContext": "Adicionar pasta ao documento",
   "session.files.empty": "Nenhum arquivo",
   "session.files.binaryContent": "Arquivo binário (conteúdo não pode ser exibido)",
   "session.messages.renderEarlier": "Renderizar mensagens anteriores",

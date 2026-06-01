@@ -432,9 +432,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   createEffect(() => {
-    bridge.setAddReference((path: string) => {
+    bridge.setAddReference((path, nodeType) => {
       if (store.mode !== "doc") return false
-      return doc.addReference(relPath(path))
+      return doc.addReference(relPath(path), nodeType ?? "file")
     })
     bridge.setAddLineReference((input) => {
       if (store.mode !== "doc") return false

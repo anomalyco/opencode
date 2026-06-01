@@ -99,3 +99,44 @@ test("file tree can add a file reference to the doc in doc mode", async ({ page,
   const ref = composer.locator("opencode-file-reference").filter({ hasText: "file-tree.tsx" })
   await expect(ref).toBeVisible()
 })
+
+test("file tree can add a folder reference to the doc in doc mode", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const composer = page.locator(sessionComposerDockSelector)
+  await composer.locator('[data-action="prompt-doc"]').click()
+  await expect(composer.locator('[data-component="prompt-doc"]')).toBeVisible()
+
+  const toggle = page.getByRole("button", { name: "Toggle file tree" })
+  const panel = page.locator("#file-tree-panel")
+  const treeTabs = panel.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
+
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
+
+  const allTab = treeTabs.getByRole("tab", { name: /^all files$/i })
+  await allTab.click()
+
+  const tree = treeTabs.locator('[data-slot="tabs-content"]:not([hidden])')
+
+  const expand = async (name: string) => {
+    const folder = tree.getByRole("button", { name, exact: true }).first()
+    await expect(folder).toBeVisible()
+    if ((await folder.getAttribute("aria-expanded")) === "false") await folder.click()
+    await expect(folder).toHaveAttribute("aria-expanded", "true")
+  }
+
+  await expand("packages")
+  await expand("app")
+  await expand("src")
+
+  const assets = tree.getByRole("button", { name: "assets", exact: true }).first()
+  await expect(assets).toBeVisible()
+  await assets.hover()
+
+  const add = tree.getByRole("button", { name: /add folder to document/i }).first()
+  await expect(add).toBeVisible()
+  await add.click()
+
+  const ref = composer.locator('opencode-file-reference[data-node-type="directory"]').filter({ hasText: "assets" })
+  await expect(ref).toBeVisible()
+})

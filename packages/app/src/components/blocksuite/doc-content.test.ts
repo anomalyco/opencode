@@ -104,6 +104,31 @@ describe("docMarkdown", () => {
     expect(docPlain(ctx.doc)).toContain(".prettierignore")
   })
 
+  test("serializes folder reference blocks into folder notes", async () => {
+    const ctx = page()
+
+    add(
+      ctx.doc,
+      "opencode:file-reference",
+      {
+        name: "assets",
+        path: "src/assets",
+        url: "src/assets",
+        nodeType: "directory",
+      },
+      ctx.note,
+    )
+
+    const out = await docMarkdown(
+      ctx.doc,
+      opts(async () => new Response(null, { status: 404 })),
+    )
+
+    expect(out.text).toContain("referenced folder src/assets")
+    expect(out.text).toContain("[assets](src/assets)")
+    expect(docPlain(ctx.doc)).toContain("assets")
+  })
+
   test("serializes line reference blocks into notes and links", async () => {
     const ctx = page()
 

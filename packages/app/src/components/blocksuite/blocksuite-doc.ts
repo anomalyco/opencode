@@ -12,7 +12,7 @@ import { frame, settled } from "./frame"
 import { inlineReady } from "./inline-editor"
 import { OpencodeAwarenessSource, OpencodeBlobSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
 import { scheme } from "./theme"
-import { FileReferenceBlockSpec, withFileReferenceSchema } from "./file-reference-block"
+import { FileReferenceBlockSpec, withFileReferenceSchema, type FileNodeType } from "./file-reference-block"
 import { LineReferenceBlockSpec, withLineReferenceSchema } from "./line-reference-block"
 import { lineReferenceUrl, normLineRef, type LineRefInput } from "./line-reference-url"
 
@@ -455,14 +455,15 @@ export async function createPage(input: DocMountInput) {
     return true
   }
 
-  const addReference = (path: string) => {
+  const addReference = (path: string, nodeType: FileNodeType = "file") => {
     if (input.readonly) return false
     ensureEditable(doc)
     const parent = doc.getBlockByFlavour("affine:note")[0]
     if (!parent) return false
+    const name = nodeType === "directory" ? path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path : getFilename(path)
     doc.addBlock(
       "opencode:file-reference",
-      { name: getFilename(path), path, url: path },
+      { name, path, url: path, nodeType },
       parent.id,
     )
     onHistory()

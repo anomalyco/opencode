@@ -528,6 +528,7 @@ export const dict = {
   "session.files.empty": "ไม่มีไฟล์",
   "session.files.all": "ไฟล์ทั้งหมด",
   "session.files.addToContext": "เพิ่มไฟล์ไปยังเอกสาร",
+  "session.files.addFolderToContext": "เพิ่มโฟลเดอร์ไปยังเอกสาร",
   "session.files.binaryContent": "ไฟล์ไบนารี (ไม่สามารถแสดงเนื้อหาได้)",
 
   "session.messages.renderEarlier": "แสดงข้อความก่อนหน้า",

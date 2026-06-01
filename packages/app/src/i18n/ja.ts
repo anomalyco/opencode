@@ -476,6 +476,7 @@ export const dict = {
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
   "session.files.addToContext": "ドキュメントにファイルを追加",
+  "session.files.addFolderToContext": "ドキュメントにフォルダを追加",
   "session.files.empty": "ファイルなし",
   "session.files.binaryContent": "バイナリファイル（内容を表示できません）",
   "session.messages.renderEarlier": "以前のメッセージを表示",

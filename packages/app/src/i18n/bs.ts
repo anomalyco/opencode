@@ -532,6 +532,7 @@ export const dict = {
   "session.files.selectToOpen": "Odaberi datoteku za otvaranje",
   "session.files.all": "Sve datoteke",
   "session.files.addToContext": "Dodaj datoteku u dokument",
+  "session.files.addFolderToContext": "Dodaj folder u dokument",
   "session.files.empty": "Nema datoteka",
   "session.files.binaryContent": "Binarna datoteka (sadržaj se ne može prikazati)",
 

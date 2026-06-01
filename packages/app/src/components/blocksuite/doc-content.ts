@@ -1,6 +1,6 @@
 import type { BlockModel, Doc } from "@blocksuite/store"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { formatCommentNote, formatReferenceNote } from "@/utils/comment-note"
+import { formatCommentNote, formatFolderReferenceNote, formatReferenceNote } from "@/utils/comment-note"
 import type { FileSelection } from "@/context/file/types"
 import { lineRangeLabel, lineSideNote } from "./line-reference-url"
 
@@ -297,11 +297,14 @@ async function block(model: BlockModel, opts: ExportOpts, assets: DocExportAsset
   }
 
   if (model.flavour === "opencode:file-reference") {
-    const name = str(model, "name") ?? str(model, "path") ?? str(model, "url") ?? "File"
+    const path = str(model, "path") ?? str(model, "url") ?? ""
+    const name = str(model, "name") ?? path ?? "File"
     const url = str(model, "url")
     const nested = await children()
-    if (!url) return [label(name), ...nested]
-    return [`[${label(name)}](${url})`, ...nested]
+    const dir = str(model, "nodeType") === "directory"
+    const note = dir ? formatFolderReferenceNote(path) : formatReferenceNote({ path })
+    const link = url ? `[${label(name)}](${url})` : label(name)
+    return [note, link, ...nested].filter(Boolean)
   }
 
   if (model.flavour === "opencode:line-reference") {

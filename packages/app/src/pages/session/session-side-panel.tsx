@@ -47,8 +47,8 @@ export function SessionSidePanel(props: {
 
   const onContextAdd = createMemo(() => {
     if (bridge.mode() !== "doc") return
-    return (path: string) => {
-      bridge.addReference(path)
+    return (path: string, type: "file" | "directory") => {
+      bridge.addReference(path, type)
     }
   })
 
@@ -442,6 +442,7 @@ export function SessionSidePanel(props: {
                           onFileClick={(node) => props.focusReviewDiff(node.path)}
                           onContextAdd={onContextAdd()}
                           contextLabel={language.t("session.files.addToContext")}
+                          contextFolderLabel={language.t("session.files.addFolderToContext")}
                         />
                       </Show>
                     </Match>
@@ -464,6 +465,7 @@ export function SessionSidePanel(props: {
                         onFileClick={(node) => openTab(file.tab(node.path))}
                         onContextAdd={onContextAdd()}
                         contextLabel={language.t("session.files.addToContext")}
+                        contextFolderLabel={language.t("session.files.addFolderToContext")}
                       />
                     </Match>
                   </Switch>

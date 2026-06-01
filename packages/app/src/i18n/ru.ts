@@ -531,6 +531,7 @@ export const dict = {
   "session.files.selectToOpen": "Выберите файл, чтобы открыть",
   "session.files.all": "Все файлы",
   "session.files.addToContext": "Добавить файл в документ",
+  "session.files.addFolderToContext": "Добавить папку в документ",
   "session.files.empty": "Нет файлов",
   "session.files.binaryContent": "Двоичный файл (содержимое не может быть отображено)",
   "session.messages.renderEarlier": "Показать предыдущие сообщения",

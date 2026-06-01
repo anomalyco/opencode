@@ -528,6 +528,7 @@ export const dict = {
   "session.files.selectToOpen": "Vælg en fil at åbne",
   "session.files.all": "Alle filer",
   "session.files.addToContext": "Tilføj fil til dokument",
+  "session.files.addFolderToContext": "Tilføj mappe til dokument",
   "session.files.empty": "Ingen filer",
   "session.files.binaryContent": "Binær fil (indhold kan ikke vises)",
   "session.messages.renderEarlier": "Vis tidligere beskeder",

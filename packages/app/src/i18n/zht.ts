@@ -524,6 +524,7 @@ export const dict = {
   "session.files.selectToOpen": "選取要開啟的檔案",
   "session.files.all": "所有檔案",
   "session.files.addToContext": "將檔案新增到文件",
+  "session.files.addFolderToContext": "將資料夾新增到文件",
   "session.files.empty": "沒有檔案",
   "session.files.binaryContent": "二進位檔案（無法顯示內容）",
   "session.messages.renderEarlier": "顯示更早的訊息",

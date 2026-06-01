@@ -475,6 +475,7 @@ export const dict = {
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
   "session.files.addToContext": "إضافة ملف إلى المستند",
+  "session.files.addFolderToContext": "إضافة مجلد إلى المستند",
   "session.files.empty": "لا توجد ملفات",
   "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",
