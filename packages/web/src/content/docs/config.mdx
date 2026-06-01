@@ -366,7 +366,10 @@ You can configure the providers and models you want to use in your OpenCode conf
 }
 ```
 
+The `model` and `small_model` values use the `provider_id/model_id` format. For built-in providers, use the provider and model IDs shown by `opencode models` or [Models.dev](https://models.dev). For custom providers, `provider_id` is the key under `provider`, and `model_id` is the key under that provider's `models`.
+
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+The small model can use a different provider than your main model.
 
 Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
 
