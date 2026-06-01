@@ -128,6 +128,35 @@ describe("createChildStoreManager", () => {
     }
   })
 
+  test("falls back to the requested directory before the path query resolves", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap() {},
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+
+      const [store] = manager.child("/project", { bootstrap: false })
+
+      expect(store.path.directory).toBe("/project")
+      expect(store.path.worktree).toBe("/project")
+    } finally {
+      dispose()
+    }
+  })
+
   test("enables MCP only when requested for the directory", () => {
     let manager: ReturnType<typeof createChildStoreManager> | undefined
     const offset = queryGroups.length
