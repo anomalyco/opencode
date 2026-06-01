@@ -1,8 +1,7 @@
 import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
-import { promptSame } from "./prompt.shared"
 import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
-import type { FooterPatch, RunPrompt, StreamCommit } from "./types"
+import type { FooterPatch, StreamCommit } from "./types"
 
 type ReplayInput = {
   messages: SessionMessages
@@ -188,30 +187,29 @@ export function replaySession(input: ReplayInput): SessionReplay {
   }
 }
 
-export function replayLocalPromptTail(messages: SessionMessages, history: RunPrompt[]): StreamCommit[] {
-  const prompt = history.at(-1)
-  if (!prompt || !prompt.text.trim() || prompt.mode === "shell") {
-    return []
-  }
+export function replayLocalRows(messages: SessionMessages, commits: StreamCommit[], rows: StreamCommit[]): StreamCommit[] {
+  const persisted = new Set(messages.map((message) => message.info.id))
+  return rows.reduce((out, row) => {
+    if (row.kind === "user" && row.messageID && persisted.has(row.messageID)) {
+      return out
+    }
 
-  if (prompt.messageID && messages.some((message) => message.info.id === prompt.messageID)) {
-    return []
-  }
+    if (!row.messageID) {
+      return [...out, row]
+    }
 
-  const persisted = messages.findLast((message) => message.info.role === "user")
-  if (!prompt.messageID && persisted && promptSame(messagePrompt(persisted), prompt)) {
-    return []
-  }
+    if (persisted.has(row.messageID)) {
+      const after = out.findLastIndex((commit) => commit.messageID === row.messageID)
+      return [...out.slice(0, after + 1), row, ...out.slice(after + 1)]
+    }
 
-  return [
-    {
-      kind: "user",
-      text: prompt.text,
-      phase: "start",
-      source: "system",
-      ...(prompt.messageID ? { messageID: prompt.messageID } : {}),
-    },
-  ]
+    const before = out.findIndex((commit) => commit.messageID && row.messageID! < commit.messageID)
+    if (before === -1) {
+      return [...out, row]
+    }
+
+    return [...out.slice(0, before), row, ...out.slice(before)]
+  }, commits)
 }
 
 export function replayActiveText(data: SessionData, current: SessionData): StreamCommit[] {

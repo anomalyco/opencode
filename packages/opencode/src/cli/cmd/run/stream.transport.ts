@@ -27,7 +27,7 @@ import {
   reduceSessionData,
   type SessionData,
 } from "./session-data"
-import { replayActiveText, replayLocalPromptTail, replaySession } from "./session-replay"
+import { replayActiveText, replayLocalRows, replaySession } from "./session-replay"
 import {
   bootstrapSubagentCalls,
   bootstrapSubagentData,
@@ -102,7 +102,7 @@ export type SessionTransport = {
 }
 
 export type SessionResizeReplayInput = {
-  localPrompts: () => RunPrompt[]
+  localRows: () => StreamCommit[]
   reset: () => Promise<void>
 }
 
@@ -1052,11 +1052,11 @@ function createLayer(input: StreamInput) {
             seedBlocker(request.id)
           }
 
-          for (const commit of [
-            ...snapshot.value.visible.commits,
-            ...snapshot.value.activeCommits,
-            ...replayLocalPromptTail(messagesList, next.localPrompts()),
-          ]) {
+          for (const commit of replayLocalRows(
+            messagesList,
+            [...snapshot.value.visible.commits, ...snapshot.value.activeCommits],
+            next.localRows(),
+          )) {
             input.trace?.write("ui.commit", commit)
             input.footer.append(commit)
           }

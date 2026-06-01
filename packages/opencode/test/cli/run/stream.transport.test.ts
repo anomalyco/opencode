@@ -773,16 +773,24 @@ describe("run stream transport", () => {
       limits: () => ({}),
       footer: ui.api,
     })
-    const localPrompts = [{ text: "pending prompt", parts: [], messageID: "msg-pending" }]
+    const localRows: StreamCommit[] = [
+      { kind: "user", text: "pending prompt", phase: "start", source: "system", messageID: "msg-pending" },
+    ]
     const reset = mock(() => {
-      localPrompts.push({ text: "sent during reset", parts: [], messageID: "msg-during-reset" })
+      localRows.push({
+        kind: "user",
+        text: "sent during reset",
+        phase: "start",
+        source: "system",
+        messageID: "msg-during-reset",
+      })
       return Promise.resolve()
     })
 
     try {
       expect(
         await transport.replayOnResize({
-          localPrompts: () => localPrompts,
+          localRows: () => localRows,
           reset,
         }),
       ).toBe(true)
@@ -842,7 +850,7 @@ describe("run stream transport", () => {
       await waitFor(() => ui.commits.find((commit) => commit.kind === "assistant" && commit.text === "Hello"))
       ui.commits.length = 0
 
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset: () => Promise.resolve() })).toBe(true)
+      expect(await transport.replayOnResize({ localRows: () => [], reset: () => Promise.resolve() })).toBe(true)
       src.push(textDelta("msg-live", "text-live", "Hello"))
       src.push(
         textUpdated({
@@ -901,7 +909,7 @@ describe("run stream transport", () => {
       await waitFor(() => ui.commits.find((commit) => commit.kind === "reasoning" && commit.text === "Thinking: plan"))
       ui.commits.length = 0
 
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset: () => Promise.resolve() })).toBe(true)
+      expect(await transport.replayOnResize({ localRows: () => [], reset: () => Promise.resolve() })).toBe(true)
       expect(ui.commits.filter((commit) => commit.kind === "reasoning").map((commit) => commit.text)).toEqual([
         "Thinking: plan",
       ])
@@ -952,7 +960,7 @@ describe("run stream transport", () => {
       await waitFor(() => ui.commits.find((commit) => commit.kind === "assistant" && commit.text === "Hello"))
       ui.commits.length = 0
 
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset: () => Promise.resolve() })).toBe(true)
+      expect(await transport.replayOnResize({ localRows: () => [], reset: () => Promise.resolve() })).toBe(true)
       expect(
         ui.commits.filter((commit) => commit.kind === "assistant" && commit.text).map((commit) => commit.text),
       ).toEqual(["Hello"])
@@ -987,7 +995,7 @@ describe("run stream transport", () => {
     const reset = mock(() => Promise.resolve())
 
     try {
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
       expect(reset).not.toHaveBeenCalled()
       expect(ui.commits).toEqual([])
     } finally {
@@ -1010,8 +1018,8 @@ describe("run stream transport", () => {
     const reset = mock(() => Promise.reject(new Error("clear failed")))
 
     try {
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset })).toBe(false)
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
       expect(reset).toHaveBeenCalledTimes(1)
       expect(ui.commits).toContainEqual({
         kind: "error",
@@ -1045,8 +1053,8 @@ describe("run stream transport", () => {
     })
 
     try {
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset })).toBe(false)
-      expect(await transport.replayOnResize({ localPrompts: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
+      expect(await transport.replayOnResize({ localRows: () => [], reset })).toBe(false)
       expect(reset).toHaveBeenCalledTimes(1)
       expect(ui.commits).toContainEqual({
         kind: "error",

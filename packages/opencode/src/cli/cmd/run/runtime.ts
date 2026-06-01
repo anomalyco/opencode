@@ -20,7 +20,7 @@ import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { recordRunSpanError, setRunSpanAttributes, withRunSpan } from "./otel"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
-import type { RunInput, RunPrompt, RunProvider } from "./types"
+import type { RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -114,6 +114,7 @@ type RuntimeState = {
   activeVariant: string | undefined
   sessionID: string
   history: RunPrompt[]
+  localRows: StreamCommit[]
   sessionTitle?: string
   agent: string | undefined
   switching?: Promise<void>
@@ -140,6 +141,7 @@ function variantsFor(providers: RunProvider[], model: RunInput["model"]) {
 }
 
 const REPLAY_RESIZE_DELAY = 100
+const LOCAL_REPLAY_ROW_LIMIT = 100
 
 async function resolveExitTitle(
   ctx: BootContext,
@@ -198,6 +200,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         activeVariant: resolveVariant(ctx.variant, session.variant, savedVariant, []),
         sessionID: ctx.sessionID,
         history: [...session.history],
+        localRows: [],
         sessionTitle: ctx.sessionTitle,
         agent: ctx.agent,
       }
@@ -376,6 +379,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         },
       })
       const footer = shell.footer
+      const rememberLocal = (commit: StreamCommit) => {
+        state.localRows = [...state.localRows, commit].slice(-LOCAL_REPLAY_ROW_LIMIT)
+      }
 
       const loadCatalog = async (): Promise<void> => {
         if (footer.isClosed) {
@@ -528,7 +534,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
               void state.stream
                 .then((item) =>
                   item.handle.replayOnResize({
-                    localPrompts: () => state.history,
+                    localRows: () => state.localRows,
                     reset: () =>
                       shell.resetForReplay({
                         sessionTitle: state.sessionTitle,
@@ -557,6 +563,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           onSend: (prompt) => {
             state.shown = true
             state.history.push(prompt)
+            if (prompt.mode !== "shell") {
+              rememberLocal({
+                kind: "user",
+                text: prompt.text,
+                phase: "start",
+                source: "system",
+                messageID: prompt.messageID,
+              })
+            }
           },
           onNewSession: createSession
             ? async () => {
@@ -577,6 +592,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                   state.sessionTitle = created.sessionTitle
                   state.agent = created.agent ?? state.agent
                   state.history = []
+                  state.localRows = []
                   includeFiles = true
                   state.demo = input.demo
                     ? createRunDemo({
@@ -678,6 +694,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                     includeFiles,
                     signal,
                   })
+                  if (prompt.messageID) {
+                    state.localRows = state.localRows.filter(
+                      (commit) => commit.kind !== "user" || commit.messageID !== prompt.messageID,
+                    )
+                  }
                   includeFiles = false
                 } catch (error) {
                   if (signal.aborted || footer.isClosed) {
@@ -688,7 +709,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                   const text =
                     (await state.stream?.then((item) => item.mod).catch(() => undefined))?.formatUnknownError(error) ??
                     (error instanceof Error ? error.message : String(error))
-                  footer.append({ kind: "error", text, phase: "start", source: "system" })
+                  const commit = {
+                    kind: "error",
+                    text,
+                    phase: "start",
+                    source: "system",
+                    messageID: prompt.messageID,
+                  } as const
+                  rememberLocal(commit)
+                  footer.append(commit)
                 }
               },
             )

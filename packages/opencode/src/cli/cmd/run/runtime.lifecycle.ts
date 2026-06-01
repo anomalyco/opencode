@@ -310,8 +310,19 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         return {
           footer,
           onResize(fn) {
-            renderer.on(CliRenderEvents.RESIZE, fn)
-            return () => renderer.off(CliRenderEvents.RESIZE, fn)
+            let width = renderer.terminalWidth
+            let height = renderer.terminalHeight
+            const resize = () => {
+              if (width === renderer.terminalWidth && height === renderer.terminalHeight) {
+                return
+              }
+
+              width = renderer.terminalWidth
+              height = renderer.terminalHeight
+              fn()
+            }
+            renderer.on(CliRenderEvents.RESIZE, resize)
+            return () => renderer.off(CliRenderEvents.RESIZE, resize)
           },
           async resetForReplay(next) {
             if (closed || renderer.isDestroyed || footer.isClosed) {
