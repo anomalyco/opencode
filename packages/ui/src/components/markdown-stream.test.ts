@@ -20,6 +20,20 @@ describe("markdown stream", () => {
     ])
   })
 
+  test("heals incomplete backticks in trailing code fence tail", () => {
+    expect(stream("summary\n\n```sh\nrm -rf `", true)).toEqual([
+      { raw: "summary\n\n", src: "summary\n\n", mode: "live" },
+      { raw: "```sh\nrm -rf `", src: "```sh\nrm -rf ``", mode: "live" },
+    ])
+  })
+
+  test("handles backtick-heavy content that ends without trailing newline", () => {
+    const input = "run `git status` and `git"
+    const result = stream(input, true)
+    expect(result[0].raw).toBe(input)
+    expect(result[0].src).toContain("git status")
+  })
+
   test("keeps reference-style markdown as one block", () => {
     expect(stream("[docs][1]\n\n[1]: https://example.com", true)).toEqual([
       {
