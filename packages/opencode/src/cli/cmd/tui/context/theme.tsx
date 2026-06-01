@@ -16,6 +16,7 @@ import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
+import knightRider from "./theme/knight-rider.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
 import mercury from "./theme/mercury.json" with { type: "json" }
@@ -28,6 +29,7 @@ import opencode from "./theme/opencode.json" with { type: "json" }
 import orng from "./theme/orng.json" with { type: "json" }
 import lucentOrng from "./theme/lucent-orng.json" with { type: "json" }
 import palenight from "./theme/palenight.json" with { type: "json" }
+import pipBoy from "./theme/pip-boy.json" with { type: "json" }
 import rosepine from "./theme/rosepine.json" with { type: "json" }
 import solarized from "./theme/solarized.json" with { type: "json" }
 import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
@@ -100,6 +102,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   github,
   gruvbox,
   kanagawa,
+  ["knight-rider"]: knightRider,
   material,
   matrix,
   mercury,
@@ -112,6 +115,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   orng,
   ["lucent-orng"]: lucentOrng,
   palenight,
+  ["pip-boy"]: pipBoy,
   rosepine,
   solarized,
   synthwave84,

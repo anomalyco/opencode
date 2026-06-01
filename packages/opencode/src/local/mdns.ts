@@ -2,6 +2,8 @@ import dns from "dns/promises"
 import net from "net"
 import os from "os"
 import Bonjour from "bonjour-service"
+import { createClient } from "./llama-skein/gen/client"
+import { LlamaSkeinClient } from "./llama-skein/gen/sdk.gen"
 
 export interface LocalLlamaSwapService {
   name: string
@@ -37,14 +39,31 @@ async function reverseHostname(ip: string): Promise<string> {
   )
 }
 
-export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<string[]> {
+function normalizeControlBaseURL(baseURL: string): string {
+  return baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
+}
+
+function llamaSkeinClient(baseURL: string) {
+  return new LlamaSkeinClient({ client: createClient({ baseUrl: normalizeControlBaseURL(baseURL) }) })
+}
+
+type ModelListResult = {
+  data?: { data?: Array<{ id?: string }> }
+  error?: unknown
+}
+
+export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<string[] | null> {
   return withTimeout(
-    fetch(`${baseURL}/models`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ data?: Array<{ id: string }> }>) : null))
-      .then((body) => (body?.data ?? []).map((m) => m.id).filter(Boolean))
-      .catch(() => []),
+    llamaSkeinClient(baseURL)
+      .listModels()
+      .then((result) => {
+        const response = result as ModelListResult
+        if (response.error !== undefined || !response.data?.data) return null
+        return response.data.data.map((m) => m.id).filter((id): id is string => Boolean(id))
+      })
+      .catch(() => null),
     timeoutMs,
-    [],
+    null,
   )
 }
 
@@ -54,10 +73,11 @@ const LLAMA_SWAP_SERVICE_TYPES = ["llamaswap", "llama-swap"]
 async function probeHost(host: string, port: number): Promise<LocalLlamaSwapService | null> {
   const baseURL = `http://${host}:${port}/v1`
   return withTimeout(
-    fetch(`${baseURL}/models`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ data?: unknown[] }>) : null))
-      .then((body) => {
-        if (!body?.data) return null
+    llamaSkeinClient(baseURL)
+      .listModels()
+      .then((result) => {
+        const response = result as ModelListResult
+        if (response.error !== undefined || !response.data?.data) return null
         return { name: host, host, port, baseURL } satisfies LocalLlamaSwapService
       })
       .catch(() => null),
@@ -174,7 +194,9 @@ async function probeLAN(): Promise<LocalLlamaSwapService[]> {
   return Promise.all(found.map(async (svc) => ({ ...svc, name: await reverseHostname(svc.host) })))
 }
 
-export async function scanLlamaSwap(timeoutMs = 4000): Promise<Array<LocalLlamaSwapService & { models: string[] }>> {
+export async function scanLlamaSwap(
+  timeoutMs = 4000,
+): Promise<Array<LocalLlamaSwapService & { models: string[]; online: boolean }>> {
   const raw: LocalLlamaSwapService[] = []
 
   const mdnsScan = new Promise<void>((resolve) => {
@@ -226,5 +248,10 @@ export async function scanLlamaSwap(timeoutMs = 4000): Promise<Array<LocalLlamaS
     }
   }
 
-  return Promise.all(raw.map(async (svc) => ({ ...svc, models: await probeModelIDs(svc.baseURL, 750) })))
+  return Promise.all(
+    raw.map(async (svc) => {
+      const models = await probeModelIDs(svc.baseURL, 750)
+      return { ...svc, models: models ?? [], online: models !== null }
+    }),
+  )
 }

@@ -589,7 +589,7 @@ function DialogLocalProviders(props: { instances: LocalInstance[] }) {
 
   const options = createMemo<DialogSelectOption<LocalInstance>[]>(() =>
     props.instances.map((instance) => {
-      const running = instance.models.length > 0
+      const running = instance.online
       const configured = Boolean(instance.configuredProviderID)
       const picked = selected().has(keyOf(instance))
       const category = configured ? (running ? "Configured · Online" : "Configured · Offline") : "Available"

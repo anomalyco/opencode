@@ -38,6 +38,13 @@ test("hasTheme checks theme presence", () => {
   expect(hasTheme(name)).toBe(true)
 })
 
+test("includes local custom themes", () => {
+  expect(DEFAULT_THEMES["knight-rider"]).toBeDefined()
+  expect(DEFAULT_THEMES["pip-boy"]).toBeDefined()
+  expect(hasTheme("knight-rider")).toBe(true)
+  expect(hasTheme("pip-boy")).toBe(true)
+})
+
 test("resolveTheme rejects circular color refs", () => {
   const item = structuredClone(DEFAULT_THEMES.opencode)
   item.defs = {

@@ -9,11 +9,13 @@ import { DialogVariant } from "./dialog-variant"
 import { DialogModelCtx } from "./dialog-model-ctx"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
+import { useToast } from "@tui/ui/toast"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
+  const toast = useToast()
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
@@ -174,7 +176,10 @@ export function DialogModel(props: { providerID?: string }) {
           onTrigger: (option) => {
             const { providerID, modelID } = option.value as { providerID: string; modelID: string }
             const provider = sync.data.provider.find((p) => p.id === providerID)
-            if (!provider?.options?.baseURL) return
+            if (!provider?.options?.baseURL) {
+              toast.show({ variant: "warning", message: "Context size is only available for local providers" })
+              return
+            }
             dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
           },
         },

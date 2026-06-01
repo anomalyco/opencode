@@ -12,6 +12,7 @@ export const LocalInstance = Schema.Struct({
   host: Schema.String,
   port: Schema.Number,
   baseURL: Schema.String,
+  online: Schema.Boolean,
   models: Schema.Array(Schema.String),
   configuredProviderID: Schema.optional(Schema.String),
 }).annotate({ identifier: "LocalInstance" })

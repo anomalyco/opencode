@@ -2242,6 +2242,7 @@ export type LocalInstance = {
   host: string
   port: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   baseURL: string
+  online: boolean
   models: Array<string>
   configuredProviderID?: string
 }
@@ -2250,6 +2251,10 @@ export type LocalConnectPayload = {
   id: string
   name: string
   baseURL: string
+}
+
+export type LocalCtxSizePayload = {
+  ctx_size: number
 }
 
 export type McpStatusConnected = {
@@ -5775,6 +5780,15 @@ export type LocalScanData = {
   url: "/local/scan"
 }
 
+export type LocalScanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalScanError = LocalScanErrors[keyof LocalScanErrors]
+
 export type LocalScanResponses = {
   /**
    * Discovered local llama-swap instances
@@ -5793,6 +5807,15 @@ export type LocalConnectData = {
   }
   url: "/local/connect"
 }
+
+export type LocalConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalConnectError = LocalConnectErrors[keyof LocalConnectErrors]
 
 export type LocalConnectResponses = {
   /**
@@ -5815,6 +5838,15 @@ export type LocalDisconnectData = {
   url: "/local/connect/{providerID}"
 }
 
+export type LocalDisconnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalDisconnectError = LocalDisconnectErrors[keyof LocalDisconnectErrors]
+
 export type LocalDisconnectResponses = {
   /**
    * Removed provider ID
@@ -5824,11 +5856,7 @@ export type LocalDisconnectResponses = {
 
 export type LocalDisconnectResponse = LocalDisconnectResponses[keyof LocalDisconnectResponses]
 
-export type LocalCtxSizePayload = {
-  ctx_size: number
-}
-
-export type LocalSetModelCtxSizeData = {
+export type LocalModelSetCtxSizeData = {
   body?: LocalCtxSizePayload
   path: {
     providerID: string
@@ -5841,14 +5869,23 @@ export type LocalSetModelCtxSizeData = {
   url: "/local/model/{providerID}/{modelID}/ctx-size"
 }
 
-export type LocalSetModelCtxSizeResponses = {
+export type LocalModelSetCtxSizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalModelSetCtxSizeError = LocalModelSetCtxSizeErrors[keyof LocalModelSetCtxSizeErrors]
+
+export type LocalModelSetCtxSizeResponses = {
   /**
    * Context size updated
    */
   200: boolean
 }
 
-export type LocalSetModelCtxSizeResponse = LocalSetModelCtxSizeResponses[keyof LocalSetModelCtxSizeResponses]
+export type LocalModelSetCtxSizeResponse = LocalModelSetCtxSizeResponses[keyof LocalModelSetCtxSizeResponses]
 
 export type McpStatusData = {
   body?: never

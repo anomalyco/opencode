@@ -9,6 +9,7 @@ type OpenApiResponse = {
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
+  readonly operationId?: string
   readonly parameters?: ReadonlyArray<{ readonly name: string; readonly in: string }>
   readonly responses?: Record<string, OpenApiResponse>
   readonly security?: unknown
@@ -221,5 +222,18 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(componentName(responseRef(spec.paths["/project/{projectID}"]?.patch?.responses?.["404"]) ?? "")).toBe(
       "ProjectNotFoundError",
     )
+  })
+
+  test("documents local model context route for generated SDK", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const operation = spec.paths["/local/model/{providerID}/{modelID}/ctx-size"]?.patch
+
+    expect(operation?.operationId).toBe("local.model.setCtxSize")
+    expect(operation?.parameters?.map((parameter) => `${parameter.in}:${parameter.name}`)).toEqual([
+      "path:providerID",
+      "path:modelID",
+      "query:directory",
+      "query:workspace",
+    ])
   })
 })

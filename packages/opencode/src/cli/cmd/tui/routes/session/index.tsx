@@ -87,6 +87,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { DialogModelCtx } from "../../component/dialog-model-ctx"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
@@ -124,6 +125,7 @@ const sessionBindingCommands = [
   "session.timeline",
   "session.fork",
   "session.compact",
+  "session.model.ctx",
   "session.unshare",
   "session.undo",
   "session.redo",
@@ -570,6 +572,36 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Set context size",
+      value: "session.model.ctx",
+      category: "Session",
+      slash: {
+        name: "ctx",
+        aliases: ["context", "context-size"],
+      },
+      run: () => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Select a model first",
+            duration: 3000,
+          })
+          return
+        }
+        const provider = sync.data.provider.find((item) => item.id === selectedModel.providerID)
+        if (!provider?.options?.baseURL) {
+          toast.show({
+            variant: "warning",
+            message: "Context size is only available for local providers",
+            duration: 3000,
+          })
+          return
+        }
+        dialog.replace(() => <DialogModelCtx providerID={selectedModel.providerID} modelID={selectedModel.modelID} />)
       },
     },
     {

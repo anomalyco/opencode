@@ -82,12 +82,16 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
+  LocalConnectErrors,
   LocalConnectPayload,
   LocalConnectResponses,
   LocalCtxSizePayload,
+  LocalDisconnectErrors,
   LocalDisconnectResponses,
+  LocalModelSetCtxSizeErrors,
+  LocalModelSetCtxSizeResponses,
+  LocalScanErrors,
   LocalScanResponses,
-  LocalSetModelCtxSizeResponses,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -1962,6 +1966,53 @@ export class Formatter extends HeyApiClient {
   }
 }
 
+export class Model extends HeyApiClient {
+  /**
+   * Set model context window size
+   *
+   * Patch the ctx_size for a model on a llama-swap backend.
+   */
+  public setCtxSize<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localCtxSizePayload?: LocalCtxSizePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localCtxSizePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      LocalModelSetCtxSizeResponses,
+      LocalModelSetCtxSizeErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/ctx-size",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Local extends HeyApiClient {
   /**
    * Scan for local providers
@@ -1986,7 +2037,7 @@ export class Local extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<LocalScanResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).get<LocalScanResponses, LocalScanErrors, ThrowOnError>({
       url: "/local/scan",
       ...options,
       ...params,
@@ -2018,49 +2069,8 @@ export class Local extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).post<LocalConnectResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).post<LocalConnectResponses, LocalConnectErrors, ThrowOnError>({
       url: "/local/connect",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Set model context window size
-   *
-   * Patch the ctx_size for a model on a llama-swap backend.
-   */
-  public setModelCtxSize<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      modelID: string
-      directory?: string
-      workspace?: string
-      localCtxSizePayload?: LocalCtxSizePayload
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { in: "path", key: "modelID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { key: "localCtxSizePayload", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).patch<LocalSetModelCtxSizeResponses, unknown, ThrowOnError>({
-      url: "/local/model/{providerID}/{modelID}/ctx-size",
       ...options,
       ...params,
       headers: {
@@ -2096,11 +2106,16 @@ export class Local extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).delete<LocalDisconnectResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).delete<LocalDisconnectResponses, LocalDisconnectErrors, ThrowOnError>({
       url: "/local/connect/{providerID}",
       ...options,
       ...params,
     })
+  }
+
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
   }
 }
 
@@ -4624,7 +4639,7 @@ export class Session3 extends HeyApiClient {
   }
 }
 
-export class Model extends HeyApiClient {
+export class Model2 extends HeyApiClient {
   /**
    * List v2 models
    *
@@ -4711,9 +4726,9 @@ export class V2 extends HeyApiClient {
     return (this._session ??= new Session3({ client: this.client }))
   }
 
-  private _model?: Model
-  get model(): Model {
-    return (this._model ??= new Model({ client: this.client }))
+  private _model?: Model2
+  get model(): Model2 {
+    return (this._model ??= new Model2({ client: this.client }))
   }
 
   private _provider?: Provider2

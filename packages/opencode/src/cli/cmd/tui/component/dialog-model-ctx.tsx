@@ -45,7 +45,7 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     if (busy()) return
     setBusy(true)
     try {
-      const res = await sdk.client.local.setModelCtxSize(
+      const res = await sdk.client.local.model.setCtxSize(
         { providerID: props.providerID, modelID: props.modelID, localCtxSizePayload: { ctx_size } },
         { throwOnError: true },
       )

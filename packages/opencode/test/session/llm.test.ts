@@ -587,13 +587,23 @@ beforeAll(() => {
   state.server = Bun.serve({
     port: 0,
     async fetch(req) {
+      const incomingURL = new URL(req.url)
+      if (req.method === "GET" && incomingURL.pathname.endsWith("/models")) {
+        return Response.json({ object: "list", data: [], models: [] })
+      }
       const next = state.queue.shift()
       if (!next) {
         return new Response("unexpected request", { status: 500 })
       }
 
-      const url = new URL(req.url)
-      const body = (await req.json()) as Record<string, unknown>
+      const url = incomingURL
+      const body =
+        req.method === "GET" || req.method === "HEAD"
+          ? {}
+          : await req
+              .json()
+              .then((value) => value as Record<string, unknown>)
+              .catch(() => ({}))
       next.resolve({ url, headers: req.headers, body })
 
       if (!url.pathname.endsWith(next.path)) {

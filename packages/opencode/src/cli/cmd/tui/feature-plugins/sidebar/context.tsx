@@ -11,6 +11,10 @@ function fmtCtxK(n: number): string {
   return `${n}`
 }
 
+function fmtTokensPerSecond(n: number): string {
+  return n >= 10 ? Math.round(n).toLocaleString() : n.toFixed(1)
+}
+
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -36,10 +40,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       ? props.api.state.provider.find((item) => item.id === providerID)?.models[modelID]
       : undefined
     const ctx = model?.limit.context ?? 0
+    const seconds = last?.time.completed ? Math.max(0, (last.time.completed - last.time.created) / 1000) : 0
+    const tokensPerSecond = last && seconds > 0 && last.tokens.output > 0 ? last.tokens.output / seconds : null
     return {
       tokens,
       percent: ctx > 0 && tokens > 0 ? Math.round((tokens / ctx) * 100) : null,
       ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null,
+      tokensPerSecond,
     }
   })
 
@@ -54,6 +61,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       </text>
       <Show when={state().percent !== null}>
         <text fg={theme().textMuted}>{state().percent}% used</text>
+      </Show>
+      <Show when={state().tokensPerSecond !== null}>
+        <text fg={theme().textMuted}>{fmtTokensPerSecond(state().tokensPerSecond!)} tokens/s</text>
       </Show>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>

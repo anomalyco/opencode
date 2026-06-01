@@ -30,7 +30,10 @@ import { MessageID, PartID } from "@/session/schema"
 import { promptOffsetWidth } from "@/cli/cmd/prompt-display"
 import { createStore, produce, unwrap } from "solid-js/store"
 
-const ClickText = "text" as unknown as (props: JSX.IntrinsicElements["text"]) => Renderable
+function ClickText(props: JSX.IntrinsicElements["text"]) {
+  return <text {...props} />
+}
+
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign, expandPastedTextPlaceholders, expandTrackedPastedText } from "./part"

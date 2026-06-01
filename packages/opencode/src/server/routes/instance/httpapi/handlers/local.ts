@@ -33,6 +33,14 @@ function providerIDFromName(name: string): string {
     .replace(/^-+|-+$/g, "")
 }
 
+function canonicalServiceName(name: string) {
+  return name
+    .replace(/\.local\.?$/i, "")
+    .replace(/\.localdomain\.?$/i, "")
+    .replace(/-llama-?swap$/i, "")
+    .trim()
+}
+
 function normalizeControlBaseURL(baseURL: string) {
   return baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
 }
@@ -79,6 +87,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           host: string
           port: number
           baseURL: string
+          online: boolean
           models: string[]
           configuredProviderID?: string
         }
@@ -93,6 +102,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           host: svc.host,
           port: svc.port,
           baseURL: svc.baseURL,
+          online: svc.online,
           models: [...svc.models],
           configuredProviderID,
         })
@@ -113,23 +123,53 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
             } catch {
               host = e.baseURL
             }
-            return { entry: e, host, port, models }
+            return { entry: e, host, port, models, online: models !== null }
           }),
         ),
       )
-      for (const { entry, host, port, models } of probeResults) {
+      for (const { entry, host, port, models, online } of probeResults) {
         byURL.set(entry.baseURL, {
           id: entry.id,
           name: entry.name,
           host,
           port,
           baseURL: entry.baseURL,
-          models,
+          online,
+          models: models ?? [],
           configuredProviderID: entry.id,
         })
       }
 
-      return [...byURL.values()].map((svc) => ({
+      const deduped = new Map<
+        string,
+        {
+          id: string
+          name: string
+          host: string
+          port: number
+          baseURL: string
+          online: boolean
+          models: string[]
+          configuredProviderID?: string
+        }
+      >()
+      for (const svc of byURL.values()) {
+        const canonicalName = canonicalServiceName(svc.name)
+        const canonicalID = providerIDFromName(canonicalName || svc.name)
+        const dedupeKey = svc.configuredProviderID ?? canonicalID
+        const previous = deduped.get(dedupeKey)
+        const hasConfigured = Boolean(svc.configuredProviderID)
+        const previousConfigured = Boolean(previous?.configuredProviderID)
+        if (!previous || (hasConfigured && !previousConfigured) || svc.models.length > previous.models.length) {
+          deduped.set(dedupeKey, {
+            ...svc,
+            id: svc.configuredProviderID ?? canonicalID,
+            name: canonicalName || svc.name,
+          })
+        }
+      }
+
+      return [...deduped.values()].map((svc) => ({
         ...svc,
         baseURL: svc.baseURL,
       }))
