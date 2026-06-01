@@ -15,6 +15,7 @@ import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
+import { MemoryStore } from "@/self-improvement/memory-store"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
@@ -1444,6 +1445,9 @@ export const layer = Layer.effect(
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const memoryStore = yield* MemoryStore.Service
+            const memoryPrompt = yield* memoryStore.compile(agent.name, sessionID, msgs)
+            if (memoryPrompt) system.unshift(memoryPrompt)
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
@@ -1476,6 +1480,10 @@ export const layer = Layer.effect(
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const
               }
+            }
+
+            if (finished) {
+              yield* plugin.trigger("experimental.session.step.complete", { sessionID, step }, {})
             }
 
             if (result === "stop") return "break" as const

@@ -55,6 +55,22 @@ function truncateToolOutput(text: string, maxChars?: number) {
   return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
 }
 
+function summarizeToolOutput(part: { tool: string; state: { input?: Record<string, unknown>; output?: string } }): string {
+  const input = part.state.input
+  if (!input) return part.tool
+  if (input.command) {
+    const lines = (part.state.output ?? "").split("\n").length
+    return `ran \`${String(input.command).slice(0, 60)}\` → ${lines} lines`
+  }
+  if (input.filePath) return `read \`${String(input.filePath)}\` (${(part.state.output ?? "").length} chars)`
+  if (input.pattern) {
+    const matches = (part.state.output ?? "").match(/\n/g)?.length ?? 0
+    return `searched for \`${String(input.pattern)}\` → ${matches} matches`
+  }
+  if (input.url) return `fetched \`${String(input.url)}\` (${(part.state.output ?? "").length} chars)`
+  return `${String(input.tool ?? part.tool)} → done`
+}
+
 export const Event = {
   Updated: SessionLegacy.Event.MessageUpdated,
   Removed: SessionLegacy.Event.MessageRemoved,
@@ -302,7 +318,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted
-              ? "[Old tool result content cleared]"
+              ? summarizeToolOutput(part)
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
             const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 

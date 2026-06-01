@@ -2,7 +2,7 @@
 
 ## Current Goal
 
-Integration plan rewritten with informed trade-offs based on deep code study. Waiting for user review.
+Integration plan rewritten with informed trade-offs based on deep code study.
 
 ## Plan Status
 
@@ -66,4 +66,4 @@ Rewrote `docs/architecture/integration-plan.md` with informed trade-offs:
 
 ## Open Issues
 
-- Awaiting user review of rewritten plan
+- Awaiting  review of rewritten plan.

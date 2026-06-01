@@ -208,6 +208,16 @@ export const layer = Layer.effect(
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)
+        yield* plugin.trigger(
+          "experimental.session.error",
+          {
+            sessionID: ctx.sessionID,
+            tool: match.part.state.input?.tool ?? "unknown",
+            args: match.part.state.input,
+            error: errorMessage(error),
+          },
+          { handled: false },
+        )
         return true
       })
 

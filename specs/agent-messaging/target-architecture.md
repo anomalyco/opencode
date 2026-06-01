@@ -2,7 +2,7 @@
 
 ## Goal
 
-Turn opencode into an agent runtime that can be driven from messaging platforms while preserving the current CLI, TUI, desktop, SDK, and HTTP API behavior.
+Turn opencode into an agent runtime that can be driven from messaging platforms while preserving the current CLI, TUI, desktop, SDK, and HTTP API behavior with reduced RAM  usage and startup time.
 
 ## Non-Goals
 
@@ -58,7 +58,7 @@ Each messaging adapter should stay thin:
 ## Channel Model
 
 ```ts
-type ChannelID = "slack" | "telegram" | "whatsapp" | "discord" | "wechat"
+type ChannelID = "slack" | "telegram" | "whatsapp" | "discord" | "wechat" | 
 
 type ChannelMessage = {
   channel: ChannelID
@@ -122,4 +122,4 @@ Use OpenClaw as a reference implementation for agent-oriented channel behavior. 
 - license compatibility,
 - security posture.
 
-Only import code or dependencies after that review shows a concrete advantage over extending the existing opencode runtime.
+Only import code or dependencies after that review shows a concrete advantage over extending the existing opencode runtime

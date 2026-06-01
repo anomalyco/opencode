@@ -128,6 +128,7 @@ self._system_prompt_snapshot = {
 ```
 
 This is critical because:
+
 - The system prompt (containing memory) is **identical every turn**
 - Provider prefix caching stays valid across the entire session
 - Only `memory` tool responses show the live state, not the prompt
@@ -146,6 +147,7 @@ No file locking needed for readers — atomic rename means every reader sees
 either the old complete file or the new complete file.
 
 **File Locking for Writers:**
+
 - `fcntl.flock` on Unix, `msvcrt.locking` on Windows
 - Uses a `.lock` sidecar file (separate from data file)
 - Graceful fallback when neither locking module available
@@ -161,21 +163,25 @@ session_search()                                → BROWSE
 ```
 
 **Discovery Mode:**
+
 1. FTS5 full-text search against SQLite message store
 2. Lineage-aware dedup: walk `parent_session_id` chain to root, collapse hits
 3. For each hit: ±5 message window + bookends (first 3 + last 3 messages)
 4. Result: goal → match → resolution, all from DB, zero LLM calls
 
 **Scroll Mode:**
+
 - Anchor on a `message_id`, return window of ±N messages
 - Page forward/backward by re-anchoring on boundary message
 - Handles lineage rebind: if message lives in child session, rebind transparently
 
 **Browse Mode:**
+
 - No arguments → recent sessions chronologically
 - Excludes current session lineage and tool-generated sessions
 
 **Design Decisions:**
+
 - **Zero LLM calls** — every shape returns actual messages from SQLite
 - **Bookends are free** — cheap SQL window queries, not LLM summaries
 - **Lineage dedup** — compression creates child sessions; user shouldn't see duplicates
@@ -197,6 +203,7 @@ class MemoryProvider(ABC):
 ```
 
 **Lifecycle Hooks:**
+
 | Hook | When Called | Purpose |
 |------|-------------|---------|
 | `sync_turn(turn_messages)` | After each assistant + tool turn | Feed conversation to external memory |
@@ -350,6 +357,7 @@ Pre-run Python script's stdout becomes agent context. `[SILENT]` pattern means
 zero notifications for no-op ticks.
 
 **Cron hardening:**
+
 - 3-minute hard interrupt on sessions
 - Catchup window: half period, clamped 120s–2h
 - File lock to prevent duplicate ticks
@@ -420,6 +428,7 @@ removes that ceiling.
 | `summary_target_tokens` | scales as 20% of content | Proportional to volume |
 
 Flow:
+
 1. `should_compress_preflight()` — cheap estimate BEFORE API call
 2. `should_compress()` — fires when prompt_tokens >= threshold
 3. `compress()` — compress middle, keep head + tail
@@ -428,6 +437,7 @@ Flow:
 6. Secret redaction: strip API keys, tokens, passwords from summary prompt
 
 **Offline compression** (`TrajectoryCompressor`):
+
 - Separate CLI tool for post-processing training trajectories
 - Batch-parallel: 50 concurrent API calls
 - Per-trajectory timeout (5 min)
@@ -440,21 +450,25 @@ Flow:
 **Key tables:**
 
 `sessions` — one row per conversation:
+
 - `id`, `source`, `parent_session_id` (lineage), `model`, `system_prompt`
 - `started_at`, `ended_at`, `end_reason` (compression creates child)
 - `message_count`, `tool_call_count`, token counters, cost tracking
 
 `messages` — full message history:
+
 - `id`, `session_id`, `role`, `content`, `tool_call_id`, `tool_calls`, `tool_name`
 - `reasoning`, `reasoning_content`, `reasoning_details`
 
 **FTS5 search index:**
+
 - `messages_fts` — standard unicode61 tokenizer
 - `messages_fts_trigram` — trigram for CJK/substring search
 - Both index content + tool_name + tool_calls
 - Auto-sync via INSERT/DELETE/UPDATE triggers
 
 **Session Lineage:**
+
 - Compression creates child session with `parent_session_id`
 - Timestamp gate: `child.started_at >= parent.ended_at` distinguishes
   compression forks from subagents (which start during parent's lifetime)
@@ -463,6 +477,7 @@ Flow:
   conversation = one list entry
 
 **Write concurrency:**
+
 - `BEGIN IMMEDIATE` (locks at transaction start, not commit)
 - Random jitter 20-150ms, 15 retries (breaks SQLite convoy behavior)
 - Passive checkpoint every 50 writes
@@ -606,25 +621,25 @@ locking for structural integrity).
 
 **Medium value, moderate complexity:**
 
-6. **Two-layer curation** — Deterministic auto-transitions (pure rules) for
+1. **Two-layer curation** — Deterministic auto-transitions (pure rules) for
    common cases + LLM review for consolidation decisions. Don't pay for
    summarization when rule-based suffices.
 
-7. **Provenance-driven eligibility** — Three tiers (bundled / hub-installed /
+2. **Provenance-driven eligibility** — Three tiers (bundled / hub-installed /
    agent-created) with multiple enforcement layers. Safety-critical when
    automated maintenance touches user content.
 
-8. **Archive-not-delete posture** — Maximum destructive action is moving to
+3. **Archive-not-delete posture** — Maximum destructive action is moving to
    `.archive/`. Full backup before mutations. Creates psychological safety
    for automated systems.
 
 **Nice-to-have, higher complexity:**
 
-9. **Bookended session search** — SQL-level window queries that give the model
+1. **Bookended session search** — SQL-level window queries that give the model
    "goal → match → resolution" context without LLM calls. Requires FTS5 or
    equivalent pre-indexed search.
 
-10. **Cron rewrite chaining** — When a consolidation deprecates Skill A, any
+2. **Cron rewrite chaining** — When a consolidation deprecates Skill A, any
     scheduled job referencing A is automatically rewritten. Prevents silent
     breakage of automations.
 

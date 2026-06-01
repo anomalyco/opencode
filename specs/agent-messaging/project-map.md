@@ -7,7 +7,7 @@ This map tracks the existing opencode surfaces that matter for converting the pr
 - `packages/opencode` is the core runtime: CLI, HTTP API, session orchestration, tools, agents, permissions, storage, and event bus.
 - `packages/sdk/js` is the supported programmatic client boundary. It can start an opencode server and call generated API methods.
 - `packages/slack` is already a messaging adapter. It starts an opencode server, maps Slack threads to opencode sessions, forwards user text to `session.prompt`, and posts responses back to Slack.
-- `packages/app`, `packages/desktop`, `packages/web`, `sdks/vscode`, and `packages/console/*` are UI, distribution, and hosted-console surfaces. They should not be the first place to add messaging-agent logic.
+- `packages/app`, `packages/desktop`, `packages/web`, `sdks/vscode`, and `packages/console/*` are UI, distribution, and hosted-console surfaces. They should not be the first place to add messaging-agent logic
 
 ## Core Runtime Files
 
@@ -57,4 +57,4 @@ OpenClaw is a relevant reference project because its GitHub organization describ
 
 ## Initial Architectural Conclusion
 
-The safest migration path is not to replace opencode with another agent project. The existing runtime already has sessions, agents, tools, permissions, MCP, events, and an SDK. The missing layer is a first-class channel adapter/runtime package that standardizes the Slack pattern and adds providers for Telegram, WhatsApp, and future messaging platforms.
+The safest migration path is not to replace opencode with another agent project. The existing runtime already has sessions, agents, tools, permissions, MCP, events, and an SDK etc. The missing layer is a first-class channel adapter/runtime package that standardizes the Slack pattern and adds providers for Telegram, WhatsApp, and future messaging platforms.

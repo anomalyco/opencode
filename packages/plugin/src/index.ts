@@ -328,6 +328,38 @@ export interface Hooks {
     output: { text: string },
   ) => Promise<void>
   /**
+   * Called after each step/turn completes in a session. Plugins can use
+   * this to capture memories or record conversation state for later recall.
+   */
+  "experimental.session.step.complete"?: (
+    input: { sessionID: string; messages: any[]; finish: any },
+    output: { memories: string[] },
+  ) => Promise<void>
+  /**
+   * Called when a tool call fails with an error during a session. Plugins
+   * can set `handled` to `true` to prevent the error from propagating.
+   */
+  "experimental.session.error"?: (
+    input: { sessionID: string; tool: string; args: any; error: string },
+    output: { handled: boolean },
+  ) => Promise<void>
+  /**
+   * Called when a session ends. Plugins can use this to generate a summary
+   * of the session that will be persisted.
+   */
+  "experimental.session.ended"?: (
+    input: { sessionID: string },
+    output: { summary: string },
+  ) => Promise<void>
+  /**
+   * Called before a compaction cycle begins, giving plugins a chance to
+   * inject additional context that should be preserved through compaction.
+   */
+  "experimental.compaction.before"?: (
+    input: { sessionID: string; messages: any[] },
+    output: { context: string },
+  ) => Promise<void>
+  /**
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>

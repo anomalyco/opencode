@@ -42,6 +42,7 @@ import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Plugin } from "@/plugin"
 
 const log = Log.create({ service: "session" })
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
@@ -674,6 +675,7 @@ export const layer: Layer.Layer<
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
+      const plugin = yield* Plugin.Service
       try {
         // `remove` needs to work in all cases, such as broken sessions that
         // run cleanup without instance state.
@@ -694,6 +696,11 @@ export const layer: Layer.Layer<
           { location: eventLocation(session) },
         )
         yield* events.remove(sessionID)
+        yield* plugin.trigger(
+          "experimental.session.ended",
+          { sessionID },
+          { summary: "" },
+        )
       } catch (e) {
         log.error(e)
       }

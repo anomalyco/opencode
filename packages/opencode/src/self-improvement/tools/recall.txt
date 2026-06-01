@@ -1,0 +1,8 @@
+Search across past memories. Retrieve stored facts, decisions, and patterns from previous sessions.
+
+Use before starting work to check if similar tasks were done before, or to recall user preferences, constraints, and key decisions.
+
+Parameters:
+- query: Search terms to find relevant memories
+- type_filter: Optional filter by memory type ("episodic", "semantic", "procedural", "pattern")
+- max_results: Maximum results to return (default 5)

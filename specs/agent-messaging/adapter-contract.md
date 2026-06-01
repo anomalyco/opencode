@@ -107,4 +107,4 @@ Session binding persistence should store:
 - opencode workspace/directory,
 - created timestamp,
 - last activity timestamp,
-- archived/deleted state.
+- archived/deleted state .

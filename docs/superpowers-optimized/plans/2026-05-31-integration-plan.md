@@ -2,13 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-optimized:subagent-driven-development (recommended) or superpowers-optimized:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement self-improvement (memory/curation), plugin hooks, compaction augmentations, browser tools, and channels into OpenCode's existing V2 architecture.
+**Goal:** Implement self-improvement (memory/curation), plugin hooks, compaction augmentations, browser tools, and channels into OpenCode's existing V2 architecture with reduced RAM usage and startup time.
 
 **Architecture:** New modules in `packages/opencode/src/` (self-improvement/, tool/browser/, channels/) + 4 new experimental hooks in `packages/plugin/src/index.ts` + compaction augmentations in session/ + new config modules + CLI commands + console UI pages. All built Effect-first following existing code patterns.
 
 **Tech Stack:** TypeScript, Effect (v4 beta), @effect/schema, Drizzle ORM (SQLite), Playwright (optional), yargs (CLI), SvelteKit (console)
 
 **Assumptions:**
+
 - Assumes the existing tool pattern (Tool.define/Tool.init) — will NOT work if tools must be registered differently
 - Assumes plugin hooks are Promise-based (not Effect) — will NOT work if hooks are migrated to Effect during implementation
 - Assumes config uses self-reexport sibling pattern (no barrel index.ts) — will NOT work if config adds an index.ts
@@ -147,6 +148,7 @@ packages/opencode/src/
 ### Task 1.1: Create Memory Schema (schema.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/schema.ts`
 
 **Does NOT cover:** Drizzle table definitions (separate Task 1.2), MemoryStore service (separate Task 1.3)
@@ -193,6 +195,7 @@ export class MemoryRelation extends Schema.Struct({
 ### Task 1.2: Create Drizzle Table (memory.sql.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/memory.sql.ts`
 
 **Does NOT cover:** MemoryStore service (Task 1.3), curation log table (Task 3.1)
@@ -225,6 +228,7 @@ export const memoryTable = sqliteTable("self_improvement_memory", {
 ### Task 1.3: Create Memory Store Service (memory-store.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/memory-store.ts`
 - Depends on: `schema.ts`, `memory.sql.ts`
 
@@ -233,6 +237,7 @@ export const memoryTable = sqliteTable("self_improvement_memory", {
 - [ ] **Create MemoryStore service with CRUD + keyword search + event subscriptions**
 
 Key patterns to follow:
+
 - Use `Context.Service` and `Layer.effect` pattern
 - Subscribe to EventV2 events for auto-storage
 - Implement `store()`, `search()`, `get()`, `update()`, `delete()`, `touchActive()`, `recordToolError()`, `compile()` methods
@@ -242,6 +247,7 @@ Key patterns to follow:
 ### Task 1.4: Create Memory Bus Events (memory-bus-events.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/memory-bus-events.ts`
 
 - [ ] **Create bus events following existing BusEvent.define() pattern**
@@ -268,6 +274,7 @@ export const MemoryRecalled = BusEvent.define("memory.recalled", Schema.Struct({
 ### Task 1.5: Create `remember` Tool
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/tools/remember.ts`
 - Depends on: memory-store.ts
 
@@ -300,6 +307,7 @@ export const RememberTool = Tool.define("remember", Effect.gen(function* () {
 ### Task 1.6: Create `recall` Tool
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/tools/recall.ts`
 - Depends on: memory-store.ts
 
@@ -326,6 +334,7 @@ export const RecallTool = Tool.define("recall", Effect.gen(function* () {
 ### Task 1.7: Create Tools Index + Registry Registration
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/tools/index.ts`
 - Modify: `packages/opencode/src/tool/registry.ts`
 
@@ -343,6 +352,7 @@ export const SelfImprovementTools = [RememberTool, RecallTool]
 ### Task 1.8: Create Self-Improvement Index (boot layer)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/index.ts`
 - Depends on: all above tasks
 
@@ -353,6 +363,7 @@ Following the `export * as SelfImprovement from "."` pattern at the bottom.
 ### Task 1.9: Create Migration SQL
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/migrations/001_create_memory_table.sql`
 
 - [ ] **Create migration SQL file**
@@ -379,6 +390,7 @@ CREATE TABLE IF NOT EXISTS self_improvement_memory (
 ```
 
 **Verification for Wave A:**
+
 - `bun typecheck` passes across `packages/opencode`
 - Migration SQL is syntactically valid SQLite
 - Tool.Def types compile correctly
@@ -390,6 +402,7 @@ CREATE TABLE IF NOT EXISTS self_improvement_memory (
 ### Task 2.1: Add New Hook Types to Plugin Interface
 
 **Files:**
+
 - Modify: `packages/plugin/src/index.ts`
 - Modify: `packages/plugin/package.json` (version bump)
 
@@ -420,6 +433,7 @@ CREATE TABLE IF NOT EXISTS self_improvement_memory (
 ### Task 2.2: Add Hook Trigger in processor.ts (session.error)
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/processor.ts`
 
 - [ ] **Add experimental.session.error hook trigger in failToolCall / settleToolCall**
@@ -429,6 +443,7 @@ After a tool call fails (in `failToolCall` around line 209), trigger the hook wi
 ### Task 2.3: Add Hook Trigger in session.ts (session.ended)
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/session.ts`
 
 - [ ] **Add experimental.session.ended hook trigger in session close/remove path**
@@ -438,6 +453,7 @@ In the `remove` method or session cleanup path, trigger the hook before cleanup.
 ### Task 2.4: Add Hook Trigger in prompt.ts (step.complete)
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/prompt.ts`
 
 - [ ] **Add experimental.session.step.complete hook trigger after step completion**
@@ -447,6 +463,7 @@ After the `step-finish` event handling, trigger the hook with full step/result c
 ### Task 2.5: Add Memory Injection in System Prompt
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/prompt.ts` (around L1555-L1565)
 
 - [ ] **Call MemoryService.compile() and inject into system array**
@@ -463,6 +480,7 @@ const system = [
 ```
 
 **Verification for Wave B:**
+
 - `bun typecheck` passes
 - New hooks appear in Plugin.Hooks type
 - Triggers fire with correct input/output data during session lifecycle
@@ -474,6 +492,7 @@ const system = [
 ### Task 3.1: Create Curation Log Table
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/curation-log.sql.ts`
 - Create: `packages/opencode/src/self-improvement/migrations/002_create_curation_log.sql`
 
@@ -482,6 +501,7 @@ const system = [
 ### Task 3.2: Create Curation Bus Events
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/curation-bus-events.ts`
 
 - [ ] **Create curation.started, curation.ended, curation.error bus events**
@@ -489,6 +509,7 @@ const system = [
 ### Task 3.3: Create Decay Processor (decay.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/decay.ts`
 
 - [ ] **Create DecayProcessor with run() that decrements importance, purges below threshold**
@@ -496,6 +517,7 @@ const system = [
 ### Task 3.4: Create Heartbeat Touch (heartbeat.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/heartbeat.ts`
 
 - [ ] **Create HeartbeatFiber — touch heartbeat_at on active memories**
@@ -503,6 +525,7 @@ const system = [
 ### Task 3.5: Create Curation Fiber (curation.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/curation.ts`
 
 - [ ] **Create CurationFiber — scheduled consolidation, evolution, decay, pattern discovery**
@@ -510,6 +533,7 @@ const system = [
 ### Task 3.6: Create Pattern Extractor (pattern-extractor.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/pattern-extractor.ts`
 
 - [ ] **Create LLM-driven pattern extraction from memory clusters**
@@ -517,6 +541,7 @@ const system = [
 ### Task 3.7: Create Prompt Files
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/prompts/evolve.md`
 - Create: `packages/opencode/src/self-improvement/prompts/pattern.md`
 
@@ -525,6 +550,7 @@ const system = [
 ### Task 3.8: Create Health Check Fiber (health-check.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/self-improvement/health-check.ts`
 
 - [ ] **Create periodic health check fiber for memory store + fiber supervision**
@@ -532,6 +558,7 @@ const system = [
 ### Task 3.9: Wire Fibers into Boot Sequence
 
 **Files:**
+
 - Modify: `packages/opencode/src/self-improvement/index.ts`
 
 - [ ] **Wire curation, decay, heartbeat, health-check fibers into boot**
@@ -539,6 +566,7 @@ const system = [
 ### Task 4.1: Informative Tool Collapse
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/message-v2.ts` (line ~791)
 
 - [ ] **Replace "[Old tool result content cleared]" with informative one-line summary**
@@ -562,6 +590,7 @@ function summarizeToolOutput(part: any): string {
 ### Task 4.2: Anti-Thrashing in Compaction
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/compaction.ts`
 
 - [ ] **Add thrash counter to skip Phase 2 after consecutive low-yield passes**
@@ -571,12 +600,14 @@ Track savings % from each compaction pass. If savings < 10% for 2+ consecutive p
 ### Task 4.3: Pre-Compaction Plugin Hook
 
 **Files:**
+
 - Modify: `packages/opencode/src/session/compaction.ts` (line ~397)
 - Already covered: plugin hook type already added in Task 2.1
 
 - [ ] **Trigger experimental.compaction.before hook before pruning**
 
 **Verification for Wave C:**
+
 - Curation fiber starts/stops with config toggle
 - Decay decrements importance correctly
 - Tool collapse shows informative summaries instead of generic placeholder
@@ -589,6 +620,7 @@ Track savings % from each compaction pass. If savings < 10% for 2+ consecutive p
 ### Task 5.1: Browser Schema (schema.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/tool/browser/schema.ts`
 
 - [ ] **Create BrowserSessionID, BrowserState, BrowserViewport, tool param schemas**
@@ -596,6 +628,7 @@ Track savings % from each compaction pass. If savings < 10% for 2+ consecutive p
 ### Task 5.2: Playwright Engine (engine.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/tool/browser/engine.ts`
 
 - [ ] **Create BrowserEngine class — launch/dispose, per-session page management**
@@ -603,6 +636,7 @@ Track savings % from each compaction pass. If savings < 10% for 2+ consecutive p
 ### Task 5.3: Browser Bus Events (bus-events.ts)
 
 **Files:**
+
 - Create: `packages/opencode/src/tool/browser/bus-events.ts`
 
 - [ ] **Create browser session lifecycle bus events**
@@ -610,6 +644,7 @@ Track savings % from each compaction pass. If savings < 10% for 2+ consecutive p
 ### Task 5.4-5.9: Individual Browser Tools
 
 **Files:**
+
 - Create: `packages/opencode/src/tool/browser/navigate.ts`
 - Create: `packages/opencode/src/tool/browser/click.ts`
 - Create: `packages/opencode/src/tool/browser/type.ts`
@@ -620,6 +655,7 @@ Track savings % from each compaction pass. If savings < 10% for 2+ consecutive p
 - [ ] **Create all 6 browser tools following Tool.define() pattern with permission gating**
 
 Each tool:
+
 1. Takes params, uses BrowserEngine.ensurePage(sessionID)
 2. Checks permission via ctx.ask()
 3. Executes Playwright action
@@ -628,6 +664,7 @@ Each tool:
 ### Task 5.10: Browser Tools Index + Registry
 
 **Files:**
+
 - Create: `packages/opencode/src/tool/browser/index.ts`
 - Modify: `packages/opencode/src/tool/registry.ts`
 
@@ -637,6 +674,7 @@ Each tool:
 ### Task 5.11: Update package.json + Config + Permission
 
 **Files:**
+
 - Modify: `packages/opencode/package.json` — add `playwright` as optional dep
 - Create: `packages/opencode/src/config/browser.ts` — browser config schema
 - Modify: `packages/opencode/src/permission/schema.ts` — add `"browser"` type
@@ -646,6 +684,7 @@ Each tool:
 ### Task 6.1: Channel Schema
 
 **Files:**
+
 - Create: `packages/opencode/src/channels/schema.ts`
 
 - [ ] **Create ChannelID, ChannelInfo schemas**
@@ -653,6 +692,7 @@ Each tool:
 ### Task 6.2: Channel Drizzle Table
 
 **Files:**
+
 - Create: `packages/opencode/src/channels/channel.sql.ts`
 - Create: `packages/opencode/src/channels/migrations/001_create_channel_config.sql`
 
@@ -661,6 +701,7 @@ Each tool:
 ### Task 6.3: Channel Bus Events
 
 **Files:**
+
 - Create: `packages/opencode/src/channels/bus-events.ts`
 
 - [ ] **Create channel lifecycle bus events**
@@ -668,6 +709,7 @@ Each tool:
 ### Task 6.4: Channel Index (registry)
 
 **Files:**
+
 - Create: `packages/opencode/src/channels/index.ts`
 
 - [ ] **Create ChannelRegistry — CRUD, event forwarding, lifecycle**
@@ -675,6 +717,7 @@ Each tool:
 ### Task 6.5-6.6: Transports
 
 **Files:**
+
 - Create: `packages/opencode/src/channels/transports/slack.ts`
 - Create: `packages/opencode/src/channels/transports/discord.ts`
 
@@ -684,11 +727,13 @@ Each tool:
 ### Task 6.7: Channel Config
 
 **Files:**
+
 - Create: `packages/opencode/src/config/channels.ts`
 
 - [ ] **Create ChannelsConfig schema**
 
 **Verification for Wave D:**
+
 - `bun typecheck` passes
 - Browser engine compiles (no runtime test without Playwright installed)
 - Channel CRUD works against SQLite
@@ -701,6 +746,7 @@ Each tool:
 ### Task 7.1: Self-Improvement Config Module
 
 **Files:**
+
 - Create: `packages/opencode/src/config/self-improvement.ts`
 
 - [ ] **Create SelfImprovementConfig schema following self-export pattern**
@@ -708,6 +754,7 @@ Each tool:
 ### Task 7.2: Merge Config Into Config System
 
 **Files:**
+
 - Modify: `packages/opencode/src/config/config.ts`
 
 - [ ] **Import and merge self_improvement, experimental.browser, channels into Config.Info schema**
@@ -715,6 +762,7 @@ Each tool:
 ### Task 7.3-7.8: CLI Commands
 
 **Files:**
+
 - Create: `packages/opencode/src/cli/cmd/memory/list.ts`
 - Create: `packages/opencode/src/cli/cmd/memory/show.ts`
 - Create: `packages/opencode/src/cli/cmd/memory/prune.ts`
@@ -740,6 +788,7 @@ export const MemoryListCommand = effectCmd({
 ### Task 7.9: Register CLI Commands
 
 **Files:**
+
 - Modify: `packages/opencode/src/index.ts`
 
 - [ ] **Register memory and curation command groups in the CLI**
@@ -749,6 +798,7 @@ export const MemoryListCommand = effectCmd({
 ## Self-Review
 
 ### 1. Spec Coverage
+
 - Phase 1 covers all schema, tools, and store from the integration plan (§4.1-4.6, §8.1-8.3)
 - Phase 2 covers all plugin hooks and triggers (§4.4, §4.5)
 - Phase 3 covers curation, decay, heartbeat, health-check (§4.7, §11)
@@ -759,11 +809,13 @@ export const MemoryListCommand = effectCmd({
 - Console UI (§10.1) is deferred to a follow-up
 
 ### 2. Types Consistency
+
 - All 4 experimental hook names match across plugin interface, trigger call sites, and consumer expectations
 - MemoryID brand is consistent across schema, store, tools, and bus events
 - Tool.define() pattern consistent with existing tool definitions
 
 ### 3. Placeholder Check
+
 - No "TODO", "TBD", or "implement later" in actual code blocks
 - Every code block contains real implementation code
 - Verification commands are specific and actionable

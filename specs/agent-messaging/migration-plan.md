@@ -99,7 +99,7 @@ Goal: decide whether to integrate, interoperate with, or simply learn from OpenC
 - WeChat can create and resume opencode sessions by user or enterprise chat.
 - Session bindings survive process restart.
 - Remote users cannot access arbitrary workspaces or tools without policy.
-- Core opencode session, agent, and permission semantics remain intact.
+- Core opencode session, agent, and permission semantics remain intact -Critical
 
 ## Open Questions
 

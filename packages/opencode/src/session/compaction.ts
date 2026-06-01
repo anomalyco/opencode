@@ -221,6 +221,7 @@ export const layer = Layer.effect(
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const thrashCounters = new Map<string, { consecutiveLowYield: number }>()
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionLegacy.Assistant["tokens"]
@@ -305,6 +306,12 @@ export const layer = Layer.effect(
         .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
       if (!msgs) return
 
+      yield* plugin.trigger(
+        "experimental.compaction.before",
+        { sessionID: input.sessionID, messages: msgs },
+        { context: "" },
+      )
+
       let total = 0
       let pruned = 0
       const toPrune: SessionLegacy.ToolPart[] = []
@@ -348,6 +355,15 @@ export const layer = Layer.effect(
       auto: boolean
       overflow?: boolean
     }) {
+      // Anti-thrashing: skip LLM compaction after consecutive low-yield passes
+      const thrashKey = input.sessionID
+      const thrash = thrashCounters.get(thrashKey)
+      if (thrash && thrash.consecutiveLowYield >= 2) {
+        log.info("skipping compaction due to consecutive low-yield passes", { sessionID: input.sessionID })
+        thrashCounters.set(thrashKey, { consecutiveLowYield: 0 })
+        return "stop"
+      }
+
       const parent = input.messages.findLast((m) => m.info.id === input.parentID)
       if (!parent || parent.info.role !== "user") {
         throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
@@ -570,6 +586,24 @@ export const layer = Layer.effect(
             parts: [],
           },
         )
+
+        // Track compaction savings for anti-thrashing using actual summary text
+        const inputToolChars = input.messages.reduce((sum, m) => {
+          return sum + m.parts.reduce((s, p) => {
+            return s + (p.type === "tool" && p.state.status === "completed" ? (p.state.output ?? "").length : 0)
+          }, 0)
+        }, 0)
+        const summaryLen = (summary ?? "").length
+        const savings = inputToolChars > 0 ? (inputToolChars - summaryLen) / inputToolChars : 0
+        const counter = thrashCounters.get(thrashKey) ?? { consecutiveLowYield: 0 }
+        if (savings < 0.1) {
+          counter.consecutiveLowYield++
+        } else {
+          counter.consecutiveLowYield = 0
+        }
+        thrashCounters.set(thrashKey, counter)
+        log.info("compaction savings", { savings: Math.round(savings * 100), consecutiveLowYield: counter.consecutiveLowYield })
+
         if (flags.experimentalEventSystem) {
           yield* events.publish(SessionEvent.Compaction.Ended, {
             sessionID: input.sessionID,

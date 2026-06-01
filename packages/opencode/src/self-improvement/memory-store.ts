@@ -404,4 +404,4 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
 
-export * as SelfImprovementMemoryStore from "./memory-store"
+export * as MemoryStore from "./memory-store"

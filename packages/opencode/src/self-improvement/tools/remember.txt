@@ -1,0 +1,8 @@
+Store a fact, decision, or pattern for cross-session recall. Use this to persist important information the user should be able to retrieve in future sessions.
+
+Parameters:
+- title: Short label identifying the memory
+- content: The detailed information to store
+- type: Memory type — "semantic" (general knowledge), "episodic" (event), "procedural" (how-to), or "pattern" (recurring)
+- tags: Optional categorization tags
+- importance: 0.0-1.0 significance score (default 0.5)

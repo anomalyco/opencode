@@ -39,6 +39,9 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
+import { MemoryStore } from "../self-improvement/memory-store"
+import { RememberTool } from "../self-improvement/tools/remember"
+import { RecallTool } from "../self-improvement/tools/recall"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
@@ -111,6 +114,7 @@ export const layer: Layer.Layer<
   | Truncate.Service
   | RuntimeFlags.Service
   | Database.Service
+  | MemoryStore.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -139,6 +143,8 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const remember = yield* RememberTool
+    const recall = yield* RecallTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -248,6 +254,8 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          remember: Tool.init(remember),
+          recall: Tool.init(recall),
         })
 
         return {
@@ -270,6 +278,8 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            tool.remember,
+            tool.recall,
           ],
           task: tool.task,
           read: tool.read,
@@ -359,8 +369,14 @@ export const layer: Layer.Layer<
               .join("\n"),
             parameters: output.parameters,
             jsonSchema,
-            execute: tool.execute,
-            formatValidationError: tool.formatValidationError,
+            // Avoid referencing unbound methods which may change `this`.
+            // Wrap the execute call to preserve the tool as its context.
+            execute: (...args: unknown[]) => tool.execute(...(args as any)),
+            // Avoid referencing unbound methods which may change `this`.
+            // Wrap the formatValidationError call to preserve the tool as its context.
+            formatValidationError: tool.formatValidationError
+              ? ((...args: unknown[]) => (tool.formatValidationError as any).call(tool, ...args))
+              : undefined,
           }
         }),
         { concurrency: "unbounded" },
@@ -400,7 +416,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
+    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer), Layer.provide(MemoryStore.defaultLayer)),
 )
 
 function isZodType(value: unknown): value is z.ZodType {

@@ -29,7 +29,7 @@
 
 ## 1. Deep-Study Findings Summary
 
-Before any plan was written, 5 parallel subagents analyzed the actual codebase:
+Before any plan was written,  parallel subagents analyzed the actual codebase:
 
 ### 1.1 Plugin Systems — Two Systems Found
 
@@ -268,6 +268,7 @@ const system = [
 ```
 
 The `MemoryService.compile()` function would:
+
 1. Query memory store for relevant patterns (by agent + recent context)
 2. Format as a structured system message section
 3. Return `null` if no relevant memories (zero overhead)
@@ -277,12 +278,14 @@ The `MemoryService.compile()` function would:
 Two new built-in tools registered in `tool/registry.ts`:
 
 **`remember`** — Store a fact/decision/pattern for cross-session recall
+
 - Parameters: `title` (string), `content` (string), `type` (episodic|semantic|procedural|pattern), `tags` (string[]), `importance` (number, 0-1)
 - Returns: memory ID
 - Side effect: writes to `self_improvement_memory` table
 - Follows same `Tool.Def` pattern as existing tools (`tool/tool.ts` lines 34-80)
 
 **`recall`** — Semantic search across past memories
+
 - V1: Keyword/tag matching (zero dependencies)
 - V2: FTS5 full-text search on SQLite (built-in, no extra dependency)
 - V3: LLM-based ranking
@@ -315,6 +318,7 @@ export const CurationFiber = Layer.effect(
 ```
 
 Cycle steps (derived from Hermes two-layer curator):
+
 1. **Consolidate** — Find similar memories (tag overlap, content similarity), merge duplicates
 2. **Evolve** — Promote frequently-accessed short-term → long-term; demote stale long-term
 3. **Discover patterns** — Cluster memories by shared tags; when confidence threshold met, emit `pattern` memory
@@ -607,16 +611,19 @@ Research showed OpenCode's compaction is architecturally on-par with Hermes. No 
 **File:** `packages/opencode/src/session/message-v2.ts` line ~791
 
 **Current:**
+
 ```typescript
 "[Old tool result content cleared]"
 ```
 
 **After:**
+
 ```typescript
 `[tool] ${part.state.input?.tool ?? "unknown"} → ${summarizeToolOutput(part.state.output)}`
 ```
 
 Where `summarizeToolOutput()` produces:
+
 ```
 `ran ${command} → exit ${code}, ${N} lines`
 `read ${path} from line ${start} (${chars} chars)`
@@ -908,6 +915,7 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 | `self-improvement/migrations/001_create_memory_table.sql` | Database Optimizer | Create: Drizzle migration SQL | memory.sql.ts |
 
 **Verification by:** Senior QA
+
 - `bun typecheck` passes across `packages/opencode`
 - `remember("my fact", { type: "semantic", tags: ["test"] })` writes to SQLite
 - `recall("my fact")` returns the stored memory
@@ -926,11 +934,13 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 | `session/session.ts` (~L333-L369) | Backend Architect | **Modify:** Trigger `experimental.session.ended` in session close path | — |
 
 **Indirectly affected:**
+
 - `packages/plugin/package.json` — version bump (new hooks = semver minor)
 - Any existing `@opencode-ai/plugin` consumer (needs type compatibility)
 - `packages/opencode/src/plugin/index.ts` — dispatch call (already routes all hooks, no change needed)
 
 **Verification by:** Senior QA
+
 - Hook triggers fire with correct input/output data
 - Memory appears in `system` array during LLM requests
 - No existing plugin behavior changed (backward-compatible hook additions)
@@ -952,11 +962,13 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 | `self-improvement/index.ts` | Backend Architect | **Modify:** Wire curation fiber + decay processor into boot sequence | curation.ts, decay.ts |
 
 **Indirectly affected:**
+
 - `self-improvement/memory-store.ts` — may need batch read/write methods for curation to consume
 - Memory heartbeat touches `heartbeat_at` column on each memory row
 - `curation_run_log` table grows with each cycle (needs log rotation policy)
 
 **Verification by:** DevOps Automator + Senior QA
+
 - Curation fiber starts/stops with config toggle (`self_improvement.enabled`)
 - After 2+ runs, similar memories get consolidated
 - Unaccessed memories decay below threshold and are purged
@@ -975,11 +987,13 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 | `@opencode-ai/plugin/src/index.ts` | Software Architect | **Modify:** Add `experimental.compaction.before` hook | — |
 
 **Indirectly affected:**
+
 - `session/message-v2.ts` — `toModelMessagesEffect` function (same file, ~L750-L800) reads collapsed output
 - LLM effectiveness — informative collapses give better signal than "[Old tool result content cleared]"
 - Compaction test fixtures may need updating if they assert on the old placeholder string
 
 **Verification by:** Senior QA
+
 - Collapsed tool results show `[tool] grep → found 4 matches (1,200 chars)` instead of generic placeholder
 - Compaction skips after 2 consecutive <10% savings passes
 - Pre-compaction hook fires and receives `{ sessionID, messages }`
@@ -1005,6 +1019,7 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 | `console/app/src/routes/browser/` | Frontend Developer | Create: Browser session viewer page (list active sessions, current URL, screenshot gallery) | browser/engine.ts exports |
 
 **Indirectly affected:**
+
 - Permission system — new permission type `"browser"` needs addition to permission schema
 - Truncation system — screenshot output may exceed default 2000-line limit, needs `truncation.ts` to handle binary content
 - Config — `experimental.browser` needs to merge into config schema (TypeScript type + JSON parsing)
@@ -1012,6 +1027,7 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 - OTEL spans — browser tool calls need tracing spans
 
 **Verification by:** Senior QA
+
 - `bun install --optional playwright` completes cleanly
 - Agent can navigate to URL, snapshot page, click elements, type text, take screenshot
 - Permission prompts fire for browser actions
@@ -1034,12 +1050,14 @@ Each phase assigns specific agent types to specific files. This ensures parallel
 | `console/app/src/routes/channels/` | Frontend Developer | Create: Channel admin page — list, add, remove, test channel configs | channels/index.ts |
 
 **Indirectly affected:**
+
 - Bus event filtering — channels subscribe to all bus events; may need filtering/per-event routing
 - `@opencode-ai/plugin` — channel templates are published as reference plugins, not core changes
 - Config merge — `channels` section added to config schema
 - Migration pipeline — new table needs to be discovered by Drizzle migration runner
 
 **Verification by:** Senior QA
+
 - Channel config create/read/update/delete works
 - Bus events forward to Slack webhook
 - Channel tools register and execute
@@ -1061,6 +1079,7 @@ The console (SvelteKit web app) needs new pages and widgets for each subsystem:
 | **Config** | Self-improvement + browser + channels config editor sections | Extension of existing `routes/settings/` | Low |
 
 **Console files indirectly affected:**
+
 ```
 packages/console/app/src/
   ├── routes/
@@ -1111,6 +1130,7 @@ New CLI commands for the `code` CLI:
 | `code curation run` | `cli/cmd/curation/run.ts` | Manually trigger curation cycle |
 
 **CLI files indirectly affected:**
+
 ```
 packages/opencode/src/cli/
   ├── cmd/
@@ -1201,6 +1221,7 @@ export * as ConfigSelfImprovement from "./self-improvement"
 ```
 
 **Config index indirectly affected:**
+
 - `packages/opencode/src/config/config.ts` — MODIFY: merge new config sections into `Config` union type
 - `packages/opencode/src/config/index.ts` — MODIFY: add new exports
 
@@ -1606,8 +1627,6 @@ packages/console/app/src/
 | New Effect fibers | 4 (curation, decay, heartbeat, health-check) |
 | New plugin hooks | 4 (3 session + 1 compaction) |
 
-
-
 ---
 
 ## Appendix: Hermes Patterns Decided
@@ -1628,12 +1647,12 @@ packages/console/app/src/
 
 | Considered | Decision |
 |------------|----------|
-| New plugin system for self-improvement | ❌ Use @opencode-ai/plugin (2 already exist, don't add a third) |
+| New plugin system for self-improvement | ❌ Improve @opencode-ai/plugin (2 already exist, don't add a third) |
 | Replace compaction with Hermes version | ❌ Architecturally convergent, not worth replacement cost |
 | Replace EventV2 with custom event system | ❌ 27 events already exist, subscribe pattern works |
-| Cloud sync for memory store | ❌ Local-only for V1 |
+| Cloud sync for memory store | ❌No cloud for now, we can add it later preffered privacy for users (Local Memory Storage) |
 | Full Hermes agent runtime (claude_code_agent.py) | ❌ Only self-improvement patterns |
-| Embedding-based semantic search (V1) | ❌ Keyword/FTS5 first — LLM ranking later if needed |
+| Embedding-based semantic search (V1) | ❌ Keyword/FTS5 first — LLM ranking  if needed |
 | New Service type in packages/core | ❌ No new core abstractions |
 | PluginV2 changes (core hook system) | ❌ Core hooks are for model/provider plumbing, not self-improvement |
 | Channel as separate plugin kind | ❌ Standard @opencode-ai/plugin is sufficient |
