@@ -1,5 +1,5 @@
-@import "@opencode-ai/ui/v2/components/text-input-v2.css";
-@import "@opencode-ai/ui/v2/components/button-v2.css";
+@import "@opencode-ai/ui/v2/text-input-v2.css";
+@import "@opencode-ai/ui/v2/button-v2.css";
 
 [data-component="settings-v2"] {
   height: 100%;
@@ -474,7 +474,9 @@
   line-height: 1;
   letter-spacing: 0.05px;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" on, "lnum" on;
+  font-feature-settings:
+    "tnum" on,
+    "lnum" on;
   font-variation-settings: "slnt" 0;
   color: var(--v2-text-text-faint);
 }

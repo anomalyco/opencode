@@ -1,6 +1,6 @@
 import { Component } from "solid-js"
-import { Dialog } from "@opencode-ai/ui/v2/components/dialog-v2.jsx"
-import { TabsV2 } from "@opencode-ai/ui/v2/components/tabs-v2.jsx"
+import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
+import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"

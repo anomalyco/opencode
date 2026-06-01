@@ -1,10 +1,10 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SelectV2 } from "@opencode-ai/ui/select-v2"
-import { Switch } from "@opencode-ai/ui/v2/components/switch-v2.jsx"
-import { TextInputV2 } from "@opencode-ai/ui/v2/components/text-input-v2.jsx"
+import { Switch } from "@opencode-ai/ui/v2/switch-v2"
+import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -748,12 +748,7 @@ export const SettingsGeneralV2: Component = () => {
           title={language.t("settings.updates.row.check.title")}
           description={language.t("settings.updates.row.check.description")}
         >
-          <ButtonV2
-            size="normal"
-            variant="neutral"
-            disabled={store.checking || !platform.checkUpdate}
-            onClick={check}
-          >
+          <ButtonV2 size="normal" variant="neutral" disabled={store.checking || !platform.checkUpdate} onClick={check}>
             {store.checking
               ? language.t("settings.updates.action.checking")
               : language.t("settings.updates.action.checkNow")}

@@ -1,5 +1,5 @@
-import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
-import { Tag } from "@opencode-ai/ui/v2/components/badge-v2.jsx"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"

@@ -12,7 +12,7 @@ import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
-import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/components/project-avatar-v2.jsx"
+import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 
 export type { ProjectAvatarVariant }
 
