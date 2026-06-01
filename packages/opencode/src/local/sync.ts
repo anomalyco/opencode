@@ -1,4 +1,5 @@
 import * as Log from "@opencode-ai/core/util/log"
+import os from "os"
 import { Config } from "@/config/config"
 import { Effect, Layer } from "effect"
 import { scanLlamaSwap } from "./mdns"
@@ -14,6 +15,16 @@ function providerIDFromName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
+}
+
+function ownIPs(): Set<string> {
+  const ips = new Set<string>()
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const iface of ifaces ?? []) {
+      ips.add(iface.address)
+    }
+  }
+  return ips
 }
 
 function canonicalName(name: string) {
@@ -52,8 +63,13 @@ const syncLocalProviders = Effect.gen(function* () {
     if (base) existingByURL.set(base, id)
   }
 
+  const selfIPs = ownIPs()
   let changed = false
   for (const svc of online) {
+    // Skip own IPs — probeLAN only skips one interface per subnet, so a
+    // machine with two LAN addresses would otherwise add itself twice.
+    if (selfIPs.has(svc.host)) continue
+
     const norm = normalizeBaseURL(svc.baseURL)
     const name = canonicalName(svc.name)
     const slug = providerIDFromName(name || svc.name)
