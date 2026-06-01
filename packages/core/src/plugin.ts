@@ -26,9 +26,9 @@ type HookSpec = {
   }
   "account.switched": {
     input: {
-      serviceID: import("./account").AccountV2.ServiceID
-      from?: import("./account").AccountV2.ID
-      to?: import("./account").AccountV2.ID
+      serviceID: import("./auth").Auth.ServiceID
+      from?: import("./auth").Auth.ID
+      to?: import("./auth").Auth.ID
     }
     output: {}
   }
@@ -111,7 +111,14 @@ export const layer = Layer.effect(
         const existing = hooks.find((item) => item.id === input.id)
         if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
         const scope = yield* Scope.make()
-        const result = yield* input.effect.pipe(Scope.provide(scope))
+        const result = yield* input.effect.pipe(
+          Scope.provide(scope),
+          Effect.withSpan("Plugin.load", {
+            attributes: {
+              "plugin.id": input.id,
+            },
+          }),
+        )
         hooks = [
           ...hooks.filter((item) => item.id !== input.id),
           {
@@ -169,7 +176,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
+export const locationLayer = layer
 
 // opencode
 // sdcok

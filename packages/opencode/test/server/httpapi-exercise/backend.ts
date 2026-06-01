@@ -56,7 +56,7 @@ function app(modules: Runtime, options: CallOptions) {
         ),
       ),
     ),
-    { disableLogger: true },
+    { disableLogger: true, memoMap: modules.memoMap },
   ).handler
   return (appCache[cacheKey] = {
     request(input: string | URL | Request, init?: RequestInit) {

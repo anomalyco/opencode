@@ -1,4 +1,5 @@
 import { EOL } from "os"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { basename } from "path"
 import { Cause, Effect } from "effect"
 import { Agent } from "../../../agent/agent"
@@ -163,7 +164,7 @@ const createToolContext = Effect.fn("Cli.debug.agent.createToolContext")(functio
         )
       })
   const now = Date.now()
-  const message: MessageV2.Assistant = {
+  const message: SessionLegacy.Assistant = {
     id: messageID,
     sessionID: session.id,
     role: "assistant",

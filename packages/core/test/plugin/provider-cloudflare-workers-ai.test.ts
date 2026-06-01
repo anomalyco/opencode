@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AccountV2 } from "@opencode-ai/core/account"
+import { Auth } from "@opencode-ai/core/auth"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { Policy } from "@opencode-ai/core/policy"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { CloudflareWorkersAIPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-workers-ai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -16,11 +15,9 @@ import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, withEnv } from "./provider-helper"
 
 const itWithAccount = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
-    Layer.provideMerge(AccountV2.defaultLayer),
+  Catalog.locationLayer.pipe(
+    Layer.provideMerge(Auth.defaultLayer),
     Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(Policy.defaultLayer),
     Layer.provideMerge(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
     ),
@@ -131,12 +128,12 @@ describe("CloudflareWorkersAIPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          const accounts = yield* AccountV2.Service
+          const accounts = yield* Auth.Service
           const catalog = yield* Catalog.Service
           const events = yield* EventV2.Service
           yield* accounts.create({
-            serviceID: AccountV2.ServiceID.make("cloudflare-workers-ai"),
-            credential: new AccountV2.ApiKeyCredential({
+            serviceID: Auth.ServiceID.make("cloudflare-workers-ai"),
+            credential: new Auth.ApiKeyCredential({
               type: "api",
               key: "account-key",
               metadata: { accountId: "account-acct" },
@@ -145,7 +142,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           yield* plugin.add({
             ...AccountPlugin,
             effect: AccountPlugin.effect.pipe(
-              Effect.provideService(AccountV2.Service, accounts),
+              Effect.provideService(Auth.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
               Effect.provideService(EventV2.Service, events),
               Effect.provideService(PluginV2.Service, plugin),

@@ -200,4 +200,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Global.defaultLayer))
+export const locationLayer = layer.pipe(Layer.provideMerge(Policy.locationLayer))

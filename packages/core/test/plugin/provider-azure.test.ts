@@ -1,11 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AccountV2 } from "@opencode-ai/core/account"
+import { Auth } from "@opencode-ai/core/auth"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { Policy } from "@opencode-ai/core/policy"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -15,11 +14,9 @@ import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
 const itWithAccount = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
-    Layer.provideMerge(AccountV2.defaultLayer),
+  Catalog.locationLayer.pipe(
+    Layer.provideMerge(Auth.defaultLayer),
     Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(Policy.defaultLayer),
     Layer.provideMerge(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
     ),
@@ -79,12 +76,12 @@ describe("AzurePlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          const accounts = yield* AccountV2.Service
+          const accounts = yield* Auth.Service
           const catalog = yield* Catalog.Service
           const events = yield* EventV2.Service
           yield* accounts.create({
-            serviceID: AccountV2.ServiceID.make("azure"),
-            credential: new AccountV2.ApiKeyCredential({
+            serviceID: Auth.ServiceID.make("azure"),
+            credential: new Auth.ApiKeyCredential({
               type: "api",
               key: "key",
               metadata: { resourceName: "from-account" },
@@ -93,7 +90,7 @@ describe("AzurePlugin", () => {
           yield* plugin.add({
             ...AccountPlugin,
             effect: AccountPlugin.effect.pipe(
-              Effect.provideService(AccountV2.Service, accounts),
+              Effect.provideService(Auth.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
               Effect.provideService(EventV2.Service, events),
               Effect.provideService(PluginV2.Service, plugin),
