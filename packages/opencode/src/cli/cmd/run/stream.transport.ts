@@ -5,8 +5,8 @@
 // produce scrollback commits and footer patches, which get forwarded to the
 // footer through stream.ts.
 //
-// Prompt turns are one-at-a-time: runPromptTurn() sends the prompt to the
-// SDK, arms a deferred Wait, and resolves when the session becomes idle.
+// Prompt turns are one-at-a-time: runPromptTurn() sends the prompt, arms a
+// deferred Wait, and resolves when the session becomes idle.
 // Prefer session.status idle events, but also poll session.status because some
 // transports can miss status events while still delivering message events. If
 // the turn is aborted (user interrupt), it flushes any in-progress parts as
