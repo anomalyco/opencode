@@ -237,6 +237,49 @@ describe("session.list", () => {
   )
 
   it.instance(
+    "respects offset parameter across pages",
+    () =>
+      Effect.gen(function* () {
+        yield* withSession({ title: "offset-1" })
+        yield* withSession({ title: "offset-2" })
+        yield* withSession({ title: "offset-3" })
+        yield* withSession({ title: "offset-4" })
+        yield* withSession({ title: "offset-5" })
+
+        const page1 = yield* SessionNs.use.list({ limit: 2, offset: 0 })
+        const page2 = yield* SessionNs.use.list({ limit: 2, offset: 2 })
+        const page3 = yield* SessionNs.use.list({ limit: 2, offset: 4 })
+
+        expect(page1.length).toBe(2)
+        expect(page2.length).toBe(2)
+        expect(page3.length).toBe(1)
+
+        const ids1 = new Set(page1.map((s) => s.id))
+        const ids2 = new Set(page2.map((s) => s.id))
+        const ids3 = new Set(page3.map((s) => s.id))
+
+        expect([...ids1, ...ids2, ...ids3].length).toBe(5)
+        expect([...ids1].filter((id) => ids2.has(id))).toEqual([])
+        expect([...ids1].filter((id) => ids3.has(id))).toEqual([])
+        expect([...ids2].filter((id) => ids3.has(id))).toEqual([])
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "offset past total returns empty",
+    () =>
+      Effect.gen(function* () {
+        yield* withSession({ title: "past-1" })
+        yield* withSession({ title: "past-2" })
+
+        const sessions = yield* SessionNs.use.list({ limit: 10, offset: 5 })
+        expect(sessions.length).toBe(0)
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "includes metadata in listed sessions",
     () =>
       Effect.gen(function* () {

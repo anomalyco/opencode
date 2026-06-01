@@ -764,6 +764,37 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "serves paginated session list via offset",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        for (let i = 0; i < 5; i++) {
+          yield* createSession({ title: `page-${i}` })
+        }
+
+        const page1 = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?limit=2&offset=0`, { headers })
+        const page2 = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?limit=2&offset=2`, { headers })
+        const page3 = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?limit=2&offset=4`, { headers })
+
+        expect(page1.length).toBe(2)
+        expect(page2.length).toBe(2)
+        expect(page3.length).toBe(1)
+
+        const ids1 = new Set(page1.map((s) => s.id))
+        const ids2 = new Set(page2.map((s) => s.id))
+        const ids3 = new Set(page3.map((s) => s.id))
+        const allIds = new Set([...ids1, ...ids2, ...ids3])
+
+        expect(allIds.size).toBe(5)
+        expect([...ids1].filter((id) => ids2.has(id))).toEqual([])
+        expect([...ids1].filter((id) => ids3.has(id))).toEqual([])
+        expect([...ids2].filter((id) => ids3.has(id))).toEqual([])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "uses project-scoped path and directory precedence",
     () =>
       Effect.gen(function* () {

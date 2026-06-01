@@ -301,6 +301,7 @@ export type ListInput = {
   start?: number
   search?: string
   limit?: number
+  offset?: number
 }
 
 export type GlobalListInput = {
@@ -1074,6 +1075,7 @@ function listByProject(
     .where(and(...conditions))
     .orderBy(desc(SessionTable.time_updated))
     .limit(limit)
+    .offset(input.offset ?? 0)
     .all()
     .pipe(
       Effect.orDie,

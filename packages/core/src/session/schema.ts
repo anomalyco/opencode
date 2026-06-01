@@ -53,7 +53,7 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
-    archived: optionalOmitUndefined(V2Schema.DateTimeUtcFromMillis),
+    archived: Schema.optional(V2Schema.DateTimeUtcFromMillis),
   }),
   title: Schema.String,
 }) {}
