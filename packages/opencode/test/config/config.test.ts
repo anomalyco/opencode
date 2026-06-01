@@ -13,6 +13,13 @@ import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import {
+  InstallationLocal,
+  InstallationDependencyVersion,
+  InstallationVersion,
+  normalizeInstallationDependencyVersion,
+} from "@opencode-ai/core/installation/version"
+import { Npm } from "@opencode-ai/core/npm"
 import { Env } from "../../src/env"
 import {
   provideTmpdirInstance,
@@ -90,6 +97,7 @@ const configLayer = (
     auth?: Layer.Layer<Auth.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
+    npm?: Layer.Layer<Npm.Service>
   } = {},
 ) =>
   Config.layer.pipe(
@@ -98,7 +106,7 @@ const configLayer = (
     Layer.provide(options.auth ?? AuthTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
-    Layer.provide(NpmTest.noop),
+    Layer.provide(options.npm ?? NpmTest.noop),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)),
     Layer.provideMerge(AppFileSystem.defaultLayer),
   )
@@ -901,23 +909,64 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
 )
 
-it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
-  Effect.gen(function* () {
-    const dir = yield* tmpdirScoped()
-    const configDir = path.join(dir, "configdir")
-    yield* AppFileSystem.use.ensureDir(configDir)
+{
+  const installs: Array<{
+    dir: string
+    input?: {
+      add: {
+        name: string
+        version?: string
+      }[]
+    }
+  }> = []
 
-    yield* withProcessEnv(
-      "OPENCODE_CONFIG_DIR",
-      configDir,
-      Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
-        provideInstanceEffect(dir),
-      ),
-    )
+  const npm = Layer.mock(Npm.Service)({
+    install: (dir, input) =>
+      Effect.sync(() => {
+        installs.push({ dir, input })
+      }),
+  })
 
-    expect(yield* AppFileSystem.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
-  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
-)
+  configIt({ npm }).effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
+    Effect.gen(function* () {
+      installs.length = 0
+      const dir = yield* tmpdirScoped()
+      const configDir = path.join(dir, "configdir")
+      yield* AppFileSystem.use.ensureDir(configDir)
+
+      yield* withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        configDir,
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      )
+
+      expect(yield* AppFileSystem.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
+      const configDirInstall = installs.find((install) => install.dir === configDir)
+      expect(configDirInstall).toBeDefined()
+      expect(configDirInstall?.input?.add).toEqual([
+        {
+          name: "@opencode-ai/plugin",
+          version: InstallationLocal ? undefined : InstallationDependencyVersion,
+        },
+      ])
+      if (!InstallationLocal && /[+-]/.test(InstallationVersion)) {
+        expect(configDirInstall?.input?.add[0]?.version).toBe(InstallationVersion.replace(/[+-].*$/, ""))
+        expect(configDirInstall?.input?.add[0]?.version).not.toBe(InstallationVersion)
+      }
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  )
+}
+
+test("normalizeInstallationDependencyVersion strips prerelease and build metadata", () => {
+  expect(normalizeInstallationDependencyVersion("1.15.13-c0dn.1")).toBe("1.15.13")
+  expect(normalizeInstallationDependencyVersion("1.16.0-c0dn.12")).toBe("1.16.0")
+  expect(normalizeInstallationDependencyVersion("2.0.0-beta.3")).toBe("2.0.0")
+  expect(normalizeInstallationDependencyVersion("10.20.30+build.7")).toBe("10.20.30")
+  expect(normalizeInstallationDependencyVersion("1.15.13")).toBe("1.15.13")
+  expect(normalizeInstallationDependencyVersion("local")).toBe("local")
+})
 
 // Note: deduplication and serialization of npm installs is now handled by the
 // core Npm.Service (via EffectFlock). Those behaviors are tested in the core
