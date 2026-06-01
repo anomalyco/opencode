@@ -94,6 +94,16 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 type Row = typeof SessionMailboxTable.$inferSelect
 
+function dieDb<A>(effect: Effect.Effect<A, unknown, unknown>): Effect.Effect<A> {
+  return effect.pipe(Effect.catch((error: unknown) => Effect.die(error))) as Effect.Effect<A>
+}
+
+function dieDbExceptNotFound<A>(effect: Effect.Effect<A, unknown, unknown>): Effect.Effect<A, NotFoundError> {
+  return effect.pipe(
+    Effect.catch((error: unknown) => (error instanceof NotFoundError ? Effect.fail(error) : Effect.die(error))),
+  ) as Effect.Effect<A, NotFoundError>
+}
+
 function fromRow(row: Row): Message {
   return {
     id: ID.make(row.id),
@@ -134,37 +144,46 @@ export const layer = Layer.effect(
     const { db } = yield* Database.Service
     const events = yield* EventV2.Service
 
-    const publish = (message: Message) => {
+    const publish = (message: Message): Effect.Effect<void> => {
       const data = eventData(message)
-      const effect = (() => {
-        switch (message.state) {
-          case "queued":
-            return events.publish(SessionEvent.Mailbox.Enqueued, data)
-          case "processing":
-            return events.publish(SessionEvent.Mailbox.Processing, { ...data, claimID: message.claimID })
-          case "delivered":
-            return events.publish(SessionEvent.Mailbox.Delivered, data)
-          case "failed":
-            return events.publish(SessionEvent.Mailbox.Failed, { ...data, error: message.error })
-          case "cancelled":
-            return events.publish(SessionEvent.Mailbox.Cancelled, data)
-        }
-      })()
+      let effect: Effect.Effect<void>
+      switch (message.state) {
+        case "queued":
+          effect = events.publish(SessionEvent.Mailbox.Enqueued, data).pipe(Effect.asVoid)
+          break
+        case "processing":
+          effect = events.publish(SessionEvent.Mailbox.Processing, { ...data, claimID: message.claimID }).pipe(Effect.asVoid)
+          break
+        case "delivered":
+          effect = events.publish(SessionEvent.Mailbox.Delivered, data).pipe(Effect.asVoid)
+          break
+        case "failed":
+          effect = events.publish(SessionEvent.Mailbox.Failed, { ...data, error: message.error }).pipe(Effect.asVoid)
+          break
+        case "cancelled":
+          effect = events.publish(SessionEvent.Mailbox.Cancelled, data).pipe(Effect.asVoid)
+          break
+      }
       return effect.pipe(Effect.catchCause(() => Effect.void), Effect.asVoid)
     }
 
-    const getRow = (id: ID) => db.select().from(SessionMailboxTable).where(eq(SessionMailboxTable.id, id)).get()
+    const getRow = (id: ID): Effect.Effect<Row | undefined> =>
+      dieDb(db.select().from(SessionMailboxTable).where(eq(SessionMailboxTable.id, id)).get())
 
-    const requireRow = (id: ID) =>
+    const requireRow = (id: ID): Effect.Effect<Row, NotFoundError> =>
       Effect.gen(function* () {
-        const row = yield* getRow(id).pipe(Effect.orDie)
+        const row = yield* getRow(id)
         if (!row) return yield* new NotFoundError({ id })
         return row
       })
 
-    const updateTerminal = (id: ID, state: "delivered" | "failed", error?: string) =>
-      db
-        .transaction(
+    const updateTerminal = (
+      id: ID,
+      state: "delivered" | "failed",
+      error?: string,
+    ): Effect.Effect<{ row: Row; changed: boolean }, NotFoundError> =>
+      dieDbExceptNotFound(
+        db.transaction(
           () =>
             Effect.gen(function* () {
               const current = yield* requireRow(id)
@@ -179,8 +198,8 @@ export const layer = Layer.effect(
               return { row: next, changed: true }
             }),
           { behavior: "immediate" },
-        )
-        .pipe(Effect.orDie)
+        ),
+      )
 
     return Service.of({
       enqueue: Effect.fn("SessionMailbox.enqueue")(function* (input) {
@@ -188,18 +207,18 @@ export const layer = Layer.effect(
         const id = input.id ?? ID.create()
         const row = {
           id,
-          from_session_id: input.fromSessionID,
+          from_session_id: input.fromSessionID ?? null,
           to_session_id: input.toSessionID,
-          root_session_id: input.rootSessionID,
+          root_session_id: input.rootSessionID ?? null,
           kind: input.kind,
           delivery: input.delivery,
           state: "queued" as const,
           text: input.text,
-          metadata: input.metadata,
+          metadata: input.metadata ?? null,
           time_created: now,
           time_updated: now,
         }
-        yield* db.insert(SessionMailboxTable).values([row]).run().pipe(Effect.orDie)
+        yield* dieDb(db.insert(SessionMailboxTable).values([row]).run())
         const message = fromRow({ ...row, claim_id: null, error: null, time_processing: null, time_completed: null })
         yield* publish(message)
         return message
@@ -208,8 +227,8 @@ export const layer = Layer.effect(
       claim: Effect.fn("SessionMailbox.claim")(function* (input) {
         const limit = Math.max(1, Math.floor(input.limit ?? 1))
         const claimID = input.claimID ?? `claim_${Identifier.ascending()}`
-        const rows = yield* db
-          .transaction(
+        const rows = yield* dieDb(
+          db.transaction(
             () =>
               Effect.gen(function* () {
                 const existing = yield* db
@@ -258,10 +277,10 @@ export const layer = Layer.effect(
                   .orderBy(asc(SessionMailboxTable.time_created), asc(SessionMailboxTable.id))
                   .all()
                 return { rows: claimed.filter((row) => row.claim_id === claimID), changed: claimed }
-              }),
+            }),
             { behavior: "immediate" },
-          )
-          .pipe(Effect.orDie)
+          ),
+        )
         const messages = rows.rows.map(fromRow)
         for (const row of rows.changed) {
           if (row.state === "processing" && row.claim_id === claimID) yield* publish(fromRow(row))
@@ -285,8 +304,8 @@ export const layer = Layer.effect(
 
       cancel: Effect.fn("SessionMailbox.cancel")(function* (input) {
         const id = typeof input === "string" ? input : input.id
-        const result = yield* db
-          .transaction(
+        const result = yield* dieDbExceptNotFound(
+          db.transaction(
             () =>
               Effect.gen(function* () {
                 const current = yield* requireRow(id)
@@ -299,10 +318,10 @@ export const layer = Layer.effect(
                   .run()
                 const next = yield* requireRow(id)
                 return { row: next, changed: true }
-              }),
+            }),
             { behavior: "immediate" },
-          )
-          .pipe(Effect.orDie)
+          ),
+        )
         const message = fromRow(result.row)
         if (result.changed) yield* publish(message)
         return message
@@ -313,21 +332,22 @@ export const layer = Layer.effect(
       }),
 
       list: Effect.fn("SessionMailbox.list")(function* (input = {}) {
-        const rows = yield* db
-          .select()
-          .from(SessionMailboxTable)
-          .where(
-            and(
-              input.toSessionID ? eq(SessionMailboxTable.to_session_id, input.toSessionID) : undefined,
-              input.kind ? eq(SessionMailboxTable.kind, input.kind) : undefined,
-              input.delivery ? eq(SessionMailboxTable.delivery, input.delivery) : undefined,
-              input.state ? eq(SessionMailboxTable.state, input.state) : undefined,
-            ),
-          )
-          .orderBy(asc(SessionMailboxTable.to_session_id), asc(SessionMailboxTable.kind), asc(SessionMailboxTable.time_created), asc(SessionMailboxTable.id))
-          .limit(input.limit ?? 100)
-          .all()
-          .pipe(Effect.orDie)
+        const rows = yield* dieDb(
+          db
+            .select()
+            .from(SessionMailboxTable)
+            .where(
+              and(
+                input.toSessionID ? eq(SessionMailboxTable.to_session_id, input.toSessionID) : undefined,
+                input.kind ? eq(SessionMailboxTable.kind, input.kind) : undefined,
+                input.delivery ? eq(SessionMailboxTable.delivery, input.delivery) : undefined,
+                input.state ? eq(SessionMailboxTable.state, input.state) : undefined,
+              ),
+            )
+            .orderBy(asc(SessionMailboxTable.to_session_id), asc(SessionMailboxTable.kind), asc(SessionMailboxTable.time_created), asc(SessionMailboxTable.id))
+            .limit(input.limit ?? 100)
+            .all(),
+        )
         return rows.map(fromRow)
       }),
     })
