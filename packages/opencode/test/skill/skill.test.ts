@@ -540,23 +540,23 @@ description: A skill in the .agents/skills directory.
 `,
               ),
               Bun.write(
-                path.join(dir, ".opencode", "skill", "agent-skill", "SKILL.md"),
+                path.join(dir, ".opencode", "skill", "opencode-skill-dir", "SKILL.md"),
                 `---
-name: opencode-skill
+name: opencode-skill-dir
 description: A skill in the .opencode/skill directory.
 ---
 
-# OpenCode Skill
+# OpenCode Skill Dir
 `,
               ),
               Bun.write(
-                path.join(dir, ".opencode", "skills", "agent-skill", "SKILL.md"),
+                path.join(dir, ".opencode", "skills", "opencode-skill-dir2", "SKILL.md"),
                 `---
-name: opencode-skill
+name: opencode-skill-dir2
 description: A skill in the .opencode/skills directory.
 ---
 
-# OpenCode Skill
+# OpenCode Skill Dir2
 `,
               ),
             ]),
@@ -565,6 +565,147 @@ description: A skill in the .opencode/skills directory.
           const skill = yield* Skill.Service
           expect((yield* skill.dirs()).length).toBe(4)
         }),
+      { git: true },
+    ),
+  )
+})
+
+describe("DedupeMode", () => {
+  // With DedupeMode.KeepFirst (default), when same basename appears in multiple roots,
+  // first-discovered wins. Phase 1 (.claude) is scanned before Phase 2 (.agents),
+  // so .claude path should win.
+
+  it.live("KeepFirst: deduplicates same basename from .claude and .agents, .claude wins", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        withHome(
+          dir,
+          Effect.gen(function* () {
+            // Create same skill basename in both .claude and .agents
+            yield* Effect.promise(() =>
+              Promise.all([
+                Bun.write(
+                  path.join(dir, ".claude", "skills", "shared-skill", "SKILL.md"),
+                  `---
+name: shared-skill
+description: From .claude
+---
+
+# Shared Skill
+`,
+                ),
+                Bun.write(
+                  path.join(dir, ".agents", "skills", "shared-skill", "SKILL.md"),
+                  `---
+name: shared-skill
+description: From .agents
+---
+
+# Shared Skill
+`,
+                ),
+              ]),
+            )
+
+            const skill = yield* Skill.Service
+            const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+
+            // Should have exactly 1 entry (deduplicated)
+            expect(list.length).toBe(1)
+            // And it should be from .claude (first-discovered)
+            expect(list[0].location).toContain(".claude")
+            expect(list[0].description).toBe("From .claude")
+          }),
+        ),
+      { git: true },
+    ),
+  )
+
+  it.live("KeepFirst: available() returns stable list across calls", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        withHome(
+          dir,
+          Effect.gen(function* () {
+            yield* Effect.promise(() =>
+              Promise.all([
+                Bun.write(
+                  path.join(dir, ".claude", "skills", "dup-skill", "SKILL.md"),
+                  `---
+name: dup-skill
+description: A skill
+---
+
+# Dup Skill
+`,
+                ),
+                Bun.write(
+                  path.join(dir, ".agents", "skills", "dup-skill", "SKILL.md"),
+                  `---
+name: dup-skill
+description: Same skill
+---
+
+# Dup Skill
+`,
+                ),
+              ]),
+            )
+
+            const skill = yield* Skill.Service
+            const first = yield* skill.available()
+            const second = yield* skill.available()
+
+            expect(first.length).toBe(second.length)
+            for (let i = 0; i < first.length; i++) {
+              expect(first[i].name).toBe(second[i].name)
+              expect(first[i].location).toBe(second[i].location)
+            }
+          }),
+        ),
+      { git: true },
+    ),
+  )
+
+  it.live("KeepFirst: skills with unique basenames are all retained", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        withHome(
+          dir,
+          Effect.gen(function* () {
+            yield* Effect.promise(() =>
+              Promise.all([
+                Bun.write(
+                  path.join(dir, ".claude", "skills", "skill-a", "SKILL.md"),
+                  `---
+name: skill-a
+description: Skill A
+---
+
+# Skill A
+`,
+                ),
+                Bun.write(
+                  path.join(dir, ".agents", "skills", "skill-b", "SKILL.md"),
+                  `---
+name: skill-b
+description: Skill B
+---
+
+# Skill B
+`,
+                ),
+              ]),
+            )
+
+            const skill = yield* Skill.Service
+            const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+
+            expect(list.length).toBe(2)
+            expect(list.find((s) => s.name === "skill-a")).toBeDefined()
+            expect(list.find((s) => s.name === "skill-b")).toBeDefined()
+          }),
+        ),
       { git: true },
     ),
   )

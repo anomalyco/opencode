@@ -24,6 +24,14 @@ const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
+export const DEDUPE_MODE = {
+  KeepFirst: "keep_first",
+  KeepLast: "keep_last",
+  KeepBoth: "keep_both",
+} as const
+
+export { discoverSkills }
+
 // Built-in skill that ships with opencode. The model's intuition for what an
 // opencode.json should look like is often wrong, and opencode hard-fails on
 // invalid config, so users hit cryptic startup errors. Loading this skill
@@ -91,6 +99,7 @@ type DiscoveryState = {
 type ScanState = {
   matches: Set<string>
   dirs: Set<string>
+  seen: Map<string, string>
 }
 
 export interface Interface {
@@ -145,6 +154,7 @@ const scan = Effect.fnUntraced(function* (
   root: string,
   pattern: string,
   opts?: { dot?: boolean; scope?: string },
+  dedupeMode: typeof DEDUPE_MODE[keyof typeof DEDUPE_MODE] = DEDUPE_MODE.KeepFirst,
 ) {
   const matches = yield* Effect.tryPromise({
     try: () =>
@@ -165,6 +175,22 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
+    const basename = path.basename(path.dirname(match))
+    const existing = state.seen.get(basename)
+
+    if (existing !== undefined) {
+      if (dedupeMode === DEDUPE_MODE.KeepBoth) {
+        state.matches.add(match)
+      } else if (dedupeMode === DEDUPE_MODE.KeepLast) {
+        state.matches.delete(existing)
+        state.matches.add(match)
+        state.seen.set(basename, match)
+      }
+      // KeepFirst: skip (first wins) — do nothing
+      continue
+    }
+
+    state.seen.set(basename, match)
     state.matches.add(match)
     state.dirs.add(path.dirname(match))
   }
@@ -179,8 +205,9 @@ const discoverSkills = Effect.fnUntraced(function* (
   disableClaudeCodeSkills: boolean,
   directory: string,
   worktree: string,
+  dedupeMode: typeof DEDUPE_MODE[keyof typeof DEDUPE_MODE] = DEDUPE_MODE.KeepFirst,
 ) {
-  const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const state: ScanState = { matches: new Set(), dirs: new Set(), seen: new Map() }
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
@@ -190,7 +217,7 @@ const discoverSkills = Effect.fnUntraced(function* (
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" }, dedupeMode)
     }
 
     const upDirs = yield* fsys
@@ -198,13 +225,13 @@ const discoverSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" }, dedupeMode)
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN, undefined, dedupeMode)
   }
 
   const cfg = yield* config.get()
@@ -216,13 +243,13 @@ const discoverSkills = Effect.fnUntraced(function* (
       continue
     }
 
-    yield* scan(state, dir, SKILL_PATTERN)
+    yield* scan(state, dir, SKILL_PATTERN, undefined, dedupeMode)
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
-      yield* scan(state, dir, SKILL_PATTERN)
+      yield* scan(state, dir, SKILL_PATTERN, undefined, dedupeMode)
     }
   }
 
