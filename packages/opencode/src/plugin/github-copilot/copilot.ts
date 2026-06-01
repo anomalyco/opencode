@@ -10,6 +10,8 @@ import { MessageV2 } from "@/session/message-v2"
 const log = Log.create({ service: "plugin.copilot" })
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
+const API_VERSION = "2026-06-01"
+const UTILITY_MODELS = new Set(["gpt-4o-mini", "gpt-4.1", "gpt-4o", "gpt-5.4-nano"])
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
@@ -71,6 +73,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           {
             Authorization: `Bearer ${auth.refresh}`,
             "User-Agent": `opencode/${InstallationVersion}`,
+            "X-GitHub-Api-Version": API_VERSION,
           },
           provider.models,
         ).catch((error) => {
@@ -344,6 +347,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
     },
     "chat.headers": async (incoming, output) => {
       if (!incoming.model.providerID.includes("github-copilot")) return
+
+      output.headers["X-GitHub-Api-Version"] = API_VERSION
+      if (incoming.agent === "title" && UTILITY_MODELS.has(incoming.model.api.id)) {
+        output.headers["X-Interaction-Type"] = "agent-session-name-generation"
+      }
 
       if (incoming.model.api.npm === "@ai-sdk/anthropic") {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
