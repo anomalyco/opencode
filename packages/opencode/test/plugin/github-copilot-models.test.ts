@@ -158,14 +158,7 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
               version: "incomplete-internal-model-2026-06-01",
               capabilities: {
                 family: "internal",
-                limits: {
-                  max_output_tokens: 1,
-                  max_prompt_tokens: 1,
-                },
-                supports: {
-                  streaming: true,
-                  tool_calls: false,
-                },
+                supports: {},
               },
             },
           ],

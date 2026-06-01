@@ -31,26 +31,28 @@ export const schema = Schema.Struct({
       ),
       capabilities: Schema.Struct({
         family: Schema.String,
-        limits: Schema.Struct({
-          max_context_window_tokens: Schema.optional(Schema.Number),
-          max_output_tokens: Schema.Number,
-          max_prompt_tokens: Schema.Number,
-          vision: Schema.optional(
-            Schema.Struct({
-              max_prompt_image_size: Schema.Number,
-              max_prompt_images: Schema.Number,
-              supported_media_types: Schema.Array(Schema.String),
-            }),
-          ),
-        }),
+        limits: Schema.optional(
+          Schema.Struct({
+            max_context_window_tokens: Schema.optional(Schema.Number),
+            max_output_tokens: Schema.optional(Schema.Number),
+            max_prompt_tokens: Schema.optional(Schema.Number),
+            vision: Schema.optional(
+              Schema.Struct({
+                max_prompt_image_size: Schema.Number,
+                max_prompt_images: Schema.Number,
+                supported_media_types: Schema.Array(Schema.String),
+              }),
+            ),
+          }),
+        ),
         supports: Schema.Struct({
           adaptive_thinking: Schema.optional(Schema.Boolean),
           max_thinking_budget: Schema.optional(Schema.Number),
           min_thinking_budget: Schema.optional(Schema.Number),
           reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
-          streaming: Schema.Boolean,
+          streaming: Schema.optional(Schema.Boolean),
           structured_outputs: Schema.optional(Schema.Boolean),
-          tool_calls: Schema.Boolean,
+          tool_calls: Schema.optional(Schema.Boolean),
           vision: Schema.optional(Schema.Boolean),
         }),
       }),
@@ -59,9 +61,20 @@ export const schema = Schema.Struct({
 })
 
 type Item = Schema.Schema.Type<typeof schema>["data"][number]
+type SelectableItem = Item & {
+  capabilities: Item["capabilities"] & {
+    limits: NonNullable<Item["capabilities"]["limits"]> & {
+      max_output_tokens: number
+      max_prompt_tokens: number
+    }
+    supports: Item["capabilities"]["supports"] & {
+      tool_calls: boolean
+    }
+  }
+}
 const decodeModels = Schema.decodeUnknownSync(schema)
 
-function build(key: string, remote: Item, url: string, prev?: Model): Model {
+function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
   const reasoning =
     !!remote.capabilities.supports.adaptive_thinking ||
     !!remote.capabilities.supports.reasoning_effort?.length ||
@@ -174,6 +187,16 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
   return model
 }
 
+function selectable(item: Item): item is SelectableItem {
+  return (
+    item.model_picker_enabled &&
+    item.policy?.state !== "disabled" &&
+    item.capabilities.limits?.max_output_tokens !== undefined &&
+    item.capabilities.limits.max_prompt_tokens !== undefined &&
+    item.capabilities.supports.tool_calls !== undefined
+  )
+}
+
 export async function get(
   baseURL: string,
   headers: HeadersInit = {},
@@ -190,16 +213,7 @@ export async function get(
   })
 
   const result = { ...existing }
-  const remote = new Map(
-    data.data
-      .filter(
-        (m) =>
-          m.model_picker_enabled &&
-          m.policy?.state !== "disabled" &&
-          m.capabilities.limits.max_context_window_tokens !== undefined,
-      )
-      .map((m) => [m.id, m] as const),
-  )
+  const remote = new Map(data.data.filter(selectable).map((m) => [m.id, m] as const))
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {
