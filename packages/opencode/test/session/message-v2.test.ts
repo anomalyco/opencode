@@ -410,6 +410,82 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("omits non-media tool-result attachments from model messages", async () => {
+    const userID = "m-user-csv"
+    const assistantID = "m-assistant-csv"
+
+    const input: SessionLegacy.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-csv"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionLegacy.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-csv"),
+            type: "tool",
+            callID: "call-csv-1",
+            tool: "get_csv",
+            state: {
+              status: "completed",
+              input: {},
+              output: "name,age\nAlice,30",
+              title: "Get CSV",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-csv-1"),
+                  type: "file",
+                  mime: "text/csv",
+                  filename: "test.csv",
+                  url: "data:text/csv;base64,bmFtZSxhZ2UKQWxpY2UsMzA=",
+                },
+              ],
+            },
+          },
+        ] as SessionLegacy.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-csv-1",
+            toolName: "get_csv",
+            input: {},
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-csv-1",
+            toolName: "get_csv",
+            output: { type: "text", value: "name,age\nAlice,30" },
+          },
+        ],
+      },
+    ])
+  })
+
   test("preserves jpeg tool-result media for anthropic models", async () => {
     const anthropicModel: Provider.Model = {
       ...model,

@@ -166,12 +166,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               const { resource } = contentItem
               if (resource.text) textParts.push(resource.text)
               if (resource.blob) {
-                attachments.push({
-                  type: "file",
-                  mime: resource.mimeType ?? "application/octet-stream",
-                  url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                  filename: resource.uri,
-                })
+                const mime = resource.mimeType ?? "application/octet-stream"
+                const text = blobText(mime, resource.blob)
+                if (text !== undefined) textParts.push(text)
+                if (text === undefined)
+                  attachments.push({
+                    type: "file",
+                    mime,
+                    url: `data:${mime};base64,${resource.blob}`,
+                    filename: resource.uri,
+                  })
               }
             }
           }
@@ -206,5 +210,25 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
   return tools
 })
+
+function blobText(mime: string, blob: string) {
+  if (!textMime(mime)) return undefined
+  return Buffer.from(blob, "base64").toString("utf8")
+}
+
+function textMime(mime: string) {
+  const type = mime.toLowerCase().split(";")[0]?.trim()
+  if (!type) return false
+  return (
+    type.startsWith("text/") ||
+    [
+      "application/json",
+      "application/ld+json",
+      "application/x-ndjson",
+      "application/xml",
+      "application/javascript",
+    ].includes(type)
+  )
+}
 
 export * as SessionTools from "./tools"
