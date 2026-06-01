@@ -461,6 +461,8 @@ export const dict = {
   "session.files.all": "كل الملفات",
   "session.files.empty": "لا توجد ملفات",
   "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
+  "session.files.viewPreview": "معاينة",
+  "session.files.viewSource": "مصدر",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",
   "session.messages.loadingEarlier": "جارٍ تحميل الرسائل السابقة...",
   "session.messages.loadEarlier": "تحميل الرسائل السابقة",

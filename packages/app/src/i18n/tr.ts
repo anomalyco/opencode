@@ -523,6 +523,8 @@ export const dict = {
   "session.files.all": "Tüm dosyalar",
   "session.files.empty": "Dosya yok",
   "session.files.binaryContent": "İkili dosya (içerik görüntülenemiyor)",
+  "session.files.viewPreview": "Önizleme",
+  "session.files.viewSource": "Kaynak",
 
   "session.messages.renderEarlier": "Önceki mesajları göster",
   "session.messages.loadingEarlier": "Önceki mesajlar yükleniyor...",

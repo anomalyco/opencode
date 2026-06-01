@@ -513,6 +513,8 @@ export const dict = {
   "session.files.empty": "ไม่มีไฟล์",
   "session.files.all": "ไฟล์ทั้งหมด",
   "session.files.binaryContent": "ไฟล์ไบนารี (ไม่สามารถแสดงเนื้อหาได้)",
+  "session.files.viewPreview": "ดูตัวอย่าง",
+  "session.files.viewSource": "ซอร์สโค้ด",
 
   "session.messages.renderEarlier": "แสดงข้อความก่อนหน้า",
   "session.messages.loadingEarlier": "กำลังโหลดข้อความก่อนหน้า...",

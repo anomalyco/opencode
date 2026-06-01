@@ -518,6 +518,8 @@ export const dict = {
   "session.files.all": "Sve datoteke",
   "session.files.empty": "Nema datoteka",
   "session.files.binaryContent": "Binarna datoteka (sadržaj se ne može prikazati)",
+  "session.files.viewPreview": "Pregled",
+  "session.files.viewSource": "Izvor",
 
   "session.messages.renderEarlier": "Prikaži ranije poruke",
   "session.messages.loadingEarlier": "Učitavanje ranijih poruka...",

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -12,6 +12,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
@@ -211,6 +212,12 @@ export function FileTabContent(props: { tab: string }) {
     view,
   })
 
+  const isMarkdown = createMemo(() => {
+    const p = path()
+    return p ? /\.(?:md|markdown)$/i.test(p) : false
+  })
+  const [preview, setPreview] = createSignal(true)
+
   const selectionPreview = (source: string, selection: FileSelection) => {
     return previewSelectedLines(source, {
       start: selection.startLine,
@@ -359,10 +366,20 @@ export function FileTabContent(props: { tab: string }) {
       path,
       () => {
         commentsUi.note.reset()
+        setPreview(true)
       },
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    const focus = comments.focus()
+    const p = path()
+    if (!focus || !p) return
+    if (focus.file !== p) return
+    if (activeFileTab() !== props.tab) return
+    if (preview()) setPreview(false)
+  })
 
   createEffect(() => {
     const focus = comments.focus()
@@ -443,7 +460,28 @@ export function FileTabContent(props: { tab: string }) {
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
+        <Show when={state()?.loaded && isMarkdown() && state()?.content?.type !== "binary"}>
+          <div class="sticky top-0 z-10 flex items-center gap-1 bg-background-base px-4 py-1.5 border-b border-border-base">
+            <button
+              class={"px-2 py-0.5 rounded text-sm " + (preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
+              onClick={() => setPreview(true)}
+            >
+              {language.t("session.files.viewPreview")}
+            </button>
+            <button
+              class={"px-2 py-0.5 rounded text-sm " + (!preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
+              onClick={() => setPreview(false)}
+            >
+              {language.t("session.files.viewSource")}
+            </button>
+          </div>
+        </Show>
         <Switch>
+          <Match when={state()?.loaded && isMarkdown() && preview() && state()?.content?.type !== "binary"}>
+            <div class="px-6 py-4 pb-40">
+              <Markdown text={contents()} cacheKey={cacheKey()} />
+            </div>
+          </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>

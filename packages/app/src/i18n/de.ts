@@ -473,6 +473,8 @@ export const dict = {
   "session.files.all": "Alle Dateien",
   "session.files.empty": "Keine Dateien",
   "session.files.binaryContent": "Binärdatei (Inhalt kann nicht angezeigt werden)",
+  "session.files.viewPreview": "Vorschau",
+  "session.files.viewSource": "Quelle",
   "session.messages.renderEarlier": "Frühere Nachrichten rendern",
   "session.messages.loadingEarlier": "Lade frühere Nachrichten...",
   "session.messages.loadEarlier": "Frühere Nachrichten laden",
