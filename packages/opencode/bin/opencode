@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+// ESM imports — required because packages/opencode/package.json has "type": "module".
+// CJS require() is undefined in ESM scope; __filename replaced with import.meta.url.
+import childProcess from "child_process"
+import fs from "fs"
+import path from "path"
+import os from "os"
+import { fileURLToPath } from "url"
 
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
@@ -45,7 +48,7 @@ function run(target) {
 
 const envPath = process.env.OPENCODE_BIN_PATH
 
-const scriptPath = fs.realpathSync(__filename)
+const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url))
 const scriptDir = path.dirname(scriptPath)
 
 //

@@ -748,16 +748,39 @@ export const layer: Layer.Layer<
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
+
+      // When this is a subagent session (parentID set), inherit the parent's
+      // workspace context — directory and workspaceID. Without this, child
+      // sessions fall back to ctx.directory (daemon process.cwd()), which is
+      // unrelated to the parent's actual project. That mismatch caused every
+      // subagent tool call to read against the wrong worktree, triggering
+      // external_directory permission asks for paths the parent's worktree
+      // fully owns. Effect.catchCause ensures a missing/race-deleted parent
+      // degrades gracefully back to ctx.directory.
+      let directory = ctx.directory
+      let resolvedWorkspaceID = input?.workspaceID ?? workspace
+      if (input?.parentID) {
+        const parent = yield* get(input.parentID).pipe(
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        )
+        if (parent) {
+          directory = parent.directory
+          if (input?.workspaceID === undefined) {
+            resolvedWorkspaceID = parent.workspaceID ?? resolvedWorkspaceID
+          }
+        }
+      }
+
       return yield* createNext({
         parentID: input?.parentID,
-        directory: ctx.directory,
-        path: sessionPath(ctx.worktree, ctx.directory),
+        directory,
+        path: sessionPath(ctx.worktree, directory),
         title: input?.title,
         agent: input?.agent,
         model: input?.model,
         metadata: input?.metadata,
         permission: input?.permission,
-        workspaceID: input?.workspaceID ?? workspace,
+        workspaceID: resolvedWorkspaceID,
       })
     })
 
