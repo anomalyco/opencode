@@ -23,7 +23,6 @@ export type TimelineRowMap = {
     userMessageID: string
     group: PartGroup
     previousAssistantPart: boolean
-    lastAssistantPart: boolean
   }
   Thinking: { userMessageID: string; reasoningHeading?: string }
   Retry: { userMessageID: string }
@@ -50,7 +49,6 @@ export namespace TimelineRow {
     userMessageID: string
     group: PartGroup
     previousAssistantPart: boolean
-    lastAssistantPart: boolean
   }> {}
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
@@ -151,8 +149,6 @@ export namespace Timeline {
             ),
           ]
         : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
-    const assistantGroupCount = assistantItems.filter((item) => item.type === "part").length
-
     if (comments.length > 0)
       rows.push(
         new TimelineRow.CommentStrip({
@@ -195,7 +191,6 @@ export namespace Timeline {
           userMessageID: userMessage.id,
           group: item.group,
           previousAssistantPart: assistantGroupIndex > 0,
-          lastAssistantPart: assistantGroupIndex === assistantGroupCount - 1,
         }),
       )
       assistantGroupIndex += 1

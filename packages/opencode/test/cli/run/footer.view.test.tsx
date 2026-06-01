@@ -1,8 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { testRender } from "@opentui/solid"
+import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
+import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@/cli/cmd/tui/keymap"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
@@ -15,7 +17,6 @@ import { RunFooterView } from "@/cli/cmd/run/footer.view"
 import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
 import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
 import type {
-  FooterKeybinds,
   FooterState,
   FooterSubagentState,
   FooterSubagentTab,
@@ -23,26 +24,14 @@ import type {
   RunCommand,
   RunInput,
   RunProvider,
+  RunTuiConfig,
   StreamCommit,
 } from "@/cli/cmd/run/types"
 import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
+import { RejectField } from "@/cli/cmd/run/footer.permission"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-function bindings(...keys: string[]) {
-  return keys.map((key) => ({ key }))
-}
-
-const keybinds: FooterKeybinds = {
-  leader: "ctrl+x",
-  leaderTimeout: 2000,
-  commandList: bindings("ctrl+p"),
-  variantCycle: bindings("ctrl+t"),
-  interrupt: bindings("escape"),
-  historyPrevious: bindings("up"),
-  historyNext: bindings("down"),
-  inputClear: bindings("ctrl+c"),
-  inputSubmit: bindings("return"),
-  inputNewline: bindings("shift+return,ctrl+return,alt+return,ctrl+j"),
-}
+const tuiConfig = createTuiResolvedConfig()
 
 function command(input: { name: string; description: string; source?: "command" | "mcp" | "skill" }) {
   return {
@@ -143,6 +132,90 @@ function subagent(input: {
   } satisfies FooterSubagentTab
 }
 
+function footerState(input: Partial<FooterState> = {}) {
+  return createSignal<FooterState>({
+    phase: "idle",
+    status: "",
+    queue: 0,
+    model: "gpt-5",
+    duration: "",
+    usage: "",
+    first: false,
+    interrupt: 0,
+    exit: 0,
+    ...input,
+  })[0]
+}
+
+async function renderFooter(input: { tuiConfig?: RunTuiConfig; onCycle?: () => void } = {}) {
+  const [view] = createSignal<FooterView>({ type: "prompt" })
+  const [subagents] = createSignal<FooterSubagentState>({ tabs: [], details: {}, permissions: [], questions: [] })
+  const state = footerState()
+  const config = input.tuiConfig ?? tuiConfig
+  let offKeymap: (() => void) | undefined
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RunFooterView
+          directory="/tmp"
+          findFiles={async () => []}
+          agents={() => []}
+          resources={() => []}
+          commands={() => []}
+          providers={() => undefined}
+          currentModel={() => undefined}
+          variants={() => []}
+          currentVariant={() => undefined}
+          state={state}
+          view={view}
+          subagent={subagents}
+          theme={RUN_THEME_FALLBACK}
+          tuiConfig={config}
+          agent="opencode"
+          onSubmit={() => true}
+          onPermissionReply={() => {}}
+          onQuestionReply={() => {}}
+          onQuestionReject={() => {}}
+          onCycle={input.onCycle ?? (() => {})}
+          onInterrupt={() => false}
+          onInputClear={() => {}}
+          onExit={() => {}}
+          onModelSelect={() => {}}
+          onVariantSelect={() => {}}
+          onRows={() => {}}
+          onLayout={() => {}}
+          onStatus={() => {}}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={8}>
+        <Harness />
+      </box>
+    ),
+    { width: 100, height: 8, kittyKeyboard: true },
+  )
+
+  return {
+    ...app,
+    cleanup() {
+      app.renderer.currentFocusedRenderable?.blur()
+      app.renderer.currentFocusedEditor?.blur()
+      offKeymap?.()
+      offKeymap = undefined
+      app.renderer.destroy()
+    },
+  }
+}
+
 test("run entry content updates when live commit text changes", async () => {
   const [commit, setCommit] = createSignal<StreamCommit>({
     kind: "tool",
@@ -204,7 +277,7 @@ test("direct command panel renders grouped command palette", async () => {
           commands={commands}
           subagents={subagents}
           variants={variants}
-          keybinds={keybinds}
+          variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
           onSubagent={() => {}}
@@ -262,7 +335,7 @@ test("direct command panel shows subagent entry when available", async () => {
           commands={commands}
           subagents={subagents}
           variants={variants}
-          keybinds={keybinds}
+          variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
           onSubagent={() => {}}
@@ -334,6 +407,61 @@ test("direct subagent panel renders active subagents", async () => {
   }
 })
 
+// OpenTUI currently segfaults when the full footer view suite creates several
+// keymap-backed test renderers in one process. Re-enable after the runtime fix.
+test.skip("direct footer opens command panel through keymap binding", async () => {
+  const app = await renderFooter()
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("p", { ctrl: true })
+    await app.renderOnce()
+
+    expect(app.captureCharFrame()).toContain("Commands")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test.skip("direct footer dispatches leader variant binding only when leader is registered", async () => {
+  const calls: string[] = []
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "ctrl+x", variant_cycle: "<leader>t" } }),
+    onCycle: () => calls.push("cycle"),
+  })
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("t")
+    expect(calls).toEqual([])
+
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("t")
+    expect(calls).toEqual(["cycle"])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
+  const calls: string[] = []
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", variant_cycle: "<leader>t" } }),
+    onCycle: () => calls.push("cycle"),
+  })
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("t")
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("t")
+
+    expect(calls).toEqual([])
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer shows subagent indicator while prompt is running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
@@ -353,10 +481,14 @@ test("direct footer shows subagent indicator while prompt is running", async () 
     permissions: [],
     questions: [],
   })
+  let offKeymap: (() => void) | undefined
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    offKeymap = registerOpencodeKeymap(keymap, renderer, tuiConfig)
 
-  const app = await testRender(
-    () => (
-      <box width={100} height={8}>
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
         <RunFooterView
           directory="/tmp"
           findFiles={async () => []}
@@ -371,7 +503,7 @@ test("direct footer shows subagent indicator while prompt is running", async () 
           view={view}
           subagent={subagents}
           theme={RUN_THEME_FALLBACK}
-          keybinds={keybinds}
+          tuiConfig={tuiConfig}
           agent="opencode"
           onSubmit={() => true}
           onPermissionReply={() => {}}
@@ -387,6 +519,14 @@ test("direct footer shows subagent indicator while prompt is running", async () 
           onLayout={() => {}}
           onStatus={() => {}}
         />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={8}>
+        <Harness />
       </box>
     ),
     {
@@ -399,6 +539,9 @@ test("direct footer shows subagent indicator while prompt is running", async () 
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("interrupt · 1 agent · ↓ to view")
   } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    offKeymap?.()
     app.renderer.destroy()
   }
 })
@@ -446,6 +589,122 @@ test("direct question body separates single-select checkmark from label", async 
     expect(replies).toHaveLength(1)
     expect(app.captureCharFrame()).toContain("Product ✓")
   } finally {
+    app.renderer.destroy()
+  }
+})
+
+// OpenTUI currently segfaults while tearing down this textarea-backed keymap renderer.
+// Re-enable after the runtime fix.
+test.skip("direct custom answer submits through keymap return binding", async () => {
+  const question = {
+    id: "question-1",
+    sessionID: "session-1",
+    questions: [
+      {
+        question: "Which answer should I use?",
+        header: "Answer",
+        options: [{ label: "Provided", description: "Use the listed answer." }],
+        custom: true,
+      },
+    ],
+  } satisfies QuestionRequest
+  const questions: unknown[] = []
+  let off: (() => void) | undefined
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RunQuestionBody
+          request={question}
+          theme={RUN_THEME_FALLBACK.footer}
+          onReply={(input) => {
+            questions.push(input)
+          }}
+          onReject={() => {}}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={18}>
+        <Harness />
+      </box>
+    ),
+    { width: 100, height: 18, kittyKeyboard: true },
+  )
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("2")
+    await app.renderOnce()
+    "typed".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(questions).toEqual([{ requestID: "question-1", answers: [["typed"]] }])
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    off?.()
+    app.renderer.destroy()
+  }
+})
+
+test("direct permission rejection submits through keymap return binding", async () => {
+  let text = ""
+  const submits: string[] = []
+  let off: (() => void) | undefined
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RejectField
+          theme={RUN_THEME_FALLBACK.footer}
+          text=""
+          disabled={false}
+          onChange={(input) => {
+            text = input
+          }}
+          onConfirm={() => {
+            submits.push(text)
+          }}
+          onCancel={() => {}}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={18}>
+        <Harness />
+      </box>
+    ),
+    { width: 100, height: 18, kittyKeyboard: true },
+  )
+
+  try {
+    await app.renderOnce()
+    "retry".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("retry")
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(submits).toEqual(["retry"])
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    off?.()
     app.renderer.destroy()
   }
 })

@@ -36,7 +36,7 @@ export const Cost = Schema.Struct({
 export const Ref = Schema.Struct({
   id: ID,
   providerID: ProviderV2.ID,
-  variant: VariantID,
+  variant: VariantID.pipe(Schema.optional),
 })
 export type Ref = typeof Ref.Type
 
@@ -68,8 +68,8 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
     output: Schema.Int,
   }),
 }) {
-  static empty(providerID: ProviderV2.ID, modelID: ID) {
-    return new Info({
+  static empty(providerID: ProviderV2.ID, modelID: ID): Info {
+    return {
       id: modelID,
       apiID: modelID,
       providerID,
@@ -101,7 +101,7 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
         context: 0,
         output: 0,
       },
-    })
+    }
   }
 }
 

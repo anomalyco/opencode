@@ -6,7 +6,7 @@ export const CerebrasPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (ctx) {
-        for (const item of ctx.data) {
+        for (const item of ctx.provider.list()) {
           if (item.provider.endpoint.type !== "aisdk") continue
           if (item.provider.endpoint.package !== "@ai-sdk/cerebras") continue
           ctx.provider.update(item.provider.id, (provider) => {

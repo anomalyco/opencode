@@ -1,8 +1,10 @@
 import { afterEach, describe, expect } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Session } from "@/session/session"
@@ -11,28 +13,29 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 afterEach(async () => {
   await disposeAllInstances()
 })
 
 const ref = {
-  providerID: ProviderID.make("test"),
-  modelID: ModelID.make("test-model"),
+  providerID: ProviderV2.ID.make("test"),
+  modelID: ProviderV2.ModelID.make("test-model"),
 }
 
 const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
     BackgroundJob.defaultLayer,
-    Bus.defaultLayer,
+    EventV2Bridge.defaultLayer,
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Session.defaultLayer,
@@ -40,6 +43,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     SessionStatus.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
+    Database.defaultLayer,
     RuntimeFlags.layer(flags),
   )
 
@@ -65,7 +69,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     model: ref,
     time: { created: Date.now() },
   })
-  const assistant: MessageV2.Assistant = {
+  const assistant: SessionLegacy.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: user.id,
@@ -92,11 +96,10 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
         opts?.onPrompt?.(input)
         return reply(input, opts?.text ?? "done")
       }),
-    loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, opts?.text ?? "done")),
   }
 }
 
-function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithParts {
+function reply(input: SessionPrompt.PromptInput, text: string): SessionLegacy.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -237,7 +240,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
       expect(result.metadata.sessionId).toBe(child.id)
-      expect(result.output).toContain(`task_id: ${child.id}`)
+      expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
     }),
   )
@@ -307,7 +310,6 @@ describe("tool.task", () => {
             ready.resolve(input)
             return cancelled.promise
           }).pipe(Effect.as(reply(input, "cancelled"))),
-        loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "done")),
       }
 
       const fiber = yield* def
@@ -371,7 +373,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(result.metadata.sessionId)
       expect(result.metadata.sessionId).not.toBe("ses_missing")
-      expect(result.output).toContain(`task_id: ${result.metadata.sessionId}`)
+      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
     }),
   )
@@ -511,7 +513,7 @@ describe("tool.task", () => {
 
       const job = yield* jobs.get(result.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain("state: running")
+      expect(result.output).toContain(`state="running"`)
       expect(job?.status).toBe("running")
     }),
   )
@@ -549,10 +551,9 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("background task completion does not wait for the parent resume loop", () =>
+  background.instance("background task completion does not wait for the parent async prompt", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
-      const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
       const def = yield* tool.init()
@@ -573,27 +574,7 @@ describe("tool.task", () => {
             promptOps: {
               ...stubOps({ text: "background done" }),
               prompt: (input) =>
-                input.noReply
-                  ? Effect.gen(function* () {
-                      const user = yield* sessions.updateMessage({
-                        id: input.messageID ?? MessageID.ascending(),
-                        role: "user",
-                        sessionID: input.sessionID,
-                        agent: input.agent ?? "build",
-                        model: input.model ?? ref,
-                        time: { created: Date.now() },
-                      })
-                      const parts = input.parts.map((part) => ({
-                        ...part,
-                        id: part.id ?? PartID.ascending(),
-                        messageID: user.id,
-                        sessionID: input.sessionID,
-                      }))
-                      yield* Effect.forEach(parts, (part) => sessions.updatePart(part), { discard: true })
-                      return { info: user, parts }
-                    })
-                  : Effect.succeed(reply(input, "background done")),
-              loop: () => Effect.never,
+                input.sessionID === chat.id ? Effect.never : Effect.succeed(reply(input, "background done")),
             } satisfies TaskPromptOps,
           },
           messages: [],

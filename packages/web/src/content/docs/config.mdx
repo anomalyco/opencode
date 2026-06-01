@@ -116,7 +116,7 @@ For project-specific TUI settings, add `tui.json` alongside it.
 Place project specific config in the root of your project.
 :::
 
-When OpenCode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
@@ -390,6 +390,29 @@ Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
+
+---
+
+### Policies
+
+Use the `experimental.policies` option to allow or deny OpenCode actions on configured resources. Currently, policies can control which providers OpenCode may use.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+[Learn more about policies here](/docs/policies).
 
 ---
 

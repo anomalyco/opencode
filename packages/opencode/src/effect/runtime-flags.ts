@@ -1,4 +1,4 @@
-import { Config, ConfigProvider, Context, Effect, Layer } from "effect"
+import { Config, ConfigProvider, Context, Effect, Layer, Option } from "effect"
 import { ConfigService } from "@/effect/config-service"
 
 const bool = (name: string) => Config.boolean(name).pipe(Config.withDefault(false))
@@ -9,18 +9,17 @@ const positiveInteger = (name: string) =>
   )
 const experimental = bool("OPENCODE_EXPERIMENTAL")
 const enabledByExperimental = (name: string) =>
-  Config.all({ experimental, enabled: bool(name) }).pipe(Config.map((flags) => flags.experimental || flags.enabled))
+  Config.all({ experimental, enabled: Config.boolean(name).pipe(Config.option) }).pipe(
+    Config.map((flags) => Option.getOrElse(flags.enabled, () => flags.experimental)),
+  )
 
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   autoShare: bool("OPENCODE_AUTO_SHARE"),
   pure: bool("OPENCODE_PURE"),
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
-  diffViewer: bool("OPENCODE_DIFF_VIEWER"),
-  disableChannelDb: bool("OPENCODE_DISABLE_CHANNEL_DB"),
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
   disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
   disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
-  skipMigrations: bool("OPENCODE_SKIP_MIGRATIONS"),
   disableClaudeCodePrompt: Config.all({
     broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
     direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
@@ -51,7 +50,8 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalIconDiscovery: enabledByExperimental("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"),
   outputTokenMax: positiveInteger("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"),
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
-  experimentalNativeLlm: enabledByExperimental("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
+  experimentalNativeLlm: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
+  experimentalWebSockets: bool("OPENCODE_EXPERIMENTAL_WEBSOCKETS"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
 }) {}
 

@@ -1,5 +1,5 @@
 import * as Log from "@opencode-ai/core/util/log"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
@@ -43,6 +43,7 @@ import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { ConfigExperimental } from "@opencode-ai/core/config/experimental"
 
 const log = Log.create({ service: "config" })
 
@@ -300,6 +301,9 @@ export const Info = Schema.Struct({
       }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
+      }),
+      policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
+        description: "Policy statements applied to supported resources, such as provider access",
       }),
     }),
   ),
@@ -762,7 +766,14 @@ export const layer = Layer.effect(
           result.permission = mergeDeep(perms, result.permission ?? {})
         }
 
-        if (!result.username) result.username = os.userInfo().username
+        if (!result.username) {
+          try {
+            result.username = os.userInfo().username || "user"
+          } catch (err) {
+            log.warn("failed to read system username, using fallback", { err })
+            result.username = "user"
+          }
+        }
 
         if (result.autoshare === true && !result.share) {
           result.share = "auto"
