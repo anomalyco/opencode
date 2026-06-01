@@ -2,7 +2,7 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
-import * as Session from "./session"
+import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
 

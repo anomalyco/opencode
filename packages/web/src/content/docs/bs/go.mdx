@@ -67,6 +67,7 @@ Trenutna lista modela uključuje:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
+- **MiniMax M3**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -96,6 +97,7 @@ Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca kori
 | Kimi K2.6         | 1,150              | 2,880             | 5,750             |
 | MiMo-V2.5         | 30,100             | 75,200            | 150,400           |
 | MiMo-V2.5-Pro     | 3,250              | 8,150             | 16,300            |
+| MiniMax M3        | 1,400              | 3,500             | 7,000             |
 | MiniMax M2.7      | 3,400              | 8,500             | 17,000            |
 | MiniMax M2.5      | 6,300              | 15,900            | 31,800            |
 | Qwen3.7 Max       | 950                | 2,390             | 4,770             |
@@ -109,6 +111,7 @@ Procjene se zasnivaju na zapaženim prosječnim obrascima zahtjeva:
 - Kimi K2.5/K2.6 — 870 ulaznih, 55,000 keširanih, 200 izlaznih tokena po zahtjevu
 - DeepSeek V4 Pro — 750 ulaznih, 82,000 keširanih, 290 izlaznih tokena po zahtjevu
 - DeepSeek V4 Flash — 790 ulaznih, 68,000 keširanih, 280 izlaznih tokena po zahtjevu
+- MiniMax M3 — 810 ulaznih, 62,000 keširanih, 225 izlaznih tokena po zahtjevu
 - MiniMax M2.7/M2.5 — 300 ulaznih, 55,000 keširanih, 125 izlaznih tokena po zahtjevu
 - Qwen3.7 Max — 420 ulaznih, 66,000 keširanih, 200 izlaznih tokena po zahtjevu
 - Qwen3.6 Plus — 500 ulaznih, 57,000 keširanih, 190 izlaznih tokena po zahtjevu
@@ -125,6 +128,7 @@ Procjene se također zasnivaju na sljedećim cijenama po 1M tokena:
 | Kimi K2.5         | $0.60 | $3.00  | $0.10       | -            |
 | MiMo V2.5         | $0.14 | $0.28  | $0.0028     | -            |
 | MiMo V2.5 Pro     | $1.74 | $3.48  | $0.0145     | -            |
+| MiniMax M3        | $0.60 | $2.40  | $0.12       | $0.75        |
 | MiniMax M2.7      | $0.30 | $1.20  | $0.06       | $0.375       |
 | MiniMax M2.5      | $0.30 | $1.20  | $0.06       | $0.375       |
 | Qwen3.7 Max       | $2.50 | $7.50  | $0.50       | $3.125       |
@@ -164,6 +168,7 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
