@@ -48,7 +48,8 @@ export const BeadsStatusCommand = effectCmd({
       ).pipe(Effect.catch(() => Effect.succeed({ code: 1 }))))).code === 0
       : false
     const ctx = yield* InstanceRef
-    const dir = ctx ? path.join(ctx.directory, ".beads") : path.join(process.cwd(), ".beads")
+     const mappingPath = ctx ? path.join(ctx.directory, ".opencode") : path.join(process.cwd(), ".opencode")
+     const dir = ctx ? path.join(ctx.directory, ".beads") : path.join(process.cwd(), ".beads")
 
     UI.println("Beads Sync Status")
     UI.println("─────────────────")
@@ -69,8 +70,7 @@ export const BeadsStatusCommand = effectCmd({
       const allBeads = result.code === 0 ? (JSON.parse(result.text) as Record<string, unknown>[]) : []
       const beads = allBeads.map(parseBriefBead).filter((b): b is BriefBead => b !== null)
 
-      const cwd = process.cwd()
-      const mapping = yield* Mapping.load(cwd).pipe(
+      const mapping = yield* Mapping.load(mappingPath).pipe(
         Effect.orElseSucceed(() => ({ version: 1, mapping: {} })),
       )
 

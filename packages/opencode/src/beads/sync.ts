@@ -8,6 +8,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { which } from "@/util/which"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as Log from "@opencode-ai/core/util/log"
+import path from "path"
 
 const log = Log.create({ service: "beads-sync" })
 
@@ -201,9 +202,10 @@ export const layer: Layer.Layer<Service, never, EventV2Bridge.Service> = Layer.e
         if (todos.length === 0) return
 
         const dir = yield* InstanceState.directory
+        const mappingDir = path.join(dir, ".opencode")
         let mapping: MappingFile
         try {
-          mapping = yield* Mapping.load(dir)
+          mapping = yield* Mapping.load(mappingDir)
         } catch {
           mapping = { version: 1, mapping: {} } as MappingFile
         }
@@ -212,7 +214,7 @@ export const layer: Layer.Layer<Service, never, EventV2Bridge.Service> = Layer.e
 
         yield* syncAllTodos(mapping, sessionID, todos, activeSessions)
 
-        yield* Mapping.save(dir, mapping)
+        yield* Mapping.save(mappingDir, mapping)
       }).pipe(
         Effect.catch((err) =>
           Effect.sync(() =>
