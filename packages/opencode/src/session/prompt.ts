@@ -38,6 +38,7 @@ import { LLM } from "./llm"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "@/tool/shell/id"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { isTextMime } from "@/util/media"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
@@ -731,16 +732,6 @@ const layer = Layer.effect(
                   const mime = "mimeType" in c && typeof c.mimeType === "string" ? c.mimeType : part.mime
                   const filename = "uri" in c && typeof c.uri === "string" ? c.uri : part.filename
                   const size = mcpResourceBase64Size(c.blob)
-                  if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                    pieces.push({
-                      messageID: info.id,
-                      sessionID: input.sessionID,
-                      type: "text",
-                      synthetic: true,
-                      text: `[Binary MCP resource omitted: ${filename ?? uri} (${mime}, ${formatMcpResourceBytes(size)}) is not a supported attachment type]`,
-                    })
-                    continue
-                  }
                   if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
                     pieces.push({
                       messageID: info.id,
@@ -748,6 +739,26 @@ const layer = Layer.effect(
                       type: "text",
                       synthetic: true,
                       text: `[Binary MCP resource omitted: ${filename ?? uri} (${mime}, ${formatMcpResourceBytes(size)}) exceeds ${formatMcpResourceBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+                    })
+                    continue
+                  }
+                  if (isTextMime(mime)) {
+                    pieces.push({
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: Buffer.from(c.blob, "base64").toString("utf-8"),
+                    })
+                    continue
+                  }
+                  if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+                    pieces.push({
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: `[Binary MCP resource omitted: ${filename ?? uri} (${mime}, ${formatMcpResourceBytes(size)}) is not a supported attachment type]`,
                     })
                     continue
                   }

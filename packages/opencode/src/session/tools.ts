@@ -11,6 +11,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 
 import { Plugin } from "@/plugin"
+import { isTextMime } from "@/util/media"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
@@ -439,15 +440,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               if (resource.blob) {
                 const mime = resource.mimeType ?? "application/octet-stream"
                 const size = base64Size(resource.blob)
-                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
-                  )
-                  continue
-                }
                 if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
                   textParts.push(
                     `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+                  )
+                  continue
+                }
+                if (isTextMime(mime)) {
+                  textParts.push(Buffer.from(resource.blob, "base64").toString("utf-8"))
+                  continue
+                }
+                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+                  textParts.push(
+                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
                   )
                   continue
                 }
@@ -544,15 +549,19 @@ function formatMcpResourceContent(server: string, uri: string, content: { conten
     }
     if (typeof item.blob === "string") {
       const size = base64Size(item.blob)
-      if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-        text.push(
-          `[Binary MCP resource omitted: ${itemUri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
-        )
-        continue
-      }
       if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
         text.push(
           `[Binary MCP resource omitted: ${itemUri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+        )
+        continue
+      }
+      if (isTextMime(mime)) {
+        text.push(`Resource: ${itemUri}\nMIME: ${mime}\n${Buffer.from(item.blob, "base64").toString("utf-8")}`)
+        continue
+      }
+      if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+        text.push(
+          `[Binary MCP resource omitted: ${itemUri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
         )
         continue
       }
