@@ -803,6 +803,10 @@
     box-shadow: var(--shadow-md);
   }
 
+  [data-component="codle-side-panel"] .scroll-view__thumb {
+    right: 12px;
+  }
+
   [data-component="codle-preview-panel"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border-radius: 0;

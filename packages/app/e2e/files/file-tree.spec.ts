@@ -56,6 +56,52 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await expect(viewer).toContainText("export default function FileTree")
 })
 
+test("file tree toggle stays clickable beside scrollable file tab", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const toggle = page.getByRole("button", { name: "Toggle file tree" })
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+
+  const panel = page.locator("#file-tree-panel")
+  const treeTabs = panel.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
+  const allTab = treeTabs.getByRole("tab", { name: /^all files$/i })
+  await allTab.click()
+
+  const tree = treeTabs.locator('[data-slot="tabs-content"]:not([hidden])')
+  const expand = async (name: string) => {
+    const folder = tree.getByRole("button", { name, exact: true }).first()
+    if ((await folder.getAttribute("aria-expanded")) === "false") await folder.click()
+  }
+
+  await expand("packages")
+  await expand("app")
+  await tree.getByRole("button", { name: "CONTRIBUTING.md", exact: true }).first().click()
+
+  const tab = page.getByRole("tab", { name: "CONTRIBUTING.md" })
+  await expect(tab).toHaveAttribute("aria-selected", "true")
+
+  const view = page.locator("#review-panel .scroll-view__viewport").first()
+  await expect.poll(async () => view.evaluate((el) => el.scrollHeight > el.clientHeight + 1)).toBe(true)
+
+  const clickToggleEdge = async () => {
+    const box = await toggle.boundingBox()
+    if (!box) throw new Error("toggle missing")
+    await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2)
+  }
+
+  if ((await toggle.getAttribute("aria-expanded")) !== "false") {
+    await clickToggleEdge()
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  }
+
+  await clickToggleEdge()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+
+  await clickToggleEdge()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+})
+
 test("file tree can add a file reference to the doc in doc mode", async ({ page, gotoSession }) => {
   await gotoSession()
 
