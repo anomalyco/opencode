@@ -17,7 +17,8 @@ import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
-import { useServers } from "@/context/servers"
+import { useGlobal } from "@/context/global"
+import { useSettings } from "@/context/settings"
 
 const pollMs = 10_000
 
@@ -153,7 +154,7 @@ type ServerStatusItem = {
 }
 
 export function StatusPopoverServerBody() {
-  const servers = useServers()
+  const global = useGlobal()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -167,7 +168,7 @@ export function StatusPopoverServerBody() {
     dialogRun += 1
   })
 
-  const sortedServers = createMemo(() => listServersByHealth(servers.list(), server.key, servers.health))
+  const sortedServers = createMemo(() => listServersByHealth(global.servers.list(), server.key, global.servers.health))
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const serverItems = createMemo(() =>
     sortedServers().map((conn) => {
@@ -175,8 +176,8 @@ export function StatusPopoverServerBody() {
       return {
         key,
         conn,
-        health: servers.health[key],
-        blocked: servers.health[key]?.healthy === false,
+        health: global.servers.health[key],
+        blocked: global.servers.health[key]?.healthy === false,
         active: !!server.current && key === ServerConnection.key(server.current),
         onSelect: () => {
           navigate("/")
@@ -288,12 +289,13 @@ function ServerStatusList(props: { state: ServerStatusState }) {
 
 export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sync = useSync()
-  const servers = useServers()
+  const global = useGlobal()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
+  const settings = useSettings()
 
   const fail = (err: unknown) => {
     showToast({
@@ -313,7 +315,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogDead = true
     dialogRun += 1
   })
-  const sortedServers = createMemo(() => listServersByHealth(servers.list(), server.key, servers.health))
+  const sortedServers = createMemo(() => listServersByHealth(global.servers.list(), server.key, global.servers.health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
@@ -338,10 +340,12 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         variant="alt"
       >
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
-          <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-            {servers.list().length > 0 ? `${servers.list().length} ` : ""}
-            {language.t("status.popover.tab.servers")}
-          </Tabs.Trigger>
+          {!settings.general.newLayoutDesigns() && (
+            <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
+              {global.servers.list().length > 0 ? `${global.servers.list().length} ` : ""}
+              {language.t("status.popover.tab.servers")}
+            </Tabs.Trigger>
+          )}
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
             {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
             {language.t("status.popover.tab.mcp")}
@@ -362,7 +366,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               <For each={sortedServers()}>
                 {(s) => {
                   const key = ServerConnection.key(s)
-                  const blocked = () => servers.health[key]?.healthy === false
+                  const blocked = () => global.servers.health[key]?.healthy === false
                   return (
                     <button
                       type="button"
@@ -378,11 +382,11 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                         queueMicrotask(() => server.setActive(key))
                       }}
                     >
-                      <ServerHealthIndicator health={servers.health[key]} />
+                      <ServerHealthIndicator health={global.servers.health[key]} />
                       <ServerRow
                         conn={s}
                         dimmed={blocked()}
-                        status={servers.health[key]}
+                        status={global.servers.health[key]}
                         class="flex items-center gap-2 w-full min-w-0"
                         nameClass="text-14-regular text-text-base truncate"
                         versionClass="text-12-regular text-text-weak truncate"
