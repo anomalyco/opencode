@@ -56,6 +56,15 @@ import {
   type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
+import { clearAfterQueue } from "./prompt-input/composer-submit"
+import {
+  followupShouldQueue,
+  NON_EMPTY_TEXT,
+  promptHasDraft,
+  sessionBusy,
+  submitIntent,
+  type FollowupMode,
+} from "./prompt-input/composer-state"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
@@ -68,7 +77,7 @@ import { createPromptDrawing } from "./prompt-input/drawing"
 import { createPromptDoc } from "./prompt-input/doc"
 import { createPromptContextSync } from "./prompt-input/context-sync"
 import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
-import { DialogDocSubmit } from "./dialog-doc-submit"
+import { DialogDocSubmit } from "./doc-submit/dialog-doc-submit"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
 interface PromptInputProps {
@@ -78,7 +87,7 @@ interface PromptInputProps {
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void
-  shouldQueue?: () => boolean
+  followupMode?: FollowupMode
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
@@ -116,8 +125,6 @@ const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true
 const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
 const footerOff = import.meta.env.VITE_DISABLE_PROMPT_FOOTER === "true"
 const wysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === "true"
-
-const NON_EMPTY_TEXT = /[^\s\u200B]/
 
 type PromptMode = "normal" | "shell" | "draw" | "doc"
 
@@ -273,24 +280,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "idle",
       },
   )
-  const working = createMemo(() => status()?.type !== "idle")
-  const tip = () => {
-    if (working()) {
-      return (
-        <div class="flex items-center gap-2">
-          <span>{language.t("prompt.action.stop")}</span>
-          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-        </div>
-      )
-    }
-
-    return (
-      <div class="flex items-center gap-2">
-        <span>{language.t("prompt.action.send")}</span>
-        <Icon name="enter" size="small" class="text-icon-base" />
-      </div>
-    )
-  }
+  const working = createMemo(() => {
+    const id = params.id
+    return sessionBusy(status(), id ? sync.data.message[id] : undefined)
+  })
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -421,8 +414,66 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     url: () => sdk.url,
     directory: () => sdk.directory,
     client: sdk.client,
-    submit: () => void submit(false),
+    submit: () => void submit(),
   })
+
+  const hasDraft = createMemo(() => {
+    if (store.mode === "doc") return doc.filled()
+    if (store.mode === "draw") return drawing.filled()
+    if (imageAttachments().length > 0 || commentCount() > 0) return true
+    if (!prompt.dirty()) return false
+    return promptHasDraft(prompt.current())
+  })
+  const mode = () => props.followupMode ?? "none"
+  const submitAction = createMemo(() => submitIntent(working(), hasDraft(), mode()))
+  const submitIcon = createMemo(() => {
+    if (submitAction() === "stop") return "stop" as const
+    return "arrow-up-bold" as const
+  })
+  const submitLabel = createMemo(() => {
+    const action = submitAction()
+    if (action === "queue") return language.t("prompt.action.queue")
+    if (action === "stop") return language.t("prompt.action.stop")
+    return language.t("prompt.action.send")
+  })
+  const tip = createMemo(() => {
+    const action = submitAction()
+    if (action === "stop") {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.action.stop")}</span>
+          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+        </div>
+      )
+    }
+
+    if (action === "queue") {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.action.queue")}</span>
+          <Icon name="enter" size="small" class="text-icon-base" />
+        </div>
+      )
+    }
+
+    if (store.mode === "doc") {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.action.send")}</span>
+          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.shift")}</span>
+          <Icon name="enter" size="small" class="text-icon-base" />
+        </div>
+      )
+    }
+
+    return (
+      <div class="flex items-center gap-2">
+        <span>{language.t("prompt.action.send")}</span>
+        <Icon name="enter" size="small" class="text-icon-base" />
+      </div>
+    )
+  })
+
   createPromptContextSync({
     sync: doc.sync,
     comments: comments.all,
@@ -1239,6 +1290,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const addPart = (part: ContentPart) => {
     if (part.type === "image") return false
+    if (store.mode === "doc") {
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      prompt.set([...prompt.current(), part], cursor)
+      return true
+    }
 
     const selection = window.getSelection()
     if (!selection) return false
@@ -1382,15 +1438,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
-    enabled: () => !canvasMode(store.mode),
+    enabled: () => store.mode !== "draw",
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
     focusEditor: () => {
+      if (store.mode === "doc") {
+        doc.refocus()
+        return
+      }
       editorRef.focus()
       setCursorPosition(editorRef, promptLength(prompt.current()))
     },
     addPart,
+    dropPath: async (path) => {
+      if (store.mode !== "doc") return false
+      const dir = sdk.directory.replace(/\/+$/, "")
+      const rel =
+        path.startsWith(dir) && (path === dir || path[dir.length] === "/")
+          ? path.slice(dir.length).replace(/^\/+/, "")
+          : path
+      const ok = doc.addReference(rel)
+      if (ok) addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
+      return ok
+    },
+    dropFiles: async (list) => {
+      if (store.mode !== "doc") return false
+      const ok = await doc.addFiles(list)
+      if (!ok && list.length > 0) {
+        showToast({
+          title: language.t("common.requestFailed"),
+        })
+      }
+      return true
+    },
     readClipboardImage: platform.readClipboardImage,
   })
 
@@ -1439,8 +1520,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setPopover: (popover) => setStore("popover", popover),
     newSessionWorktree: () => (store.mode === "doc" ? "main" : props.newSessionWorktree),
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: props.shouldQueue,
+    shouldQueue: () => followupShouldQueue(params.id, mode(), working()),
     onQueue: props.onQueue,
+    onQueued: async ({ sessionID, mode }) => {
+      try {
+        await clearAfterQueue({ mode, sessionID, advanceDoc: doc.advance })
+      } catch {
+        showToast({
+          title: language.t("prompt.toast.docAdvanceFailed.title"),
+          description: language.t("prompt.toast.docAdvanceFailed.description"),
+        })
+      }
+    },
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
     approve: async (input) => {
@@ -1487,15 +1578,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
-  async function submit(stop: boolean) {
+  async function submit() {
+    if (submitAction() === "stop") {
+      await abort()
+      return
+    }
+
     if (store.mode === "draw") {
       const part = await drawing.commit()
       if (!part) {
-        if (working() && stop) {
+        if (working()) {
           await abort()
           return
         }
-        if (working()) return
         showToast({
           title: language.t("prompt.toast.drawEmpty.title"),
           description: language.t("prompt.toast.drawEmpty.description"),
@@ -1508,15 +1603,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (store.mode === "doc") {
-      if (working() && !stop) return
       const next = await doc.commitMarkdown()
       const text = next?.text
       if (!text) {
-        if (working() && stop) {
+        if (working()) {
           await abort()
           return
         }
-        if (working()) return
         showToast({
           title: language.t("prompt.toast.docEmpty.title"),
           description: language.t("prompt.toast.docEmpty.description"),
@@ -1559,7 +1652,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleFormSubmit = (event: Event) => {
     event.preventDefault()
-    void submit(true)
+    void submit()
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1722,16 +1815,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       if (event.repeat) return
-      if (
-        working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
-      ) {
+      const action = submitAction()
+      if (action === "stop") {
+        void abort()
+        return
+      }
+      if (store.mode === "draw" || store.mode === "doc") {
+        void submit()
         return
       }
       void handleSubmit(event)
@@ -1761,7 +1851,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
           onPointerDown={resize}
         >
-          <div class="h-0.5 w-18 rounded-full bg-border-base transition-colors group-hover:bg-border-strong-base" />
+          <div class="h-0.5 w-18 rounded-none bg-border-weaker-base transition-colors group-hover:bg-border-strong-base" />
         </div>
       </Show>
       <PromptPopover
@@ -1783,13 +1873,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleFormSubmit}
         classList={{
           "group/prompt-input": true,
-          "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Show when={!canvasMode(store.mode)}>
+        <Show when={store.mode !== "draw"}>
           <PromptDragOverlay
             type={store.draggingType}
             label={language.t(
@@ -1870,7 +1959,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onKeyDown={handleKeyDown}
                       classList={{
                         "select-text": true,
-                        "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                        "w-full text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                         "[&_[data-type=file]]:text-syntax-property": true,
                         "[&_[data-type=agent]]:text-syntax-type": true,
                         "font-mono!": store.mode === "shell",
@@ -1879,7 +1968,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     />
                     <Show when={!prompt.dirty()}>
                       <div
-                        class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                        data-component="prompt-input-placeholder"
+                        class="absolute top-0 inset-x-0 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                         classList={{ "font-mono!": store.mode === "shell" }}
                         style={{ "padding-bottom": space }}
                       >
@@ -1893,8 +1983,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   variant="doc"
                   drawing={drawing}
                   doc={doc}
-                  working={working}
-                  tip={tip}
+                  submitIcon={submitIcon()}
+                  submitLabel={submitLabel()}
+                  submitDisabled={submitAction() === "send" && !hasDraft()}
+                  tip={tip()}
                   onExit={exitDoc}
                   modes={modeButtons()}
                 />
@@ -1905,8 +1997,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               variant="draw"
               drawing={drawing}
               doc={doc}
-              working={working}
-              tip={tip}
+              submitIcon={submitIcon()}
+              submitLabel={submitLabel()}
+              submitDisabled={submitAction() === "send" && !hasDraft()}
+              tip={tip()}
               onExit={() => setMode("normal")}
               modes={modeButtons()}
             />
@@ -1942,20 +2036,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               />
 
               <div class="flex items-center gap-1 pointer-events-auto">
-                <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
+                <Tooltip placement="top" inactive={submitAction() === "send" && !hasDraft()} value={tip()}>
                   <IconButton
                     data-action="prompt-submit"
                     type="submit"
                     disabled={
                       store.mode === "shell" ||
-                      (store.mode === "normal" && !prompt.dirty() && !working() && commentCount() === 0)
+                      (store.mode === "normal" && !hasDraft() && submitAction() === "send")
                     }
                     tabIndex={store.mode === "shell" ? -1 : undefined}
-                    icon={working() ? "stop" : "arrow-up"}
+                    icon={submitIcon()}
                     variant="primary"
                     class="size-7.5"
                     style={submitStyle()}
-                    aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                    aria-label={submitLabel()}
                   />
                 </Tooltip>
               </div>

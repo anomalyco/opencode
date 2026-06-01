@@ -263,6 +263,7 @@ export const dict = {
   "prompt.attachment.remove": "Supprimer la pièce jointe",
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
+  "prompt.action.queue": "Add to queue",
   "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",
@@ -601,9 +602,10 @@ export const dict = {
   "settings.general.row.uiFont.description": "Personnaliser la police utilisée dans toute l'interface",
   "settings.general.row.followup.title": "Comportement de suivi",
   "settings.general.row.followup.description":
-    "Choisissez si les messages de suivi dirigent immédiatement ou attendent dans une file d'attente",
+    "Choisissez si les messages de suivi sont en file, dirigent immédiatement ou n'autorisent l'arrêt que pendant l'exécution",
   "settings.general.row.followup.option.queue": "File d'attente",
   "settings.general.row.followup.option.steer": "Diriger",
+  "settings.general.row.followup.option.none": "Aucun",
   "settings.general.row.reasoningSummaries.title": "Afficher les résumés de raisonnement",
   "settings.general.row.reasoningSummaries.description":
     "Afficher les résumés de raisonnement du modèle dans la chronologie",

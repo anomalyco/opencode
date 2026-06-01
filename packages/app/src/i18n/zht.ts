@@ -282,6 +282,7 @@ export const dict = {
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "不支援的附件",
   "prompt.toast.drawEmpty.title": "Nothing to send",
@@ -647,9 +648,10 @@ export const dict = {
   "settings.general.row.uiFont.title": "介面字型",
   "settings.general.row.uiFont.description": "自訂整個介面使用的字型",
   "settings.general.row.followup.title": "後續追問行為",
-  "settings.general.row.followup.description": "選擇後續追問提示是立即引導還是進入佇列等待",
+  "settings.general.row.followup.description": "選擇後續追問提示是進入佇列、立即引導，或在代理忙碌時僅允許停止",
   "settings.general.row.followup.option.queue": "佇列",
   "settings.general.row.followup.option.steer": "引導",
+  "settings.general.row.followup.option.none": "無",
   "settings.general.row.reasoningSummaries.title": "顯示推理摘要",
   "settings.general.row.reasoningSummaries.description": "在時間軸中顯示模型推理摘要",
 

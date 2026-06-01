@@ -31,6 +31,8 @@ type PromptAttachmentsInput = {
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
   addPart: (part: ContentPart) => boolean
+  dropPath?: (path: string) => Promise<boolean> | boolean
+  dropFiles?: (files: File[]) => Promise<boolean>
   readClipboardImage?: () => Promise<File | null>
 }
 
@@ -53,8 +55,6 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     const editor = input.editor()
-    if (!editor) return false
-
     const url = await dataUrl(file, mime)
     if (!url) return false
 
@@ -65,7 +65,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       mime,
       dataUrl: url,
     }
-    const cursor = prompt.cursor() ?? getCursorPosition(editor)
+    const cursor = prompt.cursor() ?? (editor ? getCursorPosition(editor) : undefined)
     prompt.set([...prompt.current(), attachment], cursor)
     return true
   }
@@ -167,12 +167,14 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (input.isDialogActive()) return
 
     event.preventDefault()
+    event.stopPropagation()
     input.setDraggingType(null)
 
     const plainText = event.dataTransfer?.getData("text/plain")
     const filePrefix = "file:"
     if (plainText?.startsWith(filePrefix)) {
       const filePath = plainText.slice(filePrefix.length)
+      if (await input.dropPath?.(filePath)) return
       input.focusEditor()
       input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
       return
@@ -181,19 +183,21 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
-    await addAttachments(Array.from(dropped))
+    const files = Array.from(dropped)
+    if (input.dropFiles && (await input.dropFiles(files))) return
+    await addAttachments(files)
   }
 
   onMount(() => {
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
-    document.addEventListener("drop", handleGlobalDrop)
+    document.addEventListener("drop", handleGlobalDrop, true)
   })
 
   onCleanup(() => {
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
-    document.removeEventListener("drop", handleGlobalDrop)
+    document.removeEventListener("drop", handleGlobalDrop, true)
   })
 
   return {

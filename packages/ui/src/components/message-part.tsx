@@ -35,6 +35,7 @@ import { useDialog } from "../context/dialog"
 import { type UiI18n, useI18n } from "../context/i18n"
 import { BasicTool, GenericTool } from "./basic-tool"
 import { countPartialStringLines, editPendingDiff, parsePartialToolInput } from "./tool-input"
+import { edge } from "../paper-edge"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Card } from "./card"
@@ -142,6 +143,7 @@ export interface MessageProps {
   message: MessageType
   parts: PartType[]
   actions?: UserActions
+  hideUserMeta?: boolean
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
 }
@@ -160,6 +162,7 @@ export interface MessagePartProps {
   defaultOpen?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  hideUserMeta?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -532,6 +535,7 @@ export function AssistantParts(props: {
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
+  hideUserMeta?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -612,6 +616,7 @@ export function AssistantParts(props: {
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
+                        hideUserMeta={props.hideUserMeta}
                         defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                       />
                     </Show>
@@ -745,7 +750,12 @@ export function Message(props: MessageProps) {
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
         {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
+          <UserMessageDisplay
+            message={userMessage() as UserMessage}
+            parts={props.parts}
+            actions={props.actions}
+            hideUserMeta={props.hideUserMeta}
+          />
         )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
@@ -937,7 +947,12 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; actions?: UserActions }) {
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  actions?: UserActions
+  hideUserMeta?: boolean
+}) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
@@ -948,12 +963,35 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   })
   const copied = () => state.copied
   const busy = () => state.busy
+  const [paper, setPaper] = createSignal<HTMLDivElement | undefined>()
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
 
   const text = createMemo(() => textPart()?.text || "")
+
+  createEffect(() => {
+    text()
+    const el = paper()
+    if (!el) return
+
+    const sync = () => {
+      if (!el.isConnected) return
+      if (!el.closest('[data-component="codle-session"]')) return
+      const box = el.getBoundingClientRect()
+      if (box.width < 1 || box.height < 1) return
+      const path = edge(box.width, box.height)
+      const body = el.parentElement
+      el.style.setProperty("--paper-edge", path)
+      body?.style.setProperty("--paper-edge", path)
+    }
+
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    onCleanup(() => ro.disconnect())
+  })
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
@@ -1022,9 +1060,9 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   })
 
   const metaHead = createMemo(() => {
+    if (props.hideUserMeta) return ""
     const agent = props.message.agent
-    // ENT-69 운영 빌드에서는 모델명을 메타에서 가림 (로컬 vite dev에서만 표시).
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", import.meta.env.DEV ? model() : ""]
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
@@ -1095,7 +1133,12 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       <Show when={text()}>
         <>
           <div data-slot="user-message-body" data-doc={doc() ? "true" : undefined}>
-            <div data-slot="user-message-text" data-doc={doc() ? "true" : undefined} data-raw={raw() ? "true" : undefined}>
+            <div
+              ref={setPaper}
+              data-slot="user-message-text"
+              data-doc={doc() ? "true" : undefined}
+              data-raw={raw() ? "true" : undefined}
+            >
               <Show when={mode() === "doc" ? view() : undefined} keyed fallback={content()}>
                 {(next) => <Dynamic component={next.comp} id={next.id} fallback={content()} />}
               </Show>
@@ -1137,7 +1180,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 />
               </Tooltip>
             </Show>
-            <Show when={props.actions?.revert}>
+            <Show when={!props.hideUserMeta && props.actions?.revert}>
               <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
                 <IconButton
                   icon="reset"
@@ -1228,6 +1271,7 @@ export function Part(props: MessagePartProps) {
         defaultOpen={props.defaultOpen}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        hideUserMeta={props.hideUserMeta}
       />
     </Show>
   )
@@ -1468,10 +1512,9 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const agent = (props.message as AssistantMessage).agent
-    // ENT-69 운영 빌드에서는 모델명을 메타에서 가림 (로컬 vite dev에서만 표시).
     const items = [
-      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      import.meta.env.DEV ? model() : "",
+      props.hideUserMeta ? "" : agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      props.hideUserMeta ? "" : model(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]

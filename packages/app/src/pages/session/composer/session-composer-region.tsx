@@ -12,6 +12,7 @@ import { SessionFollowupDock } from "@/pages/session/composer/session-followup-d
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
+import type { FollowupMode } from "@/components/prompt-input/composer-state"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
 
 export function SessionComposerRegion(props: {
@@ -24,7 +25,7 @@ export function SessionComposerRegion(props: {
   onSubmit: () => void
   onResponseSubmit: () => void
   followup?: {
-    queue: () => boolean
+    mode: FollowupMode
     items: { id: string; text: string }[]
     sending?: string
     edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
@@ -242,7 +243,7 @@ export function SessionComposerRegion(props: {
                 onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                 edit={props.followup?.edit}
                 onEditLoaded={props.followup?.onEditLoaded}
-                shouldQueue={props.followup?.queue}
+                followupMode={props.followup?.mode}
                 onQueue={props.followup?.onQueue}
                 onAbort={props.followup?.onAbort}
                 onSubmit={props.onSubmit}

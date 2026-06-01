@@ -282,6 +282,7 @@ export const dict = {
   "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
   "prompt.toast.drawEmpty.title": "Nothing to send",
@@ -659,9 +660,10 @@ export const dict = {
   "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всем интерфейсе",
   "settings.general.row.followup.title": "Поведение уточняющих вопросов",
   "settings.general.row.followup.description":
-    "Выберите, отправлять ли уточняющие вопросы сразу или помещать их в очередь",
+    "Выберите: очередь, немедленная отправка или только остановка, пока агент занят",
   "settings.general.row.followup.option.queue": "Очередь",
   "settings.general.row.followup.option.steer": "Направлять",
+  "settings.general.row.followup.option.none": "Нет",
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
   "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
 

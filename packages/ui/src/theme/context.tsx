@@ -59,6 +59,7 @@ const names: Record<string, string> = {
   kanagawa: "Kanagawa",
   "lucent-orng": "Lucent Orng",
   codle: "Codle",
+  jitda: "Jitda",
   material: "Material",
   matrix: "Matrix",
   mercury: "Mercury",

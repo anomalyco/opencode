@@ -1,2 +1,2 @@
-export const THEME_ID = "codle"
+export const THEME_ID = "jitda"
 export const COLOR_SCHEME = "system"

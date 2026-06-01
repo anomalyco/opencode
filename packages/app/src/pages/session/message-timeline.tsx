@@ -200,6 +200,7 @@ export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
   actions?: UserActions
+  hideUserMeta?: boolean
   scroll: { overflow: boolean; bottom: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
@@ -1000,6 +1001,7 @@ export function MessageTimeline(props: {
                         messageID={messageID}
                         messages={sessionMessages()}
                         actions={props.actions}
+                        hideUserMeta={props.hideUserMeta}
                         active={active()}
                         status={active() ? sessionStatus() : undefined}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}

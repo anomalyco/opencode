@@ -2,6 +2,7 @@ import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
+  type Component,
   batch,
   onCleanup,
   Show,
@@ -40,6 +41,7 @@ import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { sessionBusy } from "@/components/prompt-input/composer-state"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
@@ -1040,8 +1042,8 @@ export default function Page() {
       <SessionReviewTab
         title={changesTitle()}
         empty={reviewEmpty(input)}
-        diffs={reviewDiffs}
-        view={view}
+        diffs={reviewDiffs()}
+        view={view()}
         diffStyle={input.diffStyle}
         onDiffStyleChange={input.onDiffStyleChange}
         onScrollRef={(el) => setTree("reviewScroll", el)}
@@ -1059,7 +1061,7 @@ export default function Page() {
     </Show>
   )
 
-  const reviewPanel = () => (
+  const reviewPanel = createMemo(() => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         {reviewContent({
@@ -1070,7 +1072,7 @@ export default function Page() {
         })}
       </div>
     </div>
-  )
+  ))
 
   createEffect(
     on(
@@ -1411,10 +1413,8 @@ export default function Page() {
     })
 
   const busy = (sessionID: string) => {
-    if ((sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle") return true
-    return (sync.data.message[sessionID] ?? []).some(
-      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
+    const status = sync.data.session_status[sessionID] ?? { type: "idle" as const }
+    return sessionBusy(status, sync.data.message[sessionID])
   }
 
   const queuedFollowups = createMemo(() => {
@@ -1465,11 +1465,7 @@ export default function Page() {
     return followupMutation.variables?.id
   })
 
-  const queueEnabled = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked()
-  })
+  const followupMode = createMemo(() => settings.general.followup())
 
   const followupText = (item: FollowupDraft) => {
     const text = item.prompt
@@ -1619,7 +1615,7 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = createMemo(() => (env.productionLayout() ? {} : { revert }))
 
   createEffect(() => {
     const sessionID = params.id
@@ -1705,7 +1701,7 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-  const SessionPanelContent = () => (
+  const SessionPanelBody = () => (
     <>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
@@ -1723,7 +1719,8 @@ export default function Page() {
                   loadingClass: "px-4 py-4 text-text-weak",
                   emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
                 })}
-                actions={actions}
+                actions={actions()}
+                hideUserMeta={env.productionLayout()}
                 scroll={ui.scroll}
                 onResumeScroll={resumeScroll}
                 setScrollRef={setScrollRef}
@@ -1776,7 +1773,7 @@ export default function Page() {
         followup={
           params.id
             ? {
-                queue: queueEnabled,
+                mode: followupMode(),
                 items: followupDock(),
                 sending: sendingFollowup(),
                 edit: editingFollowup(),
@@ -1808,37 +1805,62 @@ export default function Page() {
           promptDock = el
         }}
       />
-
-      <Show when={desktopSidePanelOpen()}>
-        <div style={{ "--resize-gap-offset": "7px" }} onPointerDown={() => size.start()}>
-          <ResizeHandle
-            showHandle={true}
-            direction="horizontal"
-            size={layout.session.width()}
-            min={300}
-            max={typeof window === "undefined" ? 1000 : window.innerWidth - 380}
-            onResize={(width) => {
-              size.touch()
-              layout.session.resize(width)
-            }}
-          />
-        </div>
-      </Show>
     </>
+  )
+
+  const SessionPanelResize = () => (
+    <Show when={isDesktop()}>
+      <div
+        class="absolute inset-y-0 right-0 z-30 w-0 overflow-visible"
+        style={{ "--resize-gap-offset": "7px" }}
+        onPointerDown={() => size.start()}
+      >
+        <ResizeHandle
+          showHandle={true}
+          direction="horizontal"
+          size={layout.session.width()}
+          min={300}
+          max={typeof window === "undefined" ? 1000 : window.innerWidth - 380}
+          onResize={(width) => {
+            size.touch()
+            layout.session.resize(width)
+          }}
+        />
+      </div>
+    </Show>
+  )
+
+  const SessionPanelColumn: Component<{
+    class?: string
+    classList?: Record<string, boolean | undefined>
+    style?: Record<string, string>
+  }> = (props) => (
+    <div
+      data-component="codle-session-column"
+      classList={{
+        "relative flex min-h-0 min-w-0 flex-1 flex-col": true,
+        ...(props.classList ?? {}),
+        [props.class ?? ""]: !!props.class,
+      }}
+      style={props.style}
+    >
+      <div
+        data-component="codle-session-frame"
+        class="@container relative flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <SessionPanelBody />
+      </div>
+      <SessionPanelResize />
+    </div>
   )
 
   if (env.productionLayout()) {
     return (
       <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
         <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
-          <div
-            data-component="codle-session-frame"
-            class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0 overflow-visible"
-          >
-            <SessionPanelContent />
-          </div>
+          <SessionPanelColumn class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0" />
           <SessionSidePanel
-            reviewPanel={reviewPanel}
+            reviewPanel={reviewPanel()}
             activeDiff={tree.activeDiff}
             focusReviewDiff={focusReviewDiff}
             reviewSnap={ui.reviewSnap}
@@ -1879,22 +1901,19 @@ export default function Page() {
         </Show>
 
         {/* Session panel */}
-        <div
-          data-component="codle-session-frame"
+        <SessionPanelColumn
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
+            "shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
           style={{
             width: sessionPanelWidth(),
           }}
-        >
-          <SessionPanelContent />
-        </div>
+        />
 
         <SessionSidePanel
-          reviewPanel={reviewPanel}
+          reviewPanel={reviewPanel()}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}

@@ -209,6 +209,9 @@ function plain(model: BlockModel): string[] {
   if (model.flavour === "affine:paragraph" || model.flavour === "affine:list" || model.flavour === "affine:code") {
     return [raw(model).trim(), ...children()].filter(Boolean)
   }
+  if (model.flavour === "opencode:file-reference") {
+    return [str(model, "name") ?? str(model, "path") ?? str(model, "url") ?? "File", ...children()]
+  }
   if (model.flavour === "affine:image") return [caption(model) || source(model) || "Image", ...children()]
   if (model.flavour === "affine:attachment") return [str(model, "name") ?? source(model) ?? "Attachment", ...children()]
   if (model.flavour === "affine:divider") return ["---", ...children()]
@@ -267,6 +270,14 @@ async function block(model: BlockModel, opts: ExportOpts, assets: DocExportAsset
   if (model.flavour === "affine:divider") {
     const nested = await children()
     return ["---", ...nested]
+  }
+
+  if (model.flavour === "opencode:file-reference") {
+    const name = str(model, "name") ?? str(model, "path") ?? str(model, "url") ?? "File"
+    const url = str(model, "url")
+    const nested = await children()
+    if (!url) return [label(name), ...nested]
+    return [`[${label(name)}](${url})`, ...nested]
   }
 
   if (model.flavour === "affine:latex") {

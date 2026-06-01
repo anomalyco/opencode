@@ -7,8 +7,13 @@
   min-width: 0;
   height: 100%;
   min-height: 0;
+  border-radius: inherit;
+  overflow: hidden;
   --affine-editor-width: 100%;
-  --affine-editor-side-padding: 12px;
+  --affine-editor-side-padding: 14px;
+  --affine-background-primary-color: var(--input-base);
+  --affine-text-primary-color: var(--text-strong);
+  --affine-font-family: var(--font-family-sans);
 }
 
 [data-component="prompt-doc"] page-editor,
@@ -40,9 +45,16 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding-top: 6px;
+  padding-top: 12px;
   min-height: 100%;
   box-sizing: border-box;
+}
+
+[data-component="prompt-doc"] affine-note,
+[data-component="prompt-doc"] .affine-note-block-container,
+[data-component="prompt-doc"] .affine-block-children-container {
+  height: 100%;
+  min-height: 100%;
 }
 
 [data-component="prompt-doc"] doc-title .doc-title-container {

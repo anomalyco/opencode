@@ -1,6 +1,7 @@
 import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { parseFollowupMode, type FollowupMode } from "@/components/prompt-input/composer-state"
 import { persisted } from "@/utils/persist"
 
 export interface NotificationSettings {
@@ -22,7 +23,7 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
-    followup: "queue" | "steer"
+    followup: FollowupMode
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
@@ -89,7 +90,7 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
-    followup: "steer",
+    followup: "none",
     // thinking 을 보이도록 합니다 모델이 thinking 을 지원하는 경우여야 실제로 생각이 랜더링 됩니다
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
@@ -153,8 +154,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
         },
-        followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
-        setFollowup(value: "queue" | "steer") {
+        followup: createMemo(() => parseFollowupMode(store.general?.followup)),
+        setFollowup(value: FollowupMode) {
           setStore("general", "followup", value)
         },
         showReasoningSummaries: withFallback(

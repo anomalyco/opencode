@@ -282,6 +282,7 @@ export const dict = {
   "prompt.attachment.remove": "เอาไฟล์แนบออก",
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
   "prompt.toast.drawEmpty.title": "Nothing to send",
@@ -652,9 +653,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "ฟอนต์ UI",
   "settings.general.row.uiFont.description": "ปรับแต่งฟอนต์ที่ใช้ทั่วทั้งอินเทอร์เฟซ",
   "settings.general.row.followup.title": "พฤติกรรมการติดตามผล",
-  "settings.general.row.followup.description": "เลือกว่าจะให้พร้อมท์ติดตามผลทำงานทันทีหรือรอในคิว",
+  "settings.general.row.followup.description":
+    "เลือกว่าจะคิว ส่งทันที หรืออนุญาตเฉพาะหยุดขณะเอเจนต์ทำงาน",
   "settings.general.row.followup.option.queue": "คิว",
   "settings.general.row.followup.option.steer": "นำทาง",
+  "settings.general.row.followup.option.none": "ไม่มี",
   "settings.general.row.reasoningSummaries.title": "แสดงสรุปการใช้เหตุผล",
   "settings.general.row.reasoningSummaries.description": "แสดงสรุปการใช้เหตุผลของโมเดลในไทม์ไลน์",
   "settings.general.row.shellToolPartsExpanded.title": "ขยายส่วนเครื่องมือ shell",

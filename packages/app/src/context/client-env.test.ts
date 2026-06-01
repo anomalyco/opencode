@@ -93,4 +93,31 @@ describe("client env", () => {
       dispose()
     })
   })
+
+  test("submit failure close sec defaults to 5", () => {
+    put("VITE_SUBMIT_FAILURE_CLOSE_SEC")
+
+    createRoot((dispose) => {
+      expect(createClientEnv().submitFailureCloseSec()).toBe(5)
+      dispose()
+    })
+  })
+
+  test("submit failure close sec reads env", () => {
+    put("VITE_SUBMIT_FAILURE_CLOSE_SEC", "8")
+
+    createRoot((dispose) => {
+      expect(createClientEnv().submitFailureCloseSec()).toBe(8)
+      dispose()
+    })
+  })
+
+  test("submit failure close sec ignores invalid env", () => {
+    put("VITE_SUBMIT_FAILURE_CLOSE_SEC", "0")
+
+    createRoot((dispose) => {
+      expect(createClientEnv().submitFailureCloseSec()).toBe(5)
+      dispose()
+    })
+  })
 })

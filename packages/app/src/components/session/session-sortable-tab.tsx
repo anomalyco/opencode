@@ -22,7 +22,7 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
           <FileIcon node={{ path: props.path, type: "file" }} mono class="absolute inset-0 size-4 tab-fileicon-mono" />
         </span>
       </Show>
-      <span class="text-14-medium truncate">{getFilename(props.path)}</span>
+      <span class="truncate">{getFilename(props.path)}</span>
     </div>
   )
 }
@@ -39,9 +39,8 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
     return <FileVisual path={value} />
   })
   return (
-    <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
-      <div class="relative">
-        <Tabs.Trigger
+    <div use:sortable class="h-full" classList={{ "opacity-0": sortable.isActiveDraggable }}>
+      <Tabs.Trigger
           value={props.tab}
           closeButton={
             <TooltipKeybind
@@ -64,7 +63,6 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
         >
           <Show when={content()}>{(value) => value()}</Show>
         </Tabs.Trigger>
-      </div>
     </div>
   )
 }

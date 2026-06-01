@@ -28,7 +28,7 @@ import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
-  reviewPanel: () => JSX.Element
+  reviewPanel: JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
@@ -56,6 +56,11 @@ export function SessionSidePanel(props: {
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const offset = createMemo(() => {
+    if (!fileOpen()) return "-4px"
+    if (reviewOpen()) return `calc(${treeWidth()} - 10px)`
+    return `calc(${treeWidth()} - 24px)`
+  })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -251,14 +256,16 @@ export function SessionSidePanel(props: {
                           <div class="flex items-center gap-1.5">
                             <div>{language.t("session.tab.review")}</div>
                             <Show when={hasReview()}>
-                              <div>{reviewCount()}</div>
+                              <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
                             </Show>
                           </div>
                         </Tabs.Trigger>
                       </Show>
                       <Show when={previewTab()}>
                         <Tabs.Trigger value="preview">
-                          <div>{language.t("session.tab.preview")}</div>
+                          <div class="flex items-center gap-1.5">
+                            <div>{language.t("session.tab.preview")}</div>
+                          </div>
                         </Tabs.Trigger>
                       </Show>
                       <Show when={contextOpen()}>
@@ -317,7 +324,7 @@ export function SessionSidePanel(props: {
 
                   <Show when={reviewTab()}>
                     <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                      <Show when={activeTab() === "review"}>{props.reviewPanel()}</Show>
+                      <Show when={activeTab() === "review"}>{props.reviewPanel}</Show>
                     </Tabs.Content>
                   </Show>
 
@@ -397,7 +404,7 @@ export function SessionSidePanel(props: {
               >
                 <Tabs.List>
                   <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {reviewCount()}{" "}
+                    <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
                     {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
@@ -466,6 +473,28 @@ export function SessionSidePanel(props: {
               </div>
             </Show>
           </div>
+          <Show when={reviewOpen() || fileOpen()}>
+            <TooltipKeybind title={language.t("command.fileTree.toggle")} keybind={command.keybind("fileTree.toggle")}>
+              <IconButton
+                icon={fileOpen() ? "chevron-right" : "chevron-left"}
+                variant="secondary"
+                size="small"
+                class="absolute top-1/2 z-20 !h-8 !w-5 -translate-y-1/2 cursor-pointer bg-background-stronger"
+                classList={{
+                  "rounded-r-none border-r-0": !fileOpen(),
+                }}
+                style={{ right: offset() }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  layout.fileTree.toggle()
+                }}
+                aria-label={language.t("command.fileTree.toggle")}
+                aria-expanded={layout.fileTree.opened()}
+                aria-controls="file-tree-panel"
+              />
+            </TooltipKeybind>
+          </Show>
         </div>
       </aside>
     </Show>

@@ -7,6 +7,16 @@
   user-select: none;
   aspect-ratio: 1;
   flex-shrink: 0;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+
+  &:focus-visible:not(:disabled) {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.94);
+  }
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
@@ -112,8 +122,8 @@
   }
 
   &[data-size="normal"] {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
 
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);

@@ -3,10 +3,10 @@
 @import "./colors.css" layer(theme);
 @import "./theme.css" layer(theme);
 /**
- * theme.css 의 OC-2 fallback 팔레트를 Codle 테마로 덮어쓴다 (같은 layer 내 후위 선언 우선).
+ * theme.css 의 OC-2 fallback 팔레트를 Jitda 테마로 덮어쓴다 (같은 layer 내 후위 선언 우선).
  * 공용 디자인 토큰(typography/spacing/shadow 등)은 theme.css 에 그대로 남아 있음.
  */
-@import "./theme.codle.css" layer(theme);
+@import "./theme.jitda.css" layer(theme);
 
 @import "./base.css" layer(base);
 @import "katex/dist/katex.min.css" layer(base);

@@ -292,6 +292,7 @@ export const dict = {
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",
@@ -764,9 +765,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "UI Font",
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.followup.title": "Follow-up behavior",
-  "settings.general.row.followup.description": "Choose whether follow-up prompts steer immediately or wait in a queue",
+  "settings.general.row.followup.description":
+    "Choose whether follow-up prompts queue, steer immediately, or only allow stop while the agent is busy",
   "settings.general.row.followup.option.queue": "Queue",
   "settings.general.row.followup.option.steer": "Steer",
+  "settings.general.row.followup.option.none": "None",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",

@@ -268,6 +268,7 @@ export const dict = {
   "prompt.attachment.remove": "Anhang entfernen",
   "prompt.action.send": "Senden",
   "prompt.action.stop": "Stopp",
+  "prompt.action.queue": "Add to queue",
   "prompt.toast.pasteUnsupported.title": "Nicht unterstützter Anhang",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",
@@ -604,9 +605,10 @@ export const dict = {
   "settings.general.row.uiFont.description": "Die im gesamten Interface verwendete Schriftart anpassen",
   "settings.general.row.followup.title": "Verhalten bei Folgefragen",
   "settings.general.row.followup.description":
-    "Wählen Sie, ob Folgefragen sofort steuern oder in einer Warteschlange warten",
+    "Wählen Sie, ob Folgefragen warten, sofort steuern oder bei laufendem Agenten nur stoppen",
   "settings.general.row.followup.option.queue": "Warteschlange",
   "settings.general.row.followup.option.steer": "Steuern",
+  "settings.general.row.followup.option.none": "Keine",
   "settings.general.row.reasoningSummaries.title": "Reasoning-Zusammenfassungen anzeigen",
   "settings.general.row.reasoningSummaries.description":
     "Zusammenfassungen des Modell-Reasonings in der Timeline anzeigen",

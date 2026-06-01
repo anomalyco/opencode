@@ -49,6 +49,7 @@ export function createPromptDoc(input: PromptDocInput) {
   let pending: { id: string; init: boolean; task: Promise<void> } | undefined
 
   const [ready, setReady] = createSignal(false)
+  const [filled, setFilled] = createSignal(false)
   const [docID, setDocID] = createSignal<string | undefined>()
   const [actor, setActor] = createSignal<SessionActor | undefined>()
   const [activeSync, setActiveSync] = createSignal<DocSyncOpts | undefined>()
@@ -62,12 +63,17 @@ export function createPromptDoc(input: PromptDocInput) {
     setHistory({ undo, redo })
   }
 
+  const syncFilled = () => {
+    setFilled(handle ? !handle.empty() : false)
+  }
+
   const bindHistory = () => {
     historySub?.dispose()
     if (!handle) return
     historySub = handle.doc.slots.historyUpdated.on(() => {
       handle?.onHistory()
       syncHistory()
+      syncFilled()
     })
   }
 
@@ -77,6 +83,7 @@ export function createPromptDoc(input: PromptDocInput) {
     const current = handle
     handle = undefined
     setReady(false)
+    setFilled(false)
     await current?.dispose()
   }
 
@@ -119,6 +126,7 @@ export function createPromptDoc(input: PromptDocInput) {
       sync: next,
       init: opts?.init ?? init,
       submit: input.submit,
+      onDraftChange: syncFilled,
     })
     if (opts?.seq && opts.seq !== seq) {
       await fresh.dispose()
@@ -142,6 +150,7 @@ export function createPromptDoc(input: PromptDocInput) {
     setDocID(id)
     setReady(true)
     syncHistory()
+    syncFilled()
     bindHistory()
   }
 
@@ -205,6 +214,7 @@ export function createPromptDoc(input: PromptDocInput) {
     if (handle?.collection.id === remote.docID) {
       await handle.attach(opts.el)
       setReady(true)
+      syncFilled()
       return
     }
 
@@ -234,6 +244,7 @@ export function createPromptDoc(input: PromptDocInput) {
     setDocID(undefined)
     if (sessionID) clearActor(sessionID)
     setHistory({ undo: false, redo: false })
+    setFilled(false)
   }
 
   const guard = () => handle?.guard()
@@ -258,6 +269,13 @@ export function createPromptDoc(input: PromptDocInput) {
   const commitMarkdown = () => handle?.markdown()
 
   const empty = () => (handle ? handle.empty() : true)
+
+  const addFiles = async (files: File[]) => {
+    const result = await Promise.all(files.map((file) => handle?.addFile(file) ?? false))
+    return result.some(Boolean)
+  }
+
+  const addReference = (path: string) => handle?.addReference(path) ?? false
 
   const actors = () => {
     const list: DocActor[] = handle?.actors() ?? []
@@ -285,11 +303,13 @@ export function createPromptDoc(input: PromptDocInput) {
       clientID,
     })
     if (!ready.data?.docID) throw new Error("prompt doc ready failed")
+    syncFilled()
     return next.docID
   }
 
   return {
     ready,
+    filled,
     docID,
     sync: activeSync,
     actorID: () => actor()?.actorID,
@@ -305,6 +325,8 @@ export function createPromptDoc(input: PromptDocInput) {
     guard,
     refocus,
     commitMarkdown,
+    addFiles,
+    addReference,
     empty,
     advance,
     undo,

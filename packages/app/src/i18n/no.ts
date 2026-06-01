@@ -285,6 +285,7 @@ export const dict = {
   "prompt.attachment.remove": "Fjern vedlegg",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stopp",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
   "prompt.toast.drawEmpty.title": "Nothing to send",
@@ -661,9 +662,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "UI-skrift",
   "settings.general.row.uiFont.description": "Tilpass skrifttypen som brukes i hele grensesnittet",
   "settings.general.row.followup.title": "Oppfølgingsadferd",
-  "settings.general.row.followup.description": "Velg om oppfølgingsspørsmål skal kjøres umiddelbart eller vente i kø",
+  "settings.general.row.followup.description":
+    "Velg om oppfølging skal køes, styres umiddelbart eller bare tillate stopp mens agenten er opptatt",
   "settings.general.row.followup.option.queue": "Kø",
   "settings.general.row.followup.option.steer": "Styr",
+  "settings.general.row.followup.option.none": "Ingen",
   "settings.general.row.reasoningSummaries.title": "Vis resonneringssammendrag",
   "settings.general.row.reasoningSummaries.description": "Vis sammendrag av modellresonnering i tidslinjen",
   "settings.general.row.shellToolPartsExpanded.title": "Utvid shell-verktøydeler",

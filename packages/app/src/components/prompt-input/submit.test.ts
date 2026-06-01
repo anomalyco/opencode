@@ -22,6 +22,8 @@ const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 const sentPrompts: Array<{ sessionID: string; parts: Array<{ metadata?: { docID?: string } }> }> = []
+const aborted: string[] = []
+const queued: string[] = []
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
@@ -52,7 +54,10 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       command: async () => ({ data: undefined }),
-      abort: async () => ({ data: undefined }),
+      abort: async (input: { sessionID: string }) => {
+        aborted.push(input.sessionID)
+        return { data: undefined }
+      },
     },
     worktree: {
       create: async () => ({ data: { directory: `${directory}/new` } }),
@@ -169,6 +174,9 @@ beforeAll(async () => {
 
   mock.module("@/context/global-sync", () => ({
     useGlobalSync: () => ({
+      todo: {
+        set: () => undefined,
+      },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
@@ -216,6 +224,8 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   sentPrompts.length = 0
+  aborted.length = 0
+  queued.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
@@ -437,5 +447,209 @@ describe("prompt submit worktree selection", () => {
     expect(part && "metadata" in part ? part.metadata?.docID : undefined).toBe("doc-session-1")
     expect(sentPrompts).toHaveLength(0)
     expect(optimistic).toHaveLength(0)
+  })
+})
+
+describe("prompt submit while busy", () => {
+  test("aborts when busy with empty input", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event, [])
+    await Bun.sleep(0)
+
+    expect(aborted).toEqual(["session-1"])
+    expect(sentPrompts).toHaveLength(0)
+    expect(queued).toHaveLength(0)
+  })
+
+  test("onQueued after doc queue", async () => {
+    params = { id: "session-1" }
+    const cleared: string[] = []
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "doc",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => true,
+      onQueue: () => undefined,
+      onQueued: ({ sessionID }) => {
+        cleared.push(sessionID)
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Bun.sleep(0)
+
+    expect(cleared).toEqual(["session-1"])
+  })
+
+  test("queues doc mode when busy with shouldQueue", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "doc",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => true,
+      onQueue: (draft) => {
+        queued.push(draft.sessionID)
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Bun.sleep(0)
+
+    expect(queued).toEqual(["session-1"])
+    expect(aborted).toHaveLength(0)
+    expect(sentPrompts).toHaveLength(0)
+  })
+
+  test("queues when busy with shouldQueue", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => true,
+      onQueue: (draft) => {
+        queued.push(draft.sessionID)
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Bun.sleep(0)
+
+    expect(queued).toEqual(["session-1"])
+    expect(aborted).toHaveLength(0)
+    expect(sentPrompts).toHaveLength(0)
+  })
+
+  test("sends when busy without queue", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => false,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Bun.sleep(0)
+
+    expect(aborted).toHaveLength(0)
+    expect(queued).toHaveLength(0)
+    expect(sentPrompts).toHaveLength(1)
+  })
+
+  test("reads shouldQueue when submit runs", async () => {
+    params = { id: "session-1" }
+    let queue = false
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: () => queue,
+      onQueue: (draft) => {
+        queued.push(draft.sessionID)
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await Bun.sleep(0)
+    expect(queued).toHaveLength(0)
+    expect(sentPrompts).toHaveLength(1)
+
+    queue = true
+    await submit.handleSubmit(event)
+    await Bun.sleep(0)
+    expect(queued).toEqual(["session-1"])
+    expect(sentPrompts).toHaveLength(1)
   })
 })

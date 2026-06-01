@@ -3,7 +3,7 @@
 @layer base {
   :root {
     /* App shell aliases over Codle theme tokens. */
-    --app-canvas: var(--background-base);
+    --app-canvas: var(--c-paper, var(--background-base));
     --app-paper: var(--surface-raised-base);
     --app-paper-strong: var(--surface-raised-stronger-non-alpha);
     --app-ink: var(--text-strong);
@@ -11,9 +11,9 @@
     --app-line: var(--border-weaker-base);
     --app-line-strong: var(--border-weak-base);
     --app-pill: 999px;
-    --app-radius: 22px;
-    --app-card-shadow: 0 22px 80px rgba(0, 0, 0, 0.15), 0 8px 26px rgba(0, 0, 0, 0.08);
-    --app-prompt-shadow: 0 18px 48px rgba(0, 0, 0, 0.15), 0 2px 7px rgba(0, 0, 0, 0.08);
+    --app-radius: 10px;
+    --app-card-shadow: var(--shadow-md);
+    --app-prompt-shadow: var(--shadow-md);
     --app-mix: white;
     --app-frame: var(--surface-raised-stronger-non-alpha);
     --app-neutral-hover: rgba(0, 0, 0, 0.04);
@@ -25,6 +25,11 @@
     --app-user-bubble: var(--surface-base);
     --app-user-bubble-hover: var(--surface-base-hover);
     --app-user-bubble-text: var(--text-strong);
+    --app-user-paper: #f6eed9;
+    --app-user-paper-hover: #faf4e4;
+    --app-user-paper-shadow: rgba(45, 35, 20, 0.14);
+    --app-user-paper-shadow-soft: rgba(45, 35, 20, 0.07);
+    --app-user-paper-shadow-lift: 3px 7px 16px rgba(45, 35, 20, 0.13);
     --app-menu-shadow:
       0 0 0 0.5px white inset,
       0 0 0 0.5px var(--app-menu-line),
@@ -34,6 +39,38 @@
       0 6px 6px -3px rgba(0, 0, 0, 0.04),
       0 12px 12px -6px rgba(0, 0, 0, 0.04),
       0 24px 24px -12px rgba(0, 0, 0, 0.04);
+  }
+
+  :root[data-theme="jitda"] {
+    --app-canvas-grid-size: 24px;
+    --app-canvas-grid-image:
+      linear-gradient(color-mix(in srgb, var(--text-strong) 4%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--text-strong) 4%, transparent) 1px, transparent 1px);
+  }
+
+  :root[data-theme="jitda"][data-color-scheme="dark"] {
+    --app-canvas-grid-image:
+      linear-gradient(color-mix(in srgb, var(--text-strong) 6%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--text-strong) 6%, transparent) 1px, transparent 1px);
+    --app-user-paper: #3a3628;
+    --app-user-paper-hover: #423d2e;
+    --app-user-paper-shadow: rgba(0, 0, 0, 0.28);
+    --app-user-paper-shadow-soft: rgba(0, 0, 0, 0.14);
+    --app-user-paper-shadow-lift: 3px 7px 16px rgba(0, 0, 0, 0.24);
+  }
+
+  :root[data-theme="jitda"] html,
+  :root[data-theme="jitda"] body,
+  :root[data-theme="jitda"] #root {
+    background-color: var(--c-paper, var(--background-base));
+    background-image: var(--app-canvas-grid-image);
+    background-size: var(--app-canvas-grid-size);
+  }
+
+  html,
+  body,
+  #root {
+    background-color: var(--c-paper, var(--background-base));
   }
 
   @media (prefers-color-scheme: dark) {
@@ -56,8 +93,14 @@
 
 @layer components {
   [data-app-surface="canvas"] {
-    background: var(--app-canvas);
+    background-color: var(--app-canvas);
     color: var(--app-ink);
+  }
+
+  :root[data-theme="jitda"] [data-app-surface="canvas"],
+  :root[data-theme="jitda"] [data-component="codle-home"] {
+    background-image: var(--app-canvas-grid-image);
+    background-size: var(--app-canvas-grid-size);
   }
 
   [data-app-surface="paper"] {
@@ -68,7 +111,7 @@
 
   [data-component="codle-home"] {
     min-height: 100%;
-    background: var(--app-canvas);
+    background-color: var(--app-canvas);
     color: var(--app-ink);
   }
 
@@ -80,13 +123,13 @@
   [data-component="codle-home-sidebar"] [data-component="button"] {
     width: 100%;
     justify-content: flex-start;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
   }
 
   [data-component="codle-home-prompt"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     box-shadow: var(--app-prompt-shadow);
   }
 
@@ -118,29 +161,34 @@
   [data-component="codle-project-card"] {
     background: color-mix(in srgb, var(--app-paper-strong) 92%, var(--app-mix) 8%);
     border: 1px solid var(--app-line);
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-xs);
     transition:
-      transform 140ms ease,
-      box-shadow 140ms ease,
-      border-color 140ms ease;
+      transform var(--dur-fast) var(--ease-standard),
+      box-shadow var(--dur-fast) var(--ease-standard),
+      border-color var(--dur-fast) var(--ease-standard);
   }
 
   [data-component="codle-project-card"]:hover {
     border-color: var(--app-line-strong);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-hover);
     transform: translateY(-1px);
   }
 
   [data-component="codle-project-preview"] {
     background:
-      radial-gradient(circle at 18% 18%, rgba(62, 136, 255, 0.72), transparent 34%),
-      radial-gradient(circle at 78% 70%, rgba(67, 228, 249, 0.62), transparent 30%),
-      linear-gradient(135deg, #234e91, #363636 54%, #2c61b5);
+      radial-gradient(circle at 18% 18%, rgba(255, 206, 43, 0.45), transparent 34%),
+      radial-gradient(circle at 78% 70%, rgba(31, 58, 82, 0.35), transparent 30%),
+      linear-gradient(135deg, #1f3a52, #14130f 54%, #2a2823);
   }
 
   [data-component="codle-session"] {
-    background: var(--app-canvas);
+    background-color: var(--app-canvas);
+  }
+
+  :root[data-theme="jitda"] [data-component="codle-session"] {
+    background-image: var(--app-canvas-grid-image);
+    background-size: var(--app-canvas-grid-size);
   }
 
   [data-component="codle-session-panel"] {
@@ -150,9 +198,14 @@
   [data-component="codle-session-frame"] {
     background: var(--app-frame);
     border: 1px solid var(--app-line);
-    border-radius: 20px;
-    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
     overflow: hidden;
+    isolation: isolate;
+  }
+
+  [data-component="codle-session-frame"] > * {
+    min-width: 0;
   }
 
   [data-component="codle-session"] [data-component="codle-scroll-bottom"] {
@@ -205,10 +258,20 @@
 
   [data-component="codle-session"] [data-component="user-message"] {
     color: var(--app-user-bubble-text);
+    overflow: visible;
   }
 
   [data-component="codle-session"] [data-slot="user-message-body"] {
+    --paper-edge: polygon(1% 2%, 99% 2%, 99% 98%, 1% 98%);
+    position: relative;
+    display: inline-block;
     max-width: min(78%, 58ch);
+    margin: 4px 6px 3px 0;
+    overflow: visible;
+    filter:
+      drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.1))
+      drop-shadow(2px 3px 2px rgba(45, 35, 20, 0.05));
+    transition: filter 160ms ease;
   }
 
   [data-component="codle-session"] [data-slot="user-message-body"][data-doc="true"] {
@@ -216,14 +279,51 @@
     max-width: min(82%, 760px);
   }
 
+  [data-component="codle-session"] [data-slot="user-message-body"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    clip-path: var(--paper-edge);
+    pointer-events: none;
+    background: var(--app-user-paper);
+    transition: background 160ms ease;
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-body"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    clip-path: var(--paper-edge);
+    pointer-events: none;
+    background:
+      linear-gradient(104deg, transparent 17%, rgba(70, 55, 30, 0.09) 18%, transparent 21%),
+      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.38) 43%, transparent 46%),
+      linear-gradient(154deg, transparent 62%, rgba(80, 60, 35, 0.08) 63%, transparent 66%);
+    mix-blend-mode: multiply;
+    opacity: 0.75;
+  }
+
   [data-component="codle-session"] [data-slot="user-message-text"] {
-    background: var(--app-user-bubble);
+    position: relative;
+    z-index: 2;
+    display: inline-block;
+    max-width: 100%;
+    background: transparent;
     border: 0;
-    border-radius: 20px;
+    border-radius: 0;
     color: var(--app-user-bubble-text);
-    padding: 10px 16px;
+    padding: 14px 20px;
     line-height: 1.45;
-    box-shadow: 0 1px 0 color-mix(in srgb, white 42%, transparent) inset;
+    box-shadow: none;
+    overflow: visible !important;
+    clip-path: var(--paper-edge);
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-text"] > * {
+    position: relative;
+    z-index: 1;
   }
 
   [data-component="codle-session"] [data-slot="user-message-text"][data-doc="true"] {
@@ -231,8 +331,37 @@
     width: 100%;
   }
 
-  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-text"] {
-    background: var(--app-user-bubble-hover);
+  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"] {
+    filter:
+      drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.11))
+      drop-shadow(2px 3px 2px rgba(45, 35, 20, 0.06));
+  }
+
+  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"]::after {
+    background: var(--app-user-paper-hover);
+  }
+
+  [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"]::before {
+    opacity: 0.82;
+  }
+
+  :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"] {
+    filter:
+      drop-shadow(2px 4px 3px rgba(0, 0, 0, 0.14))
+      drop-shadow(2px 3px 2px rgba(0, 0, 0, 0.08));
+  }
+
+  :root[data-color-scheme="dark"] [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"] {
+    filter:
+      drop-shadow(3px 5px 4px rgba(0, 0, 0, 0.17))
+      drop-shadow(2px 3px 2px rgba(0, 0, 0, 0.09));
+  }
+
+  :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"]::before {
+    background:
+      linear-gradient(104deg, transparent 17%, rgba(0, 0, 0, 0.14) 18%, transparent 21%),
+      linear-gradient(31deg, transparent 42%, rgba(255, 255, 255, 0.08) 43%, transparent 46%),
+      linear-gradient(154deg, transparent 62%, rgba(0, 0, 0, 0.12) 63%, transparent 66%);
   }
 
   [data-component="codle-session"] [data-slot="user-message-text"] [data-highlight="file"],
@@ -241,41 +370,57 @@
     font-weight: 500;
   }
 
-  [data-component="session-prompt-dock"][data-variant="codle"] {
-    --surface-raised-stronger-non-alpha: var(--app-frame);
-    background: var(--app-frame);
+  [data-component="codle-session"] [data-slot="user-message-copy-wrapper"] {
+    margin-top: 2px;
+    min-height: 12px;
   }
 
+  [data-component="session-prompt-dock"][data-variant="codle"] {
+    --surface-raised-stronger-non-alpha: var(--input-base);
+    background: transparent;
+  }
+
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] {
-    background: var(--app-frame);
-    border: 1px solid var(--app-line);
-    border-radius: 20px;
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--app-paper-strong) 70%, transparent) inset;
+    background: var(--input-base);
+    border: 1px solid var(--border-strong-base);
+    border-radius: var(--radius-xs);
+    box-shadow: none;
+    overflow: hidden;
+  }
+
+  [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"]:focus-within,
+  [data-component="codle-session"] [data-dock-surface="shell"]:focus-within {
+    border-color: var(--text-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring-color);
   }
 
   [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="tray"] {
     background: color-mix(in srgb, var(--app-paper) 82%, var(--app-frame) 18%);
     border-color: color-mix(in srgb, var(--app-line) 72%, transparent);
-    border-radius: 0 0 18px 18px;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     box-shadow: none;
   }
 
   [data-component="session-followup-dock"] [data-component="button"],
   [data-component="codle-session"] [data-component="button"],
   [data-component="codle-home"] [data-component="button"] {
-    border-radius: var(--app-pill);
+    border-radius: var(--radius-sm);
+  }
+
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input"],
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input-placeholder"] {
+    padding: 12px 14px;
   }
 
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-input"] {
     min-height: 86px;
-    padding-top: 14px;
   }
 
-  /* Embedded Excalidraw: flat toolbars (parent dock shell already has frame/shadow). */
-  [data-component="prompt-drawing"] .excalidraw {
-    --shadow-island: none;
-    --library-dropdown-shadow: none;
-    --island-bg-color: var(--surface-raised-stronger-non-alpha);
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-doc-shell"],
+  [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-draw-shell"] {
+    border-radius: inherit;
+    overflow: hidden;
   }
 
   [data-component="prompt-drawing"] .excalidraw .Island {
@@ -413,7 +558,76 @@
     width: 30px;
     height: 30px;
     padding: 0;
+    box-sizing: border-box;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-attach"] {
     border-radius: var(--app-pill);
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"] {
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #ffce2b;
+    border-radius: var(--radius-sm);
+    background: #14130f;
+    color: #ffce2b;
+    box-shadow: none;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 35%, rgba(255, 206, 43, 0.55) 50%, transparent 65%);
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    background-position: 130% 0;
+    animation: jt-btn-shine 2.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes jt-btn-shine {
+    0% {
+      background-position: 130% 0;
+    }
+
+    55% {
+      background-position: -30% 0;
+    }
+
+    100% {
+      background-position: -30% 0;
+    }
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:hover:not(:disabled) {
+    background: #000;
+    color: #ffce2b;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:disabled {
+    background: color-mix(in srgb, #14130f 62%, var(--background-base) 38%);
+    border-color: color-mix(in srgb, #ffce2b 42%, transparent);
+    color: color-mix(in srgb, #ffce2b 42%, transparent);
+    opacity: 1;
+    box-shadow: none;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:disabled::after {
+    animation: none;
+    opacity: 0;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"] [data-component="icon"],
+  [data-component="codle-session"] [data-action="prompt-submit"] [data-slot="icon-svg"] {
+    position: relative;
+    z-index: 1;
+    color: #ffce2b;
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:disabled [data-slot="icon-svg"] {
+    color: color-mix(in srgb, #ffce2b 42%, transparent);
   }
 
   [data-component="codle-session"] [data-action="prompt-attach"] {
@@ -469,7 +683,8 @@
     background: color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%);
   }
 
-  [data-codle-menu="true"] {
+  [data-codle-menu="true"],
+  [data-jitda-menu="true"] {
     --surface-raised-stronger-non-alpha: var(--app-menu);
     --surface-raised-base-hover: var(--app-neutral-hover);
     --surface-raised-base-active: var(--app-neutral-pressed);
@@ -480,17 +695,19 @@
     --icon-strong-base: var(--app-ink);
     background: var(--app-menu);
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     box-shadow: var(--app-menu-shadow);
     padding: 4px;
     background-clip: padding-box;
   }
 
-  [data-codle-menu="true"] [data-slot="select-select-content-list"] {
+  [data-codle-menu="true"] [data-slot="select-select-content-list"],
+  [data-jitda-menu="true"] [data-slot="select-select-content-list"] {
     gap: 0;
   }
 
-  [data-codle-menu="true"] [data-slot="select-select-item"] {
+  [data-codle-menu="true"] [data-slot="select-select-item"],
+  [data-jitda-menu="true"] [data-slot="select-select-item"] {
     min-height: 32px;
     border-radius: 8px;
   }
@@ -507,7 +724,7 @@
     --icon-strong-base: var(--app-ink);
     background: var(--app-menu);
     border: 0;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     box-shadow: var(--app-menu-shadow);
     padding: 4px;
     background-clip: padding-box;
@@ -579,15 +796,11 @@
     background: color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%);
   }
 
-  [data-component="codle-session"] [data-slot="tabs-trigger-wrapper"] {
-    background: transparent;
-  }
-
   [data-component="codle-side-panel"] {
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
-    border-radius: 18px;
-    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.08);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
   }
 
   [data-component="codle-preview-panel"] {
@@ -716,6 +929,16 @@
       opacity: 0.55;
       transform: none;
     }
+
+    [data-component="codle-session"] [data-action="prompt-submit"] {
+      box-shadow: 0 0 12px 2px rgba(255, 206, 43, 0.35);
+    }
+
+    [data-component="codle-session"] [data-action="prompt-submit"]::after {
+      animation: none;
+      background-position: 50% 0;
+      opacity: 0.35;
+    }
   }
 
   @media (prefers-color-scheme: dark) {
@@ -723,22 +946,18 @@
       box-shadow: 0 18px 56px rgba(0, 0, 0, 0.26);
     }
 
+    [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"],
     [data-component="codle-session"] [data-dock-surface="shell"] {
-      border-color: color-mix(in srgb, var(--border-strong-base) 72%, transparent);
-      box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.1),
-        0 1px 0 rgba(255, 255, 255, 0.08) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.28) inset,
-        0 12px 28px rgba(0, 0, 0, 0.22);
+      background: var(--input-base);
+      border-color: var(--border-strong-base);
+      border-radius: var(--radius-xs);
+      box-shadow: none;
     }
 
+    [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"]:focus-within,
     [data-component="codle-session"] [data-dock-surface="shell"]:focus-within {
-      border-color: color-mix(in srgb, var(--border-strong-base) 92%, white 8%);
-      box-shadow:
-        0 0 0 0.5px rgba(255, 255, 255, 0.18),
-        0 1px 0 rgba(255, 255, 255, 0.12) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.22) inset,
-        0 14px 32px rgba(0, 0, 0, 0.28);
+      border-color: var(--text-strong);
+      box-shadow: 0 0 0 2px var(--focus-ring-color);
     }
 
     [data-component="codle-session"] [data-component="codle-scroll-bottom"] {
@@ -772,29 +991,6 @@
 
     [data-component="codle-session"] [data-slot="icon-svg"] {
       color: currentColor;
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"] {
-      background: var(--button-primary-base);
-      color: var(--text-strong);
-      box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.12) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.18) inset,
-        0 1px 2px rgba(0, 0, 0, 0.22);
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"]:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--button-primary-base) 88%, white 12%);
-      color: var(--text-strong);
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"]:disabled {
-      background: color-mix(in srgb, var(--button-primary-base) 74%, var(--background-base) 26%);
-      color: var(--text-weaker);
-      opacity: 1;
-      box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.08) inset,
-        0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
     }
 
     [data-component="codle-session"] [data-action="prompt-attach"] {
