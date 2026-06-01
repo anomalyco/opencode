@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { SessionMailbox } from "@opencode-ai/core/session/mailbox"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -203,7 +204,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(RuntimeFlags.layer({})),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -215,11 +216,11 @@ function makePrompt(input?: { processor?: "blocking" }) {
       : SessionProcessor.layer.pipe(
           Layer.provide(summary),
           Layer.provide(Image.defaultLayer),
-          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+          Layer.provide(RuntimeFlags.layer({})),
           Layer.provideMerge(deps),
         )
   const compact = SessionCompaction.layer.pipe(
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(RuntimeFlags.layer({})),
     Layer.provideMerge(proc),
     Layer.provideMerge(deps),
   )
@@ -235,7 +236,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provideMerge(trunc),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(SystemPrompt.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(RuntimeFlags.layer({})),
     Layer.provideMerge(deps),
     Layer.provide(summary),
   )
@@ -517,6 +518,37 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+noLLMServer.instance(
+  "prompt publishes prompted and synthetic v2 events without experimental flag",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const events = yield* EventV2Bridge.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const seen: string[] = []
+      const off = yield* events.listen((evt) => {
+        if ((evt.data as { sessionID?: string }).sessionID === chat.id) seen.push(evt.type)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => off)
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "hello v2" },
+          { type: "file", mime: "text/plain", filename: "note.txt", url: "data:text/plain;base64,bm90ZQ==" },
+        ],
+      })
+
+      expect(seen).toContain(SessionEvent.Prompted.type)
+      expect(seen).toContain(SessionEvent.Synthetic.type)
+    }),
+  { config: cfg },
 )
 
 noLLMServer.instance.skip(
@@ -1486,6 +1518,13 @@ unixNoLLMServer(
   () =>
     Effect.gen(function* () {
       const { prompt, run, chat } = yield* boot()
+      const events = yield* EventV2Bridge.Service
+      const seen: string[] = []
+      const off = yield* events.listen((evt) => {
+        if ((evt.data as { sessionID?: string }).sessionID === chat.id) seen.push(evt.type)
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => off)
       const result = yield* prompt.shell({
         sessionID: chat.id,
         agent: "build",
@@ -1500,6 +1539,8 @@ unixNoLLMServer(
       expect(tool.state.output).toContain("err")
       expect(tool.state.metadata.output).toContain("out")
       expect(tool.state.metadata.output).toContain("err")
+      expect(seen).toContain(SessionEvent.Shell.Started.type)
+      expect(seen).toContain(SessionEvent.Shell.Ended.type)
       yield* run.assertNotBusy(chat.id)
     }),
   { config: cfg },

@@ -1,7 +1,9 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { expect } from "bun:test"
 import { tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
@@ -191,7 +193,7 @@ const env = Layer.mergeAll(
   SessionProcessor.layer.pipe(
     Layer.provide(summary),
     Layer.provide(Image.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(RuntimeFlags.layer({})),
     Layer.provideMerge(deps),
   ),
 )
@@ -213,7 +215,6 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
-        const database = yield* Database.Service
         const { processors, session, provider } = yield* boot()
 
         yield* llm.text("hello")
@@ -249,6 +250,7 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         const parts = yield* MessageV2.parts(msg.id)
         const calls = yield* llm.calls
 
+        expect(handle.message.error).toBeUndefined()
         expect(value).toBe("continue")
         expect(calls).toBe(1)
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
@@ -349,7 +351,6 @@ it.live("session.processor effect tests stop after token overflow requests compa
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
-        const database = yield* Database.Service
         const { processors, session, provider } = yield* boot()
 
         yield* llm.text("after", { usage: { input: 100, output: 0 } })
@@ -396,7 +397,6 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
-        const database = yield* Database.Service
         const { processors, session, provider } = yield* boot()
 
         yield* llm.push(reply().reason("think").text("done").stop())
@@ -432,6 +432,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         const reasoning = parts.find((part): part is SessionLegacy.ReasoningPart => part.type === "reasoning")
         const text = parts.find((part): part is SessionLegacy.TextPart => part.type === "text")
 
+        expect(handle.message.error).toBeUndefined()
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
         expect(reasoning?.text).toBe("think")
@@ -593,10 +594,16 @@ it.live("session.processor effect tests publish retry status updates", () =>
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const states: number[] = []
+        const retried: number[] = []
         const off = yield* events.listen((evt) => {
-          if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
-          const data = evt.data as typeof SessionStatus.Event.Status.data.Type
-          if (data.sessionID === chat.id && data.status.type === "retry") states.push(data.status.attempt)
+          if (evt.type === SessionStatus.Event.Status.type) {
+            const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+            if (data.sessionID === chat.id && data.status.type === "retry") states.push(data.status.attempt)
+          }
+          if (evt.type === SessionEvent.Retried.type) {
+            const data = evt.data as typeof SessionEvent.Retried.data.Type
+            if (data.sessionID === chat.id) retried.push(data.attempt)
+          }
           return Effect.void
         })
         const handle = yield* processors.create({
@@ -627,6 +634,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(2)
         expect(states).toStrictEqual([1])
+        expect(retried).toStrictEqual([1])
       }),
     { config: (url) => providerCfg(url) },
   ),
@@ -680,6 +688,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
     ({ dir, llm }) =>
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
+        const database = yield* Database.Service
 
         yield* llm.tool("lookup", { query: "weather" })
 
@@ -722,9 +731,19 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
 
         const parts = yield* MessageV2.parts(msg.id)
         const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+        const seen = (yield* database.db.select().from(EventTable).all().pipe(Effect.orDie))
+          .filter((evt) => (evt.data as { sessionID?: string }).sessionID === chat.id)
+          .map((evt) => evt.type)
 
+        expect(handle.message.error).toBeUndefined()
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
+        expect(seen.some((type) => type.startsWith(SessionEvent.Step.Started.type))).toBe(true)
+        expect(seen.some((type) => type.startsWith(SessionEvent.Tool.Input.Started.type))).toBe(true)
+        expect(seen.some((type) => type.startsWith(SessionEvent.Tool.Input.Ended.type))).toBe(true)
+        expect(seen.some((type) => type.startsWith(SessionEvent.Tool.Called.type))).toBe(true)
+        expect(seen.some((type) => type.startsWith(SessionEvent.Tool.Success.type))).toBe(true)
+        expect(seen.some((type) => type.startsWith(SessionEvent.Step.Ended.type))).toBe(true)
         expect(call?.callID).toBe("call_1")
         expect(call?.tool).toBe("lookup")
         expect(call?.state.status).toBe("completed")

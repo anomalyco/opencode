@@ -562,14 +562,12 @@ export const layer = Layer.effect(
               },
             }
             yield* sessions.updatePart(part)
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Shell.Started, {
-                sessionID: input.sessionID,
-                timestamp: DateTime.makeUnsafe(started),
-                callID: part.callID,
-                command: input.command,
-              })
-            }
+            yield* events.publish(SessionEvent.Shell.Started, {
+              sessionID: input.sessionID,
+              timestamp: DateTime.makeUnsafe(started),
+              callID: part.callID,
+              command: input.command,
+            })
             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
@@ -585,14 +583,12 @@ export const layer = Layer.effect(
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Shell.Ended, {
-                  sessionID: input.sessionID,
-                  timestamp: DateTime.makeUnsafe(completed),
-                  callID: part.callID,
-                  output,
-                })
-              }
+              yield* events.publish(SessionEvent.Shell.Ended, {
+                sessionID: input.sessionID,
+                timestamp: DateTime.makeUnsafe(completed),
+                callID: part.callID,
+                output,
+              })
               if (!msg.time.completed) {
                 msg.time.completed = completed
                 yield* sessions.updateMessage(msg)
@@ -1189,27 +1185,23 @@ export const layer = Layer.effect(
         },
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      if (flags.experimentalEventSystem) {
-        yield* events.publish(SessionEvent.Prompted, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          prompt: new Prompt({
-            text: nextPrompt.text.join("\n"),
-            files: nextPrompt.files,
-            agents: nextPrompt.agents,
-            references: nextPrompt.references,
-          }),
-        })
-      }
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID: input.sessionID,
+        timestamp: DateTime.makeUnsafe(info.time.created),
+        prompt: new Prompt({
+          text: nextPrompt.text.join("\n"),
+          files: nextPrompt.files,
+          agents: nextPrompt.agents,
+          references: nextPrompt.references,
+        }),
+      })
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (flags.experimentalEventSystem) {
-          yield* events.publish(SessionEvent.Synthetic, {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(info.time.created),
-            text,
-          })
-        }
+        yield* events.publish(SessionEvent.Synthetic, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          text,
+        })
       }
 
       return { info, parts }

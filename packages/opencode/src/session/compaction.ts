@@ -570,14 +570,12 @@ export const layer = Layer.effect(
             parts: [],
           },
         )
-        if (flags.experimentalEventSystem) {
-          yield* events.publish(SessionEvent.Compaction.Ended, {
-            sessionID: input.sessionID,
-            timestamp: DateTime.makeUnsafe(Date.now()),
-            text: summary ?? "",
-            include: selected.tail_start_id,
-          })
-        }
+        yield* events.publish(SessionEvent.Compaction.Ended, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+          text: summary ?? "",
+          include: selected.tail_start_id,
+        })
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
       }
       return result
@@ -606,13 +604,11 @@ export const layer = Layer.effect(
         auto: input.auto,
         overflow: input.overflow,
       })
-      if (flags.experimentalEventSystem) {
-        yield* events.publish(SessionEvent.Compaction.Started, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(Date.now()),
-          reason: input.auto ? "auto" : "manual",
-        })
-      }
+      yield* events.publish(SessionEvent.Compaction.Started, {
+        sessionID: input.sessionID,
+        timestamp: DateTime.makeUnsafe(Date.now()),
+        reason: input.auto ? "auto" : "manual",
+      })
     })
 
     return Service.of({
