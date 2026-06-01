@@ -35,6 +35,15 @@ function assistant(id: string, extra: Record<string, unknown> = {}) {
   }
 }
 
+function emptyTokens() {
+  return {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cache: { read: 0, write: 0 },
+  }
+}
+
 function user(id: string) {
   return {
     type: "message.updated",
@@ -150,6 +159,38 @@ describe("run session data", () => {
         text: " Found",
       }),
     ])
+  })
+
+  test("shows live output tokens and throughput while assistant text streams", () => {
+    let data = createSessionData()
+    data = reduce(data, assistant("msg-1", { tokens: emptyTokens() })).data
+    data = reduce(data, text({ id: "txt-1", messageID: "msg-1", text: "", time: { start: 1 } })).data
+
+    const out = reduce(data, delta("msg-1", "txt-1", "streamed assistant output"))
+
+    expect(out.footer?.patch?.usage).toMatch(/^in \? · out ~\d+ · [\d.]+ tok\/s$/)
+  })
+
+  test("keeps final provider usage authoritative over live estimates", () => {
+    let data = createSessionData()
+    data = reduce(data, assistant("msg-1", { tokens: emptyTokens() })).data
+    data = reduce(data, text({ id: "txt-1", messageID: "msg-1", text: "", time: { start: 1 } })).data
+    data = reduce(data, delta("msg-1", "txt-1", "streamed assistant output")).data
+
+    const out = reduce(
+      data,
+      assistant("msg-1", {
+        cost: 0.01,
+        tokens: {
+          input: 20,
+          output: 5,
+          reasoning: 1,
+          cache: { read: 2, write: 3 },
+        },
+      }),
+    )
+
+    expect(out.footer?.patch?.usage).toBe("31 · $0.01")
   })
 
   test("drops delayed text once the message resolves to a user role", () => {

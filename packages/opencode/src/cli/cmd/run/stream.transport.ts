@@ -25,6 +25,7 @@ import {
   flushInterrupted,
   pickBlockerView,
   reduceSessionData,
+  resetSessionUsage,
   type SessionData,
 } from "./session-data"
 import { replaySession } from "./session-replay"
@@ -1009,6 +1010,7 @@ function createLayer(input: StreamInput) {
           }
           state.wait = item
           state.data.announced = false
+          resetSessionUsage(state.data)
 
           const turn = new AbortController()
           const stop = () => {

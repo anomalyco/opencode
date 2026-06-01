@@ -1,5 +1,11 @@
 import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
-import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
+import {
+  bootstrapSessionData,
+  createSessionData,
+  reduceSessionData,
+  setSessionUsageTracking,
+  type SessionData,
+} from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
 import type { FooterPatch, StreamCommit } from "./types"
 
@@ -166,6 +172,7 @@ export function replaySession(input: ReplayInput): SessionReplay {
   const data = createSessionData()
   const commits: StreamCommit[] = []
   let patch: FooterPatch | undefined
+  setSessionUsageTracking(data, false)
 
   bootstrapSessionData({
     data,
@@ -179,6 +186,7 @@ export function replaySession(input: ReplayInput): SessionReplay {
     commits.push(...next.commits)
     patch = mergePatch(patch, next.patch)
   }
+  setSessionUsageTracking(data, true)
 
   return {
     data,

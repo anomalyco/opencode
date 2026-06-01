@@ -136,6 +136,7 @@ describe("run session replay", () => {
       expect.objectContaining({
         phase: "idle",
         status: "",
+        usage: "2",
       }),
     )
   })
