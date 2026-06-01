@@ -23,11 +23,20 @@ export const metadata: Metadata = {
     siteName: "Acompanyセキュアコード",
     locale: "ja_JP",
     type: "website",
+    images: [
+      {
+        url: "/keyvisual/wide.png",
+        width: 1920,
+        height: 1080,
+        alt: SITE_TITLE,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
+    images: ["/keyvisual/wide.png"],
   },
 }
 
