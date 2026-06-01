@@ -9,6 +9,15 @@ export type Event =
   | EventPluginAdded
   | EventCatalogModelUpdated
   | EventFileEdited
+  | EventSessionMailboxEnqueued
+  | EventSessionMailboxProcessing
+  | EventSessionMailboxDelivered
+  | EventSessionMailboxFailed
+  | EventSessionMailboxCancelled
+  | EventSessionBackgroundStarted
+  | EventSessionBackgroundCompleted
+  | EventSessionBackgroundFailed
+  | EventSessionBackgroundCancelled
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextPrompted
@@ -721,6 +730,122 @@ export type GlobalEvent = {
         type: "file.edited"
         properties: {
           file: string
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.enqueued"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.processing"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+          claimID?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.delivered"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.failed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+          error?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.mailbox.cancelled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          fromSessionID?: string
+          rootSessionID?: string
+          kind: SessionMailboxKind
+          delivery: SessionMailboxDelivery
+        }
+      }
+    | {
+        id: string
+        type: "session.background.started"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.background.completed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.background.failed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
+          error?: string
+        }
+      }
+    | {
+        id: string
+        type: "session.background.cancelled"
+        properties: {
+          timestamp: number
+          sessionID: string
+          parentSessionID: string
+          jobID: string
+          taskID?: string
+          description?: string
         }
       }
     | {
@@ -1439,6 +1564,15 @@ export type GlobalEvent = {
         }
       }
     | EventServerInstanceDisposed
+    | SyncEventSessionMailboxEnqueued
+    | SyncEventSessionMailboxProcessing
+    | SyncEventSessionMailboxDelivered
+    | SyncEventSessionMailboxFailed
+    | SyncEventSessionMailboxCancelled
+    | SyncEventSessionBackgroundStarted
+    | SyncEventSessionBackgroundCompleted
+    | SyncEventSessionBackgroundFailed
+    | SyncEventSessionBackgroundCancelled
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextPrompted
@@ -2750,6 +2884,10 @@ export type ModelV2Info = {
   }
 }
 
+export type SessionMailboxKind = "user" | "inter_agent" | "control"
+
+export type SessionMailboxDelivery = "async" | "interrupt"
+
 export type PromptSource = {
   start: number
   end: number
@@ -2840,6 +2978,158 @@ export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
+  }
+}
+
+export type SyncEventSessionMailboxEnqueued = {
+  type: "sync"
+  name: "session.mailbox.enqueued.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type SyncEventSessionMailboxProcessing = {
+  type: "sync"
+  name: "session.mailbox.processing.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    claimID?: string
+  }
+}
+
+export type SyncEventSessionMailboxDelivered = {
+  type: "sync"
+  name: "session.mailbox.delivered.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type SyncEventSessionMailboxFailed = {
+  type: "sync"
+  name: "session.mailbox.failed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    error?: string
+  }
+}
+
+export type SyncEventSessionMailboxCancelled = {
+  type: "sync"
+  name: "session.mailbox.cancelled.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type SyncEventSessionBackgroundStarted = {
+  type: "sync"
+  name: "session.background.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type SyncEventSessionBackgroundCompleted = {
+  type: "sync"
+  name: "session.background.completed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type SyncEventSessionBackgroundFailed = {
+  type: "sync"
+  name: "session.background.failed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+    error?: string
+  }
+}
+
+export type SyncEventSessionBackgroundCancelled = {
+  type: "sync"
+  name: "session.background.cancelled.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
   }
 }
 
@@ -3440,12 +3730,14 @@ export type SessionMessageShell = {
 
 export type SessionMessageAssistantText = {
   type: "text"
+  id: string
   text: string
 }
 
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
   id: string
+  reasoningID: string
   text: string
 }
 
@@ -3492,6 +3784,7 @@ export type SessionMessageToolStateError = {
 export type SessionMessageAssistantTool = {
   type: "tool"
   id: string
+  callID: string
   name: string
   provider?: {
     executed: boolean
@@ -3764,6 +4057,131 @@ export type EventFileEdited = {
   type: "file.edited"
   properties: {
     file: string
+  }
+}
+
+export type EventSessionMailboxEnqueued = {
+  id: string
+  type: "session.mailbox.enqueued"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type EventSessionMailboxProcessing = {
+  id: string
+  type: "session.mailbox.processing"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    claimID?: string
+  }
+}
+
+export type EventSessionMailboxDelivered = {
+  id: string
+  type: "session.mailbox.delivered"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type EventSessionMailboxFailed = {
+  id: string
+  type: "session.mailbox.failed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+    error?: string
+  }
+}
+
+export type EventSessionMailboxCancelled = {
+  id: string
+  type: "session.mailbox.cancelled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    fromSessionID?: string
+    rootSessionID?: string
+    kind: SessionMailboxKind
+    delivery: SessionMailboxDelivery
+  }
+}
+
+export type EventSessionBackgroundStarted = {
+  id: string
+  type: "session.background.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type EventSessionBackgroundCompleted = {
+  id: string
+  type: "session.background.completed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+  }
+}
+
+export type EventSessionBackgroundFailed = {
+  id: string
+  type: "session.background.failed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
+    error?: string
+  }
+}
+
+export type EventSessionBackgroundCancelled = {
+  id: string
+  type: "session.background.cancelled"
+  properties: {
+    timestamp: number
+    sessionID: string
+    parentSessionID: string
+    jobID: string
+    taskID?: string
+    description?: string
   }
 }
 

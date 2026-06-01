@@ -8,7 +8,9 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { Session } from "@/session/session"
 import { V2Schema } from "@opencode-ai/core/v2-schema"
+import { eq } from "drizzle-orm"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
@@ -52,13 +54,19 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-const it = testEffect(Layer.mergeAll(httpApiLayer, EventV2Bridge.defaultLayer, Database.defaultLayer))
+const it = testEffect(Layer.mergeAll(httpApiLayer, EventV2Bridge.defaultLayer, Database.defaultLayer, Session.defaultLayer))
 
 const sessionNextData = (sessionID: SessionSchema.ID, timestamp = 1234) => ({
   sessionID,
   timestamp: DateTime.makeUnsafe(timestamp),
   agent: "test-agent",
   model: { id: ModelV2.ID.make("test-model"), providerID: ProviderV2.ID.make("test-provider") },
+})
+
+const createSessionID = Effect.fn("Test.createSessionID")(function* () {
+  const session = yield* Session.Service
+  const created = yield* session.create({})
+  return created.id
 })
 
 const FanoutEncodeFailureEvent = EventV2.define({
@@ -129,11 +137,16 @@ describe("event HttpApi", () => {
       Effect.gen(function* () {
         const events = yield* EventV2Bridge.Service
         const { db } = yield* Database.Service
-        const sessionID = SessionSchema.ID.descending()
+        const sessionID = yield* createSessionID()
 
         yield* events.publish(SessionEvent.Step.Started, sessionNextData(sessionID))
 
-        const row = yield* db.select().from(EventTable).all().pipe(Effect.orDie).pipe(Effect.map((rows) => rows[0]))
+        const row = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.type, EventV2.versionedType(SessionEvent.Step.Started.type, 1)))
+          .get()
+          .pipe(Effect.orDie)
         expect(row?.data.timestamp).toBe(1234)
       }),
     { git: true, config: { formatter: false, lsp: false } },
@@ -144,7 +157,7 @@ describe("event HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const events = yield* EventV2Bridge.Service
-        const sessionID = SessionSchema.ID.descending()
+        const sessionID = yield* createSessionID()
         const received: GlobalEvent[] = []
         const handler = (event: GlobalEvent) => received.push(event)
         yield* Effect.sync(() => GlobalBus.on("event", handler))
@@ -183,10 +196,10 @@ describe("event HttpApi", () => {
       Effect.gen(function* () {
         const { directory } = yield* TestInstance
         const events = yield* EventV2Bridge.Service
+        const sessionID = yield* createSessionID()
         const { reader } = yield* openEventStream(directory)
         expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
 
-        const sessionID = SessionSchema.ID.descending()
         yield* events.publish(SessionEvent.Step.Started, sessionNextData(sessionID))
 
         const event = yield* readEvent(reader)
@@ -201,12 +214,12 @@ describe("event HttpApi", () => {
       Effect.gen(function* () {
         const { directory } = yield* TestInstance
         const events = yield* EventV2Bridge.Service
+        const sessionID = yield* createSessionID()
         const { reader } = yield* openEventStream(directory)
         expect(yield* readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
 
         yield* events.publish(FanoutEncodeFailureEvent, fanoutEncodeFailureData())
 
-        const sessionID = SessionSchema.ID.descending()
         yield* events.publish(SessionEvent.Step.Started, sessionNextData(sessionID))
 
         const event = yield* readEvent(reader)
@@ -220,11 +233,11 @@ describe("event HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const events = yield* EventV2Bridge.Service
+        const sessionID = yield* createSessionID()
         const received = yield* Queue.unbounded<EventV2.Payload>()
         const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(received, event)))
         yield* Effect.addFinalizer(() => unsubscribe)
 
-        const sessionID = SessionSchema.ID.descending()
         yield* events.replay(
           {
             id: EventV2.ID.create(),
@@ -247,11 +260,11 @@ describe("event HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const events = yield* EventV2Bridge.Service
+        const sessionID = yield* createSessionID()
         const received = yield* Queue.unbounded<EventV2.Payload>()
         const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(received, event)))
         yield* Effect.addFinalizer(() => unsubscribe)
 
-        const sessionID = SessionSchema.ID.descending()
         yield* events.replay(
           {
             id: EventV2.ID.create(),

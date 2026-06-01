@@ -33,7 +33,7 @@ function activeShell(messages: SessionMessage[], callID: string) {
 
 function latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
   return assistant?.content.findLast(
-    (item): item is SessionMessageAssistantTool => item.type === "tool" && (callID === undefined || item.id === callID),
+    (item): item is SessionMessageAssistantTool => item.type === "tool" && (callID === undefined || item.callID === callID),
   )
 }
 
@@ -43,7 +43,7 @@ function latestText(assistant: SessionMessageAssistant | undefined) {
 
 function latestReasoning(assistant: SessionMessageAssistant | undefined, reasoningID: string) {
   return assistant?.content.findLast(
-    (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && item.id === reasoningID,
+    (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && item.reasoningID === reasoningID,
   )
 }
 
@@ -154,7 +154,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.text.started":
           update(event.properties.sessionID, (draft) => {
-            activeAssistant(draft)?.content.push({ type: "text", text: "" })
+            activeAssistant(draft)?.content.push({ type: "text", id: event.id, text: "" })
           })
           break
         case "session.next.text.delta":
@@ -173,7 +173,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           update(event.properties.sessionID, (draft) => {
             activeAssistant(draft)?.content.push({
               type: "tool",
-              id: event.properties.callID,
+              id: event.id,
+              callID: event.properties.callID,
               name: event.properties.name,
               time: { created: event.properties.timestamp },
               state: { status: "pending", input: "" },
@@ -191,7 +192,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.tool.called":
           update(event.properties.sessionID, (draft) => {
             const match = latestTool(activeAssistant(draft), event.properties.callID)
-            if (!match) return
+            if (match?.state.status !== "pending") return
             match.time.ran = event.properties.timestamp
             match.provider = event.properties.provider
             match.state = { status: "running", input: event.properties.input, structured: {}, content: [] }
@@ -238,7 +239,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           update(event.properties.sessionID, (draft) => {
             activeAssistant(draft)?.content.push({
               type: "reasoning",
-              id: event.properties.reasoningID,
+              id: event.id,
+              reasoningID: event.properties.reasoningID,
               text: "",
             })
           })

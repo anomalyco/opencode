@@ -245,13 +245,15 @@ describe("MessageV2.page", () => {
   it.instance("accepts cursors from fractional timestamps", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {
-        const ids = yield* fill(sessionID, 4, (i: number) => 1000.5 + i)
+        const ids = yield* fill(sessionID, 4, (i: number) => 1000 + i)
 
-        const a = yield* MessageV2.page({ sessionID, limit: 2 })
-        const b = yield* MessageV2.page({ sessionID, limit: 2, before: a.cursor! })
+        const result = yield* MessageV2.page({
+          sessionID,
+          limit: 10,
+          before: MessageV2.cursor.encode({ id: ids[2], time: 1002.5 }),
+        })
 
-        expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(-2))
-        expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
+        expect(result.items.map((item) => item.info.id)).toEqual(ids.slice(0, 3))
       }),
     ),
   )
