@@ -37,7 +37,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
       - name: Analyze issue and post plan
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           # Claude Max サブスクの OAuth トークンで認証する（API の従量課金・
@@ -102,3 +106,32 @@ jobs:
             - コメントは 1 件のみ。簡潔・具体的に書く。明らかに AI 生成と分かる冗長な定型文は避ける。
             - リポジトリへの書き込み・コミットはしない（分析とコメントのみ）。
             - 判断に迷う場合は B ではなく A（質問）を選ぶ。
+
+      # claude-code-action の execution_file（SDKMessage の JSON 配列）を、ベンダリングした
+      # format-claude-stream で人間が読みやすいテキストへ整形し、Job Summary に出力する。
+      # このワークフローは show_full_output を有効にしていない（生ログは伏せたまま）ため、
+      # 整形済みログが実質的な調査手段になる。詳細は
+      # .github/format-claude-stream/VENDORING.md を参照。
+      - name: Render Claude log to job summary
+        if: ${{ always() && steps.claude.outputs.execution_file != '' }}
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          bun install --cwd .github/format-claude-stream --frozen-lockfile --ignore-scripts
+          bun .github/format-claude-stream/render-execution-file.ts "$EXECUTION_FILE" \
+            > /tmp/claude-log.txt 2> /tmp/claude-log.err || {
+              echo "(ログの整形に失敗しました)" >> /tmp/claude-log.txt
+              cat /tmp/claude-log.err >> /tmp/claude-log.txt
+            }
+          # ログ本文にバッククォートが含まれても閉じないよう、コードフェンスは ~~~ を使う。
+          {
+            echo "## 🧩 Claude 実行ログ（整形済み）"
+            echo ""
+            echo "<details><summary>クリックで展開</summary>"
+            echo ""
+            echo "~~~text"
+            cat /tmp/claude-log.txt
+            echo "~~~"
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
