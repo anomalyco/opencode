@@ -203,8 +203,9 @@ experimental flags, and legacy background paths.
 
 ## Validation Checklist
 
-Run targeted checks from `packages/opencode` as phases land. Representative
-commands:
+The authoritative phase-by-phase validation plan lives in
+[`event-v2-test-plan.md`](./event-v2-test-plan.md). Run the tests for the phase
+being committed plus the common typecheck gate. Representative commands:
 
 ```bash
 bun --cwd packages/opencode test test/effect/runtime-flags.test.ts
