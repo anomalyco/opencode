@@ -95,9 +95,11 @@ describe("PermissionV2", () => {
     Effect.gen(function* () {
       const { service, fiber, request } = yield* waitForRequest()
       expect(yield* service.list()).toEqual([request])
+      expect(yield* service.get(request.id)).toEqual(request)
       yield* service.reply({ requestID: request.id, reply: "once" })
       yield* Fiber.join(fiber)
       expect(yield* service.list()).toEqual([])
+      expect(yield* service.get(request.id)).toBeUndefined()
     }),
   )
 

@@ -120,6 +120,7 @@ export interface Interface {
   readonly ask: (input: AssertInput) => EffectRuntime.Effect<Effect>
   readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error>
   readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
+  readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
   readonly list: () => EffectRuntime.Effect<ReadonlyArray<Request>>
 }
 
@@ -265,7 +266,11 @@ export const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request)
     })
 
-    return Service.of({ ask, assert, reply, list })
+    const get = EffectRuntime.fn("PermissionV2.get")(function* (id: ID) {
+      return pending.get(id)?.request
+    })
+
+    return Service.of({ ask, assert, reply, get, list })
   }),
 )
 
