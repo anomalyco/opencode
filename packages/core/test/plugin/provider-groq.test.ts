@@ -2,13 +2,16 @@ import { describe, expect } from "bun:test"
 import { createGroq } from "@ai-sdk/groq"
 import { Effect, Layer } from "effect"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GroqPlugin } from "@opencode-ai/core/plugin/provider/groq"
 import { it, model } from "./provider-helper"
 import { testEffect } from "../lib/effect"
 
-const aisdkIt = testEffect(AISDK.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer)))
+const aisdkIt = testEffect(
+  AISDK.layer.pipe(Layer.provideMerge(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))),
+)
 
 describe("GroqPlugin", () => {
   it.effect("creates a Groq SDK for @ai-sdk/groq", () =>
