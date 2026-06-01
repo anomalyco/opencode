@@ -1,8 +1,13 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { showToast } from "@opencode-ai/ui/toast"
 import {
   createEffect,
   createMemo,
@@ -14,6 +19,7 @@ import {
   Switch,
   untrack,
   type ComponentProps,
+  type JSX,
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
@@ -83,6 +89,39 @@ const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: 
   if (!kind) return
   if (!marks?.has(node.path)) return
   return kind
+}
+
+export const parentDirectoryPath = (path?: string) => {
+  if (!path) return
+
+  const trimmed = path.replace(/[\\/]+$/, "")
+  if (!trimmed) return
+  if (/^[A-Za-z]:$/.test(trimmed)) return
+
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"))
+  if (index === -1) return
+  if (index === 0) return trimmed.slice(0, 1)
+  if (index === 2 && /^[A-Za-z]:/.test(trimmed)) return trimmed.slice(0, 3)
+  return trimmed.slice(0, index)
+}
+
+export const fileTreeOpenLocationPath = (node: Pick<FileNode, "absolute">) => parentDirectoryPath(node.absolute)
+
+export const openFileTreeLocation = (input: {
+  path?: string
+  openPath?: (path: string) => Promise<void>
+  onError: (err: unknown) => void
+}) => {
+  if (!input.path || !input.openPath) return
+  input.openPath(input.path).catch(input.onError)
+}
+
+const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown) => {
+  showToast({
+    variant: "error",
+    title: language.t("common.requestFailed"),
+    description: err instanceof Error ? err.message : String(err),
+  })
 }
 
 const buildDragImage = (target: HTMLElement) => {
@@ -209,8 +248,12 @@ export default function FileTree(props: {
   _chain?: readonly string[]
 }) {
   const file = useFile()
+  const language = useLanguage()
+  const platform = usePlatform()
+  const server = useServer()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
+  const canOpenLocation = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
 
   const key = (p: string) =>
     file
@@ -301,6 +344,33 @@ export default function FileTree(props: {
 
     return out
   })
+
+  const openLocation = (path: string) => {
+    openFileTreeLocation({
+      path,
+      openPath: canOpenLocation() ? platform.openPath : undefined,
+      onError: (err) => showRequestError(language, err),
+    })
+  }
+
+  const withNodeContextMenu = (node: FileNode, trigger: JSX.Element) => (
+    <Show when={canOpenLocation() ? fileTreeOpenLocationPath(node) : undefined} fallback={trigger}>
+      {(path) => (
+        <ContextMenu>
+          <ContextMenu.Trigger as="div" class="block w-full">
+            {trigger}
+          </ContextMenu.Trigger>
+          <ContextMenu.Portal>
+            <ContextMenu.Content>
+              <ContextMenu.Item onSelect={() => openLocation(path())}>
+                <ContextMenu.ItemLabel>{language.t("session.files.openFolder")}</ContextMenu.ItemLabel>
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Portal>
+        </ContextMenu>
+      )}
+    </Show>
+  )
 
   createEffect(() => {
     const current = filter()
@@ -403,21 +473,24 @@ export default function FileTree(props: {
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
                 >
-                  <Collapsible.Trigger>
-                    <FileTreeNode
-                      node={node}
-                      level={level}
-                      active={props.active}
-                      nodeClass={props.nodeClass}
-                      draggable={draggable()}
-                      kinds={kinds()}
-                      marks={marks()}
-                    >
-                      <div class="size-4 flex items-center justify-center text-icon-weak">
-                        <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-                      </div>
-                    </FileTreeNode>
-                  </Collapsible.Trigger>
+                  {withNodeContextMenu(
+                    node,
+                    <Collapsible.Trigger>
+                      <FileTreeNode
+                        node={node}
+                        level={level}
+                        active={props.active}
+                        nodeClass={props.nodeClass}
+                        draggable={draggable()}
+                        kinds={kinds()}
+                        marks={marks()}
+                      >
+                        <div class="size-4 flex items-center justify-center text-icon-weak">
+                          <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                        </div>
+                      </FileTreeNode>
+                    </Collapsible.Trigger>,
+                  )}
                   <Collapsible.Content class="relative pt-0.5">
                     <div
                       classList={{
@@ -451,51 +524,54 @@ export default function FileTree(props: {
                 </Collapsible>
               </Match>
               <Match when={node.type === "file"}>
-                <FileTreeNode
-                  node={node}
-                  level={level}
-                  active={props.active}
-                  nodeClass={props.nodeClass}
-                  draggable={draggable()}
-                  kinds={kinds()}
-                  marks={marks()}
-                  as="button"
-                  type="button"
-                  onClick={() => props.onFileClick?.(node)}
-                >
-                  <div class="w-4 shrink-0" />
-                  <Switch>
-                    <Match when={node.ignored}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style="color: var(--icon-weak-base)"
-                        mono
-                      />
-                    </Match>
-                    <Match when={active()}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style={kindTextColor(kind()!)}
-                        mono
-                      />
-                    </Match>
-                    <Match when={!node.ignored}>
-                      <span class="filetree-iconpair size-4">
+                {withNodeContextMenu(
+                  node,
+                  <FileTreeNode
+                    node={node}
+                    level={level}
+                    active={props.active}
+                    nodeClass={props.nodeClass}
+                    draggable={draggable()}
+                    kinds={kinds()}
+                    marks={marks()}
+                    as="button"
+                    type="button"
+                    onClick={() => props.onFileClick?.(node)}
+                  >
+                    <div class="w-4 shrink-0" />
+                    <Switch>
+                      <Match when={node.ignored}>
                         <FileIcon
                           node={node}
-                          class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
-                        />
-                        <FileIcon
-                          node={node}
-                          class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style="color: var(--icon-weak-base)"
                           mono
                         />
-                      </span>
-                    </Match>
-                  </Switch>
-                </FileTreeNode>
+                      </Match>
+                      <Match when={active()}>
+                        <FileIcon
+                          node={node}
+                          class="size-4 filetree-icon filetree-icon--mono"
+                          style={kindTextColor(kind()!)}
+                          mono
+                        />
+                      </Match>
+                      <Match when={!node.ignored}>
+                        <span class="filetree-iconpair size-4">
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                          />
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                            mono
+                          />
+                        </span>
+                      </Match>
+                    </Switch>
+                  </FileTreeNode>,
+                )}
               </Match>
             </Switch>
           )
