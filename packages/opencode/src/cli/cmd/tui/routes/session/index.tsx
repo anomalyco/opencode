@@ -2275,7 +2275,7 @@ export function formatSubagentTitle(agent: string, description: string, backgrou
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {
-  return `Retry #${attempt} · ${message}`
+  return `Retrying (attempt ${attempt}) · ${message}`
 }
 
 export function formatCompletedSubagentDetail(toolcalls: number, duration: string) {
