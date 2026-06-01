@@ -57,7 +57,7 @@ test("preserves temperature support from existing provider models", async () => 
     ),
   ) as unknown as typeof fetch
 
-  const models = await CopilotModels.get(
+  const result = await CopilotModels.get(
     "https://api.githubcopilot.com",
     {},
     {
@@ -112,6 +112,7 @@ test("preserves temperature support from existing provider models", async () => 
       },
     },
   )
+  const models = result.models
 
   expect(models["gpt-4o"].capabilities.temperature).toBe(true)
   expect(models["brand-new"].capabilities.temperature).toBe(true)
@@ -172,7 +173,7 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
     ),
   ) as unknown as typeof fetch
 
-  const models = await CopilotModels.get("https://api.githubcopilot.com")
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
 
   expect(models["gpt-5"].cost).toEqual({
     input: 10,
@@ -219,7 +220,7 @@ test("clears existing variants so refreshed models calculate provider-specific v
     ),
   ) as unknown as typeof fetch
 
-  const models = await CopilotModels.get(
+  const result = await CopilotModels.get(
     "https://api.githubcopilot.com",
     {},
     {
@@ -279,6 +280,7 @@ test("clears existing variants so refreshed models calculate provider-specific v
       },
     },
   )
+  const models = result.models
 
   expect(models["claude-opus-4.7"].api.npm).toBe("@ai-sdk/anthropic")
   expect(models["claude-opus-4.7"].variants).toBeUndefined()

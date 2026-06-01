@@ -188,9 +188,8 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
   return model
 }
 
-function selectable(item: Item): item is SelectableItem {
+function usable(item: Item): item is SelectableItem {
   return (
-    item.model_picker_enabled &&
     item.policy?.state !== "disabled" &&
     item.capabilities.limits?.max_output_tokens !== undefined &&
     item.capabilities.limits.max_prompt_tokens !== undefined &&
@@ -202,7 +201,7 @@ export async function get(
   baseURL: string,
   headers: HeadersInit = {},
   existing: Record<string, Model> = {},
-): Promise<Record<string, Model>> {
+): Promise<{ models: Record<string, Model>; pickerEnabled: Set<string> }> {
   const data = await fetch(`${baseURL}/models`, {
     headers,
     signal: AbortSignal.timeout(5_000),
@@ -217,7 +216,7 @@ export async function get(
   const remote = new Map(
     data.data.flatMap((raw) => {
       const item = Option.getOrUndefined(decodeItem(raw))
-      return item && selectable(item) ? ([[item.id, item]] as const) : []
+      return item && usable(item) ? ([[item.id, item]] as const) : []
     }),
   )
 
@@ -237,7 +236,10 @@ export async function get(
     result[id] = build(id, m, baseURL)
   }
 
-  return result
+  return {
+    models: result,
+    pickerEnabled: new Set([...remote].filter(([, item]) => item.model_picker_enabled).map(([id]) => id)),
+  }
 }
 
 export * as CopilotModels from "./models"
