@@ -411,6 +411,20 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <Show when={desktop()}>
+          <SettingsRow
+            title={language.t("settings.general.row.showFileChanges.title")}
+            description={language.t("settings.general.row.showFileChanges.description")}
+          >
+            <div data-action="settings-show-file-changes">
+              <Switch
+                checked={settings.general.showFileChanges()}
+                onChange={(checked) => settings.general.setShowFileChanges(checked)}
+              />
+            </div>
+          </SettingsRow>
+        </Show>
       </SettingsList>
     </div>
   )

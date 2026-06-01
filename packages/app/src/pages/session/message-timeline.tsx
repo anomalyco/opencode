@@ -1227,11 +1227,13 @@ export function MessageTimeline(props: {
       case "DiffSummary": {
         const diffSummaryRow = row as Accessor<TimelineRowByTag<"DiffSummary">>
         return (
-          <TimelineRowFrame row={diffSummaryRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <TimelineDiffSummaryRow diffs={diffSummaryRow().diffs} />
-            </div>
-          </TimelineRowFrame>
+          <Show when={platform.platform !== "desktop" || settings.general.showFileChanges()}>
+            <TimelineRowFrame row={diffSummaryRow}>
+              <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+                <TimelineDiffSummaryRow diffs={diffSummaryRow().diffs} />
+              </div>
+            </TimelineRowFrame>
+          </Show>
         )
       }
       case "Error": {

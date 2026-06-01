@@ -34,6 +34,7 @@ export interface Settings {
     showSessionProgressBar: boolean
     showCustomAgents: boolean
     newLayoutDesigns?: boolean
+    showFileChanges: boolean
   }
   updates: {
     startup: boolean
@@ -121,6 +122,8 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
     showCustomAgents: false,
+    newLayoutDesigns: newLayoutDesignsDefault,
+    showFileChanges: true,
   },
   updates: {
     startup: true,
@@ -247,6 +250,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newLayoutDesigns: withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault),
         setNewLayoutDesigns(value: boolean) {
           setStore("general", "newLayoutDesigns", value)
+        },
+        showFileChanges: withFallback(() => store.general?.showFileChanges, defaultSettings.general.showFileChanges),
+        setShowFileChanges(value: boolean) {
+          setStore("general", "showFileChanges", value)
         },
       },
       updates: {
