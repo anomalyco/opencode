@@ -564,11 +564,14 @@ export const layer = Layer.effect(
           const hit = kind ?? (yield* pluginScopeForSource(source))
           const merged = [...(result.instruction_origins ?? []), ...list.map((spec) => ({ spec, source, scope: hit }))]
           const seen = new Set<string>()
-          result.instruction_origins = merged.filter((item) => {
-            if (seen.has(item.spec)) return false
-            seen.add(item.spec)
-            return true
-          })
+          result.instruction_origins = merged
+            .toReversed()
+            .filter((item) => {
+              if (seen.has(item.spec)) return false
+              seen.add(item.spec)
+              return true
+            })
+            .toReversed()
         })
 
         const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
