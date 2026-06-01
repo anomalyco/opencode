@@ -12,6 +12,10 @@ export type SelectedLineRange = {
   end: number
   side?: "additions" | "deletions"
   endSide?: "additions" | "deletions"
+  additionStart?: number
+  additionEnd?: number
+  deletionStart?: number
+  deletionEnd?: number
 }
 
 export type FileViewState = {

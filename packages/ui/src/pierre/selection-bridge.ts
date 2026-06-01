@@ -30,7 +30,18 @@ export function cloneSelectedLineRange(range: SelectedLineRange): SelectedLineRa
 
   if (range.side) next.side = range.side
   if (range.endSide) next.endSide = range.endSide
-  return next
+  const extra = range as SelectedLineRange & {
+    additionStart?: number
+    additionEnd?: number
+    deletionStart?: number
+    deletionEnd?: number
+  }
+  const out = next as typeof extra
+  if (extra.additionStart !== undefined) out.additionStart = extra.additionStart
+  if (extra.additionEnd !== undefined) out.additionEnd = extra.additionEnd
+  if (extra.deletionStart !== undefined) out.deletionStart = extra.deletionStart
+  if (extra.deletionEnd !== undefined) out.deletionEnd = extra.deletionEnd
+  return out
 }
 
 export function lineInSelectedRange(range: SelectedLineRange | null | undefined, line: number, side?: Side) {

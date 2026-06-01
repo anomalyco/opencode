@@ -181,8 +181,8 @@ describe("docMarkdown", () => {
     )
 
     expect(out.text).toContain("line 5 of bar.ts")
-    expect(out.text).toContain("[bar.ts Line 5](bar.ts?start=5&end=5)")
-    expect(docPlain(ctx.doc)).toContain("Line 5")
+    expect(out.text).toContain("[bar.ts L5](bar.ts?start=5&end=5)")
+    expect(docPlain(ctx.doc)).toContain("L5")
   })
 
   test("serializes line reference with diff side", async () => {
@@ -209,8 +209,8 @@ describe("docMarkdown", () => {
     )
 
     expect(out.text).toContain("lines 10 through 20 of diff.ts")
-    expect(out.text).toContain("(diff: additions)")
-    expect(out.text).toContain("[diff.ts Lines 10–20](diff.ts?start=10&end=20&side=additions)")
+    expect(out.text).not.toContain("(diff: additions)")
+    expect(out.text).toContain("[diff.ts L10–20](diff.ts?start=10&end=20&side=additions)")
   })
 
   test("serializes attachments into markdown and assets", async () => {

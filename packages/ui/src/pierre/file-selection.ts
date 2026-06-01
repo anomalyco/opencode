@@ -1,5 +1,28 @@
 import { type SelectedLineRange } from "@pierre/diffs"
+import { findDiffSide } from "./diff-selection"
 import { toRange } from "./selection-bridge"
+
+export type DiffLineSpan = {
+  additions: number
+  deletions: number
+}
+
+export function readDiffLineSpan(node: Node | null): DiffLineSpan | undefined {
+  const el = findElement(node)
+  if (!el) return
+
+  const row = el.closest("[data-line], [data-alt-line]")
+  if (!(row instanceof HTMLElement)) return
+
+  const line = parseInt(row.dataset.line ?? "", 10)
+  if (Number.isNaN(line)) return
+
+  const alt = parseInt(row.dataset.altLine ?? "", 10)
+  const side = findDiffSide(row)
+  const additions = side === "additions" ? line : !Number.isNaN(alt) ? alt : line
+  const deletions = side === "deletions" ? line : !Number.isNaN(alt) ? alt : line
+  return { additions, deletions }
+}
 
 export function findElement(node: Node | null): HTMLElement | undefined {
   if (!node) return
@@ -76,7 +99,23 @@ export function readShadowLineSelection(opts: {
 
   const range: SelectedLineRange = { start, end }
   if (side) range.side = side
-  if (endSide && side && endSide !== side) range.endSide = endSide
+  if (endSide && side && endSide !== side) {
+    range.endSide = endSide
+    const a = readDiffLineSpan(startNode)
+    const b = readDiffLineSpan(endNode)
+    if (a && b) {
+      const extra = range as SelectedLineRange & {
+        additionStart?: number
+        additionEnd?: number
+        deletionStart?: number
+        deletionEnd?: number
+      }
+      extra.additionStart = Math.min(a.additions, b.additions)
+      extra.additionEnd = Math.max(a.additions, b.additions)
+      extra.deletionStart = Math.min(a.deletions, b.deletions)
+      extra.deletionEnd = Math.max(a.deletions, b.deletions)
+    }
+  }
 
   return {
     range,

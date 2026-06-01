@@ -2,7 +2,7 @@ import type { BlockModel, Doc } from "@blocksuite/store"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { formatCommentNote, formatFolderReferenceNote, formatReferenceNote } from "@/utils/comment-note"
 import type { FileSelection } from "@/context/file/types"
-import { lineRangeLabel, lineSideNote } from "./line-reference-url"
+import { lineRangeLabel, lineRefSegments, lineRefSegmentsLabel } from "./line-reference-url"
 
 export type DocExportAsset = {
   id: string
@@ -229,8 +229,20 @@ function plain(model: BlockModel): string[] {
     const start = num(model, "start")
     const end = num(model, "end")
     const range =
-      str(model, "label") ??
-      (start !== undefined && end !== undefined ? lineRangeLabel(start, end) : undefined)
+      start !== undefined && end !== undefined
+        ? lineRefSegmentsLabel(
+            lineRefSegments({
+              start,
+              end,
+              side: str(model, "side"),
+              endSide: str(model, "endSide"),
+              additionStart: num(model, "additionStart"),
+              additionEnd: num(model, "additionEnd"),
+              deletionStart: num(model, "deletionStart"),
+              deletionEnd: num(model, "deletionEnd"),
+            }),
+          )
+        : str(model, "label")
     const comment = str(model, "comment")
     const preview = str(model, "preview")
     const head = [str(model, "name") ?? path, range, preview, comment].filter((line): line is string => !!line)
@@ -313,20 +325,28 @@ async function block(model: BlockModel, opts: ExportOpts, assets: DocExportAsset
     const url = str(model, "url") ?? path
     const start = num(model, "start")
     const end = num(model, "end")
-    const side = str(model, "side")
-    const endSide = str(model, "endSide")
     const comment = str(model, "comment")
     const nested = await children()
     const selection =
       start !== undefined && end !== undefined ? lineSelection(start, end) : undefined
-    const base = comment
+    const note = comment
       ? formatCommentNote({ path, selection, comment })
       : formatReferenceNote({ path, selection })
-    const sideNote = lineSideNote(side, endSide)
-    const note = sideNote ? `${base} ${sideNote}` : base
     const rangeLabel =
-      str(model, "label") ??
-      (start !== undefined && end !== undefined ? lineRangeLabel(start, end) : undefined)
+      start !== undefined && end !== undefined
+        ? lineRefSegmentsLabel(
+            lineRefSegments({
+              start,
+              end,
+              side: str(model, "side"),
+              endSide: str(model, "endSide"),
+              additionStart: num(model, "additionStart"),
+              additionEnd: num(model, "additionEnd"),
+              deletionStart: num(model, "deletionStart"),
+              deletionEnd: num(model, "deletionEnd"),
+            }),
+          )
+        : str(model, "label")
     const link = rangeLabel ? `[${label(name)} ${rangeLabel}](${url})` : `[${label(name)}](${url})`
     return [note, link, ...nested].filter(Boolean)
   }

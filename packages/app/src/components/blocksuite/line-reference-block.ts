@@ -3,7 +3,7 @@ import { CodeIcon, DeleteIcon, DragHandleConfigExtension, HoverController } from
 import { defineBlockSchema, type BlockSchemaType, type SchemaToModel } from "@blocksuite/store"
 import { css, html } from "lit"
 import { literal } from "lit/static-html.js"
-import { lineRangeLabel, lineSideSuffix } from "./line-reference-url"
+import { lineRefSegments, lineRefTone } from "./line-reference-url"
 
 export type LineReferenceBlockProps = {
   name: string
@@ -13,6 +13,10 @@ export type LineReferenceBlockProps = {
   end: number
   side?: string
   endSide?: string
+  additionStart?: number
+  additionEnd?: number
+  deletionStart?: number
+  deletionEnd?: number
   label?: string
   preview?: string
   comment?: string
@@ -28,6 +32,10 @@ export const LineReferenceBlockSchema = defineBlockSchema({
     end: 0,
     side: "",
     endSide: "",
+    additionStart: 0,
+    additionEnd: 0,
+    deletionStart: 0,
+    deletionEnd: 0,
     label: "",
     preview: "",
     comment: "",
@@ -105,15 +113,48 @@ export class LineReferenceBlockComponent extends BlockComponent<LineReferenceBlo
     }
 
     .meta {
+      align-items: center;
       color: var(--text-weak);
+      display: flex;
       font-size: 12px;
+      gap: 4px;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .comment,
-    .preview {
+    .lines {
+      flex: 0 0 auto;
+      font-family: var(--font-family-mono);
+      font-weight: 500;
+    }
+
+    .lines[data-tone="additions"] {
+      color: var(--icon-diff-add-base);
+    }
+
+    .lines[data-tone="deletions"] {
+      color: var(--icon-diff-delete-base);
+    }
+
+    .card[data-tone="additions"] .icon {
+      color: var(--icon-diff-add-base);
+    }
+
+    .card[data-tone="deletions"] .icon {
+      color: var(--icon-diff-delete-base);
+    }
+
+    .card[data-tone="mixed"] .icon {
+      color: var(--text-weak);
+    }
+
+    .meta-sep {
+      flex: 0 0 auto;
+    }
+
+    .comment {
       color: var(--text-base);
       font-size: 12px;
       line-height: 1.4;
@@ -121,11 +162,6 @@ export class LineReferenceBlockComponent extends BlockComponent<LineReferenceBlo
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .preview {
-      color: var(--text-weak);
-      font-family: var(--font-family-mono);
     }
 
     editor-toolbar.line-reference-toolbar {
@@ -232,22 +268,45 @@ export class LineReferenceBlockComponent extends BlockComponent<LineReferenceBlo
     super.disconnectedCallback()
   }
 
+  private spans() {
+    const pick = (value: number) => (value > 0 ? value : undefined)
+    return lineRefSegments({
+      start: this.model.start,
+      end: this.model.end,
+      side: this.model.side,
+      endSide: this.model.endSide,
+      additionStart: pick(this.model.additionStart),
+      additionEnd: pick(this.model.additionEnd),
+      deletionStart: pick(this.model.deletionStart),
+      deletionEnd: pick(this.model.deletionEnd),
+    })
+  }
+
   override renderBlock() {
     const comment = this.model.comment?.trim()
-    const preview = this.model.preview?.trim()
     const path = this.model.path
-    const lines =
-      this.model.label?.trim() ||
-      lineRangeLabel(this.model.start, this.model.end)
-    const side = lineSideSuffix(this.model.side, this.model.endSide)
+    const parts = this.spans()
+    const tone = lineRefTone(this.model.side, this.model.endSide)
     return html`
       <div class="wrap" contenteditable="false">
-        <a class="card" href=${this.model.url || path} title=${path}>
+        <a
+          class="card"
+          href=${this.model.url || path}
+          title=${path}
+          data-tone=${tone ?? ""}
+        >
           <span class="icon">${CodeIcon}</span>
           <span class="body">
             <span class="name">${this.model.name || path}</span>
-            <span class="meta">${lines}${side} · ${path}</span>
-            ${preview ? html`<span class="preview">${preview}</span>` : ""}
+            <span class="meta">
+              ${parts.map((part, index) =>
+                index === 0
+                  ? html`<span class="lines" data-tone=${part.tone ?? ""}>${part.label}</span>`
+                  : html`<span class="meta-sep"> </span
+                      ><span class="lines" data-tone=${part.tone ?? ""}>${part.label}</span>`,
+              )}
+              <span class="meta-sep"> · </span><span>${path}</span>
+            </span>
             ${comment ? html`<span class="comment">${comment}</span>` : ""}
           </span>
         </a>

@@ -75,7 +75,6 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
 import { PromptDrawingShell } from "./prompt-input/drawing-shell"
 import { createPromptDrawing } from "./prompt-input/drawing"
-import { formatSelectedLineLabel } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createPromptDoc } from "./prompt-input/doc"
 import { createPromptContextSync } from "./prompt-input/context-sync"
 import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
@@ -445,7 +444,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         end: range.end,
         side: range.side,
         endSide: range.endSide,
-        label: input.label ?? formatSelectedLineLabel(range, language.t),
+        additionStart: range.additionStart,
+        additionEnd: range.additionEnd,
+        deletionStart: range.deletionStart,
+        deletionEnd: range.deletionEnd,
+        label: input.label,
         comment: input.comment,
         preview: input.preview,
       })
