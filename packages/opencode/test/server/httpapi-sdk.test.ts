@@ -21,7 +21,7 @@ import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
-import { awaitWithTimeout, testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Database } from "@opencode-ai/core/database/database"
@@ -571,6 +571,61 @@ describe("HttpApi SDK", () => {
           childCount: array(children.data).length,
           todoCount: array(todo.data).length,
           messageCount: array(messages.data).length,
+        }
+      }),
+    ),
+  )
+
+  serverPathParity("aggregates session status from child directories", (serverPath) =>
+    withFakeLlmProject(serverPath, { setup: writeStandardFiles }, ({ sdk, directory, llm }) =>
+      Effect.gen(function* () {
+        const childDirectory = path.join(directory, "backend")
+        yield* writeStandardFiles(childDirectory)
+
+        const childSdk = yield* client(serverPath, childDirectory)
+        const child = yield* capture(() => childSdk.session.create({ title: "child" }))
+        const childID = String(record(child.data).id)
+
+        const releasePrompt = yield* Deferred.make<void>()
+        yield* llm.hold("done", Effect.runPromise(Deferred.await(releasePrompt)))
+        const asyncPrompt = yield* capture(() =>
+          childSdk.session.promptAsync({
+            sessionID: childID,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "keep running" }],
+          }),
+        )
+        expect(asyncPrompt.status).toBe(204)
+        yield* awaitWithTimeout(llm.wait(1), "timed out waiting for child prompt request", "5 seconds")
+        yield* pollWithTimeout(
+          capture(() => childSdk.session.status()).pipe(
+            Effect.map((result) => (record(result.data)[childID] ? result : undefined)),
+          ),
+          "timed out waiting for child session status",
+          "5 seconds",
+        )
+
+        const status = yield* capture(() => sdk.session.status())
+        const statusMap = record(status.data)
+        const parentStatusCode = status.status
+        const parentChildStatus = statusMap[childID]
+
+        yield* Deferred.succeed(releasePrompt, void 0)
+        yield* pollWithTimeout(
+          capture(() => childSdk.session.status()).pipe(
+            Effect.map((result) => (record(result.data)[childID] ? undefined : result)),
+          ),
+          "timed out waiting for child session to finish",
+          "5 seconds",
+        )
+
+        expect(parentStatusCode).toBe(200)
+        expect(parentChildStatus).toEqual({ type: "busy" })
+
+        return {
+          status: parentStatusCode,
+          childStatus: parentChildStatus,
         }
       }),
     ),

@@ -4,6 +4,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+import path from "node:path"
 
 export const Info = Schema.Union([
   Schema.Struct({
@@ -50,7 +51,7 @@ export const Event = {
 
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info>
-  readonly list: () => Effect.Effect<Map<SessionID, Info>>
+  readonly list: (input?: { recursive?: boolean }) => Effect.Effect<Map<SessionID, Info>>
   readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
 }
 
@@ -60,9 +61,17 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const directories = new Map<string, Map<SessionID, Info>>()
 
     const state = yield* InstanceState.make(
-      Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
+      Effect.fn("SessionStatus.state")((ctx) =>
+        Effect.gen(function* () {
+          const result = new Map<SessionID, Info>()
+          directories.set(ctx.directory, result)
+          yield* Effect.addFinalizer(() => Effect.sync(() => directories.delete(ctx.directory)))
+          return result
+        }),
+      ),
     )
 
     const get = Effect.fn("SessionStatus.get")(function* (sessionID: SessionID) {
@@ -70,8 +79,19 @@ export const layer = Layer.effect(
       return data.get(sessionID) ?? { type: "idle" as const }
     })
 
-    const list = Effect.fn("SessionStatus.list")(function* () {
-      return new Map(yield* InstanceState.get(state))
+    const list = Effect.fn("SessionStatus.list")(function* (input?: { recursive?: boolean }) {
+      const current = yield* InstanceState.directory
+      const data = yield* InstanceState.get(state)
+      if (!input?.recursive) return new Map(data)
+
+      const result = new Map<SessionID, Info>()
+      for (const [directory, statuses] of directories) {
+        if (!isSameOrChildDirectory(current, directory)) continue
+        for (const [sessionID, status] of statuses) {
+          result.set(sessionID, status)
+        }
+      }
+      return result
     })
 
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
@@ -88,6 +108,11 @@ export const layer = Layer.effect(
     return Service.of({ get, list, set })
   }),
 )
+
+function isSameOrChildDirectory(parent: string, directory: string) {
+  const relative = path.relative(parent, directory)
+  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative))
+}
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
 
