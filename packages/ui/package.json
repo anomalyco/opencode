@@ -46,7 +46,6 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "5.2.8",
     "@kobalte/core": "catalog:",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",

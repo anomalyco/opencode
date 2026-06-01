@@ -9,7 +9,6 @@
   height: 100%;
   display: flex;
   overflow: clip;
-  font-family: var(--v2-font-family-sans);
 }
 
 [data-component="tabs-v2"][data-orientation="horizontal"] {

@@ -65,7 +65,6 @@
     height: 16px;
     user-select: none;
     color: var(--v2-text-text-faint);
-    font-family: var(--font-family-sans);
     font-size: 11px;
     font-style: normal;
     font-weight: 440;
@@ -76,7 +75,6 @@
 
   [data-slot="switch-error"] {
     color: var(--v2-state-fg-danger);
-    font-family: var(--font-family-sans);
     font-size: 12px;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-normal);

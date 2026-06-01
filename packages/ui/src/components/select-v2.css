@@ -23,7 +23,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 13px;
@@ -79,7 +78,6 @@
   }
 
   [data-slot="select-select-item"] {
-    font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-style: normal;
     font-weight: var(--font-weight-regular);

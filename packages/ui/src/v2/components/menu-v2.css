@@ -11,7 +11,6 @@
   box-shadow: var(--elevation-floating);
 
   outline: none;
-  font-family: var(--font-family-sans);
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -52,7 +51,6 @@
   cursor: default;
   user-select: none;
 
-  font-family: var(--font-family-sans);
   font-variation-settings: "slnt" 0;
   font-variant-numeric: tabular-nums;
   color: var(--menu-v2-fg);
@@ -164,7 +162,6 @@
   height: 28px;
   padding: 0 12px;
 
-  font-family: var(--font-family-sans);
   font-size: 11px;
   font-weight: 530;
   line-height: 100%;

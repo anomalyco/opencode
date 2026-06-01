@@ -6,7 +6,6 @@
 
 [data-component="keybind-v2"] {
   box-sizing: border-box;
-  font-family: var(--font-family-sans), var(--sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   flex-direction: row;
@@ -53,7 +52,6 @@
   height: 11px;
   padding: 0;
   flex: none;
-  font-family: var(--font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 11px;

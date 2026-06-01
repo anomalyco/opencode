@@ -64,7 +64,6 @@
 
         [data-slot="dialog-title"] {
           margin: 0;
-          font-family: var(--font-family-sans);
           font-weight: 530;
           font-size: 15px;
           line-height: 100%;
@@ -74,7 +73,6 @@
         }
 
         [data-slot="dialog-description"] {
-          font-family: var(--font-family-sans);
           font-weight: 440;
           font-size: 13px;
           line-height: 100%;

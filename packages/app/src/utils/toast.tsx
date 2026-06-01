@@ -2,15 +2,19 @@ import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { Toast, showToast as showLegacyToast, type ToastOptions, type ToastVariant } from "@opencode-ai/ui/toast"
 import { ToastV2, showToastV2 } from "@opencode-ai/ui/v2/components/toast-v2.jsx"
 
-const USE_V2_TOAST = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+let v2 = false
 
-export function ToastRegion() {
-  if (USE_V2_TOAST) return <ToastV2.Region />
+export function setV2Toast(value: boolean) {
+  v2 = value
+}
+
+export function ToastRegion(props: { v2: boolean }) {
+  if (props.v2) return <ToastV2.Region />
   return <Toast.Region />
 }
 
 export function showToast(options: ToastOptions | string) {
-  if (!USE_V2_TOAST) return showLegacyToast(options)
+  if (!v2) return showLegacyToast(options)
   if (typeof options === "string") return showToastV2(options)
 
   return showToastV2({

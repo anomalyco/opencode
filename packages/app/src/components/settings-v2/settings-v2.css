@@ -113,7 +113,6 @@
 }
 
 [data-slot="settings-v2-row-title"] {
-  font-family: var(--font-family-sans);
   font-style: normal;
   font-size: 13px;
   font-weight: 530;
@@ -452,7 +451,6 @@
 }
 
 .settings-v2-shortcuts [data-component="settings-v2-list"] > div > span {
-  font-family: var(--font-family-sans);
   font-weight: 440;
   font-size: 13px;
   line-height: 1;
@@ -470,7 +468,6 @@
   border-radius: 2px;
   background: transparent;
   cursor: pointer;
-  font-family: var(--font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 11px;
