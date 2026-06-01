@@ -404,6 +404,11 @@ export function FileTabContent(props: { tab: string }) {
           contents: source,
           cacheKey: cacheKey(),
         }}
+        filePath={path()}
+        onSave={(content: string) => {
+          const p = path()
+          if (p) file.save(p, content)
+        }}
         enableLineSelection
         enableHoverUtility
         selectedLines={activeSelection()}

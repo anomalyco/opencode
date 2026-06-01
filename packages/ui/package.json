@@ -75,6 +75,7 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "strip-ansi": "7.1.2",
-    "virtua": "catalog:"
+    "virtua": "catalog:",
+    "monaco-editor": "^0.52.0"
   }
 }

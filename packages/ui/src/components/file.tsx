@@ -46,6 +46,7 @@ import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
+import { MonacoEditor } from "./monaco-editor"
 
 const VIRTUALIZE_BYTES = 500_000
 
@@ -81,6 +82,8 @@ export type TextFileProps<T = {}> = FileOptions<T> &
     file: FileContents
     annotations?: LineAnnotation<T>[]
     preloadedDiff?: PreloadMultiFileDiffResult<T>
+    filePath?: string
+    onSave?: (content: string) => void
   }
 
 type DiffPreload<T> = PreloadMultiFileDiffResult<T> | PreloadFileDiffResult<T>
@@ -911,7 +914,60 @@ function TextViewer<T>(props: TextFileProps<T>) {
     virtuals.cleanup()
   })
 
-  return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
+  // Monaco edit overlay
+  const [editing, setEditing] = createSignal(false)
+  const editContent = () => {
+    const value = local.file.contents as unknown
+    if (typeof value === "string") return value
+    if (Array.isArray(value)) return value.join("\n")
+    if (value == null) return ""
+    return String(value)
+  }
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
+      {props.filePath && props.onSave && (
+        <button
+          onClick={() => setEditing(true)}
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: "8px",
+            "z-index": "10",
+            padding: "4px 12px",
+            "font-size": "12px",
+            "border-radius": "4px",
+            border: "1px solid var(--border-base)",
+            background: "var(--background-stronger)",
+            color: "var(--text-base)",
+            cursor: "pointer",
+          }}
+        >
+          Edit
+        </button>
+      )}
+      {editing() && props.filePath && props.onSave && (
+        <div
+          style={{
+            position: "absolute",
+            inset: "0",
+            "z-index": "20",
+            background: "var(--background-base)",
+          }}
+        >
+          <MonacoEditor
+            filePath={props.filePath}
+            content={editContent()}
+            onSave={(content) => {
+              props.onSave!(content)
+              setEditing(false)
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------

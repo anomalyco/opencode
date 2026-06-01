@@ -1624,6 +1624,47 @@ export class File extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Write file
+   *
+   * Write content to a specified file.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+      content: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      { success: boolean },
+      never,
+      ThrowOnError
+    >({
+      url: "/file/content",
+      ...options,
+      ...params,
+      body: { path: parameters.path, content: parameters.content },
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
 }
 
 export class Instance extends HeyApiClient {

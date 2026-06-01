@@ -1,6 +1,8 @@
 import * as InstanceState from "@/effect/instance-state"
 import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
+import { FileWatcher } from "@/file/watcher"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -9,6 +11,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
   Effect.gen(function* () {
     const svc = yield* File.Service
     const ripgrep = yield* Ripgrep.Service
+    const events = yield* EventV2Bridge.Service
 
     const findText = Effect.fn("FileHttpApi.findText")(function* (ctx: { query: { pattern: string } }) {
       return (yield* ripgrep
@@ -43,6 +46,16 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       return yield* svc.status()
     })
 
+    const write = Effect.fn("FileHttpApi.write")(function* (ctx: { payload: { path: string; content: string } }) {
+      yield* svc.write(ctx.payload.path, ctx.payload.content)
+      yield* events.publish(File.Event.Edited, { file: ctx.payload.path })
+      yield* events.publish(FileWatcher.Event.Updated, {
+        file: ctx.payload.path,
+        event: "change",
+      })
+      return { success: true }
+    })
+
     return handlers
       .handle("findText", findText)
       .handle("findFile", findFile)
@@ -50,5 +63,6 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("list", list)
       .handle("content", content)
       .handle("status", status)
+      .handle("write", write)
   }),
 )

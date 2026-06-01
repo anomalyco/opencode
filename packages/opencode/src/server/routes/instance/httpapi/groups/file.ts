@@ -11,10 +11,17 @@ import {
   WorkspaceRoutingQueryFields,
 } from "../middleware/workspace-routing"
 import { described } from "./metadata"
+import { FileWatcher } from "@/file/watcher"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const FileQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   path: Schema.String,
+})
+
+export const FileWriteBody = Schema.Struct({
+  path: Schema.String,
+  content: Schema.String,
 })
 
 export const FindTextQuery = Schema.Struct({
@@ -108,6 +115,16 @@ export const FileApi = HttpApi.make("file")
             identifier: "file.status",
             summary: "Get file status",
             description: "Get the git status of all files in the project.",
+          }),
+        ),
+        HttpApiEndpoint.put("write", "/file/content", {
+          payload: FileWriteBody,
+          success: described(Schema.Struct({ success: Schema.Boolean }), "Write result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "file.write",
+            summary: "Write file",
+            description: "Write content to a specified file.",
           }),
         ),
       )

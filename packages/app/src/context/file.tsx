@@ -245,6 +245,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       viewCache.clear()
     })
 
+    const save = (file: string, content: string) => {
+      const normalized = path.normalize(file)
+      return sdk.client.file
+        .write({ path: normalized, content })
+        .then(() => {
+          // Reload the file to reflect changes
+          void load(normalized, { force: true })
+        })
+    }
+
     return {
       ready: () => view().ready(),
       normalize: path.normalize,
@@ -267,6 +277,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       },
       get,
       load,
+      save,
       scrollTop,
       scrollLeft,
       setScrollTop,

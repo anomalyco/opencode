@@ -30,6 +30,14 @@ export default [
         },
         worker: {
           format: "es",
+          rollupOptions: {
+            output: {
+              entryFileNames: "assets/[name]-[hash].js",
+            },
+          },
+        },
+        optimizeDeps: {
+          include: ["monaco-editor"],
         },
       }
     },

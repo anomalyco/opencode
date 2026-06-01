@@ -316,6 +316,7 @@ export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Info[]>
   readonly read: (file: string) => Effect.Effect<Content>
+  readonly write: (file: string, content: string) => Effect.Effect<void>
   readonly list: (dir?: string) => Effect.Effect<Node[]>
   readonly search: (input: {
     query: string
@@ -640,8 +641,19 @@ export const layer = Layer.effect(
       return output
     })
 
+    const write: Interface["write"] = Effect.fn("File.write")(function* (file: string, content: string) {
+      const ctx = yield* InstanceState.context
+      const full = path.join(ctx.directory, file)
+
+      if (!containsPath(full, ctx)) {
+        throw new Error("Access denied: path escapes project directory")
+      }
+
+      yield* appFs.writeWithDirs(full, content)
+    })
+
     log.info("init")
-    return Service.of({ init, status, read, list, search })
+    return Service.of({ init, status, read, write, list, search })
   }),
 )
 
