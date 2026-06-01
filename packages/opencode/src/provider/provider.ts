@@ -1658,10 +1658,15 @@ export const layer = Layer.effect(
           return loaded as SDK
         }
 
-        const local = model.api.npm.startsWith("file://")
-        if (local) log.info("loading local provider", { pkg: model.api.npm })
-        const installedPath = local ? model.api.npm : (await Npm.add(model.api.npm)).entrypoint
-        if (!installedPath) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+        const installedPath = await (async () => {
+          if (model.api.npm.startsWith("file://")) {
+            log.info("loading local provider", { pkg: model.api.npm })
+            return model.api.npm
+          }
+          const item = await Npm.add(model.api.npm)
+          if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+          return item.entrypoint
+        })()
 
         // `installedPath` is a local entry path or an existing `file://` URL. Normalize
         // only path inputs so Node on Windows accepts the dynamic import.
