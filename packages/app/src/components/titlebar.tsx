@@ -778,21 +778,17 @@ function TabNavItem(props: {
         <span data-slot="project-avatar-slot">
           <ProjectTabAvatar project={props.project} directory={props.directory} sessionId={props.sessionId} />
         </span>
-        <Show
-          when={props.statusColor()}
-          fallback={<span class="min-w-0 flex-1">{props.title}</span>}
-        >
-          {(color) => (
-            <div
-              class="size-1.5 shrink-0 rounded-full"
-              classList={{
-                "bg-icon-success-base": color() === "green",
-                "bg-surface-warning-strong": color() === "yellow",
-                "bg-text-diff-delete-base": color() === "red",
-              }}
-            />
-          )}
-        </Show>
+        {props.statusColor() && (
+          <div
+            class="size-1.5 shrink-0 rounded-full"
+            classList={{
+              "bg-icon-success-base": props.statusColor() === "green",
+              "bg-surface-warning-strong": props.statusColor() === "yellow",
+              "bg-text-diff-delete-base": props.statusColor() === "red",
+            }}
+          />
+        )}
+        <span class="min-w-0 flex-1">{props.title}</span>
       </a>
 
       <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
