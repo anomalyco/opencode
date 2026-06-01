@@ -4,6 +4,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { readdir, realpath } from "fs/promises"
 import path from "path"
+import os from "os"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EffectBridge } from "@/effect/bridge"
@@ -124,9 +125,18 @@ export const layer = Layer.effect(
           const cfgIgnores = cfg.watcher?.ignore ?? []
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-            yield* Effect.forkScoped(
-              subscribe(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)]),
-            )
+            const home = os.homedir()
+            const rel = path.relative(ctx.directory, home)
+            const watchesHome = rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
+            if (watchesHome) {
+              log.warn("skipping watch of home directory; FSEvents exclusion setup for protected paths is too slow", {
+                directory: ctx.directory,
+              })
+            } else {
+              yield* Effect.forkScoped(
+                subscribe(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)]),
+              )
+            }
           }
 
           if (ctx.project.vcs === "git") {
