@@ -57,6 +57,7 @@ Mevcut model listesi şunları içerir:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
+- **MiniMax M3**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -86,6 +87,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | Kimi K2.6         | 1,150              | 2,880          | 5,750       |
 | MiMo-V2.5         | 30,100             | 75,200         | 150,400     |
 | MiMo-V2.5-Pro     | 3,250              | 8,150          | 16,300      |
+| MiniMax M3        | 1,400              | 3,500          | 7,000       |
 | MiniMax M2.7      | 3,400              | 8,500          | 17,000      |
 | MiniMax M2.5      | 6,300              | 15,900         | 31,800      |
 | Qwen3.7 Max       | 950                | 2,390          | 4,770       |
@@ -99,6 +101,7 @@ Tahminler, gözlemlenen ortalama istek modellerine dayanır:
 - Kimi K2.5/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
 - DeepSeek V4 Pro — İstek başına 750 girdi, 82.000 önbelleğe alınmış, 290 çıktı token'ı
 - DeepSeek V4 Flash — İstek başına 790 girdi, 68.000 önbelleğe alınmış, 280 çıktı token'ı
+- MiniMax M3 — İstek başına 810 girdi, 62.000 önbelleğe alınmış, 225 çıktı token'ı
 - MiniMax M2.7/M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
 - Qwen3.7 Max — İstek başına 420 girdi, 66.000 önbelleğe alınmış, 200 çıktı token'ı
 - Qwen3.6 Plus — İstek başına 500 girdi, 57.000 önbelleğe alınmış, 190 çıktı token'ı
@@ -115,6 +118,7 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara da dayanır:
 | Kimi K2.5         | $0.60 | $3.00  | $0.10       | -            |
 | MiMo V2.5         | $0.14 | $0.28  | $0.0028     | -            |
 | MiMo V2.5 Pro     | $1.74 | $3.48  | $0.0145     | -            |
+| MiniMax M3        | $0.60 | $2.40  | $0.12       | $0.75        |
 | MiniMax M2.7      | $0.30 | $1.20  | $0.06       | $0.375       |
 | MiniMax M2.5      | $0.30 | $1.20  | $0.06       | $0.375       |
 | Qwen3.7 Max       | $2.50 | $7.50  | $0.50       | $3.125       |
@@ -152,6 +156,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |

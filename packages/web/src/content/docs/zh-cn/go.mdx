@@ -57,6 +57,7 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
+- **MiniMax M3**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -86,6 +87,7 @@ OpenCode Go 包含以下限制：
 | Kimi K2.5         | 1,850           | 4,630      | 9,250      |
 | MiMo-V2.5         | 30,100          | 75,200     | 150,400    |
 | MiMo-V2.5-Pro     | 3,250           | 8,150      | 16,300     |
+| MiniMax M3        | 1,400           | 3,500      | 7,000      |
 | MiniMax M2.7      | 3,400           | 8,500      | 17,000     |
 | MiniMax M2.5      | 6,300           | 15,900     | 31,800     |
 | Qwen3.7 Max       | 950             | 2,390      | 4,770      |
@@ -101,6 +103,7 @@ OpenCode Go 包含以下限制：
 - DeepSeek V4 Flash — 每次请求 790 个输入 token，68,000 个缓存 token，280 个输出 token
 - MiMo-V2.5 — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
 - MiMo-V2.5-Pro — 每次请求 790 个输入 token，86,000 个缓存 token，305 个输出 token
+- MiniMax M3 — 每次请求 810 个输入 token，62,000 个缓存 token，225 个输出 token
 - MiniMax M2.7/M2.5 — 每次请求 300 个输入 token，55,000 个缓存 token，125 个输出 token
 - Qwen3.7 Max — 每次请求 420 个输入 token，66,000 个缓存 token，200 个输出 token
 - Qwen3.6 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
@@ -115,6 +118,7 @@ OpenCode Go 包含以下限制：
 | Kimi K2.5         | $0.60 | $3.00 | $0.10    | -        |
 | MiMo V2.5         | $0.14 | $0.28 | $0.0028  | -        |
 | MiMo V2.5 Pro     | $1.74 | $3.48 | $0.0145  | -        |
+| MiniMax M3        | $0.60 | $2.40 | $0.12    | $0.75    |
 | MiniMax M2.7      | $0.30 | $1.20 | $0.06    | $0.375   |
 | MiniMax M2.5      | $0.30 | $1.20 | $0.06    | $0.375   |
 | Qwen3.7 Max       | $2.50 | $7.50 | $0.50    | $3.125   |
@@ -152,6 +156,7 @@ OpenCode Go 包含以下限制：
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
