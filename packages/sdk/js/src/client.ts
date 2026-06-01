@@ -17,11 +17,17 @@ function pick(value: string | null, fallback?: string) {
 function rewrite(request: Request, directory?: string) {
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
+  const url = new URL(request.url)
+  const isSessionRequest = /\/session\/?$/.test(url.pathname)
+  const hasExplicitSearchParameter = url.searchParams.has("directory")
+
   const value = pick(request.headers.get("x-opencode-directory"), directory)
   if (!value) return request
 
-  const url = new URL(request.url)
-  if (!url.searchParams.has("directory")) {
+  // Keep implicit directory context in headers so /session is not accidentally directory-filtered.
+  if (isSessionRequest && !hasExplicitSearchParameter) return request
+
+  if (!hasExplicitSearchParameter) {
     url.searchParams.set("directory", value)
   }
 
