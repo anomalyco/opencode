@@ -12,10 +12,9 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { Effect, ManagedRuntime } from "effect"
+import { Effect } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
-import { ACPSession } from "@/acp/session"
 import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
 
@@ -142,7 +141,10 @@ const provider: Provider.Info = {
 }
 
 describe("ACP service sessions", () => {
-  const makeService = (messages: readonly { info: unknown; parts: readonly unknown[] }[] = []) => {
+  const makeService = (
+    messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
+    options?: { abort?: (input: { sessionID: string }) => Promise<{ data: boolean }> },
+  ) => {
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
     const aborts: string[] = []
@@ -220,10 +222,12 @@ describe("ACP service sessions", () => {
           summarizes.push(input)
           return Promise.resolve({ data: true })
         },
-        abort: (input: { sessionID: string }) => {
-          aborts.push(input.sessionID)
-          return Promise.resolve({ data: true })
-        },
+        abort:
+          options?.abort ??
+          ((input: { sessionID: string }) => {
+            aborts.push(input.sessionID)
+            return Promise.resolve({ data: true })
+          }),
         fork: (input: { sessionID: string }) => {
           forks.push(input.sessionID)
           return Promise.resolve({ data: { id: `fork_${input.sessionID}` } })
@@ -381,37 +385,6 @@ describe("ACP service sessions", () => {
     expect(await Effect.runPromise(service.closeSession({ sessionId: "missing" }))).toEqual({})
   })
 
-  it("does not fail close when backing abort fails", async () => {
-    const sessionService = ManagedRuntime.make(ACPSession.defaultLayer).runSync(
-      ACPSession.Service.use((service) => Effect.succeed(service)),
-    )
-    const { service } = makeService()
-    const sdk = {
-      config: {
-        providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
-        get: () => Promise.resolve({ data: {} }),
-      },
-      app: {
-        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
-        skills: () => Promise.resolve({ data: [] }),
-      },
-      command: {
-        list: () => Promise.resolve({ data: [] }),
-      },
-      session: {
-        abort: () => Promise.reject(new Error("nope")),
-      },
-      mcp: {
-        add: () => Promise.resolve({ data: {} }),
-      },
-    } as unknown as OpencodeClient
-    const closing = ACPService.make({ sdk, session: sessionService })
-    await Effect.runPromise(sessionService.create({ id: "ses_close", cwd: "/workspace" }))
-
-    expect(await Effect.runPromise(closing.closeSession({ sessionId: "ses_close" }))).toEqual({})
-    expect(await Effect.runPromise(service.closeSession({ sessionId: "missing" }))).toEqual({})
-  })
-
   it("cancel aborts the backing session and keeps the ACP session", async () => {
     const { service, aborts } = makeService()
     const created = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
@@ -428,19 +401,13 @@ describe("ACP service sessions", () => {
     expect(stillUsable).toBeDefined()
   })
 
-  it("does not fail cancel when the backing abort fails", async () => {
-    const sessionService = ManagedRuntime.make(ACPSession.defaultLayer).runSync(
-      ACPSession.Service.use((service) => Effect.succeed(service)),
-    )
-    const sdk = {
-      session: {
-        abort: () => Promise.reject(new Error("nope")),
-      },
-    } as unknown as OpencodeClient
-    const canceling = ACPService.make({ sdk, session: sessionService })
-    await Effect.runPromise(sessionService.create({ id: "ses_cancel", cwd: "/workspace" }))
+  it("does not fail cancel or close when the backing abort fails", async () => {
+    const { service } = makeService([], { abort: () => Promise.reject(new Error("nope")) })
+    const created = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
-    await Effect.runPromise(canceling.cancel({ sessionId: "ses_cancel" }))
+    await Effect.runPromise(service.cancel({ sessionId: created.sessionId }))
+    expect(await Effect.runPromise(service.closeSession({ sessionId: created.sessionId }))).toEqual({})
+    expect(await Effect.runPromise(service.closeSession({ sessionId: "missing" }))).toEqual({})
   })
 
   it("forks a session, loads fork state, and returns config options", async () => {
