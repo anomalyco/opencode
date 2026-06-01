@@ -15,6 +15,21 @@ export const schema = Schema.Struct({
           state: Schema.optional(Schema.String),
         }),
       ),
+      billing: Schema.optional(
+        Schema.Struct({
+          token_prices: Schema.optional(
+            Schema.Struct({
+              batch_size: Schema.Number,
+              default: Schema.Struct({
+                cache_price: Schema.Number,
+                input_price: Schema.Number,
+                output_price: Schema.Number,
+                context_max: Schema.Number,
+              }),
+            }),
+          ),
+        }),
+      ),
       capabilities: Schema.Struct({
         family: Schema.String,
         limits: Schema.Struct({
@@ -58,6 +73,9 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     (remote.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/"))
 
   const isMsgApi = remote.supported_endpoints?.includes("/v1/messages")
+  const prices = remote.billing?.token_prices
+  // Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
+  const usdPerMillion = prices ? 10_000 / prices.batch_size : 0
 
   const model: Model = {
     id: key,
@@ -99,9 +117,12 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     family: prev?.family ?? remote.capabilities.family,
     name: prev?.name ?? remote.name,
     cost: {
-      input: 0,
-      output: 0,
-      cache: { read: 0, write: 0 },
+      input: (prices?.default.input_price ?? 0) * usdPerMillion,
+      output: (prices?.default.output_price ?? 0) * usdPerMillion,
+      cache: {
+        read: (prices?.default.cache_price ?? 0) * usdPerMillion,
+        write: (prices?.default.cache_price ?? 0) * usdPerMillion,
+      },
     },
     options: prev?.options ?? {},
     headers: prev?.headers ?? {},
