@@ -160,6 +160,19 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
           const start = Date.now()
           const ctrl = new AbortController()
           state.ctrl = ctrl
+          const emitDuration = () => {
+            const duration = Locale.duration(Math.max(0, Date.now() - start))
+            emit(
+              {
+                type: "turn.duration",
+                duration,
+              },
+              {
+                duration,
+              },
+            )
+          }
+          const durationTimer = setInterval(emitDuration, 1000)
 
           try {
             await input.footer.idle()
@@ -193,20 +206,12 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               throw next.error
             }
           } finally {
+            clearInterval(durationTimer)
             if (state.ctrl === ctrl) {
               state.ctrl = undefined
             }
 
-            const duration = Locale.duration(Math.max(0, Date.now() - start))
-            emit(
-              {
-                type: "turn.duration",
-                duration,
-              },
-              {
-                duration,
-              },
-            )
+            emitDuration()
           }
         }
       } catch (error) {

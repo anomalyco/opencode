@@ -131,6 +131,7 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
       phase: "running",
       status: "sending prompt",
       queue: next.queue,
+      duration: "",
     }
   }
 

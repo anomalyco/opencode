@@ -168,7 +168,7 @@ describe("run session data", () => {
 
     const out = reduce(data, delta("msg-1", "txt-1", "streamed assistant output"))
 
-    expect(out.footer?.patch?.usage).toMatch(/^in \? · out ~\d+ · [\d.]+ tok\/s$/)
+    expect(out.footer?.patch?.usage).toMatch(/^↑ ~\d+ tokens · [\d.]+ tok\/s$/)
   })
 
   test("keeps final provider usage authoritative over live estimates", () => {

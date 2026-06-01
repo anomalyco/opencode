@@ -546,6 +546,82 @@ test("direct footer shows subagent indicator while prompt is running", async () 
   }
 })
 
+test("direct footer groups live duration and usage while prompt is running", async () => {
+  const [state] = createSignal<FooterState>({
+    phase: "running",
+    status: "",
+    queue: 0,
+    model: "gpt-5",
+    duration: "9m 9s",
+    usage: "↑ ~23.6k tokens · 84 tok/s",
+    first: false,
+    interrupt: 0,
+    exit: 0,
+  })
+  const [view] = createSignal<FooterView>({ type: "prompt" })
+  const [subagents] = createSignal<FooterSubagentState>({ tabs: [], details: {}, permissions: [], questions: [] })
+  let offKeymap: (() => void) | undefined
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    offKeymap = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RunFooterView
+          directory="/tmp"
+          findFiles={async () => []}
+          agents={() => []}
+          resources={() => []}
+          commands={() => []}
+          providers={() => undefined}
+          currentModel={() => undefined}
+          variants={() => []}
+          currentVariant={() => undefined}
+          state={state}
+          view={view}
+          subagent={subagents}
+          theme={RUN_THEME_FALLBACK}
+          tuiConfig={tuiConfig}
+          agent="opencode"
+          onSubmit={() => true}
+          onPermissionReply={() => {}}
+          onQuestionReply={() => {}}
+          onQuestionReject={() => {}}
+          onCycle={() => {}}
+          onInterrupt={() => false}
+          onInputClear={() => {}}
+          onExit={() => {}}
+          onModelSelect={() => {}}
+          onVariantSelect={() => {}}
+          onRows={() => {}}
+          onLayout={() => {}}
+          onStatus={() => {}}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={8}>
+        <Harness />
+      </box>
+    ),
+    { width: 100, height: 8 },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("(9m 9s · ↑ ~23.6k tokens · 84 tok/s)")
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    offKeymap?.()
+    app.renderer.destroy()
+  }
+})
+
 test("direct question body separates single-select checkmark from label", async () => {
   const request = {
     id: "question-1",

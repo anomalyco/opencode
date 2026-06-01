@@ -228,13 +228,18 @@ function formatTps(value: number): string {
   return value.toFixed(1)
 }
 
+function formatTokenCount(value: number): string {
+  const unit = value === 1 ? "token" : "tokens"
+  return `${Locale.number(value).toLowerCase()} ${unit}`
+}
+
 function formatLiveUsage(live: LiveUsage): string | undefined {
   const output = outputTokens(live)
   if (output <= 0) {
     return undefined
   }
 
-  return `in ? · out ~${Locale.number(output)} · ${formatTps(liveTps(live))} tok/s`
+  return `↑ ~${formatTokenCount(output)} · ${formatTps(liveTps(live))} tok/s`
 }
 
 function formatUsage(

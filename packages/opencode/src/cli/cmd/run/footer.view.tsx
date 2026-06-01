@@ -187,6 +187,9 @@ export function RunFooterView(props: RunFooterViewProps) {
   const queue = createMemo(() => props.state().queue)
   const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
+  const usageLabel = createMemo(() =>
+    busy() && duration().length > 0 && usage().length > 0 ? `(${duration()} · ${usage()})` : usage(),
+  )
   const interruptKey = createMemo(() => interrupt() || "/exit")
   const runTheme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
   const theme = createMemo(() => runTheme().footer)
@@ -691,9 +694,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                                 {queue()} queued
                               </text>
                             </Show>
-                            <Show when={usage().length > 0}>
+                            <Show when={usageLabel().length > 0}>
                               <text id="run-direct-footer-usage" fg={theme().muted} wrapMode="none" truncate>
-                                {usage()}
+                                {usageLabel()}
                               </text>
                             </Show>
                             <Show when={command().length > 0 && hints().command}>
