@@ -70,9 +70,9 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     // API response wins
     status: "active",
     limit: {
-      context: remote.capabilities.limits.max_context_window_tokens,
-      input: remote.capabilities.limits.max_prompt_tokens,
-      output: remote.capabilities.limits.max_output_tokens,
+      context: prev?.limit?.context ?? remote.capabilities.limits.max_context_window_tokens,
+      input: prev?.limit?.input ?? remote.capabilities.limits.max_prompt_tokens,
+      output: prev?.limit?.output ?? remote.capabilities.limits.max_output_tokens,
     },
     capabilities: {
       temperature: prev?.capabilities.temperature ?? true,
