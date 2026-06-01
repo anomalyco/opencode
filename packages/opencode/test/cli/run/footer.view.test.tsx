@@ -709,6 +709,7 @@ test("direct footer groups live duration and usage while prompt is running", asy
           onRows={() => {}}
           onLayout={() => {}}
           onStatus={() => {}}
+          onQueuedRemove={async () => true}
         />
       </OpencodeKeymapProvider>
     )
