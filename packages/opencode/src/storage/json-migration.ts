@@ -2,9 +2,9 @@ import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import { ProjectTable } from "../project/project.sql"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../session/session.sql"
-import { SessionShareTable } from "../share/share.sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import path from "path"
 import { existsSync } from "fs"
 import { Filesystem } from "@/util/filesystem"
@@ -47,8 +47,9 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   // Optimize SQLite for bulk inserts
   try {
     db.run("PRAGMA journal_mode = WAL")
-  } catch (err) {
-    log.warn("failed to enable WAL journal mode, falling back to DELETE", { path: storageDir, error: err })
+  } catch (cause) {
+    // WAL can fail on network mounts or WSL filesystems where it is unsupported.
+    log.warn("falling back to DELETE journal mode", { cause })
     db.run("PRAGMA journal_mode = DELETE")
   }
   db.run("PRAGMA synchronous = OFF")
