@@ -121,6 +121,7 @@ export interface Interface {
   readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error>
   readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
   readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
+  readonly forSession: (sessionID: SessionV2.ID) => EffectRuntime.Effect<ReadonlyArray<Request>>
   readonly list: () => EffectRuntime.Effect<ReadonlyArray<Request>>
 }
 
@@ -279,7 +280,11 @@ export const layer = Layer.effect(
       return pending.get(id)?.request
     })
 
-    return Service.of({ ask, assert, reply, get, list })
+    const forSession = EffectRuntime.fn("PermissionV2.forSession")(function* (sessionID: SessionV2.ID) {
+      return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
+    })
+
+    return Service.of({ ask, assert, reply, get, forSession, list })
   }),
 )
 

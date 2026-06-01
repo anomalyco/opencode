@@ -27,6 +27,19 @@ export const PermissionGroup = HttpApiGroup.make("v2.permission")
 
 export const SessionPermissionGroup = HttpApiGroup.make("v2.session.permission")
   .add(
+    HttpApiEndpoint.get("sessionPermissions", "/api/session/:sessionID/permission", {
+      params: { sessionID: SessionV2.ID },
+      success: Schema.Array(PermissionV2.Request),
+      error: SessionNotFoundError,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.permission.forSession",
+        summary: "List session pending permissions",
+        description: "Retrieve pending permission requests owned by a session.",
+      }),
+    ),
+  )
+  .add(
     HttpApiEndpoint.post("permissionReply", "/api/session/:sessionID/permission/:requestID/reply", {
       params: { sessionID: SessionV2.ID, requestID: PermissionV2.ID },
       payload: Schema.Struct({

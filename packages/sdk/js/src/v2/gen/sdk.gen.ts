@@ -249,6 +249,8 @@ import type {
   TuiSubmitPromptResponses,
   V2ModelListErrors,
   V2ModelListResponses,
+  V2PermissionForSessionErrors,
+  V2PermissionForSessionResponses,
   V2PermissionListErrors,
   V2PermissionListResponses,
   V2PermissionReplyErrors,
@@ -4580,6 +4582,29 @@ export class Permission2 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
     return (options?.client ?? this.client).get<V2PermissionListResponses, V2PermissionListErrors, ThrowOnError>({
       url: "/api/permission",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List session pending permissions
+   *
+   * Retrieve pending permission requests owned by a session.
+   */
+  public forSession<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<
+      V2PermissionForSessionResponses,
+      V2PermissionForSessionErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/permission",
       ...options,
       ...params,
     })

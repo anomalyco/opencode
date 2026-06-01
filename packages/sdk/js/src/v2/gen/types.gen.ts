@@ -8368,6 +8368,41 @@ export type V2PermissionListResponses = {
 
 export type V2PermissionListResponse = V2PermissionListResponses[keyof V2PermissionListResponses]
 
+export type V2PermissionForSessionData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/permission"
+}
+
+export type V2PermissionForSessionErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2PermissionForSessionError = V2PermissionForSessionErrors[keyof V2PermissionForSessionErrors]
+
+export type V2PermissionForSessionResponses = {
+  /**
+   * Success
+   */
+  200: Array<PermissionV2Request>
+}
+
+export type V2PermissionForSessionResponse = V2PermissionForSessionResponses[keyof V2PermissionForSessionResponses]
+
 export type V2PermissionReplyData = {
   body?: {
     reply: PermissionV2Reply

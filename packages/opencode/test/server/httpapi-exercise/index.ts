@@ -581,6 +581,14 @@ const scenarios: Scenario[] = [
     .json(404, object, "status"),
   http.protected.get("/api/permission", "v2.permission.list").json(200, array),
   http.protected
+    .get("/api/session/{sessionID}/permission", "v2.permission.forSession")
+    .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, array),
+  http.protected
     .post("/api/session/{sessionID}/permission/{requestID}/reply", "v2.permission.reply")
     .seeded((ctx) => ctx.session({ title: "Permission owner" }))
     .at((ctx) => ({

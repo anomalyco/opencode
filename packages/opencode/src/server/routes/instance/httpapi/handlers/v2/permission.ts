@@ -29,36 +29,56 @@ export const sessionPermissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "
     const { db } = yield* Database.Service
     const locations = yield* LocationServiceMap
 
-    return handlers.handle(
-      "permissionReply",
-      Effect.fn(function* (ctx) {
-        const row = yield* db
-          .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, ctx.params.sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row)
-          return yield* new SessionNotFoundError({
-            sessionID: ctx.params.sessionID,
-            message: `Session not found: ${ctx.params.sessionID}`,
-          })
+    const withSessionPermission = Effect.fnUntraced(function* <A, E>(
+      sessionID: Parameters<PermissionV2.Interface["forSession"]>[0],
+      use: (permission: PermissionV2.Interface) => Effect.Effect<A, E>,
+    ) {
+      const row = yield* db
+        .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row)
+        return yield* new SessionNotFoundError({
+          sessionID,
+          message: `Session not found: ${sessionID}`,
+        })
 
-        yield* Effect.gen(function* () {
-          const permission = yield* PermissionV2.Service
-          const request = yield* permission.get(ctx.params.requestID)
-          if (!request || request.sessionID !== ctx.params.sessionID) return yield* missingRequest(ctx.params.requestID)
-          yield* permission
-            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
-            .pipe(Effect.catchTag("PermissionV2.NotFoundError", () => missingRequest(ctx.params.requestID)))
-        }).pipe(
-          Effect.scoped,
-          Effect.provide(
-            locations.get({ directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }),
-          ),
-        )
-        return HttpApiSchema.NoContent.make()
-      }),
-    )
+      return yield* Effect.gen(function* () {
+        return yield* use(yield* PermissionV2.Service)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          locations.get({ directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }),
+        ),
+      )
+    })
+
+    return handlers
+      .handle(
+        "sessionPermissions",
+        Effect.fn(function* (ctx) {
+          return yield* withSessionPermission(ctx.params.sessionID, (permission) =>
+            permission.forSession(ctx.params.sessionID),
+          )
+        }),
+      )
+      .handle(
+        "permissionReply",
+        Effect.fn(function* (ctx) {
+          yield* withSessionPermission(ctx.params.sessionID, (permission) =>
+            Effect.gen(function* () {
+              const request = yield* permission.get(ctx.params.requestID)
+              if (!request || request.sessionID !== ctx.params.sessionID)
+                return yield* missingRequest(ctx.params.requestID)
+              yield* permission
+                .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
+                .pipe(Effect.catchTag("PermissionV2.NotFoundError", () => missingRequest(ctx.params.requestID)))
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
   }),
 )
