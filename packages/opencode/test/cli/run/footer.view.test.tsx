@@ -24,6 +24,7 @@ import type {
   FooterView,
   RunCommand,
   RunInput,
+  RunPrompt,
   RunProvider,
   RunTuiConfig,
   StreamCommit,
@@ -148,7 +149,14 @@ function footerState(input: Partial<FooterState> = {}) {
   })[0]
 }
 
-async function renderFooter(input: { tuiConfig?: RunTuiConfig; onCycle?: () => void } = {}) {
+async function renderFooter(
+  input: {
+    tuiConfig?: RunTuiConfig
+    commands?: RunCommand[]
+    onCycle?: () => void
+    onSubmit?: (prompt: RunPrompt) => boolean
+  } = {},
+) {
   const [view] = createSignal<FooterView>({ type: "prompt" })
   const [subagents] = createSignal<FooterSubagentState>({ tabs: [], details: {}, permissions: [], questions: [] })
   const state = footerState()
@@ -167,7 +175,7 @@ async function renderFooter(input: { tuiConfig?: RunTuiConfig; onCycle?: () => v
           findFiles={async () => []}
           agents={() => []}
           resources={() => []}
-          commands={() => []}
+          commands={() => input.commands ?? []}
           providers={() => undefined}
           currentModel={() => undefined}
           variants={() => []}
@@ -178,7 +186,7 @@ async function renderFooter(input: { tuiConfig?: RunTuiConfig; onCycle?: () => v
           theme={RUN_THEME_FALLBACK}
           tuiConfig={config}
           agent="opencode"
-          onSubmit={() => true}
+          onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
           onQuestionReply={() => {}}
           onQuestionReject={() => {}}
@@ -493,6 +501,68 @@ test("direct footer keeps leader variant binding inactive when leader is disable
     app.mockInput.pressKey("t")
 
     expect(calls).toEqual([])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer submits slash autocomplete selections without dispatching shell completions", async () => {
+  const submits: RunPrompt[] = []
+  const app = await renderFooter({
+    commands: [command({ name: "review", description: "Review code" })],
+    onSubmit(prompt) {
+      submits.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    "/rev".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    "/rev".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressKey("TAB")
+    await app.renderOnce()
+
+    "/re branch".split("").forEach((key) => app.mockInput.pressKey(key))
+    Array.from({ length: 7 }).forEach(() => app.mockInput.pressKey("ARROW_LEFT"))
+    app.mockInput.pressKey("v")
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    "/nx".split("").forEach((key) => app.mockInput.pressKey(key))
+    app.mockInput.pressKey("ARROW_LEFT")
+    app.mockInput.pressKey("e")
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    "/n scratch".split("").forEach((key) => app.mockInput.pressKey(key))
+    Array.from({ length: 8 }).forEach(() => app.mockInput.pressKey("ARROW_LEFT"))
+    app.mockInput.pressKey("e")
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    app.mockInput.pressKey("!")
+    "/rev".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits).toEqual([
+      { text: "/review ", parts: [], command: { name: "review", arguments: "" } },
+      { text: "/review ", parts: [], command: { name: "review", arguments: "" } },
+      { text: "/review branch", parts: [], command: { name: "review", arguments: "branch" } },
+      { text: "/new ", parts: [] },
+      { text: "/new ", parts: [] },
+    ])
+    expect(app.captureCharFrame()).toContain("/review")
   } finally {
     app.cleanup()
   }

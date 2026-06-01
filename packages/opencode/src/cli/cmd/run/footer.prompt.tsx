@@ -790,12 +790,20 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (next.kind === "slash") {
-      const text = `/${next.name} `
       const cursor = area.cursorOffset
+      const head = slashHead(area.plainText)
+      const local = !shell() && (next.name === "new" || next.name === "exit")
+      const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
+      const text = `/${next.name}${separator}`
 
       area.cursorOffset = 0
       const start = area.logicalCursor
-      area.cursorOffset = cursor
+      area.cursorOffset =
+        shell() || !head
+          ? cursor
+          : local
+            ? Bun.stringWidth(area.plainText)
+            : Bun.stringWidth(area.plainText.slice(0, head.end))
       const end = area.logicalCursor
 
       area.deleteRange(start.row, start.col, end.row, end.col)
@@ -803,6 +811,11 @@ export function createPromptState(input: PromptInput): PromptState {
       area.cursorOffset = Bun.stringWidth(text)
       hide()
       syncDraft()
+      if (!shell()) {
+        submitPrompt(clonePrompt(draft))
+        return
+      }
+
       scheduleRows()
       area.focus()
       return
