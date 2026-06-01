@@ -52,7 +52,7 @@ beforeAll(async () => {
     useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
       queryGroups.push(options)
       return [
-        { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
+        { isLoading: true, data: undefined },
         { isLoading: false, data: {} },
         { isLoading: false, data: [] },
         { isLoading: false, data: provider },
@@ -128,7 +128,7 @@ describe("createChildStoreManager", () => {
     }
   })
 
-  test("falls back to the requested directory before the path query resolves", () => {
+  test("provides the requested directory while the path query is pending", () => {
     let manager: ReturnType<typeof createChildStoreManager> | undefined
 
     const dispose = createOwner((owner) => {
@@ -151,7 +151,7 @@ describe("createChildStoreManager", () => {
       const [store] = manager.child("/project", { bootstrap: false })
 
       expect(store.path.directory).toBe("/project")
-      expect(store.path.worktree).toBe("/project")
+      expect(store.path.worktree).toBe("")
     } finally {
       dispose()
     }
