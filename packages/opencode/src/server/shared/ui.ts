@@ -57,9 +57,10 @@ export function embeddedUI(disableEmbeddedWebUi: boolean) {
 
 export function injectBasePath(html: string, basePath: string): string {
   if (!basePath) return html
-  const script = `<script>window.__OPENCODE_BASE_PATH__=${JSON.stringify(basePath)}</script>`
+  const safe = JSON.stringify(basePath).replace(/</g, "\\u003c")
+  const script = `<script>window.__OPENCODE_BASE_PATH__=${safe}</script>`
   html = html.replace("<head>", `<head>\n${script}`)
-  html = html.replace(/((?:href|src|content)=["'])\/(?!\/)/g, `$1${basePath}/`)
+  html = html.replace(/((?:href|src)=["'])\/(?!\/)/g, `$1${basePath}/`)
   return html
 }
 
