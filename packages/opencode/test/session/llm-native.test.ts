@@ -6,13 +6,14 @@ import { Effect, Layer, Stream } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const baseModel: Provider.Model = {
-  id: ModelID.make("gpt-5-mini"),
-  providerID: ProviderID.make("openai"),
+  id: ProviderV2.ModelID.make("gpt-5-mini"),
+  providerID: ProviderV2.ID.make("openai"),
   api: {
     id: "gpt-5-mini",
     url: "https://api.openai.com/v1",
@@ -62,7 +63,7 @@ const baseModel: Provider.Model = {
 }
 
 const providerInfo: Provider.Info = {
-  id: ProviderID.make("openai"),
+  id: ProviderV2.ID.make("openai"),
   name: "OpenAI",
   source: "config",
   env: ["OPENAI_API_KEY"],
@@ -354,7 +355,7 @@ describe("session.llm-native.request", () => {
     const compatible = LLMNative.model({
       model: {
         ...baseModel,
-        providerID: ProviderID.make("opencode"),
+        providerID: ProviderV2.ID.make("opencode"),
         api: { ...baseModel.api, url: "https://ai.example.test/v1", npm: "@ai-sdk/openai-compatible" },
       },
       apiKey: "test-key",
@@ -388,8 +389,8 @@ describe("session.llm-native.request", () => {
     })
     expect(
       LLMNativeRuntime.status({
-        model: { ...baseModel, providerID: ProviderID.make("opencode") },
-        provider: { ...providerInfo, id: ProviderID.make("opencode") },
+        model: { ...baseModel, providerID: ProviderV2.ID.make("opencode") },
+        provider: { ...providerInfo, id: ProviderV2.ID.make("opencode") },
         auth: undefined,
       }),
     ).toMatchObject({
@@ -400,10 +401,10 @@ describe("session.llm-native.request", () => {
       LLMNativeRuntime.status({
         model: {
           ...baseModel,
-          providerID: ProviderID.make("opencode"),
+          providerID: ProviderV2.ID.make("opencode"),
           api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" },
         },
-        provider: { ...providerInfo, id: ProviderID.make("opencode") },
+        provider: { ...providerInfo, id: ProviderV2.ID.make("opencode") },
         auth: undefined,
       }),
     ).toMatchObject({
@@ -412,8 +413,8 @@ describe("session.llm-native.request", () => {
     })
     expect(
       LLMNativeRuntime.status({
-        model: { ...baseModel, providerID: ProviderID.make("google") },
-        provider: { ...providerInfo, id: ProviderID.make("google") },
+        model: { ...baseModel, providerID: ProviderV2.ID.make("google") },
+        provider: { ...providerInfo, id: ProviderV2.ID.make("google") },
         auth: undefined,
       }),
     ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, or anthropic" })
@@ -454,12 +455,12 @@ describe("session.llm-native.request", () => {
       LLMNativeRuntime.status({
         model: {
           ...baseModel,
-          providerID: ProviderID.make("anthropic"),
+          providerID: ProviderV2.ID.make("anthropic"),
           api: { ...baseModel.api, npm: "@ai-sdk/anthropic", url: "https://api.anthropic.com/v1" },
         },
         provider: {
           ...providerInfo,
-          id: ProviderID.make("anthropic"),
+          id: ProviderV2.ID.make("anthropic"),
           name: "Anthropic",
           env: ["ANTHROPIC_API_KEY"],
           options: { apiKey: "test-anthropic-key" },
@@ -472,10 +473,10 @@ describe("session.llm-native.request", () => {
   test("prefers console provider api key over stored opencode auth", () => {
     expect(
       LLMNativeRuntime.status({
-        model: { ...baseModel, providerID: ProviderID.make("opencode") },
+        model: { ...baseModel, providerID: ProviderV2.ID.make("opencode") },
         provider: {
           ...providerInfo,
-          id: ProviderID.make("opencode"),
+          id: ProviderV2.ID.make("opencode"),
           options: { apiKey: "console-token" },
           key: "zen-token",
         },

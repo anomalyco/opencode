@@ -9,6 +9,7 @@ import { ProviderStatRepo, rowsFromAggregates as providerRowsFromAggregates } fr
 import { startOfIsoWeek } from "./domain/stat"
 
 const DATALAKE_INGESTION_LAG_MS = 5 * 60_000
+const STATS_DATA_START_MS = new Date("2026-05-28T00:00:00.000Z").getTime()
 const WEEK_MS = 7 * 86_400_000
 
 export type SyncStatsResult = { ok: true; rows: number; startedAt: string; periodStart: string; periodEnd: string }
@@ -21,7 +22,8 @@ export const syncStats: () => Effect.Effect<
 > = Effect.fn("StatSync.sync")(function* () {
   const startedAt = yield* DateTime.nowAsDate
   const periodEnd = new Date(Math.floor((startedAt.getTime() - DATALAKE_INGESTION_LAG_MS) / 60_000) * 60_000)
-  const periodStart = new Date(startOfIsoWeek(periodEnd).getTime() - WEEK_MS)
+  // May 27 was partial, so keep Athena stats anchored at the first complete day.
+  const periodStart = new Date(Math.max(startOfIsoWeek(periodEnd).getTime() - WEEK_MS, STATS_DATA_START_MS))
   const athena = yield* Athena
   const modelStats = yield* ModelStatRepo
   const providerStats = yield* ProviderStatRepo
