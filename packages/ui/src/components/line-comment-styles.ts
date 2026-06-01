@@ -218,6 +218,38 @@ export const lineCommentStyles = `
   opacity: 0.5;
   pointer-events: none;
 }
+
+[data-component="context-add-button"] {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--icon-interactive-base);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+[data-component="context-add-button"] [data-component="icon"] {
+  color: var(--white);
+}
+
+[data-component="context-add-button"] [data-slot="icon-svg"] {
+  width: 12px;
+  height: 12px;
+}
+
+[data-component="context-add-button"]:focus {
+  outline: none;
+}
+
+[data-component="context-add-button"]:focus-visible {
+  box-shadow: var(--shadow-xs-border-focus);
+}
 `
 
 let installed = false
