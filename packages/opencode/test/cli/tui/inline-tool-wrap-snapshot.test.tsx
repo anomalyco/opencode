@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
-import { InlineToolRow } from "../../../src/cli/cmd/tui/routes/session/index"
+import {
+  formatCompletedSubagentDetail,
+  formatSubagentToolcalls,
+  InlineToolRow,
+} from "../../../src/cli/cmd/tui/routes/session/index"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
 
@@ -86,6 +90,41 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
   )
 }
 
+function SubagentGroupFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <InlineToolRow id="tool-inline-before" icon="✱" complete={true} pending="">
+        Grep "Task" (2 matches)
+      </InlineToolRow>
+      <InlineToolRow id="tool-inline-subagent-one" icon="⠙" complete={true} pending="" subagent={true}>
+        Explore Task — Inspect active task spacing
+      </InlineToolRow>
+      <InlineToolRow id="tool-inline-subagent-two" icon="✓" complete={true} pending="" subagent={true}>
+        {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
+      </InlineToolRow>
+      <InlineToolRow id="tool-inline-after" icon="→" complete={true} pending="">
+        Read src/cli/cmd/tui/routes/session/index.tsx
+      </InlineToolRow>
+    </box>
+  )
+}
+
+function LoadedReadBeforeSubagentFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <InlineToolRow id="tool-inline-read" icon="→" complete={true} pending="">
+        Read src/cli/cmd/tui/routes/session/index.tsx
+      </InlineToolRow>
+      <box id="tool-inline-loaded-read-child" paddingLeft={3}>
+        <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
+      </box>
+      <InlineToolRow id="tool-inline-subagent-after-read" icon="✓" complete={true} pending="" subagent={true}>
+        {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
+      </InlineToolRow>
+    </box>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -101,6 +140,13 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 }
 
 describe("TUI inline tool wrapping", () => {
+  test("formats completed subagent toolcall details", () => {
+    expect(formatCompletedSubagentDetail(0, "501ms")).toBe("501ms")
+    expect(formatCompletedSubagentDetail(1, "501ms")).toBe("1 toolcall · 501ms")
+    expect(formatCompletedSubagentDetail(2, "501ms")).toBe("2 toolcalls · 501ms")
+    expect(formatSubagentToolcalls(0)).toBe("0 toolcalls")
+  })
+
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {
     expect(await renderFrame(() => <Fixture />, { width: 72, height: 12 })).toMatchSnapshot()
   })
@@ -115,5 +161,13 @@ describe("TUI inline tool wrapping", () => {
 
   test("keeps separation after a padded user message", async () => {
     expect(await renderFrame(() => <Fixture before="user" />, { width: 72, height: 14 })).toMatchSnapshot()
+  })
+
+  test("separates a contiguous subagent group from inline tools", async () => {
+    expect(await renderFrame(() => <SubagentGroupFixture />, { width: 72, height: 10 })).toMatchSnapshot()
+  })
+
+  test("separates a subagent group after an expanded read", async () => {
+    expect(await renderFrame(() => <LoadedReadBeforeSubagentFixture />, { width: 72, height: 8 })).toMatchSnapshot()
   })
 })
