@@ -20,8 +20,8 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/install | bash
-    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
+    curl -fsSL https://raw.githubusercontent.com/c0dn/opencode-personal/dev/install | bash
+    curl -fsSL https://raw.githubusercontent.com/c0dn/opencode-personal/dev/install | bash -s -- --version 1.0.180
     ./install --binary /path/to/opencode
 EOF
 }
@@ -101,10 +101,11 @@ else
 
     combo="$os-$arch"
     case "$combo" in
-      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+      linux-x64|linux-arm64)
         ;;
       *)
         echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
+        echo -e "${MUTED}This personal build publishes Linux x64 and Linux arm64 artifacts only.${NC}"
         exit 1
         ;;
     esac
@@ -157,6 +158,17 @@ else
       fi
     fi
 
+    if [ "$is_musl" = "true" ]; then
+      echo -e "${RED}Unsupported Linux libc: musl${NC}"
+      echo -e "${MUTED}This personal build publishes glibc Linux artifacts only.${NC}"
+      exit 1
+    fi
+
+    if [ "$needs_baseline" = "true" ]; then
+      echo -e "${RED}Unsupported CPU: AVX2 is required for the published Linux x64 artifact.${NC}"
+      exit 1
+    fi
+
     target="$os-$arch"
     if [ "$needs_baseline" = "true" ]; then
       target="$target-baseline"
@@ -181,8 +193,8 @@ else
     fi
 
     if [ -z "$requested_version" ]; then
-        url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        url="https://github.com/c0dn/opencode-personal/releases/latest/download/$filename"
+        specific_version=$(curl -s https://api.github.com/repos/c0dn/opencode-personal/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
@@ -191,14 +203,14 @@ else
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
+        url="https://github.com/c0dn/opencode-personal/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
 
         # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/c0dn/opencode-personal/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
+            echo -e "${MUTED}Available releases: https://github.com/c0dn/opencode-personal/releases${NC}"
             exit 1
         fi
     fi

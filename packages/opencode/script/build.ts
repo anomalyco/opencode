@@ -113,7 +113,20 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+const ids = process.env.OPENCODE_BUILD_TARGETS?.split(",")
+  .map((item) => item.trim())
+  .filter(Boolean)
+const id = (item: (typeof allTargets)[number]) =>
+  [
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+
+const targets = (singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
@@ -133,6 +146,11 @@ const targets = singleFlag
       return true
     })
   : allTargets
+).filter((item) => !ids?.length || ids.includes(id(item)))
+
+if (!targets.length) {
+  throw new Error(`No build targets matched OPENCODE_BUILD_TARGETS=${ids?.join(",") || ""}`)
+}
 
 await $`rm -rf dist`
 
@@ -142,16 +160,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
 for (const item of targets) {
-  const name = [
-    pkg.name,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
+  const name = [pkg.name, id(item)].join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
@@ -233,7 +242,13 @@ if (Script.release) {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  const assets = (await Array.fromAsync(new Bun.Glob("*.{zip,tar.gz}").scan({ cwd: "./dist" }))).map(
+    (item) => `./dist/${item}`,
+  )
+  if (!assets.length) {
+    throw new Error("No release assets generated")
+  }
+  await $`gh release upload v${Script.version} ${assets} --clobber --repo ${process.env.GH_REPO}`
 }
 
 export { binaries }
