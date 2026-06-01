@@ -280,7 +280,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (
-    input: {},
+    input: { sessionID?: string; model?: { providerID: string; modelID: string } },
     output: {
       messages: {
         info: Message
