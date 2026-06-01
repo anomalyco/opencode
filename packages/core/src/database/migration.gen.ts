@@ -23,5 +23,7 @@ export const migrations = (
     import("./migration/20260510033149_session_usage"),
     import("./migration/20260511000411_data_migration_state"),
     import("./migration/20260511173437_session-metadata"),
+    import("./migration/20260601202201_amazing_prowler"),
+    import("./migration/20260601202223_short_mariko_yashida"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

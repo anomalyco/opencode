@@ -2,21 +2,18 @@ import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { MessageID, SessionID } from "@/session/schema"
-import { PermissionTable } from "@opencode-ai/core/session/sql"
-import { Database } from "@opencode-ai/core/database/database"
-import { eq } from "drizzle-orm"
 import * as Log from "@opencode-ai/core/util/log"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { PermissionID } from "./schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "permission" })
 
-export const Action = PermissionV2.Action.annotate({ identifier: "PermissionAction" })
+export const Action = PermissionLegacy.Action.annotate({ identifier: "PermissionAction" })
 export type Action = Schema.Schema.Type<typeof Action>
 
 export const Rule = Schema.Struct({
@@ -136,7 +133,15 @@ interface State {
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-  return PermissionV2.evaluate(permission, pattern, ...rulesets)
+  return (
+    rulesets
+      .flat()
+      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
+      action: "ask",
+      permission,
+      pattern: "*",
+    }
+  )
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -145,18 +150,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
-    const { db } = yield* Database.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
-        const row = yield* db
-          .select()
-          .from(PermissionTable)
-          .where(eq(PermissionTable.project_id, ctx.project.id))
-          .get()
-          .pipe(Effect.orDie)
+        void ctx
         const state = {
           pending: new Map<PermissionID, PendingEntry>(),
-          approved: [...(row?.data ?? [])],
+          approved: [],
         }
 
         yield* Effect.addFinalizer(() =>
@@ -304,13 +303,20 @@ export function fromConfig(permission: ConfigPermission.Info) {
 }
 
 export function merge(...rulesets: Ruleset[]): Rule[] {
-  return [...PermissionV2.merge(...rulesets)]
+  return rulesets.flat()
 }
 
 export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
-  return PermissionV2.disabled(tools, ruleset)
+  const edits = ["edit", "write", "apply_patch"]
+  return new Set(
+    tools.filter((tool) => {
+      const permission = edits.includes(tool) ? "edit" : tool
+      const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
+      return rule?.pattern === "*" && rule.action === "deny"
+    }),
+  )
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
 
 export * as Permission from "."

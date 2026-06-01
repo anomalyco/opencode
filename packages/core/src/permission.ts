@@ -1,42 +1,113 @@
 export * as PermissionV2 from "./permission"
 
-import { Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { eq } from "drizzle-orm"
+import { Database } from "./database/database"
+import { EventV2 } from "./event"
+import { Location } from "./location"
+import { SessionV2 } from "./session"
+import { withStatics } from "./schema"
+import { Identifier } from "./util/identifier"
 import { Wildcard } from "./util/wildcard"
-import { Identifier } from "./id/id"
-import { Newtype } from "./schema"
+import { PermissionTable } from "./permission/sql"
 
-export class PermissionID extends Newtype<PermissionID>()(
-  "PermissionID",
-  Schema.String.check(Schema.isStartsWith("per")),
-) {
-  static ascending(id?: string): PermissionID {
-    return this.make(Identifier.ascending("permission", id))
-  }
-}
+export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
+  Schema.brand("PermissionV2.ID"),
+  withStatics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + Identifier.ascending()) })),
+)
+export type ID = typeof ID.Type
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Action" })
-export type Action = typeof Action.Type
+export const Decision = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Decision" })
+export type Decision = typeof Decision.Type
 
 export const Rule = Schema.Struct({
-  permission: Schema.String,
-  pattern: Schema.String,
-  action: Action,
-}).annotate({ identifier: "Permission.Rule" })
+  action: Schema.String,
+  resource: Schema.String,
+  decision: Decision,
+}).annotate({ identifier: "PermissionV2.Rule" })
 export type Rule = typeof Rule.Type
 
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
 export type Ruleset = typeof Ruleset.Type
 
-const EDIT_TOOLS = ["edit", "write", "apply_patch"]
+export const Source = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("tool"),
+    messageID: Schema.String,
+    callID: Schema.String,
+  }),
+]).annotate({ identifier: "PermissionV2.Source" })
+export type Source = typeof Source.Type
 
-export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
+export const Request = Schema.Struct({
+  id: ID,
+  sessionID: SessionV2.ID,
+  action: Schema.String,
+  resources: Schema.Array(Schema.String),
+  remember: Schema.Array(Schema.String).pipe(Schema.optional),
+  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  source: Source.pipe(Schema.optional),
+}).annotate({ identifier: "PermissionV2.Request" })
+export type Request = typeof Request.Type
+
+export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
+export type Reply = typeof Reply.Type
+
+export const AssertInput = Schema.Struct({
+  id: ID.pipe(Schema.optional),
+  sessionID: SessionV2.ID,
+  action: Schema.String,
+  resources: Schema.Array(Schema.String),
+  remember: Schema.Array(Schema.String).pipe(Schema.optional),
+  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  source: Source.pipe(Schema.optional),
+  rules: Ruleset,
+}).annotate({ identifier: "PermissionV2.AssertInput" })
+export type AssertInput = typeof AssertInput.Type
+
+export const ReplyInput = Schema.Struct({
+  requestID: ID,
+  reply: Reply,
+  message: Schema.String.pipe(Schema.optional),
+}).annotate({ identifier: "PermissionV2.ReplyInput" })
+export type ReplyInput = typeof ReplyInput.Type
+
+export const Event = {
+  Asked: EventV2.define({ type: "permission.v2.asked", schema: Request.fields }),
+  Replied: EventV2.define({
+    type: "permission.v2.replied",
+    schema: {
+      sessionID: SessionV2.ID,
+      requestID: ID,
+      reply: Reply,
+    },
+  }),
+}
+
+export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionV2.RejectedError", {}) {}
+
+export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionV2.CorrectedError", {
+  feedback: Schema.String,
+}) {}
+
+export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
+  rules: Ruleset,
+}) {}
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("PermissionV2.NotFoundError", {
+  requestID: ID,
+}) {}
+
+export type Error = DeniedError | RejectedError | CorrectedError
+
+export function evaluate(action: string, resource: string, ...rulesets: Ruleset[]): Rule {
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
-      action: "ask",
-      permission,
-      pattern: "*",
+      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      action,
+      resource: "*",
+      decision: "ask",
     }
   )
 }
@@ -45,12 +116,148 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
   return rulesets.flat()
 }
 
-export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
-  return new Set(
-    tools.filter((tool) => {
-      const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
-      const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
-      return rule?.pattern === "*" && rule.action === "deny"
-    }),
-  )
+export interface Interface {
+  readonly assert: (input: AssertInput) => Effect.Effect<void, Error>
+  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
+  readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Permission") {}
+
+interface Pending {
+  readonly request: Request
+  readonly rules: Ruleset
+  readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
+}
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const events = yield* EventV2.Service
+    const location = yield* Location.Service
+    const pending = new Map<ID, Pending>()
+
+    yield* Effect.addFinalizer(() =>
+      Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
+        discard: true,
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            pending.clear()
+          }),
+        ),
+      ),
+    )
+
+    const remembered = Effect.fn("PermissionV2.remembered")(function* () {
+      const rows = yield* db
+        .select()
+        .from(PermissionTable)
+        .where(eq(PermissionTable.project_id, location.project.id))
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map((row): Rule => ({ action: row.action, resource: row.resource, decision: "allow" }))
+    })
+
+    const assert = Effect.fn("PermissionV2.assert")(function* (input: AssertInput) {
+      const rememberedRules = yield* remembered()
+      const rules = [...input.rules, ...rememberedRules]
+      for (const resource of input.resources) {
+        const rule = evaluate(input.action, resource, rules)
+        if (rule.decision !== "deny") continue
+        return yield* new DeniedError({
+          rules: rules.filter((candidate) => Wildcard.match(input.action, candidate.action)),
+        })
+      }
+      if (input.resources.every((resource) => evaluate(input.action, resource, rules).decision === "allow")) return
+
+      const request: Request = {
+        id: input.id ?? ID.create(),
+        sessionID: input.sessionID,
+        action: input.action,
+        resources: input.resources,
+        remember: input.remember,
+        metadata: input.metadata,
+        source: input.source,
+      }
+      const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+      pending.set(request.id, { request, rules: input.rules, deferred })
+      yield* events.publish(Event.Asked, request)
+      return yield* Deferred.await(deferred).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            pending.delete(request.id)
+          }),
+        ),
+      )
+    })
+
+    const reply = Effect.fn("PermissionV2.reply")(function* (input: ReplyInput) {
+      const existing = pending.get(input.requestID)
+      if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
+      pending.delete(input.requestID)
+      yield* events.publish(Event.Replied, {
+        sessionID: existing.request.sessionID,
+        requestID: existing.request.id,
+        reply: input.reply,
+      })
+
+      if (input.reply === "reject") {
+        yield* Deferred.fail(
+          existing.deferred,
+          input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
+        )
+        for (const [id, item] of pending) {
+          if (item.request.sessionID !== existing.request.sessionID) continue
+          pending.delete(id)
+          yield* events.publish(Event.Replied, {
+            sessionID: item.request.sessionID,
+            requestID: item.request.id,
+            reply: "reject",
+          })
+          yield* Deferred.fail(item.deferred, new RejectedError())
+        }
+        return
+      }
+
+      if (input.reply === "always" && existing.request.remember?.length) {
+        yield* db
+          .insert(PermissionTable)
+          .values(
+            existing.request.remember.map((resource) => ({
+              project_id: location.project.id,
+              action: existing.request.action,
+              resource,
+            })),
+          )
+          .onConflictDoNothing()
+          .run()
+          .pipe(Effect.orDie)
+      }
+      yield* Deferred.succeed(existing.deferred, undefined)
+      if (input.reply !== "always" || !existing.request.remember?.length) return
+
+      const rememberedRules = yield* remembered()
+      for (const [id, item] of pending) {
+        const rules = [...item.rules, ...rememberedRules]
+        if (!item.request.resources.every((resource) => evaluate(item.request.action, resource, rules).decision === "allow")) continue
+        pending.delete(id)
+        yield* events.publish(Event.Replied, {
+          sessionID: item.request.sessionID,
+          requestID: item.request.id,
+          reply: "always",
+        })
+        yield* Deferred.succeed(item.deferred, undefined)
+      }
+    })
+
+    const list = Effect.fn("PermissionV2.list")(function* () {
+      return Array.from(pending.values(), (item) => item.request)
+    })
+
+    return Service.of({ assert, reply, list })
+  }),
+)
+
+export const locationLayer = layer
