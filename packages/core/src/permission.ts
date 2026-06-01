@@ -14,17 +14,17 @@ export class PermissionID extends Newtype<PermissionID>()(
   }
 }
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Action" })
+export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Action" })
 export type Action = typeof Action.Type
 
 export const Rule = Schema.Struct({
   permission: Schema.String,
   pattern: Schema.String,
   action: Action,
-}).annotate({ identifier: "PermissionV2.Rule" })
+}).annotate({ identifier: "Permission.Rule" })
 export type Rule = typeof Rule.Type
 
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
 export type Ruleset = typeof Ruleset.Type
 
 const EDIT_TOOLS = ["edit", "write", "apply_patch"]
