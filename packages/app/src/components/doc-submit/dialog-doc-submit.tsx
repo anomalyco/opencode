@@ -1,5 +1,6 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor } from "solid-js"
+import { useClientEnv } from "@/context/client-env"
 import type { DocSubmitActor, DocSubmitState } from "../prompt-input/doc-submit"
 import { MatchAcceptRing } from "./match-accept-ring"
 import { MoreIndicator } from "./more-indicator"
@@ -123,6 +124,7 @@ function loserRole(actor: DocSubmitActor, state: DocSubmitState): "rejected" | "
 }
 
 function FailureBody(props: { state: DocSubmitState; close: () => void }) {
+  const env = useClientEnv()
   const losers = createMemo(() =>
     props.state.actors
       .filter((item) => {
@@ -137,7 +139,7 @@ function FailureBody(props: { state: DocSubmitState; close: () => void }) {
   const hidden = createMemo(() => losers().length - slots().length)
   const size = createMemo(() => (large() ? 32 : 40))
 
-  const [auto, setAuto] = createSignal(5)
+  const [auto, setAuto] = createSignal(env.submitFailureCloseSec())
   createEffect(() => {
     if (auto() <= 0) {
       props.close()

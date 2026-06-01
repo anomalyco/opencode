@@ -3,6 +3,15 @@ import { useStorageSignal } from "@/hooks/use-storage-signal"
 
 const key = "devMode"
 const STRING_TRUE = "true"
+const submitFailureCloseFallback = 5
+
+function submitFailureCloseSec() {
+  const raw = import.meta.env.VITE_SUBMIT_FAILURE_CLOSE_SEC
+  if (typeof raw !== "string") return submitFailureCloseFallback
+  const value = Number.parseInt(raw.trim(), 10)
+  if (!Number.isFinite(value) || value < 1) return submitFailureCloseFallback
+  return value
+}
 
 export function createClientEnv() {
   const productionLayout = import.meta.env.VITE_PRODUCTION_LAYOUT === STRING_TRUE
@@ -11,7 +20,7 @@ export function createClientEnv() {
   const disablePromptTriggers = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === STRING_TRUE
   const disableWysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === STRING_TRUE
   const [devMode] = useStorageSignal(key, false, {
-    storage: "local",
+    storage: "local", 
     parse: (value) => value === STRING_TRUE,
     stringify: (value) => (value ? STRING_TRUE : undefined),
   })
@@ -23,6 +32,7 @@ export function createClientEnv() {
     disablePromptPermissions: () => disablePromptPermissions && !devMode(),
     disablePromptTriggers: () => disablePromptTriggers && !devMode(),
     disableWysiwygOnly: () => disableWysiwygOnly && !devMode(),
+    submitFailureCloseSec,
   }
 }
 
