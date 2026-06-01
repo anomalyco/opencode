@@ -1,5 +1,5 @@
-import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { createEffect, createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
+import { createStore, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
@@ -225,9 +225,7 @@ export function createChildStoreManager(input: {
             get mcp_ready() {
               return !mcpQuery.isLoading
             },
-            get mcp() {
-              return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
-            },
+            mcp: {},
             get lsp_ready() {
               return !lspQuery.isLoading
             },
@@ -243,6 +241,13 @@ export function createChildStoreManager(input: {
           children[key] = child
           disposers.set(key, dispose)
           mcpToggles.set(key, setMcpEnabled)
+
+          createEffect(() => {
+            if (mcpQuery.isLoading) return
+            const data = mcpQuery.data
+            if (data === undefined) return
+            child[1]("mcp", reconcile(data, { merge: false }))
+          })
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -304,7 +309,7 @@ export function createChildStoreManager(input: {
     if (mcpDirectories.has(key)) return
     mcpDirectories.add(key)
     mcpToggles.get(key)?.(true)
-    if (childStore[0].status !== "loading") input.onMcp(directory, childStore[1])
+    input.onMcp(directory, childStore[1])
   }
 
   function disableMcp(directory: string) {
