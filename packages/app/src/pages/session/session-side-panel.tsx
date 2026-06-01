@@ -19,7 +19,7 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { usePrompt } from "@/context/prompt"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -42,12 +42,15 @@ export function SessionSidePanel(props: {
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
-  const prompt = usePrompt()
+  const bridge = usePromptDocBridge()
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
-  const addFileToContext = (path: string) => {
-    prompt.context.add({ type: "file", path })
-  }
+  const onContextAdd = createMemo(() => {
+    if (bridge.mode() !== "doc") return
+    return (path: string) => {
+      bridge.addReference(path)
+    }
+  })
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -437,7 +440,7 @@ export function SessionSidePanel(props: {
                           draggable={false}
                           active={props.activeDiff}
                           onFileClick={(node) => props.focusReviewDiff(node.path)}
-                          onContextAdd={addFileToContext}
+                          onContextAdd={onContextAdd()}
                           contextLabel={language.t("session.files.addToContext")}
                         />
                       </Show>
@@ -459,7 +462,7 @@ export function SessionSidePanel(props: {
                         modified={diffFiles()}
                         kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
-                        onContextAdd={addFileToContext}
+                        onContextAdd={onContextAdd()}
                         contextLabel={language.t("session.files.addToContext")}
                       />
                     </Match>

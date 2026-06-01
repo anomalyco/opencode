@@ -1,3 +1,5 @@
+import { applyContextAddButtonStyle, mountContextAddIcon } from "./context-add-button"
+
 export type HoverCommentLine = {
   lineNumber: number
   side?: "additions" | "deletions"
@@ -13,20 +15,8 @@ export function createHoverCommentUtility(props: {
   const button = document.createElement("button")
   button.type = "button"
   button.ariaLabel = props.label
-  button.textContent = "+"
-  button.style.width = "20px"
-  button.style.height = "20px"
-  button.style.display = "flex"
-  button.style.alignItems = "center"
-  button.style.justifyContent = "center"
-  button.style.border = "none"
-  button.style.borderRadius = "var(--radius-md)"
-  button.style.background = "var(--icon-interactive-base)"
-  button.style.color = "var(--white)"
-  button.style.boxShadow = "var(--shadow-xs)"
-  button.style.fontSize = "14px"
-  button.style.lineHeight = "1"
-  button.style.cursor = "pointer"
+  applyContextAddButtonStyle(button)
+  mountContextAddIcon(button)
   button.style.position = "relative"
   button.style.left = "30px"
   button.style.top = "calc((var(--diffs-line-height, 24px) - 20px) / 2)"

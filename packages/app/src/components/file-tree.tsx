@@ -3,6 +3,7 @@ import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ContextAddButton } from "@opencode-ai/ui/context-add-button"
 import {
   createEffect,
   createMemo,
@@ -521,18 +522,9 @@ export default function FileTree(props: {
                     </span>
                   </button>
                   <Show when={props.onContextAdd && !node.ignored}>
-                    <button
-                      type="button"
-                      aria-label={props.contextLabel}
-                      class="shrink-0 flex items-center justify-center size-5 opacity-0 group-hover/filenode:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer border-none"
-                      style={{
-                        background: "var(--icon-interactive-base)",
-                        color: "var(--white)",
-                        "border-radius": "var(--radius-md)",
-                        "box-shadow": "var(--shadow-xs)",
-                        "font-size": "14px",
-                        "line-height": "1",
-                      }}
+                    <ContextAddButton
+                      label={props.contextLabel ?? ""}
+                      class="opacity-0 group-hover/filenode:opacity-100 focus-visible:opacity-100 transition-opacity"
                       onPointerDown={(event) => {
                         event.stopPropagation()
                       }}
@@ -541,9 +533,7 @@ export default function FileTree(props: {
                         event.preventDefault()
                         props.onContextAdd?.(node.path)
                       }}
-                    >
-                      +
-                    </button>
+                    />
                   </Show>
                   <Show when={kind()}>
                     {(value) => (

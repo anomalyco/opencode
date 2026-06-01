@@ -474,7 +474,7 @@ export const dict = {
   "session.review.noSnapshot": "تم تعطيل تتبع اللقطات في التكوين، لذا فإن تغييرات الجلسة غير متوفرة",
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
-  "session.files.addToContext": "إضافة ملف إلى السياق",
+  "session.files.addToContext": "إضافة ملف إلى المستند",
   "session.files.empty": "لا توجد ملفات",
   "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",

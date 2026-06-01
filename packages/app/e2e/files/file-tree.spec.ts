@@ -56,8 +56,12 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await expect(viewer).toContainText("export default function FileTree")
 })
 
-test("file tree can add a file to prompt context", async ({ page, gotoSession }) => {
+test("file tree can add a file reference to the doc in doc mode", async ({ page, gotoSession }) => {
   await gotoSession()
+
+  const composer = page.locator(sessionComposerDockSelector)
+  await composer.locator('[data-action="prompt-doc"]').click()
+  await expect(composer.locator('[data-component="prompt-doc"]')).toBeVisible()
 
   const toggle = page.getByRole("button", { name: "Toggle file tree" })
   const panel = page.locator("#file-tree-panel")
@@ -88,11 +92,10 @@ test("file tree can add a file to prompt context", async ({ page, gotoSession })
   await expect(file).toBeVisible()
   await file.hover()
 
-  const add = tree.getByRole("button", { name: /add file to context/i }).first()
+  const add = tree.getByRole("button", { name: /add file to document/i }).first()
   await expect(add).toBeVisible()
   await add.click()
 
-  const composer = page.locator(sessionComposerDockSelector)
-  await expect(composer.getByText("file-tree.tsx")).toBeVisible()
-  await expect(composer.getByRole("button", { name: /remove file from context/i })).toBeVisible()
+  const ref = composer.locator("opencode-file-reference").filter({ hasText: "file-tree.tsx" })
+  await expect(ref).toBeVisible()
 })

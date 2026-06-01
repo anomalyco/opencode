@@ -523,7 +523,7 @@ export const dict = {
   "session.review.noSnapshot": "設定中已停用快照追蹤，因此無法使用工作階段變更",
   "session.files.selectToOpen": "選取要開啟的檔案",
   "session.files.all": "所有檔案",
-  "session.files.addToContext": "將檔案新增到上下文",
+  "session.files.addToContext": "將檔案新增到文件",
   "session.files.empty": "沒有檔案",
   "session.files.binaryContent": "二進位檔案（無法顯示內容）",
   "session.messages.renderEarlier": "顯示更早的訊息",

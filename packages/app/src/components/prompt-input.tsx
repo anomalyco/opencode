@@ -39,6 +39,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -415,6 +416,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     directory: () => sdk.directory,
     client: sdk.client,
     submit: () => void submit(),
+  })
+
+  const bridge = usePromptDocBridge()
+  createEffect(() => {
+    bridge.setMode(store.mode)
+  })
+  createEffect(() => {
+    bridge.setAddReference((path: string) => {
+      if (store.mode !== "doc") return false
+      const dir = sdk.directory.replace(/\/+$/, "")
+      const rel =
+        path.startsWith(dir) && (path === dir || path[dir.length] === "/")
+          ? path.slice(dir.length).replace(/^\/+/, "")
+          : path
+      return doc.addReference(rel)
+    })
+    onCleanup(() => {
+      bridge.setAddReference(undefined)
+      bridge.setMode("normal")
+    })
   })
 
   const hasDraft = createMemo(() => {

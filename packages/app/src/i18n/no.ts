@@ -532,7 +532,7 @@ export const dict = {
 
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",
-  "session.files.addToContext": "Legg til fil i kontekst",
+  "session.files.addToContext": "Legg til fil i dokument",
   "session.files.empty": "Ingen filer",
   "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
 
