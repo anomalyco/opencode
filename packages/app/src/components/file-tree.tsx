@@ -439,11 +439,19 @@ export default function FileTree(props: {
                         <div class="size-4 flex shrink-0 items-center justify-center text-icon-weak">
                           <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
                         </div>
-                        <FileIcon
-                          node={node}
-                          expanded={expanded()}
-                          class="size-4 shrink-0 filetree-icon"
-                        />
+                        <span class="filetree-iconpair size-4 shrink-0">
+                          <FileIcon
+                            node={node}
+                            expanded={expanded()}
+                            class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                          />
+                          <FileIcon
+                            node={node}
+                            expanded={expanded()}
+                            class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                            mono
+                          />
+                        </span>
                       </FileTreeNode>
                     </Collapsible.Trigger>
                     <Show when={props.onContextAdd && !node.ignored}>
