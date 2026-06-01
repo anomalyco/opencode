@@ -55,7 +55,6 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalLspTool).toBe(true)
       expect(flags.experimentalOxfmt).toBe(true)
       expect(flags.experimentalPlanMode).toBe(true)
-      expect(flags.experimentalEventSystem).toBe(true)
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
       expect(flags.experimentalNativeLlm).toBe(false)

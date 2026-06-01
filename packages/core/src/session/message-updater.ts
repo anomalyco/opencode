@@ -1,7 +1,10 @@
 import { produce, type WritableDraft } from "immer"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { ToolOutput } from "../tool-output"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+
+const decodeToolContent = Schema.decodeUnknownSync(ToolOutput.Content)
 
 export type MemoryState = {
   messages: SessionMessage.Message[]
@@ -312,15 +315,15 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
                 const match = latestTool(draft, event.data.callID)
-                if (match) {
+                if (match && match.state.status === "pending") {
                   match.provider = event.data.provider
                   match.time.ran = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateRunning({
                     status: "running",
                     input: event.data.input,
                     structured: {},
                     content: [],
-                  }
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -336,7 +339,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 const match = latestTool(draft, event.data.callID)
                 if (match && match.state.status === "running") {
                   match.state.structured = event.data.structured
-                  match.state.content = [...event.data.content]
+                  match.state.content = event.data.content.map((item) => decodeToolContent(item))
                 }
               }),
             )
@@ -353,12 +356,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match && match.state.status === "running") {
                   match.provider = event.data.provider
                   match.time.completed = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateCompleted({
                     status: "completed",
                     input: match.state.input,
                     structured: event.data.structured,
-                    content: [...event.data.content],
-                  }
+                    content: event.data.content.map((item) => decodeToolContent(item)),
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -375,13 +378,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match && match.state.status === "running") {
                   match.provider = event.data.provider
                   match.time.completed = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateError({
                     status: "error",
                     error: event.data.error,
                     input: match.state.input,
                     structured: match.state.structured,
-                    content: match.state.content,
-                  }
+                    content: match.state.content.map((item) => decodeToolContent(item)),
+                  }) as DraftTool["state"]
                 }
               }),
             )
