@@ -10,8 +10,6 @@ import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
-import { Session } from "@/session/session"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
@@ -19,7 +17,7 @@ import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cl
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
@@ -30,8 +28,18 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const log = Log.create({ service: "plugin" })
+
+export const Event = {
+  Error: EventV2.define({
+    type: "plugin.error",
+    schema: {
+      message: Schema.String,
+    },
+  }),
+}
 
 type State = {
   hooks: Hooks[]
@@ -133,7 +141,7 @@ export const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
-          bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          bridge.fork(events.publish(Event.Error, { message }))
         }
 
         const { Server } = yield* Effect.promise(() => import("../server/server"))
@@ -233,15 +241,11 @@ export const layer = Layer.effect(
               return message
             },
           }).pipe(
-            Effect.catch(() => {
-              // TODO: make proper events for this
-              // events.publish(Session.Event.Error, {
-              //   error: new NamedError.Unknown({
-              //     message: `Failed to load plugin ${load.spec}: ${message}`,
-              //   }).toObject(),
-              // })
-              return Effect.void
-            }),
+            Effect.catch((message) =>
+              events.publish(Event.Error, {
+                message: `Failed to load plugin ${load.spec}: ${errorMessage(message)}`,
+              }),
+            ),
           )
         }
 

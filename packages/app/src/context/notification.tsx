@@ -287,12 +287,18 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const unsub = serverSDK.event.listen((e) => {
       const event = e.details
-      if (event.type !== "session.idle" && event.type !== "session.error") return
+      if (event.type !== "session.idle" && event.type !== "session.error" && event.type !== "plugin.error") return
 
       const directory = e.name
       const time = Date.now()
       if (event.type === "session.idle") {
         handleSessionIdle(directory, event, time)
+        return
+      }
+      if (event.type === "plugin.error") {
+        if (settings.notifications.errors()) {
+          void platform.notify(language.t("notification.plugin.error.title"), event.properties.message)
+        }
         return
       }
       handleSessionError(directory, event, time)

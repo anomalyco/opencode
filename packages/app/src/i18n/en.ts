@@ -522,6 +522,7 @@ export const dict = {
 
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
+  "notification.plugin.error.title": "Plugin error",
   "notification.session.error.fallbackDescription": "An error occurred",
 
   "home.recentProjects": "Recent projects",
