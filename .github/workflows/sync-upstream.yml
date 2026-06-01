@@ -1,0 +1,95 @@
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: sync-upstream-dev
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Merge upstream dev
+        id: merge
+        shell: bash
+        run: |
+          git config user.name "c0dn-sync-bot"
+          git config user.email "actions@github.com"
+          git remote add upstream https://github.com/anomalyco/opencode.git
+          git fetch upstream dev
+          git merge --no-edit upstream/dev
+          if [ "$(git rev-list --count origin/dev..HEAD)" = "0" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run typecheck
+        if: steps.merge.outputs.changed == 'true'
+        run: bun typecheck
+
+      - name: Run unit tests
+        if: steps.merge.outputs.changed == 'true'
+        run: bun turbo test:ci
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: false
+
+      - name: Run HttpApi exerciser gates
+        if: steps.merge.outputs.changed == 'true'
+        working-directory: packages/opencode
+        run: bun run test:httpapi
+
+      - name: Push synced dev
+        if: steps.merge.outputs.changed == 'true'
+        run: git push origin HEAD:dev
+
+      - name: Detect upstream release to mirror
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/anomalyco/opencode/releases/latest --jq .tag_name)
+          version="${tag#v}"
+          personal="${version}-c0dn.1"
+          personal_tag="v${personal}"
+
+          if gh release view "$personal_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Personal release $personal_tag already exists."
+            exit 0
+          fi
+
+          git fetch upstream "refs/tags/${tag}:refs/tags/${tag}" --force
+          if ! git merge-base --is-ancestor "${tag}^{commit}" HEAD; then
+            echo "Upstream release $tag is not contained in dev yet; skipping mirror."
+            exit 0
+          fi
+
+          echo "version=$personal" >> "$GITHUB_OUTPUT"
+
+  mirror-release:
+    needs: sync
+    if: needs.sync.outputs.release_version != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/personal-release.yml
+    with:
+      version: ${{ needs.sync.outputs.release_version }}
+      ref: dev

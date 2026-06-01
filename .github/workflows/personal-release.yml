@@ -1,0 +1,80 @@
+name: personal-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, with or without leading v"
+        required: true
+        type: string
+      ref:
+        description: "Branch, tag, or SHA to build"
+        required: false
+        default: dev
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      ref:
+        required: false
+        default: dev
+        type: string
+
+permissions:
+  contents: write
+
+concurrency: personal-release-${{ inputs.version }}
+
+jobs:
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: ./.github/actions/setup-bun
+
+      - id: vars
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          version="${version#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Typecheck opencode package
+        run: bun --cwd packages/opencode typecheck
+
+      - name: Test personal updater changes
+        run: bun --cwd packages/opencode test test/installation/installation.test.ts
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.vars.outputs.tag }}" \
+            --draft \
+            --target "${{ inputs.ref }}" \
+            --title "${{ steps.vars.outputs.tag }}" \
+            --notes "Personal Linux CLI build from c0dn/opencode-personal."
+
+      - name: Build and upload Linux CLI artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
+          OPENCODE_RELEASE: "1"
+          OPENCODE_BUILD_TARGETS: linux-x64,linux-arm64
+        run: bun ./packages/opencode/script/build.ts
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ steps.vars.outputs.tag }}" --draft=false --latest
