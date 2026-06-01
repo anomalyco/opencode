@@ -955,7 +955,28 @@ function TextViewer<T>(props: TextFileProps<T>) {
             "z-index": "20",
             background: "var(--background-base)",
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setEditing(false)
+          }}
         >
+          <button
+            onClick={() => setEditing(false)}
+            style={{
+              position: "absolute",
+              top: "8px",
+              right: "8px",
+              "z-index": "30",
+              padding: "4px 12px",
+              "font-size": "12px",
+              "border-radius": "4px",
+              border: "1px solid var(--border-base)",
+              background: "var(--background-stronger)",
+              color: "var(--text-base)",
+              cursor: "pointer",
+            }}
+          >
+            Close
+          </button>
           <MonacoEditor
             filePath={props.filePath}
             content={editContent()}

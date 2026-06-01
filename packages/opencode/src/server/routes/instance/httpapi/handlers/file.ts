@@ -46,7 +46,10 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       return yield* svc.status()
     })
 
-    const write = Effect.fn("FileHttpApi.write")(function* (ctx: { payload: { path: string; content: string } }) {
+    const write = Effect.fn("FileHttpApi.write")(function* (ctx: {
+      query: { directory?: string; workspace?: string }
+      payload: { path: string; content: string }
+    }) {
       yield* svc.write(ctx.payload.path, ctx.payload.content)
       yield* events.publish(File.Event.Edited, { file: ctx.payload.path })
       yield* events.publish(FileWatcher.Event.Updated, {

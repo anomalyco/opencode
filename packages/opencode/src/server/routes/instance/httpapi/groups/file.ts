@@ -19,6 +19,10 @@ export const FileQuery = Schema.Struct({
   path: Schema.String,
 })
 
+export const FileWriteQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+})
+
 export const FileWriteBody = Schema.Struct({
   path: Schema.String,
   content: Schema.String,
@@ -118,6 +122,7 @@ export const FileApi = HttpApi.make("file")
           }),
         ),
         HttpApiEndpoint.put("write", "/file/content", {
+          query: FileWriteQuery,
           payload: FileWriteBody,
           success: described(Schema.Struct({ success: Schema.Boolean }), "Write result"),
         }).annotateMerge(
