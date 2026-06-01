@@ -148,10 +148,6 @@ export const layer = Layer.effect(
       const parts: Types.DeepMutable<PromptInput["parts"]> = [{ type: "text", text: template }]
       const files = ConfigMarkdown.files(template)
       const seen = new Set<string>()
-      const mentionSource = (match: RegExpMatchArray) => {
-        const start = match.index ?? 0
-        return { value: match[0], start, end: start + match[0].length }
-      }
       yield* Effect.forEach(
         files,
         Effect.fnUntraced(function* (match) {
@@ -164,7 +160,8 @@ export const layer = Layer.effect(
           const alias = slash === -1 ? name : name.slice(0, slash)
           const reference = yield* references.get(alias)
           if (reference) {
-            const source = mentionSource(match)
+            const start = match.index ?? 0
+            const source = { value: match[0], start, end: start + match[0].length }
             if (reference.kind === "invalid") {
               parts.push(
                 referenceTextPart({ reference, source, target: slash === -1 ? undefined : name.slice(slash + 1) }),

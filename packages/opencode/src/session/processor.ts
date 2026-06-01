@@ -301,8 +301,6 @@ export const layer = Layer.effect(
         }
       }
 
-      const toolInput = (value: unknown): Record<string, any> => (isRecord(value) ? value : { value })
-
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "reasoning-start":
@@ -380,7 +378,7 @@ export const layer = Layer.effect(
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
             const toolCall = yield* ensureToolCall(value)
-            const input = toolInput(value.input)
+            const input = isRecord(value.input) ? value.input : { value: value.input }
             if (!toolCall.call.inputEnded) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
