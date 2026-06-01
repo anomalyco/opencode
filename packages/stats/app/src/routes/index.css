@@ -83,6 +83,10 @@
   background: var(--stats-bg);
 }
 
+[data-page="stats"] [hidden] {
+  display: none !important;
+}
+
 [data-page="stats"] [data-component="content"] {
   color: var(--stats-text);
   font-family:
@@ -1028,12 +1032,14 @@
 
 [data-page="stats"] [data-component="top-models-chart"] {
   --top-models-bar-gap: 12px;
+  --top-models-dot-size: 6px;
+  --top-models-dot-offset: 2px;
   position: relative;
   display: grid;
   grid-template-rows: 34px minmax(0, 1fr);
   gap: 12px;
   width: 100%;
-  height: 560px;
+  height: clamp(320px, 44vh, 400px);
 }
 
 [data-page="stats"] [data-slot="top-models-axis"],
@@ -1103,9 +1109,7 @@
   gap: var(--market-gap);
 }
 
-[data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"]
-  [data-slot="top-models-axis"]
-  > div {
+[data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-axis"] > div {
   position: relative;
   display: flex;
   align-items: center;
@@ -1163,17 +1167,27 @@
 
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
-  inset: 0 calc(var(--top-models-bar-gap) / 2);
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: calc(100% - var(--top-models-bar-gap));
+  transform: translateX(-50%);
   content: "";
   background: var(--stats-dot);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: center top;
+  mask-position: var(--top-models-dot-offset) top;
   mask-repeat: repeat;
-  mask-size: 6px 6px;
+  mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: center top;
+  -webkit-mask-position: var(--top-models-dot-offset) top;
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: 6px 6px;
+  -webkit-mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
+}
+
+@supports (width: round(down, 100%, 1px)) {
+  [data-page="stats"] [data-slot="top-models-bar"]::before {
+    width: round(down, calc(100% - var(--top-models-bar-gap)), var(--top-models-dot-size));
+  }
 }
 
 [data-page="stats"] [data-slot="top-models-stack"] {
@@ -1420,7 +1434,7 @@
 }
 
 [data-page="stats"] [data-section="top-models"] [data-slot="chart-footer"] {
-  margin-top: 40px;
+  margin-top: 32px;
 }
 
 [data-page="stats"] [data-component="usage-filter"] {
@@ -1718,6 +1732,9 @@
 
 [data-page="stats"] [data-component="leaderboard"] {
   gap: 0;
+  width: 100%;
+  margin-top: 36px;
+  scroll-margin-top: 88px;
 }
 
 [data-page="stats"] [data-slot="leaderboard-featured"],
@@ -1743,14 +1760,11 @@
 
 [data-page="stats"] [data-slot="leaderboard-column"] {
   gap: 8px;
+  align-content: start;
 }
 
 [data-page="stats"] [data-slot="leaderboard-mobile"] {
   display: none;
-}
-
-[data-page="stats"] [data-section="leaderboard"] [data-slot="chart-footer"] {
-  margin-top: 32px;
 }
 
 [data-page="stats"] [data-component="leader-card"] {
@@ -1889,6 +1903,26 @@
 
 [data-page="stats"] [data-slot="leader-copy"] [data-slot="delta"][data-negative="true"] {
   color: #b82d35;
+}
+
+[data-page="stats"] [data-component="leader-card"][data-active="true"] {
+  border-color: var(--stats-line-strong);
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px #00000024,
+    0 6px 16px #0000000d,
+    0 2px 6px #0000000f;
+  transform: translateY(-1px);
+}
+
+[data-page="stats"] [data-component="leader-card"][data-active="true"] [data-slot="leader-watermark"] {
+  color: var(--stats-layer-2);
+  opacity: 0.86;
+}
+
+[data-page="stats"] [data-component="leader-card"][data-active="true"] [data-slot="leader-avatar"] {
+  border-color: var(--stats-line-strong);
+  color: var(--stats-text);
 }
 
 @media (hover: hover) {
@@ -2333,8 +2367,12 @@
     0 2px 4px #0000003d;
 }
 
+[data-page="stats"][data-theme="dark"] [data-component="leader-card"][data-active="true"],
 [data-page="stats"][data-theme="dark"] [data-component="leader-card"]:hover,
 [data-page="stats"][data-theme="dark"] [data-component="leader-card"]:focus-visible,
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="leader-card"][data-active="true"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="leader-card"]:hover,
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
@@ -2346,8 +2384,15 @@
     0 2px 6px #00000052;
 }
 
+[data-page="stats"][data-theme="dark"]
+  [data-component="leader-card"][data-active="true"]
+  [data-slot="leader-watermark"],
 [data-page="stats"][data-theme="dark"] [data-component="leader-card"]:hover [data-slot="leader-watermark"],
 [data-page="stats"][data-theme="dark"] [data-component="leader-card"]:focus-visible [data-slot="leader-watermark"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  [data-component="leader-card"][data-active="true"]
+  [data-slot="leader-watermark"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="leader-card"]:hover
@@ -2459,6 +2504,9 @@
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"][data-active="true"],
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
     [data-component="leader-card"]:hover,
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
@@ -2470,6 +2518,10 @@
       0 2px 6px #00000052;
   }
 
+  :root:not([data-stats-theme="light"])
+    [data-page="stats"]:not([data-theme="light"])
+    [data-component="leader-card"][data-active="true"]
+    [data-slot="leader-watermark"],
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="leader-card"]:hover
@@ -2703,10 +2755,15 @@
   [data-page="stats"] [data-slot="top-models-mobile-controls"] {
     display: flex;
     gap: 8px;
-    margin-bottom: 32px;
+    width: 100%;
   }
 
   [data-page="stats"] [data-section="top-models"] [data-slot="chart-footer"] {
+    display: flex;
+    margin-top: 24px;
+  }
+
+  [data-page="stats"] [data-section="top-models"] [data-slot="chart-footer"] [data-component="usage-filter"] {
     display: none;
   }
 
@@ -2763,12 +2820,43 @@
 
   [data-page="stats"] [data-component="top-models-chart"] {
     grid-template-rows: 40px minmax(0, 1fr);
-    height: 400px;
+    height: 360px;
   }
 
   [data-page="stats"] [data-component="market-share"] {
     grid-template-rows: 40px minmax(0, 1fr);
     height: 400px;
+  }
+
+  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"],
+  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] {
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"]::-webkit-scrollbar,
+  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] {
+    --top-models-mobile-bar-width: 12px;
+  }
+
+  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-axis"],
+  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-bars"] {
+    min-width: calc(var(--top-models-count) * (var(--top-models-mobile-bar-width) + var(--top-models-bar-gap)));
+  }
+
+  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] {
+    --market-mobile-bar-width: 12px;
+  }
+
+  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] [data-slot="market-labels"],
+  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] [data-slot="market-bars"] {
+    min-width: calc(var(--market-count) * (var(--market-mobile-bar-width) + var(--market-gap)));
   }
 
   [data-page="stats"] [data-slot="top-models-axis"] > div {

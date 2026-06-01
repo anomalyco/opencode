@@ -325,6 +325,13 @@ export namespace Referral {
         .then((rows) => rows.map((row) => row.workspaceID))
       if (workspaceIDs.length === 0) return
 
+      const activeLite = await tx
+        .select({ id: LiteTable.id })
+        .from(LiteTable)
+        .where(and(inArray(LiteTable.workspaceID, workspaceIDs), isNull(LiteTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (activeLite) return
+
       const litePayment = await tx
         .select({ id: PaymentTable.id })
         .from(PaymentTable)

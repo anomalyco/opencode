@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
@@ -13,7 +14,7 @@ import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Plugin } from "@/plugin"
-import { ProviderID, ModelID } from "../../src/provider/schema"
+
 import { testEffect } from "../lib/effect"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -22,6 +23,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Permission } from "@/permission"
 import { LLMAISDK } from "@/session/llm/ai-sdk"
 import { Session as SessionNs } from "@/session/session"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 type ConfigModel = NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
 
@@ -498,6 +500,57 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(result.tokens.cache.write).toBe(300)
     expect(result.tokens.cache.read).toBe(200)
   })
+
+  test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({
+        type: "raw",
+        rawValue: {
+          type: "message_delta",
+          copilot_usage: { total_nano_aiu: 4_473_525_000 },
+        },
+      }),
+      {
+        type: "finish-step",
+        response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
+        finishReason: "stop",
+        rawFinishReason: "end_turn",
+        usage: {
+          inputTokens: 11_774,
+          outputTokens: 39,
+          totalTokens: 11_813,
+          inputTokenDetails: { noCacheTokens: 3, cacheReadTokens: 0, cacheWriteTokens: 11_771 },
+          outputTokenDetails: { textTokens: 39, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: { cacheCreationInputTokens: 11_771 } },
+      },
+      {
+        type: "finish-step",
+        response: { id: "msg_follow_up", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
+        finishReason: "stop",
+        rawFinishReason: "end_turn",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          inputTokenDetails: { noCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          outputTokenDetails: { textTokens: 1, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: {} },
+      },
+    ])
+
+    expect(events[0]).toMatchObject({
+      type: "step-finish",
+      providerMetadata: {
+        anthropic: { cacheCreationInputTokens: 11_771 },
+        copilot: { totalNanoAiu: 4_473_525_000 },
+      },
+    })
+    expect(events[1]).toMatchObject({ type: "step-finish", providerMetadata: { anthropic: {} } })
+    if (events[1].type !== "step-finish") throw new Error("expected step-finish")
+    expect(events[1].providerMetadata?.copilot).toBeUndefined()
+  })
 })
 
 type Capture = {
@@ -712,8 +765,8 @@ describe("session.llm.stream", () => {
         )
 
         const resolved = yield* Provider.use.getModel(
-          ProviderID.make(vivgridFixture.providerID),
-          ModelID.make(fixture.model.id),
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ProviderV2.ModelID.make(fixture.model.id),
         )
         const sessionID = SessionID.make("session-test-1")
         const agent = {
@@ -731,8 +784,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(vivgridFixture.providerID), modelID: resolved.id, variant: "high" },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id, variant: "high" },
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -786,8 +839,8 @@ describe("session.llm.stream", () => {
         const pending = waitStreamingRequest("/chat/completions")
 
         const resolved = yield* Provider.use.getModel(
-          ProviderID.make(alibabaQwenFixture.providerID),
-          ModelID.make(fixture.model.id),
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ProviderV2.ModelID.make(fixture.model.id),
         )
         const sessionID = SessionID.make("session-test-service-abort")
         const agent = {
@@ -802,8 +855,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+        } satisfies SessionLegacy.User
 
         const fiber = yield* drain({
           user,
@@ -854,8 +907,8 @@ describe("session.llm.stream", () => {
         )
 
         const resolved = yield* Provider.use.getModel(
-          ProviderID.make(alibabaQwenFixture.providerID),
-          ModelID.make(fixture.model.id),
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ProviderV2.ModelID.make(fixture.model.id),
         )
         const sessionID = SessionID.make("session-test-tools")
         const agent = {
@@ -871,9 +924,9 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+          model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
           tools: { question: true },
-        } satisfies MessageV2.User
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -958,7 +1011,7 @@ describe("session.llm.stream", () => {
         ]
         const request = waitRequest("/responses", createEventResponse(responseChunks, true))
 
-        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
@@ -974,8 +1027,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id, variant: "high" },
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -1063,7 +1116,7 @@ describe("session.llm.stream", () => {
           }),
         )
 
-        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-native-flag-off")
         const agent = {
           name: "test",
@@ -1088,8 +1141,8 @@ describe("session.llm.stream", () => {
               role: "user",
               time: { created: Date.now() },
               agent: agent.name,
-              model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
-            } satisfies MessageV2.User,
+              model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id, variant: "high" },
+            } satisfies SessionLegacy.User,
             sessionID,
             model: resolved,
             agent,
@@ -1133,7 +1186,7 @@ describe("session.llm.stream", () => {
         ]
         const request = waitRequest("/responses", createEventResponse(chunks, true))
 
-        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-native")
         const agent = {
           name: "test",
@@ -1150,8 +1203,8 @@ describe("session.llm.stream", () => {
             role: "user",
             time: { created: Date.now() },
             agent: agent.name,
-            model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
-          } satisfies MessageV2.User,
+            model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id, variant: "high" },
+          } satisfies SessionLegacy.User,
           sessionID,
           model: resolved,
           agent,
@@ -1217,7 +1270,7 @@ describe("session.llm.stream", () => {
           }),
         )
 
-        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-native-injected-tool")
         const agent = {
           name: "test",
@@ -1233,8 +1286,8 @@ describe("session.llm.stream", () => {
             role: "user",
             time: { created: Date.now() },
             agent: agent.name,
-            model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-          } satisfies MessageV2.User,
+            model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id },
+          } satisfies SessionLegacy.User,
           sessionID,
           model: resolved,
           agent,
@@ -1305,7 +1358,7 @@ describe("session.llm.stream", () => {
         const request = waitRequest("/responses", createEventResponse(chunks, true))
         let executed: unknown
 
-        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-native-tool")
         const agent = {
           name: "test",
@@ -1321,8 +1374,8 @@ describe("session.llm.stream", () => {
             role: "user",
             time: { created: Date.now() },
             agent: agent.name,
-            model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-          } satisfies MessageV2.User,
+            model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id },
+          } satisfies SessionLegacy.User,
           sessionID,
           model: resolved,
           agent,
@@ -1431,7 +1484,7 @@ describe("session.llm.stream", () => {
           ),
         ).toString("base64")}`
 
-        const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ProviderV2.ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-data-url")
         const agent = {
           name: "test",
@@ -1446,8 +1499,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id },
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -1519,8 +1572,8 @@ describe("session.llm.stream", () => {
         const request = waitRequest("/messages", createEventResponse(chunks))
 
         const resolved = yield* Provider.use.getModel(
-          ProviderID.make(minimaxFixture.providerID),
-          ModelID.make(model.id),
+          ProviderV2.ID.make(minimaxFixture.providerID),
+          ProviderV2.ModelID.make(model.id),
         )
         const sessionID = SessionID.make("session-test-3")
         const agent = {
@@ -1538,8 +1591,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.5") },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make("minimax"), modelID: ProviderV2.ModelID.make("MiniMax-M2.5") },
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
@@ -1615,7 +1668,10 @@ describe("session.llm.stream", () => {
         ]
         const request = waitRequest("/messages", createEventResponse(chunks))
 
-        const resolved = yield* Provider.use.getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make("anthropic"),
+          ProviderV2.ModelID.make(model.id),
+        )
         const sessionID = SessionID.make("session-test-anthropic-tools")
         const agent = {
           name: "test",
@@ -1629,8 +1685,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id, variant: "max" },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make("anthropic"), modelID: resolved.id, variant: "max" },
+        } satisfies SessionLegacy.User
 
         const input = [
           {
@@ -1814,7 +1870,10 @@ describe("session.llm.stream", () => {
         ]
         const request = waitRequest(pathSuffix, createEventResponse(chunks))
 
-        const resolved = yield* Provider.use.getModel(ProviderID.make(geminiFixture.providerID), ModelID.make(model.id))
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(geminiFixture.providerID),
+          ProviderV2.ModelID.make(model.id),
+        )
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",
@@ -1831,8 +1890,8 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(geminiFixture.providerID), modelID: resolved.id },
-        } satisfies MessageV2.User
+          model: { providerID: ProviderV2.ID.make(geminiFixture.providerID), modelID: resolved.id },
+        } satisfies SessionLegacy.User
 
         yield* drain({
           user,
