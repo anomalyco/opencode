@@ -1,0 +1,13 @@
+{
+  "name": "@securecode/format-claude-stream-vendored",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Khan/format-claude-stream をベンダリングし、claude-code-action の execution_file (JSON 配列) を整形するための薄いラッパを足したもの。詳細は VENDORING.md を参照。",
+  "bin": {
+    "render-execution-file": "render-execution-file.ts"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

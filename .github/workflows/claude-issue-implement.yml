@@ -38,6 +38,7 @@ jobs:
       # 起動しない。CI を回したいときはメンテナが PR を close→reopen するか、
       # コミットを追加するなどして手動で再トリガーすること。
       - name: Implement issue and open pull request
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           # Claude Max サブスクの OAuth トークンで認証する（API の従量課金・
@@ -91,3 +92,31 @@ jobs:
               -R ${{ github.repository }}` で Issue に説明して終了する。
             - Issue に直接関係しない変更は含めない。
             - `dev` ブランチへ直接 push しない。必ず作業ブランチを使う。
+
+      # claude-code-action の execution_file（SDKMessage の JSON 配列）を、ベンダリングした
+      # format-claude-stream で人間が読みやすいテキストへ整形し、Job Summary に出力する。
+      # 失敗時の調査用に if: always() で必ず走らせる。詳細は
+      # .github/format-claude-stream/VENDORING.md を参照。
+      - name: Render Claude log to job summary
+        if: ${{ always() && steps.claude.outputs.execution_file != '' }}
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          bun install --cwd .github/format-claude-stream --frozen-lockfile --ignore-scripts
+          bun .github/format-claude-stream/render-execution-file.ts "$EXECUTION_FILE" \
+            > /tmp/claude-log.txt 2> /tmp/claude-log.err || {
+              echo "(ログの整形に失敗しました)" >> /tmp/claude-log.txt
+              cat /tmp/claude-log.err >> /tmp/claude-log.txt
+            }
+          # ログ本文にバッククォートが含まれても閉じないよう、コードフェンスは ~~~ を使う。
+          {
+            echo "## 🧩 Claude 実行ログ（整形済み）"
+            echo ""
+            echo "<details><summary>クリックで展開</summary>"
+            echo ""
+            echo "~~~text"
+            cat /tmp/claude-log.txt
+            echo "~~~"
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
