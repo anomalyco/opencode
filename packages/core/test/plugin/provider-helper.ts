@@ -8,10 +8,15 @@ import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
 export const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
-const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))
+const locationLayer = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory: AbsolutePath.make("test") })),
+)
 
 export const npmLayer = Layer.succeed(
   Npm.Service,
@@ -25,7 +30,7 @@ export const npmLayer = Layer.succeed(
 export const catalogLayer = Layer.succeed(
   Catalog.Service,
   Catalog.Service.of({
-    loader: () => Effect.die("unexpected catalog.loader"),
+    transform: () => Effect.die("unexpected catalog.transform"),
     provider: {
       get: () => Effect.die("unexpected provider.get"),
       all: () => Effect.succeed([]),
@@ -36,15 +41,13 @@ export const catalogLayer = Layer.succeed(
       all: () => Effect.succeed([]),
       available: () => Effect.succeed([]),
       default: () => Effect.succeed(Option.none<ModelV2.Info>()),
-      setDefault: () => Effect.die("unexpected model.setDefault"),
       small: () => Effect.succeed(Option.none<ModelV2.Info>()),
     },
   }),
 )
 
 export const it = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
+  Catalog.locationLayer.pipe(
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
     Layer.provideMerge(npmLayer),

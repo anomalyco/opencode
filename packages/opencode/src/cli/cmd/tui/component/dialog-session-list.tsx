@@ -53,13 +53,22 @@ export function DialogSessionList() {
       const workspaceID = await (async () => {
         if (selection.type === "none") return null
         if (selection.type === "existing") return selection.workspaceID
-        const result = await sdk.client.experimental.workspace
-          .create({ type: selection.workspaceType, branch: null })
-          .catch(() => undefined)
+        let result
+        try {
+          result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
+        } catch (err) {
+          toast.show({
+            title: "Failed to create workspace",
+            message: errorMessage(err),
+            variant: "error",
+          })
+          return
+        }
         const workspace = result?.data
         if (!workspace) {
           toast.show({
-            message: `Failed to create workspace: ${errorMessage(result?.error ?? "no response")}`,
+            title: "Failed to create workspace",
+            message: errorMessage(result?.error ?? "no response"),
             variant: "error",
           })
           return

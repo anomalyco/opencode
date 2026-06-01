@@ -1,27 +1,31 @@
 import { afterEach, describe, expect } from "bun:test"
+import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
+import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
-import { Server } from "../../src/server/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import * as HttpSessionError from "../../src/server/routes/instance/httpapi/handlers/session-errors"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Database } from "@/storage/db"
-import { SessionMessageTable, SessionTable } from "@/session/session.sql"
-import { SessionMessage } from "@opencode-ai/core/session-message"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
@@ -45,11 +49,28 @@ const instanceStoreLayer = InstanceStore.defaultLayer.pipe(
     Layer.succeed(InstanceBootstrapService.Service, InstanceBootstrapService.Service.of({ run: Effect.void })),
   ),
 )
-const it = testEffect(Layer.mergeAll(instanceStoreLayer, Project.defaultLayer, Session.defaultLayer, workspaceLayer))
-
-function app() {
-  return Server.Default().app
-}
+const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
+  HttpApiApp.routes,
+  {
+    disableListenLog: true,
+    disableLogger: true,
+  },
+)
+const httpApiLayer = servedRoutes.pipe(
+  Layer.provide(layerWebSocketConstructorGlobal),
+  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(NodeServices.layer),
+)
+const it = testEffect(
+  Layer.mergeAll(
+    instanceStoreLayer,
+    Project.defaultLayer,
+    Session.defaultLayer,
+    workspaceLayer,
+    Database.defaultLayer,
+    httpApiLayer,
+  ),
+)
 
 function pathFor(path: string, params: Record<string, string>) {
   return Object.entries(params).reduce((result, [key, value]) => result.replace(`:${key}`, value), path)
@@ -67,7 +88,7 @@ function createTextMessage(sessionID: SessionIDType, text: string) {
       role: "user",
       sessionID,
       agent: "build",
-      model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
       time: { created: Date.now() },
     })
     const part = yield* svc.updatePart({
@@ -109,7 +130,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
   )
 
 const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
     const message = new SessionMessage.Assistant({
       id: SessionMessage.ID.create(),
       type: "assistant",
@@ -122,90 +143,93 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
       time: { created: DateTime.makeUnsafe(time) },
       content: [],
     })
-    Database.use((db) =>
-      db
-        .insert(SessionMessageTable)
-        .values([
-          {
-            id: message.id,
-            session_id: sessionID,
-            type: message.type,
-            time_created: time,
-            data: {
-              time: { created: time },
-              agent: message.agent,
-              model: message.model,
-              content: message.content,
-            } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
-          },
-        ])
-        .run(),
-    )
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(SessionMessageTable)
+      .values([
+        {
+          id: message.id,
+          session_id: sessionID,
+          type: message.type,
+          time_created: time,
+          data: {
+            time: { created: time },
+            agent: message.agent,
+            model: message.model,
+            content: message.content,
+          } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+        },
+      ])
+      .run()
+      .pipe(Effect.orDie)
   })
 
 const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
-  Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .insert(SessionMessageTable)
-        .values([
-          {
-            id: SessionMessage.ID.create(),
-            session_id: sessionID,
-            type: "assistant",
-            time_created: time,
-            data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
-          },
-        ])
-        .run(),
-    ),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(SessionMessageTable)
+      .values([
+        {
+          id: SessionMessage.ID.create(),
+          session_id: sessionID,
+          type: "assistant",
+          time_created: time,
+          data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+        },
+      ])
+      .run()
+      .pipe(Effect.orDie)
+  })
 
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
-  Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .update(SessionTable)
-        .set({
-          summary_additions: 1,
-          summary_deletions: 0,
-          summary_files: 1,
-          summary_diffs: [{ additions: 1, deletions: 0 }],
-        })
-        .where(eq(SessionTable.id, sessionID))
-        .run(),
-    ),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db
+      .update(SessionTable)
+      .set({
+        summary_additions: 1,
+        summary_deletions: 0,
+        summary_files: 1,
+        summary_diffs: [{ additions: 1, deletions: 0 }],
+      })
+      .where(eq(SessionTable.id, sessionID))
+      .run()
+      .pipe(Effect.orDie)
+  })
 
 const getWorkspaceID = (sessionID: SessionIDType) =>
-  Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .select({ workspaceID: SessionTable.workspace_id })
-        .from(SessionTable)
-        .where(eq(SessionTable.id, sessionID))
-        .get(),
-    ),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    return yield* db
+      .select({ workspaceID: SessionTable.workspace_id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, sessionID))
+      .get()
+      .pipe(Effect.orDie)
+  })
 
 const clearSessionPath = (sessionID: SessionIDType) =>
-  Effect.sync(() =>
-    Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sessionID)).run()),
-  )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+  })
 
 function request(path: string, init?: RequestInit) {
-  return Effect.promise(async () => app().request(path, init))
+  const url = new URL(path, "http://localhost")
+  return HttpClientRequest.fromWeb(new Request(url, init)).pipe(
+    HttpClientRequest.setUrl(url.pathname),
+    HttpClient.execute,
+  )
 }
 
-function json<T>(response: Response) {
-  return Effect.promise(async () => {
-    if (response.status !== 200) throw new Error(await response.text())
-    return (await response.json()) as T
-  })
+function json<T>(response: HttpClientResponse.HttpClientResponse) {
+  if (response.status !== 200) return response.text.pipe(Effect.flatMap((text) => Effect.die(new Error(text))))
+  return response.json.pipe(Effect.map((value) => value as T))
 }
 
-function responseJson(response: Response) {
-  return Effect.promise(() => response.json())
+function responseJson(response: HttpClientResponse.HttpClientResponse) {
+  return response.json
 }
 
 function requestJson<T>(path: string, init?: RequestInit) {
@@ -338,8 +362,8 @@ describe("session HttpApi", () => {
         const messages = yield* request(`${pathFor(SessionPaths.messages, { sessionID: parent.id })}?limit=1`, {
           headers,
         })
-        const messagePage = yield* json<MessageV2.WithParts[]>(messages)
-        const nextCursor = messages.headers.get("x-next-cursor")
+        const messagePage = yield* json<SessionLegacy.WithParts[]>(messages)
+        const nextCursor = messages.headers["x-next-cursor"]
         expect(nextCursor).toBeTruthy()
         expect(messagePage[0]?.parts[0]).toMatchObject({ type: "text" })
 
@@ -355,7 +379,7 @@ describe("session HttpApi", () => {
         ).toBe(400)
 
         expect(
-          yield* requestJson<MessageV2.WithParts>(
+          yield* requestJson<SessionLegacy.WithParts>(
             pathFor(SessionPaths.message, { sessionID: parent.id, messageID: message.info.id }),
             { headers },
           ),
@@ -788,9 +812,9 @@ describe("session HttpApi", () => {
 
         const response = yield* request(route, { headers })
 
-        expect(response.headers.get("x-next-cursor")).toBeTruthy()
-        expect(response.headers.get("link")).toContain("limit=1")
-        expect(response.headers.get("access-control-expose-headers")?.toLowerCase()).toContain("x-next-cursor")
+        expect(response.headers["x-next-cursor"]).toBeTruthy()
+        expect(response.headers["link"]).toContain("limit=1")
+        expect(response.headers["access-control-expose-headers"]?.toLowerCase()).toContain("x-next-cursor")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
@@ -805,7 +829,7 @@ describe("session HttpApi", () => {
         const first = yield* createTextMessage(session.id, "first")
         const second = yield* createTextMessage(session.id, "second")
 
-        const updated = yield* requestJson<MessageV2.Part>(
+        const updated = yield* requestJson<SessionLegacy.Part>(
           pathFor(SessionPaths.updatePart, {
             sessionID: session.id,
             messageID: first.info.id,
