@@ -9,6 +9,7 @@
     "opencode": "./src/index.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "dev": "bun run src/index.ts",
     "typecheck": "tsgo --noEmit"
   },
