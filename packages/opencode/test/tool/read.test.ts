@@ -62,7 +62,6 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Truncate.defaultLayer,
   )
 
-
 const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))
 const scout = testEffect(Layer.mergeAll(readLayer({ experimentalScout: true }), testInstanceStoreLayer))
 const configuredIt = (config: Config.Info) =>
