@@ -130,10 +130,12 @@ export const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
-    const ops = (): TaskPromptOps => ({
-      cancel: (sessionID: SessionID) => cancel(sessionID),
-      resolvePromptParts: (template: string) => resolvePromptParts(template),
-      prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
+    const ops = Effect.fn("SessionPrompt.ops")(function* () {
+      return {
+        cancel: (sessionID: SessionID) => cancel(sessionID),
+        resolvePromptParts: (template: string) => resolvePromptParts(template),
+        prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
+      } satisfies TaskPromptOps
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
@@ -309,7 +311,7 @@ export const layer = Layer.effect(
     }) {
       const { task, model, lastUser, sessionID, session, msgs } = input
       const ctx = yield* InstanceState.context
-      const promptOps = ops()
+      const promptOps = yield* ops()
       const { task: taskTool } = yield* registry.named()
       const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
       const assistantMessage: SessionLegacy.Assistant = yield* sessions.updateMessage({
@@ -1385,7 +1387,7 @@ export const layer = Layer.effect(
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
-            const promptOps = ops()
+            const promptOps = yield* ops()
 
             const tools = yield* SessionTools.resolve({
               agent,
