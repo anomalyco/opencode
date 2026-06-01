@@ -10,7 +10,7 @@ export async function validateSession(input: {
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
-}) {
+}): Promise<{ projectID: string } | undefined> {
   if (!input.sessionID) return
 
   let sessionID: SessionID
@@ -20,10 +20,15 @@ export async function validateSession(input: {
     throw new Error(`Invalid session ID: ${error instanceof Error ? error.message : "unknown error"}`, { cause: error })
   }
 
-  await createOpencodeClient({
+  const session = await createOpencodeClient({
     baseUrl: input.url,
     directory: input.directory,
     fetch: input.fetch,
     headers: input.headers,
   }).session.get({ sessionID }, { throwOnError: true })
+  // The resumed session may belong to a different project than the launch
+  // directory (e.g. `opencode -s <id>` run from elsewhere). Returning its
+  // project lets the TUI event filter deliver the session's live events
+  // without chdir-ing the process. See #28581.
+  return session.data ? { projectID: session.data.projectID } : undefined
 }

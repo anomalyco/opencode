@@ -6,6 +6,7 @@ import { onMount } from "solid-js"
 import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { useEvent } from "../../../src/cli/cmd/tui/context/event"
+import { ArgsProvider, type Args } from "../../../src/cli/cmd/tui/context/args"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
 
 const projectID = "proj_test"
@@ -47,7 +48,7 @@ function update(version: string): Event {
   }
 }
 
-async function mount() {
+async function mount(args: Args = {}) {
   const events = createEventSource()
   const calls = createFetch()
   const seen: Event[] = []
@@ -59,19 +60,21 @@ async function mount() {
   })
 
   const app = await testRender(() => (
-    <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
-      <ProjectProvider>
-        <Probe
-          onReady={async (ctx) => {
-            project = ctx.project
-            await project.sync()
-            done()
-          }}
-          seen={seen}
-          workspaces={workspaces}
-        />
-      </ProjectProvider>
-    </SDKProvider>
+    <ArgsProvider {...args}>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <Probe
+            onReady={async (ctx) => {
+              project = ctx.project
+              await project.sync()
+              done()
+            }}
+            seen={seen}
+            workspaces={workspaces}
+          />
+        </ProjectProvider>
+      </SDKProvider>
+    </ArgsProvider>
   ))
 
   await ready
@@ -151,6 +154,35 @@ describe("useEvent", () => {
       await wait(() => seen.length === 1)
 
       expect(seen).toEqual([update("1.2.3")])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("delivers events for a resumed session's project from another directory", async () => {
+    const { app, emit, seen } = await mount({ sessionProjectID: "proj_resumed" })
+
+    try {
+      // `opencode -s <id>` launched elsewhere: event project matches the
+      // resumed session, not the launch project.
+      emit(event(vcs("resumed"), { directory: "/tmp/other", project: "proj_resumed" }))
+
+      await wait(() => seen.length === 1)
+
+      expect(seen).toEqual([vcs("resumed")])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("still ignores unrelated projects when a session is resumed", async () => {
+    const { app, emit, seen } = await mount({ sessionProjectID: "proj_resumed" })
+
+    try {
+      emit(event(vcs("other"), { directory: "/tmp/other", project: "proj_unrelated" }))
+      await Bun.sleep(30)
+
+      expect(seen).toHaveLength(0)
     } finally {
       app.renderer.destroy()
     }

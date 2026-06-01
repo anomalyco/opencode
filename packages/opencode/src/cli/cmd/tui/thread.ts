@@ -210,8 +210,9 @@ export const TuiThreadCommand = cmd({
             events: createEventSource(client),
           }
 
+      let resumed: { projectID: string } | undefined
       try {
-        await validateSession({
+        resumed = await validateSession({
           url: transport.url,
           sessionID: args.session,
           directory: cwd,
@@ -245,6 +246,7 @@ export const TuiThreadCommand = cmd({
           args: {
             continue: args.continue,
             sessionID: args.session,
+            sessionProjectID: resumed?.projectID,
             agent: args.agent,
             model: args.model,
             prompt,

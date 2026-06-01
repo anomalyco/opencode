@@ -68,8 +68,9 @@ export const AttachCommand = cmd({
       const headers = ServerAuth.headers({ password: args.password, username: args.username })
       const config = await TuiConfig.get()
 
+      let resumed: { projectID: string } | undefined
       try {
-        await validateSession({
+        resumed = await validateSession({
           url: args.url,
           sessionID: args.session,
           directory,
@@ -90,6 +91,7 @@ export const AttachCommand = cmd({
         args: {
           continue: args.continue,
           sessionID: args.session,
+          sessionProjectID: resumed?.projectID,
           fork: args.fork,
         },
         directory,

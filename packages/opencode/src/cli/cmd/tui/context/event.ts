@@ -1,4 +1,5 @@
 import type { Event } from "@opencode-ai/sdk/v2"
+import { useArgs } from "./args"
 import { useProject } from "./project"
 import { useSDK } from "./sdk"
 
@@ -7,6 +8,7 @@ type EventMetadata = {
 }
 
 export function useEvent() {
+  const args = useArgs()
   const project = useProject()
   const sdk = useSDK()
 
@@ -16,7 +18,14 @@ export function useEvent() {
         return
       }
 
-      if (event.directory === "global" || event.project === project.project()) {
+      // A session resumed via `-s` from a different directory belongs to a
+      // different project than the launch cwd. Deliver its events too so the
+      // TUI live-renders without chdir-ing the process. See #28581.
+      if (
+        event.directory === "global" ||
+        event.project === project.project() ||
+        (args.sessionProjectID !== undefined && event.project === args.sessionProjectID)
+      ) {
         handler(event.payload, { workspace: event.workspace })
       }
     })
