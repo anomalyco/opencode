@@ -1287,8 +1287,7 @@ export default function Page() {
 
   const handleTimelineAutoScroll = () => {
     if (!running()) {
-      console.debug("[session] idle auto-scroll ignored")
-      return
+      console.debug("[session] idle auto-scroll gesture")
     }
     autoScroll.handleScroll()
   }
