@@ -6,7 +6,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(Config.defaultLayer)
 
-const load = Config.Service.use((svc) => svc.get())
+const load = Config.use.get()
 
 describe("Permission.evaluate for permission.task", () => {
   const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): Permission.Ruleset =>

@@ -3,6 +3,12 @@ import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
+import { ServiceUnavailableError } from "../../errors"
+
+const catalogUnavailable = new ServiceUnavailableError({
+  message: "Model catalog is unavailable",
+  service: "catalog",
+})
 
 export const modelHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.model", (handlers) =>
   Effect.gen(function* () {
@@ -11,7 +17,7 @@ export const modelHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.model", (
       Effect.fn(function* () {
         const catalog = yield* Catalog.Service
         const pluginBoot = yield* PluginBoot.Service
-        yield* pluginBoot.wait()
+        yield* pluginBoot.wait().pipe(Effect.catchDefect(() => Effect.fail(catalogUnavailable)))
         return yield* catalog.model.available()
       }),
     )

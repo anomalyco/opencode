@@ -37,7 +37,7 @@ export const DialogSelectProvider: Component = () => {
         key={(x) => x?.id}
         items={() => {
           language.locale()
-          return [{ id: CUSTOM_ID, name: customLabel() }, { id: LOCAL_ID, name: "Local providers" }, ...providers.all()]
+          return [{ id: CUSTOM_ID, name: customLabel() }, { id: LOCAL_ID, name: "Local providers" }, ...providers.all().values()]
         }}
         filterKeys={["id", "name"]}
         groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}

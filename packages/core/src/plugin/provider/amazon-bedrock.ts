@@ -50,14 +50,19 @@ export const AmazonBedrockPlugin = PluginV2.define({
   id: PluginV2.ID.make("amazon-bedrock"),
   effect: Effect.gen(function* () {
     return {
-      "provider.update": Effect.fn(function* (evt) {
-        if (evt.provider.id !== ProviderV2.ID.amazonBedrock) return
-        if (evt.provider.endpoint.type !== "aisdk") return
-        if (typeof evt.provider.options.aisdk.provider.endpoint !== "string") return
-        // The AI SDK expects a base URL, but users configure Bedrock private/VPC
-        // endpoints as `endpoint`; move it into the catalog endpoint URL once.
-        evt.provider.endpoint.url = evt.provider.options.aisdk.provider.endpoint
-        delete evt.provider.options.aisdk.provider.endpoint
+      "catalog.transform": Effect.fn(function* (evt) {
+        for (const item of evt.provider.list()) {
+          if (item.provider.endpoint.type !== "aisdk") continue
+          if (item.provider.endpoint.package !== "@ai-sdk/amazon-bedrock") continue
+          evt.provider.update(item.provider.id, (provider) => {
+            if (provider.endpoint.type !== "aisdk") return
+            if (typeof provider.options.aisdk.provider.endpoint !== "string") return
+            // The AI SDK expects a base URL, but users configure Bedrock private/VPC
+            // endpoints as `endpoint`; move it into the catalog endpoint URL once.
+            provider.endpoint.url = provider.options.aisdk.provider.endpoint
+            delete provider.options.aisdk.provider.endpoint
+          })
+        }
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/amazon-bedrock") return

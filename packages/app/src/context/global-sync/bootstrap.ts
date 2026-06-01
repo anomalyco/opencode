@@ -5,7 +5,6 @@ import type {
   PermissionRequest,
   Project,
   ProviderAuthResponse,
-  ProviderListResponse,
   QuestionRequest,
   Session,
   Todo,
@@ -19,7 +18,8 @@ import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
-import { loadMcpQuery } from "../global-sync"
+import { loadMcpQuery } from "../server-sync"
+import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 
 type GlobalStore = {
   ready: boolean
@@ -28,7 +28,7 @@ type GlobalStore = {
   session_todo: {
     [sessionID: string]: Todo[]
   }
-  provider: ProviderListResponse
+  provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
@@ -105,7 +105,7 @@ export const loadProjectsQuery = (sdk: OpencodeClient) =>
   })
 
 export async function bootstrapGlobal(input: {
-  globalSDK: OpencodeClient
+  serverSDK: OpencodeClient
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
   formatMoreCount: (count: number) => string
@@ -113,12 +113,12 @@ export async function bootstrapGlobal(input: {
   queryClient: QueryClient
 }) {
   const slow = [
-    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.globalSDK)),
-    () => input.queryClient.fetchQuery(loadProvidersQuery(null, input.globalSDK)),
-    () => input.queryClient.fetchQuery(loadPathQuery(null, input.globalSDK)),
+    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.serverSDK)),
+    () => input.queryClient.fetchQuery(loadProvidersQuery(null, input.serverSDK)),
+    () => input.queryClient.fetchQuery(loadPathQuery(null, input.serverSDK)),
     () =>
       input.queryClient
-        .fetchQuery(loadProjectsQuery(input.globalSDK))
+        .fetchQuery(loadProjectsQuery(input.serverSDK))
         .then((data) => input.setGlobalStore("project", data)),
   ]
   await runAll(slow)
@@ -198,6 +198,7 @@ export const loadPathQuery = (directory: string | null, sdk: OpencodeClient) =>
 
 export async function bootstrapDirectory(input: {
   directory: string
+  mcp: boolean
   sdk: OpencodeClient
   store: Store<State>
   setStore: SetStoreFunction<State>
@@ -208,7 +209,7 @@ export async function bootstrapDirectory(input: {
     config: Config
     path: Path
     project: Project[]
-    provider: ProviderListResponse
+    provider: NormalizedProviderListResponse
   }
   queryClient: QueryClient
 }) {
@@ -250,7 +251,7 @@ export async function bootstrapDirectory(input: {
             if (next) input.vcsCache.setStore("value", next)
           }),
         ),
-      () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),
+      input.mcp && (() => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? [])))),
       () =>
         retry(() =>
           input.sdk.permission.list().then((x) => {
@@ -304,7 +305,7 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
-      () => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk)),
+      input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk))),
       () =>
         input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
           const project = getFilename(input.directory)

@@ -7,20 +7,25 @@ export const OpencodePlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     let hasKey = false
     return {
-      "provider.update": Effect.fn(function* (evt) {
-        if (evt.provider.id !== ProviderV2.ID.opencode) return
+      "catalog.transform": Effect.fn(function* (evt) {
+        const item = evt.provider.get(ProviderV2.ID.opencode)
+        if (!item) return
         hasKey = Boolean(
           process.env.OPENCODE_API_KEY ||
-            evt.provider.env.some((item) => process.env[item]) ||
-            evt.provider.options.aisdk.provider.apiKey ||
-            (evt.provider.enabled && evt.provider.enabled.via === "auth"),
+            item.provider.env.some((env) => process.env[env]) ||
+            item.provider.options.aisdk.provider.apiKey ||
+            (item.provider.enabled && item.provider.enabled.via === "account"),
         )
-        if (!hasKey) evt.provider.options.aisdk.provider.apiKey = "public"
-      }),
-      "model.update": Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.opencode) return
+        evt.provider.update(item.provider.id, (provider) => {
+          if (!hasKey) provider.options.aisdk.provider.apiKey = "public"
+        })
         if (hasKey) return
-        if (evt.model.cost.some((item) => item.input > 0)) evt.cancel = true
+        for (const model of item.models.values()) {
+          if (!model.cost.some((cost) => cost.input > 0)) continue
+          evt.model.update(item.provider.id, model.id, (draft) => {
+            draft.enabled = false
+          })
+        }
       }),
     }
   }),

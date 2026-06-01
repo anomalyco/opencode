@@ -18,6 +18,7 @@ import {
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
@@ -29,11 +30,11 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { useSearchParams } from "@solidjs/router"
-import { NewSessionView, SessionHeader } from "@/components/session"
+import { useLocation, useSearchParams } from "@solidjs/router"
+import { NewSessionDesignView, NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
@@ -58,12 +59,14 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { shouldUseV2NewSessionPage } from "@/pages/session/new-session-layout"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
@@ -75,7 +78,6 @@ type VcsMode = "git" | "branch"
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
-  messagesReady: () => boolean
   loaded: () => number
   visibleUserMessages: () => UserMessage[]
   historyMore: () => boolean
@@ -85,205 +87,74 @@ type SessionHistoryWindowInput = {
   scroller: () => HTMLDivElement | undefined
 }
 
-/**
- * Maintains the rendered history window for a session timeline.
- *
- * It keeps initial paint bounded to recent turns, reveals cached turns in
- * small batches while scrolling upward, and prefetches older history near top.
- */
-function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
-  const turnInit = 10
-  const turnBatch = 8
-  const turnScrollThreshold = 200
-  const turnPrefetchBuffer = 16
-  const prefetchCooldownMs = 400
-  const prefetchNoGrowthLimit = 2
+function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
+  const historyScrollThreshold = 200
+  let shiftFrame: number | undefined
 
   const [state, setState] = createStore({
-    turnID: undefined as string | undefined,
-    turnStart: 0,
-    prefetchUntil: 0,
-    prefetchNoGrowth: 0,
+    shift: false,
   })
 
-  const initialTurnStart = (len: number) => (len > turnInit ? len - turnInit : 0)
-
-  const turnStart = createMemo(() => {
-    const id = input.sessionID()
-    const len = input.visibleUserMessages().length
-    if (!id || len <= 0) return 0
-    if (state.turnID !== id) return initialTurnStart(len)
-    if (state.turnStart <= 0) return 0
-    if (state.turnStart >= len) return initialTurnStart(len)
-    return state.turnStart
+  const userMessages = createMemo(() => input.visibleUserMessages(), emptyUserMessages, {
+    equals: same,
   })
 
-  const setTurnStart = (start: number) => {
-    const id = input.sessionID()
-    const next = start > 0 ? start : 0
-    if (!id) {
-      setState({ turnID: undefined, turnStart: next })
-      return
-    }
-    setState({ turnID: id, turnStart: next })
+  const cancelShiftReset = () => {
+    if (shiftFrame === undefined) return
+    cancelAnimationFrame(shiftFrame)
+    shiftFrame = undefined
   }
 
-  const renderedUserMessages = createMemo(
-    () => {
-      const msgs = input.visibleUserMessages()
-      const start = turnStart()
-      if (start <= 0) return msgs
-      return msgs.slice(start)
-    },
-    emptyUserMessages,
-    {
-      equals: same,
-    },
-  )
-
-  const preserveScroll = (fn: () => void) => {
-    const el = input.scroller()
-    if (!el) {
-      fn()
-      return
-    }
-    const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
-    fn()
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
+  const scheduleShiftReset = () => {
+    cancelShiftReset()
+    shiftFrame = requestAnimationFrame(() => {
+      shiftFrame = undefined
+      setState("shift", false)
     })
   }
 
-  const backfillTurns = () => {
-    const start = turnStart()
-    if (start <= 0) return
-
-    const next = start - turnBatch
-    const nextStart = next > 0 ? next : 0
-
-    preserveScroll(() => setTurnStart(nextStart))
-  }
-
-  /** Button path: reveal all cached turns, fetch older history, reveal one batch. */
-  const loadAndReveal = async () => {
-    const id = input.sessionID()
-    if (!id) return
-
-    const start = turnStart()
-    const beforeVisible = input.visibleUserMessages().length
-    let loaded = input.loaded()
-
-    if (start > 0) setTurnStart(0)
-
-    if (!input.historyMore() || input.historyLoading()) return
-
-    let afterVisible = beforeVisible
-    let added = 0
-
-    while (true) {
-      await input.loadMore(id)
-      if (input.sessionID() !== id) return
-
-      afterVisible = input.visibleUserMessages().length
-      const nextLoaded = input.loaded()
-      const raw = nextLoaded - loaded
-      added += raw
-      loaded = nextLoaded
-
-      if (afterVisible > beforeVisible) break
-      if (raw <= 0) break
-      if (!input.historyMore()) break
-    }
-
-    if (added <= 0) return
-    if (state.prefetchNoGrowth) setState("prefetchNoGrowth", 0)
-
-    const growth = afterVisible - beforeVisible
-    if (growth <= 0) return
-    if (turnStart() !== 0) return
-
-    const target = Math.min(afterVisible, beforeVisible + turnBatch)
-    setTurnStart(Math.max(0, afterVisible - target))
-  }
-
-  /** Scroll/prefetch path: fetch older history from server. */
-  const fetchOlderMessages = async (opts?: { prefetch?: boolean }) => {
+  const fetchOlderMessages = async () => {
     const id = input.sessionID()
     if (!id) return
     if (!input.historyMore() || input.historyLoading()) return
 
-    if (opts?.prefetch) {
-      const now = Date.now()
-      if (state.prefetchUntil > now) return
-      if (state.prefetchNoGrowth >= prefetchNoGrowthLimit) return
-      setState("prefetchUntil", now + prefetchCooldownMs)
-    }
-
-    const start = turnStart()
+    // TODO(session-timeline): switch this to core cursor-based part pagination when that API lands.
     const beforeVisible = input.visibleUserMessages().length
-    const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
     let loaded = input.loaded()
-    let added = 0
     let growth = 0
 
+    cancelShiftReset()
+    setState("shift", true)
+
     while (true) {
       await input.loadMore(id)
       if (input.sessionID() !== id) return
 
       const nextLoaded = input.loaded()
       const raw = nextLoaded - loaded
-      added += raw
       loaded = nextLoaded
       growth = input.visibleUserMessages().length - beforeVisible
 
       if (growth > 0) break
       if (raw <= 0) break
-      if (opts?.prefetch) break
       if (!input.historyMore()) break
     }
 
-    const afterVisible = input.visibleUserMessages().length
-
-    if (opts?.prefetch) {
-      setState("prefetchNoGrowth", added > 0 ? 0 : state.prefetchNoGrowth + 1)
-    } else if (added > 0 && state.prefetchNoGrowth) {
-      setState("prefetchNoGrowth", 0)
-    }
-
-    if (added <= 0) return
-    if (growth <= 0) return
-
-    if (opts?.prefetch) {
-      const current = turnStart()
-      preserveScroll(() => setTurnStart(current + growth))
+    if (growth > 0) {
+      scheduleShiftReset()
       return
     }
 
-    if (turnStart() !== start) return
-
-    const currentRendered = renderedUserMessages().length
-    const base = Math.max(beforeRendered, currentRendered)
-    const target = Math.min(afterVisible, base + turnBatch)
-    preserveScroll(() => setTurnStart(Math.max(0, afterVisible - target)))
+    setState("shift", false)
   }
+
+  const loadAndReveal = () => fetchOlderMessages()
 
   const onScrollerScroll = () => {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollTop >= turnScrollThreshold) return
-
-    const start = turnStart()
-    if (start > 0) {
-      if (start <= turnPrefetchBuffer) {
-        void fetchOlderMessages({ prefetch: true })
-      }
-      backfillTurns()
-      return
-    }
+    if (el.scrollTop >= historyScrollThreshold) return
 
     void fetchOlderMessages()
   }
@@ -292,34 +163,25 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     on(
       input.sessionID,
       () => {
-        setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
+        cancelShiftReset()
+        setState({ shift: false })
       },
       { defer: true },
     ),
   )
 
-  createEffect(
-    on(
-      () => [input.sessionID(), input.messagesReady()] as const,
-      ([id, ready]) => {
-        if (!id || !ready) return
-        setTurnStart(initialTurnStart(input.visibleUserMessages().length))
-      },
-      { defer: true },
-    ),
-  )
+  onCleanup(cancelShiftReset)
 
   return {
-    turnStart,
-    setTurnStart,
-    renderedUserMessages,
+    userMessages,
+    shift: () => state.shift,
     loadAndReveal,
     onScrollerScroll,
   }
 }
 
 export default function Page() {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
@@ -333,7 +195,9 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const location = useLocation()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -400,8 +264,10 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const isV2NewSessionPage = () =>
+    shouldUseV2NewSessionPage({ newLayoutDesigns: newSessionDesign(), sessionID: params.id })
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
+  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened() && !isV2NewSessionPage())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
@@ -615,7 +481,7 @@ export default function Page() {
         : skipToken,
     }
   })
-  const refreshVcs = () => void queryClient.invalidateQueries({ queryKey: vcsKey() })
+  const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
     if (store.changes === "git" || store.changes === "branch")
       // avoids suspense
@@ -694,11 +560,11 @@ export default function Page() {
   }
 
   function upsert(next: Project) {
-    const list = globalSync.data.project
+    const list = serverSync.data.project
     sync.set("project", next.id)
     const idx = list.findIndex((item) => item.id === next.id)
     if (idx >= 0) {
-      globalSync.set(
+      serverSync.set(
         "project",
         list.map((item, i) => (i === idx ? { ...item, ...next } : item)),
       )
@@ -706,10 +572,10 @@ export default function Page() {
     }
     const at = list.findIndex((item) => item.id > next.id)
     if (at >= 0) {
-      globalSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
+      serverSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
       return
     }
-    globalSync.set("project", [...list, next])
+    serverSync.set("project", [...list, next])
   }
 
   const gitMutation = useMutation(() => ({
@@ -737,6 +603,7 @@ export default function Page() {
   let dockHeight = 0
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
+  let revealMessage = (_id: string) => {}
   let scrollMark = 0
   let messageMark = 0
 
@@ -806,7 +673,7 @@ export default function Page() {
         todoTimer = undefined
         if (!id) return
         if (status === "idle" && !blocked) return
-        const cached = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+        const cached = untrack(() => sync.data.todo[id] !== undefined || serverSync.data.session_todo[id] !== undefined)
 
         todoFrame = requestAnimationFrame(() => {
           todoFrame = undefined
@@ -1403,9 +1270,8 @@ export default function Page() {
     },
   )
 
-  const historyWindow = createSessionHistoryWindow({
+  const historyLoader = createSessionHistoryLoader({
     sessionID: () => params.id,
-    messagesReady,
     loaded: () => messages().length,
     visibleUserMessages,
     historyMore,
@@ -1427,9 +1293,9 @@ export default function Page() {
       const el = scroller
       if (!el) return
       if (el.scrollHeight > el.clientHeight + 1) return
-      if (historyWindow.turnStart() <= 0 && !historyMore()) return
+      if (!historyMore()) return
 
-      void historyWindow.loadAndReveal()
+      void historyLoader.loadAndReveal()
     })
   }
 
@@ -1439,15 +1305,14 @@ export default function Page() {
         [
           params.id,
           messagesReady(),
-          historyWindow.turnStart(),
           historyMore(),
           historyLoading(),
           autoScroll.userScrolled(),
           visibleUserMessages().length,
         ] as const,
-      ([id, ready, start, more, loading, scrolled]) => {
+      ([id, ready, more, loading, scrolled]) => {
         if (!id || !ready || loading || scrolled) return
-        if (start <= 0 && !more) return
+        if (!more) return
         fill()
       },
       { defer: true },
@@ -1521,7 +1386,7 @@ export default function Page() {
       const ok = await sendFollowupDraft({
         client: sdk.client,
         sync,
-        globalSync,
+        serverSync,
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk.directory,
       }).catch((err) => {
@@ -1749,15 +1614,14 @@ export default function Page() {
     historyMore,
     historyLoading,
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
-    turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    setTurnStart: historyWindow.setTurnStart,
     autoScroll,
     scroller: () => scroller,
     anchor,
+    revealMessage: (id) => revealMessage(id),
     scheduleScrollState,
     consumePendingMessage: layout.pendingMessage.consume,
   })
@@ -1786,6 +1650,61 @@ export default function Page() {
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
+
+  useUsageExceededDialogs()
+
+  const composerRegion = (placement: "dock" | "inline") => (
+    <SessionComposerRegion
+      state={composer}
+      ready={!store.deferRender && messagesReady()}
+      centered={placement === "dock" && centered()}
+      placement={placement}
+      inputRef={(el) => {
+        inputRef = el
+      }}
+      newSessionWorktree={newSessionWorktree()}
+      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+      onSubmit={() => {
+        comments.clear()
+        resumeScroll()
+      }}
+      onResponseSubmit={resumeScroll}
+      followup={
+        params.id && !isChildSession()
+          ? {
+              queue: queueEnabled,
+              items: followupDock(),
+              sending: sendingFollowup(),
+              edit: editingFollowup(),
+              onQueue: queueFollowup,
+              onAbort: () => {
+                const id = params.id
+                if (!id) return
+                setFollowup("paused", id, true)
+              },
+              onSend: (id) => {
+                void sendFollowup(params.id!, id, { manual: true })
+              },
+              onEdit: editFollowup,
+              onEditLoaded: clearFollowupEdit,
+            }
+          : undefined
+      }
+      revert={
+        rolled().length > 0
+          ? {
+              items: rolled(),
+              restoring: restoring(),
+              disabled: reverting(),
+              onRestore: restore,
+            }
+          : undefined
+      }
+      setPromptDockRef={(el) => {
+        promptDock = el
+      }}
+    />
+  )
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
@@ -1817,12 +1736,12 @@ export default function Page() {
           </Tabs>
         </Show>
 
-        {/* Session panel */}
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
-            "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+            "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
+            "transition-[width]": !isV2NewSessionPage(),
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1830,20 +1749,23 @@ export default function Page() {
         >
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
+              <Match when={params.id && mobileChanges()}>
+                <div class="relative h-full overflow-hidden">
+                  {reviewContent({
+                    diffStyle: "unified",
+                    classes: {
+                      root: "pb-8",
+                      header: "px-4",
+                      container: "px-4",
+                    },
+                    loadingClass: "px-4 py-4 text-text-weak",
+                    emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+                  })}
+                </div>
+              </Match>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
                   <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
                     actions={actions}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
@@ -1853,8 +1775,11 @@ export default function Page() {
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
                     onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                    onHistoryScroll={historyLoader.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
+                    shouldAnchorBottom={() =>
+                      !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
+                    }
                     centered={centered()}
                     setContentRef={(el) => {
                       content = el
@@ -1863,72 +1788,24 @@ export default function Page() {
                       const root = scroller
                       if (root) scheduleScrollState(root)
                     }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
+                    historyShift={historyLoader.shift()}
+                    userMessages={historyLoader.userMessages()}
                     anchor={anchor}
+                    setRevealMessage={(fn) => {
+                      revealMessage = fn
+                    }}
                   />
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView worktree={newSessionWorktree()} />
+                <Show when={newSessionDesign()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
+                  <NewSessionDesignView>{composerRegion("inline")}</NewSessionDesignView>
+                </Show>
               </Match>
             </Switch>
           </div>
 
-          <SessionComposerRegion
-            state={composer}
-            ready={!store.deferRender && messagesReady()}
-            centered={centered()}
-            inputRef={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            onResponseSubmit={resumeScroll}
-            followup={
-              params.id && !isChildSession()
-                ? {
-                    queue: queueEnabled,
-                    items: followupDock(),
-                    sending: sendingFollowup(),
-                    edit: editingFollowup(),
-                    onQueue: queueFollowup,
-                    onAbort: () => {
-                      const id = params.id
-                      if (!id) return
-                      setFollowup("paused", id, true)
-                    },
-                    onSend: (id) => {
-                      void sendFollowup(params.id!, id, { manual: true })
-                    },
-                    onEdit: editFollowup,
-                    onEditLoaded: clearFollowupEdit,
-                  }
-                : undefined
-            }
-            revert={
-              rolled().length > 0
-                ? {
-                    items: rolled(),
-                    restoring: restoring(),
-                    disabled: reverting(),
-                    onRestore: restore,
-                  }
-                : undefined
-            }
-            setPromptDockRef={(el) => {
-              promptDock = el
-            }}
-          />
+          <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
