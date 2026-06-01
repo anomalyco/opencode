@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -102,16 +102,37 @@ const useDefaultServerKey = (
   }
 }
 
-const useMcpToggleMutation = () => {
-  const sync = useSync()
+const useMcpStatus = () => {
+  const sdk = useSDK()
+  const queryClient = useQueryClient()
+  const queryKey = () => [pathKey(sdk.directory), "mcp"] as const
+  const query = useQuery(() => ({
+    queryKey: queryKey(),
+    queryFn: () => sdk.client.mcp.status().then((r) => r.data ?? {}),
+  }))
+  return {
+    queryKey,
+    data: () => query.data ?? {},
+    refresh: () => queryClient.refetchQueries({ queryKey: queryKey() }),
+  }
+}
+
+const useLspStatus = () => {
+  const sdk = useSDK()
+  const query = useQuery(() => ({
+    queryKey: [pathKey(sdk.directory), "lsp"] as const,
+    queryFn: () => sdk.client.lsp.status().then((r) => r.data ?? []),
+  }))
+  return () => query.data ?? []
+}
+
+const useMcpToggleMutation = (mcp: ReturnType<typeof useMcpStatus>) => {
   const sdk = useSDK()
   const language = useLanguage()
-  const queryClient = useQueryClient()
-  const queryOptions = useQueryOptions()
 
   return useMutation(() => ({
     mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
+      const status = mcp.data()[name]
       if (status?.status === "connected") {
         await sdk.client.mcp.disconnect({ name })
         return
@@ -122,7 +143,7 @@ const useMcpToggleMutation = () => {
       }
       await sdk.client.mcp.connect({ name })
     },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
+    onSuccess: () => mcp.refresh(),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -314,12 +335,14 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogRun += 1
   })
   const sortedServers = createMemo(() => listServersByHealth(servers.list(), server.key, servers.health))
-  const toggleMcp = useMcpToggleMutation()
+  const mcp = useMcpStatus()
+  const lspStatus = useLspStatus()
+  const toggleMcp = useMcpToggleMutation(mcp)
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
-  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
-  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const mcpNames = createMemo(() => Object.keys(mcp.data()).sort((a, b) => a.localeCompare(b)))
+  const mcpStatus = (name: string) => mcp.data()[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
-  const lspItems = createMemo(() => sync.data.lsp ?? [])
+  const lspItems = createMemo(() => lspStatus())
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() =>
     (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),

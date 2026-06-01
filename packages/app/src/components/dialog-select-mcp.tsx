@@ -1,12 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { Component, createMemo, Show } from "solid-js"
-import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
-import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 
 const statusLabels = {
@@ -18,21 +16,25 @@ const statusLabels = {
 } as const
 
 export const DialogSelectMcp: Component = () => {
-  const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
   const queryClient = useQueryClient()
-  const queryOptions = useQueryOptions()
+  const mcpQueryKey = () => [pathKey(sdk.directory), "mcp"] as const
+  const mcpQuery = useQuery(() => ({
+    queryKey: mcpQueryKey(),
+    queryFn: () => sdk.client.mcp.status().then((r) => r.data ?? {}),
+  }))
+  const mcp = () => mcpQuery.data ?? {}
 
   const items = createMemo(() =>
-    Object.entries(sync.data.mcp ?? {})
+    Object.entries(mcp())
       .map(([name, status]) => ({ name, status: status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
   const toggle = useMutation(() => ({
     mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
+      const status = mcp()[name]
       if (status?.status === "connected") {
         await sdk.client.mcp.disconnect({ name })
         return
@@ -43,7 +45,7 @@ export const DialogSelectMcp: Component = () => {
       }
       await sdk.client.mcp.connect({ name })
     },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: mcpQueryKey() }),
   }))
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
@@ -67,7 +69,7 @@ export const DialogSelectMcp: Component = () => {
         }}
       >
         {(i) => {
-          const mcpStatus = () => sync.data.mcp[i.name]
+          const mcpStatus = () => mcp()[i.name]
           const status = () => mcpStatus()?.status
           const statusLabel = () => {
             const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
