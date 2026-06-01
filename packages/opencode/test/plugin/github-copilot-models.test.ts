@@ -317,7 +317,11 @@ test("preserves catalog variants missing from Copilot reasoning effort response"
     low: { reasoningEffort: "low" },
     medium: { reasoningEffort: "medium" },
     high: { reasoningEffort: "high" },
-    xhigh: { reasoningEffort: "xhigh" },
+    xhigh: {
+      reasoningEffort: "xhigh",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    },
   })
 })
 
