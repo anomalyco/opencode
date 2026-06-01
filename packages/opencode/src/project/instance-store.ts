@@ -103,12 +103,26 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return true
     })
 
+    const resolveCached = Effect.fn("InstanceStore.resolveCached")(function* (
+      directory: string,
+      input: LoadInput,
+      entry: Entry,
+    ) {
+      const ctx = yield* Deferred.await(entry.deferred)
+      if (yield* project.get(ctx.project.id)) return ctx
+      if (cache.get(directory) !== entry) return yield* load({ ...input, directory })
+      yield* Effect.logInfo("cached instance project missing; reloading instance").pipe(
+        Effect.annotateLogs({ directory, project: ctx.project.id }),
+      )
+      return yield* reload({ directory })
+    })
+
     const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
       const directory = AppFileSystem.resolve(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
-          if (existing) return yield* restore(Deferred.await(existing.deferred))
+          if (existing) return yield* restore(resolveCached(directory, input, existing))
 
           const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
           cache.set(directory, entry)

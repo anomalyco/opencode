@@ -1,10 +1,14 @@
 import { describe, expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { $ } from "bun"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -15,7 +19,9 @@ const noopBootstrap = Layer.succeed(
 )
 
 const it = testEffect(
-  Layer.mergeAll(InstanceStore.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(Layer.provide(noopBootstrap)),
+  Layer.mergeAll(InstanceStore.defaultLayer, Project.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(
+    Layer.provide(noopBootstrap),
+  ),
 )
 
 const setBootstrap = (run: Effect.Effect<void>) =>
@@ -80,6 +86,25 @@ describe("InstanceStore", () => {
 
       expect(second).toBe(first)
       expect(initialized).toBe(1)
+    }),
+  )
+
+  it.live("reloads cached context when its project row is migrated away", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const projects = yield* Project.Service
+      const remote = `github.com/opencode-test/${crypto.randomUUID()}`
+      const first = yield* store.load({ directory: dir })
+
+      yield* Effect.promise(() => $`git remote add origin ${`https://${remote}.git`}`.cwd(dir).quiet())
+      const migrated = yield* projects.fromDirectory(dir)
+      const refreshed = yield* store.load({ directory: dir })
+
+      expect(yield* projects.get(first.project.id)).toBeUndefined()
+      expect(migrated.project.id).toBe(ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`)))
+      expect(refreshed).not.toBe(first)
+      expect(refreshed.project.id).toBe(migrated.project.id)
     }),
   )
 
