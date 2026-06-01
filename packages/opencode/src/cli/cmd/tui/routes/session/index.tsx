@@ -2228,7 +2228,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
     const retrying = retry()
     if (isRunning() && retrying) {
-      content.push(`↳ ${Locale.truncate(retrying.message, 80)} [retrying attempt #${retrying.attempt}]`)
+      content.push(`↳ ${formatSubagentRetry(retrying.attempt, Locale.truncate(retrying.message, 80))}`)
     } else if (isRunning() && tools().length > 0) {
       if (current()) {
         const state = current()!.state
@@ -2272,6 +2272,10 @@ export function formatSubagentToolcalls(count: number) {
 
 export function formatSubagentTitle(agent: string, description: string, background: boolean) {
   return `${agent} Task${background ? " (background)" : ""} — ${description}`
+}
+
+export function formatSubagentRetry(attempt: number, message: string) {
+  return `Retry #${attempt} · ${message}`
 }
 
 export function formatCompletedSubagentDetail(toolcalls: number, duration: string) {
