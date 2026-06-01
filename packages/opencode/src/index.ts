@@ -1,6 +1,6 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
-import { fishCompletion } from "./cli/completions"
+import { CompletionCommand } from "./cli/cmd/completion"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import * as Log from "@opencode-ai/core/util/log"
@@ -156,25 +156,7 @@ const cli = yargs(args)
     }
   })
   .usage("")
-  .command({
-    command: "completion [shell]",
-    describe: "generate shell completion script",
-    builder: (yargs) =>
-      yargs.positional("shell", {
-        describe: "Shell type (bash, fish, zsh)",
-        type: "string",
-        default: "bash",
-      }),
-    handler: (argv) => {
-      const shell = argv.shell as string
-      if (shell === "fish") {
-        process.stdout.write(fishCompletion)
-      } else {
-        // Delegate to yargs built-in bash/zsh completion
-        process.stdout.write(cli.showCompletionScript())
-      }
-    },
-  })
+  .command(CompletionCommand)
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
