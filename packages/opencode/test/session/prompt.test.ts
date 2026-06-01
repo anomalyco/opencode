@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionMailbox } from "@opencode-ai/core/session/mailbox"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -97,6 +98,7 @@ function toolPart(parts: SessionLegacy.Part[]) {
 
 type CompletedToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateCompleted }
 type ErrorToolPart = SessionLegacy.ToolPart & { state: SessionLegacy.ToolStateError }
+const mcpReadResourceStarted: Array<() => void> = []
 
 function completedTool(parts: SessionLegacy.Part[]) {
   const part = toolPart(parts)
@@ -122,7 +124,11 @@ const mcp = Layer.succeed(
     connect: () => Effect.void,
     disconnect: () => Effect.void,
     getPrompt: () => Effect.succeed(undefined),
-    readResource: () => Effect.succeed(undefined),
+    readResource: () => {
+      const started = mcpReadResourceStarted.shift()
+      if (!started) return Effect.succeed(undefined)
+      return Effect.sync(started).pipe(Effect.andThen(Effect.never))
+    },
     startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
     authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
     finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
@@ -181,6 +187,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     mcp,
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
+    SessionMailbox.defaultLayer,
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
@@ -1121,6 +1128,185 @@ it.instance(
 )
 
 // Queue semantics
+
+it.instance(
+  "promptAsync enqueues while busy and delivers at the next runner boundary",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const gate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const mailbox = yield* SessionMailbox.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* llm.hold("first", deferredAsPromise(gate))
+      yield* llm.text("second")
+
+      const first = yield* prompt
+        .prompt({ sessionID: chat.id, agent: "build", model: ref, parts: [{ type: "text", text: "first" }] })
+        .pipe(Effect.forkChild)
+      yield* llm.wait(1)
+
+      const asyncID = MessageID.ascending()
+      yield* prompt.promptAsync({
+        sessionID: chat.id,
+        messageID: asyncID,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "queued async" }],
+      })
+
+      const queued = yield* mailbox.list({ toSessionID: chat.id, kind: "user", state: "queued" })
+      expect(queued).toHaveLength(1)
+      expect(queued[0]?.text).toBe("queued async")
+      expect((yield* sessions.messages({ sessionID: chat.id })).some((msg) => msg.info.id === asyncID)).toBe(false)
+
+      yield* Deferred.succeed(gate, void 0)
+      yield* Fiber.await(first)
+      yield* pollWithTimeout(
+        mailbox
+          .list({ toSessionID: chat.id, kind: "user", state: "delivered" })
+          .pipe(Effect.map((rows) => (rows.length === 1 ? rows[0] : undefined))),
+        "async prompt mailbox row was not delivered",
+      )
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      expect(msgs.some((msg) => msg.info.role === "user" && msg.info.id === asyncID)).toBe(true)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          return (yield* llm.calls) === 2 ? true : undefined
+        }),
+        "async prompt did not reach the model after mailbox delivery",
+      )
+      expect(yield* llm.calls).toBe(2)
+    }),
+  { git: true },
+  5_000,
+)
+
+it.instance(
+  "idle promptAsync wakes the runner and marks one mailbox row delivered",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const mailbox = yield* SessionMailbox.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const id = MessageID.ascending()
+
+      yield* llm.text("async response")
+      yield* prompt.promptAsync({
+        sessionID: chat.id,
+        messageID: id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "wake me" }],
+      })
+
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const rows = yield* mailbox.list({ toSessionID: chat.id, kind: "user", state: "delivered" })
+          const msgs = yield* sessions.messages({ sessionID: chat.id })
+          const delivered = rows.length === 1 && msgs.some((msg) => msg.info.role === "user" && msg.info.id === id)
+          return delivered && (yield* llm.calls) === 1
+            ? true
+            : undefined
+        }),
+        "idle async prompt was not delivered",
+      )
+      expect(yield* llm.calls).toBe(1)
+    }),
+  { git: true },
+  5_000,
+)
+
+noLLMServer.instance(
+  "cancelled promptAsync drain does not leave a mailbox row processing",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const mailbox = yield* SessionMailbox.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const started = yield* Deferred.make<void>()
+
+      mcpReadResourceStarted.push(() => succeedVoid(started))
+      yield* prompt.promptAsync({
+        sessionID: chat.id,
+        messageID: MessageID.ascending(),
+        agent: "build",
+        model: ref,
+        parts: [
+          {
+            type: "file",
+            mime: "text/plain",
+            filename: "resource.txt",
+            url: "file:///tmp/resource.txt",
+            source: {
+              type: "resource",
+              clientName: "test",
+              uri: "test://slow",
+              text: { value: "resource", start: 0, end: 8 },
+            },
+          },
+        ],
+      })
+
+      yield* awaitWithTimeout(Deferred.await(started), "async mailbox drain never started resource processing")
+      expect(yield* mailbox.list({ toSessionID: chat.id, kind: "user", state: "processing" })).toHaveLength(1)
+
+      yield* prompt.cancel(chat.id)
+      yield* pollWithTimeout(
+        mailbox
+          .list({ toSessionID: chat.id, kind: "user", state: "processing" })
+          .pipe(Effect.map((rows) => (rows.length === 0 ? true : undefined))),
+        "cancelled async prompt left a mailbox row processing",
+      )
+
+      const rows = yield* mailbox.list({ toSessionID: chat.id, kind: "user" })
+      expect(rows.map((row) => row.state)).toEqual(["cancelled"])
+    }),
+  { git: true },
+  5_000,
+)
+
+noLLMServer.instance("promptAsync drains queued messages in mailbox FIFO order", () =>
+  Effect.gen(function* () {
+    const { prompt, sessions, chat } = yield* boot()
+    const mailbox = yield* SessionMailbox.Service
+    const firstID = MessageID.ascending()
+    const secondID = MessageID.ascending()
+
+    yield* prompt.promptAsync({
+      sessionID: chat.id,
+      messageID: firstID,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "first async" }],
+    })
+    yield* prompt.promptAsync({
+      sessionID: chat.id,
+      messageID: secondID,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "second async" }],
+    })
+
+    yield* pollWithTimeout(
+      mailbox
+        .list({ toSessionID: chat.id, kind: "user", state: "delivered" })
+        .pipe(Effect.map((rows) => (rows.length === 2 ? rows : undefined))),
+      "FIFO async prompts were not delivered",
+    )
+
+    const users = (yield* sessions.messages({ sessionID: chat.id })).filter((msg) => msg.info.role === "user")
+    expect(users.map((msg) => msg.info.id)).toEqual([firstID, secondID])
+  }),
+)
 
 noLLMServer.instance("concurrent loop callers get same result", () =>
   Effect.gen(function* () {

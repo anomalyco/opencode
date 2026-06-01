@@ -50,9 +50,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMailbox } from "@opencode-ai/core/session/mailbox"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@opencode-ai/core/session/prompt"
+import { AgentAttachment, FileAttachment, Prompt, ReferenceAttachment, Source } from "@opencode-ai/core/session/prompt"
 import { Reference } from "@/reference/reference"
 import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
@@ -90,6 +91,7 @@ function isOrphanedInterruptedTool(part: SessionLegacy.ToolPart) {
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error>
+  readonly promptAsync: (input: PromptInput) => Effect.Effect<void>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionLegacy.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionLegacy.WithParts, Session.BusyError>
   readonly command: (input: CommandInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error>
@@ -127,6 +129,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
+    const mailbox = yield* SessionMailbox.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
@@ -1190,12 +1193,12 @@ export const layer = Layer.effect(
         yield* events.publish(SessionEvent.Prompted, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
-          prompt: {
+          prompt: new Prompt({
             text: nextPrompt.text.join("\n"),
             files: nextPrompt.files,
             agents: nextPrompt.agents,
             references: nextPrompt.references,
-          },
+          }),
         })
       }
       for (const text of nextPrompt.synthetic) {
@@ -1212,8 +1215,8 @@ export const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error> = Effect.fn(
-      "SessionPrompt.prompt",
+    const applyPromptInput: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.applyPromptInput",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
@@ -1229,6 +1232,13 @@ export const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
+      return message
+    })
+
+    const prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.prompt",
+    )(function* (input: PromptInput) {
+      const message = yield* applyPromptInput(input)
       if (input.noReply === true) return message
       return yield* loop({ sessionID: input.sessionID })
     })
@@ -1499,11 +1509,106 @@ export const layer = Layer.effect(
       },
     )
 
+    const mailboxText = (input: PromptInput) =>
+      input.parts
+        .map((part) => {
+          switch (part.type) {
+            case "text":
+              return part.text
+            case "file":
+              return part.filename ?? part.url
+            case "agent":
+              return part.name
+            case "subtask":
+              return part.prompt
+          }
+        })
+        .filter(Boolean)
+        .join("\n")
+
+    const mailboxPromptInput = Effect.fn("SessionPrompt.mailboxPromptInput")(function* (message: SessionMailbox.Message) {
+      const prompt = message.metadata?.prompt
+      if (!prompt || typeof prompt !== "object") throw new Error(`Mailbox message ${message.id} is missing prompt metadata`)
+      return yield* Schema.decodeUnknownEffect(PromptInput)(prompt)
+    })
+
+    const drainMailbox: (sessionID: SessionID) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn(
+      "SessionPrompt.drainMailbox",
+    )(function* (sessionID: SessionID) {
+      let last: SessionLegacy.WithParts | undefined
+      while (true) {
+        const [message] = yield* mailbox.claim({ toSessionID: sessionID, kind: "user", limit: 1 })
+        if (!message) break
+
+        last = yield* Effect.gen(function* () {
+          const input = yield* mailboxPromptInput(message).pipe(
+            Effect.catchCause((cause) =>
+              mailbox.failed({ id: message.id, error: Cause.pretty(cause) }).pipe(
+                Effect.orDie,
+                Effect.andThen(Effect.die(Cause.squash(cause))),
+              ),
+            ),
+          )
+          const created = yield* applyPromptInput(input).pipe(
+            Effect.catchCause((cause) =>
+              mailbox.failed({ id: message.id, error: Cause.pretty(cause) }).pipe(
+                Effect.orDie,
+                Effect.andThen(Effect.die(Cause.squash(cause))),
+              ),
+            ),
+          )
+          // Delivered means the queued prompt was applied to the transcript; the assistant reply may still be running.
+          yield* mailbox.delivered(message.id).pipe(Effect.orDie)
+          return input.noReply === true ? created : yield* runLoop(input.sessionID)
+        }).pipe(
+          // An interrupted drain owns a processing claim but has not completed delivery. Cancel the row so it
+          // does not remain stuck in processing forever; explicit processing failures still mark the row failed.
+          Effect.onInterrupt(() => mailbox.cancel(message.id).pipe(Effect.orDie, Effect.asVoid)),
+        )
+      }
+      if (last) return last
+      return yield* lastAssistant(sessionID)
+    })
+
     const loop: (input: LoopInput) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn("SessionPrompt.loop")(
       function* (input: LoopInput) {
         return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
       },
     )
+
+    const promptAsync = Effect.fn("SessionPrompt.promptAsync")(function* (input: PromptInput) {
+      yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      yield* mailbox.enqueue({
+        toSessionID: input.sessionID,
+        kind: "user",
+        delivery: "async",
+        text: mailboxText(input),
+        metadata: { prompt: input },
+      })
+
+      const wake = Effect.gen(function* () {
+        while (true) {
+          yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), drainMailbox(input.sessionID))
+          const queued = yield* mailbox.list({ toSessionID: input.sessionID, kind: "user", state: "queued", limit: 1 })
+          if (queued.length === 0) return
+        }
+      })
+
+      yield* wake.pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            yield* Effect.logError("prompt_async mailbox wake failed").pipe(
+              Effect.annotateLogs({ sessionID: input.sessionID, cause }),
+            )
+            yield* events.publish(Session.Event.Error, {
+              sessionID: input.sessionID,
+              error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
+            })
+          }),
+        ),
+        Effect.forkIn(scope, { startImmediately: true }),
+      )
+    })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionLegacy.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
@@ -1632,6 +1737,7 @@ export const layer = Layer.effect(
     return Service.of({
       cancel,
       prompt,
+      promptAsync,
       loop,
       shell,
       command,
@@ -1671,6 +1777,7 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
+        SessionMailbox.defaultLayer,
       ),
     ),
   ),

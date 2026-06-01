@@ -31,6 +31,7 @@ import { TestLLMServer } from "../lib/llm-server"
 // Same layer setup as prompt-effect.test.ts
 import { NodeFileSystem } from "@effect/platform-node"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionMailbox } from "@opencode-ai/core/session/mailbox"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -129,6 +130,7 @@ function makeHttp() {
     mcp,
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
+    SessionMailbox.defaultLayer,
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
