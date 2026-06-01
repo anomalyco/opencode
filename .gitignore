@@ -30,3 +30,22 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Local Skein orchestration/runtime state
+.skein/
+openspec/
+.opencode/agents
+.opencode/agent/analyst.md
+.opencode/agent/architect.md
+.opencode/agent/coder.md
+.opencode/agent/debugger.md
+.opencode/agent/idea-reviewer.md
+.opencode/agent/publisher.md
+.opencode/agent/researcher.md
+.opencode/agent/reviewer.md
+.opencode/agent/scanner.md
+.opencode/agent/tester.md
+
+# Local TUI theme experiments
+packages/opencode/src/cli/cmd/tui/context/theme/knight-rider.json
+packages/opencode/src/cli/cmd/tui/context/theme/pip-boy.json
