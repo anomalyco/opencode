@@ -147,8 +147,9 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
       }
     }
   }
-  if (Object.keys(variants).length > 0) {
-    model.variants = variants
+  const merged = isMsgApi ? variants : { ...(prev?.variants ?? {}), ...variants }
+  if (Object.keys(merged).length > 0) {
+    model.variants = merged
   }
 
   return model
