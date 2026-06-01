@@ -67,6 +67,31 @@ const VersionedMessage = EventV2.define({
   },
 })
 
+const ReplayVersionedMessageLatest = EventV2.define({
+  type: "test.replay-versioned",
+  sync: {
+    version: 2,
+    aggregate: "id",
+  },
+  schema: {
+    id: Schema.String,
+    text: Schema.String,
+    count: Schema.Number,
+  },
+})
+
+EventV2.define({
+  type: "test.replay-versioned",
+  sync: {
+    version: 1,
+    aggregate: "id",
+  },
+  schema: {
+    id: Schema.String,
+    text: Schema.String,
+  },
+})
+
 describe("EventV2", () => {
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
@@ -124,6 +149,12 @@ describe("EventV2", () => {
       })
 
       expect(EventV2.registry.get("test.out-of-order")).toBe(latest)
+    }),
+  )
+
+  it.effect("keeps the latest sync definition after registering an older replay version", () =>
+    Effect.sync(() => {
+      expect(EventV2.registry.get("test.replay-versioned")).toBe(ReplayVersionedMessageLatest)
     }),
   )
 
@@ -308,6 +339,32 @@ describe("EventV2", () => {
 
       expect(rows).toHaveLength(1)
       expect(rows[0]?.aggregate_id).toBe(aggregateID)
+    }),
+  )
+
+  it.effect("replay persists older sync versions with their versioned definition", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+
+      yield* events.replay({
+        id: EventV2.ID.create(),
+        type: EventV2.versionedType("test.replay-versioned", 1),
+        seq: 0,
+        aggregateID,
+        data: { id: aggregateID, text: "legacy" },
+      })
+      const rows = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, aggregateID))
+        .all()
+        .pipe(Effect.orDie)
+
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.type).toBe(EventV2.versionedType("test.replay-versioned", 1))
+      expect(rows[0]?.data).toEqual({ id: aggregateID, text: "legacy" })
     }),
   )
 

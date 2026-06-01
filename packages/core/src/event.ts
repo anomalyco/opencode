@@ -60,12 +60,38 @@ export class InvalidSyncEventError extends Schema.TaggedErrorClass<InvalidSyncEv
   },
 ) {}
 
+export class DuplicateEventDefinitionError extends Error {
+  constructor(type: string) {
+    super(`Event definition ${type} is already registered`)
+    this.name = "EventV2.DuplicateEventDefinition"
+  }
+}
+
 export function versionedType(type: string, version: number) {
   return `${type}.${version}`
 }
 
 export const registry = new Map<string, Definition>()
 const syncRegistry = new Map<string, Definition & { readonly sync: NonNullable<Definition["sync"]> }>()
+
+function registerDefinition(definition: Definition) {
+  const sync = definition.sync
+
+  if (sync === undefined) {
+    if (registry.has(definition.type)) throw new DuplicateEventDefinitionError(definition.type)
+    registry.set(definition.type, definition)
+    return
+  }
+
+  const versioned = versionedType(definition.type, sync.version)
+  if (syncRegistry.has(versioned)) throw new DuplicateEventDefinitionError(versioned)
+
+  const existing = registry.get(definition.type)
+  const existingSync = existing?.sync
+  if (existing !== undefined && existingSync === undefined) throw new DuplicateEventDefinitionError(definition.type)
+  if (existingSync === undefined || sync.version >= existingSync.version) registry.set(definition.type, definition)
+  syncRegistry.set(versioned, definition as Definition & { readonly sync: NonNullable<Definition["sync"]> })
+}
 
 export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
   readonly type: Type
@@ -90,15 +116,7 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
     ...(input.sync === undefined ? {} : { sync: input.sync }),
     data: Data,
   })
-  const existing = registry.get(input.type)
-  if (input.sync === undefined || existing?.sync === undefined || input.sync.version >= existing.sync.version) {
-    registry.set(input.type, definition)
-  }
-  if (input.sync)
-    syncRegistry.set(
-      versionedType(input.type, input.sync.version),
-      definition as Definition & { readonly sync: NonNullable<Definition["sync"]> },
-    )
+  registerDefinition(definition)
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
     Definition<Type, Schema.Struct<Fields>>
 }
@@ -221,9 +239,10 @@ export const layer = Layer.effect(
     function commitSyncEvent(
       event: Payload,
       input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string },
+      resolvedDefinition?: Definition & { readonly sync: NonNullable<Definition["sync"]> },
     ) {
       return Effect.gen(function* () {
-        const definition = registry.get(event.type)
+        const definition = resolvedDefinition ?? registry.get(event.type)
         const sync = definition?.sync
         if (sync) {
           if (event.version !== sync.version) {
@@ -350,7 +369,11 @@ export const layer = Layer.effect(
             version: definition.sync.version,
             data: decodeData(definition, event.data),
           } as Payload
-          yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
+          yield* commitSyncEvent(
+            payload,
+            { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID },
+            definition,
+          )
           if (options?.publish) {
             for (const listener of listeners) {
               yield* listener(payload)
