@@ -19,7 +19,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* defaults((editor) =>
         editor.update(build, (agent) => {
           agent.mode = "primary"
-          agent.permissions.push({ action: "bash", resource: "*", decision: "allow" })
+          agent.permissions.push({ action: "bash", resource: "*", effect: "allow" })
         }),
       )
 
@@ -30,16 +30,16 @@ describe("ConfigAgentPlugin.Plugin", () => {
             new Config.Loaded({
               source: { type: "memory" },
               info: decode({
-                permissions: [{ action: "bash", resource: "*", decision: "ask" }],
+                permissions: [{ action: "bash", resource: "*", effect: "ask" }],
                 agents: {
                   build: {
-                    permissions: [{ action: "bash", resource: "git *", decision: "allow" }],
+                    permissions: [{ action: "bash", resource: "git *", effect: "allow" }],
                   },
                   reviewer: {
                     model: "openrouter/openai/gpt-5",
                     description: "Review changes",
                     mode: "subagent",
-                    permissions: [{ action: "edit", resource: "*", decision: "deny" }],
+                    permissions: [{ action: "edit", resource: "*", effect: "deny" }],
                   },
                   removed: { description: "Removed later" },
                 },
@@ -65,12 +65,12 @@ describe("ConfigAgentPlugin.Plugin", () => {
       const buildAgent = yield* agents.get(build)
       if (!buildAgent) throw new Error("expected configured build agent")
       expect(buildAgent.permissions).toEqual([
-        { action: "bash", resource: "*", decision: "allow" },
-        { action: "bash", resource: "*", decision: "ask" },
-        { action: "bash", resource: "git *", decision: "allow" },
+        { action: "bash", resource: "*", effect: "allow" },
+        { action: "bash", resource: "*", effect: "ask" },
+        { action: "bash", resource: "git *", effect: "allow" },
       ])
-      expect(PermissionV2.evaluate("bash", "git status", buildAgent.permissions).decision).toBe("allow")
-      expect(PermissionV2.evaluate("bash", "bun test", buildAgent.permissions).decision).toBe("ask")
+      expect(PermissionV2.evaluate("bash", "git status", buildAgent.permissions).effect).toBe("allow")
+      expect(PermissionV2.evaluate("bash", "bun test", buildAgent.permissions).effect).toBe("ask")
 
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
       if (!reviewer) throw new Error("expected configured reviewer agent")
@@ -81,8 +81,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
         model: { providerID: "openrouter", id: "openai/gpt-5", variant: "high" },
       })
       expect(reviewer.permissions).toEqual([
-        { action: "bash", resource: "*", decision: "ask" },
-        { action: "edit", resource: "*", decision: "deny" },
+        { action: "bash", resource: "*", effect: "ask" },
+        { action: "edit", resource: "*", effect: "deny" },
       ])
       expect(yield* agents.get(AgentV2.ID.make("removed"))).toBeUndefined()
     }),

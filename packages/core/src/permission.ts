@@ -1,6 +1,6 @@
 export * as PermissionV2 from "./permission"
 
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventV2 } from "./event"
@@ -17,13 +17,13 @@ export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
 )
 export type ID = typeof ID.Type
 
-export const Decision = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Decision" })
-export type Decision = typeof Decision.Type
+export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
+export type Effect = typeof Effect.Type
 
 export const Rule = Schema.Struct({
   action: Schema.String,
   resource: Schema.String,
-  decision: Decision,
+  effect: Effect,
 }).annotate({ identifier: "PermissionV2.Rule" })
 export type Rule = typeof Rule.Type
 
@@ -107,7 +107,7 @@ export function evaluate(action: string, resource: string, ...rulesets: Ruleset[
       .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
       action,
       resource: "*",
-      decision: "ask",
+      effect: "ask",
     }
   )
 }
@@ -117,9 +117,10 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
 }
 
 export interface Interface {
-  readonly assert: (input: AssertInput) => Effect.Effect<void, Error>
-  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
-  readonly list: () => Effect.Effect<ReadonlyArray<Request>>
+  readonly ask: (input: AssertInput) => EffectRuntime.Effect<Effect>
+  readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error>
+  readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
+  readonly list: () => EffectRuntime.Effect<ReadonlyArray<Request>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Permission") {}
@@ -132,45 +133,53 @@ interface Pending {
 
 export const layer = Layer.effect(
   Service,
-  Effect.gen(function* () {
+  EffectRuntime.gen(function* () {
     const { db } = yield* Database.Service
     const events = yield* EventV2.Service
     const location = yield* Location.Service
     const pending = new Map<ID, Pending>()
 
-    yield* Effect.addFinalizer(() =>
-      Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
+    yield* EffectRuntime.addFinalizer(() =>
+      EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
         discard: true,
       }).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
+        EffectRuntime.ensuring(
+          EffectRuntime.sync(() => {
             pending.clear()
           }),
         ),
       ),
     )
 
-    const remembered = Effect.fn("PermissionV2.remembered")(function* () {
+    const remembered = EffectRuntime.fn("PermissionV2.remembered")(function* () {
       const rows = yield* db
         .select()
         .from(PermissionTable)
         .where(eq(PermissionTable.project_id, location.project.id))
         .all()
-        .pipe(Effect.orDie)
-      return rows.map((row): Rule => ({ action: row.action, resource: row.resource, decision: "allow" }))
+        .pipe(EffectRuntime.orDie)
+      return rows.map((row): Rule => ({ action: row.action, resource: row.resource, effect: "allow" }))
     })
 
-    const assert = Effect.fn("PermissionV2.assert")(function* (input: AssertInput) {
-      const rememberedRules = yield* remembered()
-      const rules = [...input.rules, ...rememberedRules]
-      for (const resource of input.resources) {
-        const rule = evaluate(input.action, resource, rules)
-        if (rule.decision !== "deny") continue
+    const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
+      const rules = [...input.rules, ...(yield* remembered())]
+      const effects = input.resources.map((resource) => evaluate(input.action, resource, rules).effect)
+      const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
+      return { effect, rules }
+    })
+
+    const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
+      return (yield* evaluateInput(input)).effect
+    })
+
+    const assert = EffectRuntime.fn("PermissionV2.assert")(function* (input: AssertInput) {
+      const result = yield* evaluateInput(input)
+      if (result.effect === "deny") {
         return yield* new DeniedError({
-          rules: rules.filter((candidate) => Wildcard.match(input.action, candidate.action)),
+          rules: result.rules.filter((candidate) => Wildcard.match(input.action, candidate.action)),
         })
       }
-      if (input.resources.every((resource) => evaluate(input.action, resource, rules).decision === "allow")) return
+      if (result.effect === "allow") return
 
       const request: Request = {
         id: input.id ?? ID.create(),
@@ -185,15 +194,15 @@ export const layer = Layer.effect(
       pending.set(request.id, { request, rules: input.rules, deferred })
       yield* events.publish(Event.Asked, request)
       return yield* Deferred.await(deferred).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
+        EffectRuntime.ensuring(
+          EffectRuntime.sync(() => {
             pending.delete(request.id)
           }),
         ),
       )
     })
 
-    const reply = Effect.fn("PermissionV2.reply")(function* (input: ReplyInput) {
+    const reply = EffectRuntime.fn("PermissionV2.reply")(function* (input: ReplyInput) {
       const existing = pending.get(input.requestID)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
       pending.delete(input.requestID)
@@ -233,7 +242,7 @@ export const layer = Layer.effect(
           )
           .onConflictDoNothing()
           .run()
-          .pipe(Effect.orDie)
+        .pipe(EffectRuntime.orDie)
       }
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply !== "always" || !existing.request.remember?.length) return
@@ -241,7 +250,7 @@ export const layer = Layer.effect(
       const rememberedRules = yield* remembered()
       for (const [id, item] of pending) {
         const rules = [...item.rules, ...rememberedRules]
-        if (!item.request.resources.every((resource) => evaluate(item.request.action, resource, rules).decision === "allow")) continue
+        if (!item.request.resources.every((resource) => evaluate(item.request.action, resource, rules).effect === "allow")) continue
         pending.delete(id)
         yield* events.publish(Event.Replied, {
           sessionID: item.request.sessionID,
@@ -252,11 +261,11 @@ export const layer = Layer.effect(
       }
     })
 
-    const list = Effect.fn("PermissionV2.list")(function* () {
+    const list = EffectRuntime.fn("PermissionV2.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)
     })
 
-    return Service.of({ assert, reply, list })
+    return Service.of({ ask, assert, reply, list })
   }),
 )
 

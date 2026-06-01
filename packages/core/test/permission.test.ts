@@ -63,14 +63,28 @@ function waitForRequest() {
 }
 
 describe("PermissionV2", () => {
+  it.effect("returns the effective action without creating a request", () =>
+    Effect.gen(function* () {
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion({ rules: [{ action: "read", resource: "*", effect: "allow" }] }))).toBe(
+        "allow",
+      )
+      expect(yield* service.ask(assertion({ rules: [{ action: "read", resource: "*", effect: "deny" }] }))).toBe(
+        "deny",
+      )
+      expect(yield* service.ask(assertion())).toBe("ask")
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("allows and denies from explicit rules without asking", () =>
     Effect.gen(function* () {
       const service = yield* PermissionV2.Service
       yield* service.assert(
-        assertion({ rules: [{ action: "read", resource: "*", decision: "allow" }] }),
+        assertion({ rules: [{ action: "read", resource: "*", effect: "allow" }] }),
       )
       const denied = yield* service
-        .assert(assertion({ rules: [{ action: "read", resource: "*", decision: "deny" }] }))
+        .assert(assertion({ rules: [{ action: "read", resource: "*", effect: "deny" }] }))
         .pipe(Effect.flip)
       expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
       expect(yield* service.list()).toEqual([])
