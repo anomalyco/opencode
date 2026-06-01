@@ -649,6 +649,27 @@ describe("LLMClient tools", () => {
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toContain("Invalid tool input")
+      expect(toolError?.message).toContain("Expected keys: [city]")
+    }),
+  )
+
+  it.effect("names expected and received keys when the model sends wrong argument names", () =>
+    Effect.gen(function* () {
+      const layer = scriptedResponses([
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"cityName":"Paris"}'), finishChunk("tool_calls")),
+        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
+      ])
+
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
+      )
+
+      const toolError = events.find(LLMEvent.is.toolError)
+      expect(toolError?.message).toContain("Expected keys: [city]")
+      expect(toolError?.message).toContain("Received keys: [cityName]")
     }),
   )
 

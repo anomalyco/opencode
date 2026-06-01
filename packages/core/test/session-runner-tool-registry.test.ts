@@ -301,7 +301,7 @@ describe("ToolRegistry", () => {
           ...identity,
           call: { type: "tool-call", id: "invalid-input", name: "transformed", input: { value: "yes" } },
         }),
-      ).toMatchObject({ type: "error", value: expect.stringContaining("Invalid tool input") })
+      ).toMatchObject({ type: "error", value: expect.stringContaining("Expected keys: [value]") })
       expect(executed).toEqual(["yes"])
 
       yield* service.register({

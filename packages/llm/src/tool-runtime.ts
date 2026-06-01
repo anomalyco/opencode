@@ -8,7 +8,7 @@ import {
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
 } from "./schema"
-import { type AnyTool, type Tools } from "./tool"
+import { type AnyTool, invalidToolInput, type Tools } from "./tool"
 
 export interface ToolSettlement {
   readonly result: ToolResultValueType
@@ -36,7 +36,7 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
 
 const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
-    Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
+    Effect.mapError((error) => invalidToolInput(tool._definition.inputSchema, call.input, error.message)),
     Effect.flatMap((decoded) =>
       tool.execute!(decoded, { id: call.id, name: call.name }).pipe(
         Effect.flatMap((value) =>

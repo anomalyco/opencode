@@ -229,6 +229,12 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
       }),
   )
 
+/** Name the expected and received keys so a model with wrong argument names can self-correct. */
+export const invalidToolInput = (inputSchema: ToolDefinitionClass["inputSchema"], input: unknown, message: string) =>
+  new ToolFailure({
+    message: `Invalid tool input: ${message}\nExpected keys: [${Object.keys(inputSchema.properties ?? {})}]\nReceived keys: [${input && typeof input === "object" ? Object.keys(input) : []}]`,
+  })
+
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(schema)
   if (Object.keys(document.definitions).length === 0) return document.schema
