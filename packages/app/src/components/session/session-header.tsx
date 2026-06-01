@@ -27,6 +27,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
+import { MenuV2 } from "@opencode-ai/ui/v2/components/menu-v2.jsx"
 
 const OPEN_APPS = [
   "vscode",
@@ -233,15 +234,6 @@ export function SessionHeader() {
   const tint = createMemo(() =>
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
   )
-  const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
-    statusVisible: status(),
-    statusLabel: language.t("status.popover.trigger"),
-    reviewLabel: language.t("command.review.toggle"),
-    reviewKeybind: command.keybind("review.toggle"),
-    reviewOpened: view().reviewPanel.opened(),
-    onReviewToggle: () => view().reviewPanel.toggle(),
-  }))
-
   const selectApp = (app: OpenApp) => {
     if (!options().some((item) => item.id === app)) return
     setPrefs("app", app)
@@ -278,6 +270,32 @@ export function SessionHeader() {
       })
       .catch((err: unknown) => showRequestError(language, err))
   }
+
+  const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
+    statusVisible: status(),
+    statusLabel: language.t("status.popover.trigger"),
+    reviewLabel: language.t("command.review.toggle"),
+    reviewKeybind: command.keybind("review.toggle"),
+    reviewOpened: view().reviewPanel.opened(),
+    onReviewToggle: () => view().reviewPanel.toggle(),
+    projectDirectory: projectDirectory(),
+    canOpen: canOpen(),
+    opening: opening(),
+    currentIcon: current().icon,
+    currentLabel: current().label,
+    tint: tint(),
+    options: options(),
+    currentId: current().id,
+    menuOpen: menu.open,
+    openInLabel: language.t("session.header.openIn"),
+    copyPathLabel: language.t("session.header.open.copyPath"),
+    openMenuLabel: language.t("session.header.open.menu"),
+    ariaLabel: language.t("session.header.open.ariaLabel", { app: current().label }),
+    onOpenDir: openDir,
+    onSelectApp: selectApp,
+    onCopyPath: copyPath,
+    onMenuOpenChange: (open: boolean) => setMenu("open", open),
+  }))
 
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
   const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
@@ -526,11 +544,116 @@ type SessionHeaderV2ActionsState = {
   reviewKeybind: string
   reviewOpened: boolean
   onReviewToggle: () => void
+  projectDirectory: string
+  canOpen: boolean
+  opening: boolean
+  currentIcon: string
+  currentLabel: string
+  tint: string | undefined
+  options: readonly { id: string; label: string; icon: string }[]
+  currentId: string
+  menuOpen: boolean
+  openInLabel: string
+  copyPathLabel: string
+  openMenuLabel: string
+  ariaLabel: string
+  onOpenDir: (app: string) => void
+  onSelectApp: (app: string) => void
+  onCopyPath: () => void
+  onMenuOpenChange: (open: boolean) => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
     <div class="flex items-center gap-0">
+      <Show when={props.state.projectDirectory && props.state.canOpen}>
+        <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
+          <IconButtonV2
+            type="button"
+            variant="ghost"
+            size="large"
+            class="!w-9 shrink-0 rounded-none h-full border-none shadow-none"
+            state={props.state.opening ? "pressed" : undefined}
+            disabled={props.state.opening}
+            onClick={() => props.state.onOpenDir(props.state.currentId)}
+            aria-label={props.state.ariaLabel}
+            icon={
+              <Show
+                when={props.state.opening}
+                fallback={
+                  <div class="flex size-4 items-center justify-center [&_[data-component=app-icon]]:size-4">
+                    <AppIcon id={props.state.currentIcon} />
+                  </div>
+                }
+              >
+                <Spinner class="size-3.5" style={{ color: props.state.tint ?? "var(--icon-base)" }} />
+              </Show>
+            }
+          />
+          <MenuV2
+            gutter={4}
+            placement="bottom-end"
+            open={props.state.menuOpen}
+            onOpenChange={props.state.onMenuOpenChange}
+          >
+            <MenuV2.Trigger
+              as={IconButtonV2}
+              type="button"
+              variant="ghost"
+              size="large"
+              class="!w-6 shrink-0 rounded-none h-full px-0 border-none shadow-none"
+              state={(props.state.opening || props.state.menuOpen) ? "pressed" : undefined}
+              disabled={props.state.opening}
+              aria-label={props.state.openMenuLabel}
+              icon={<IconV2 name="outline-chevron-down" size="small" />}
+            />
+            <MenuV2.Portal>
+              <MenuV2.Content>
+                <MenuV2.Group>
+                  <MenuV2.GroupLabel>{props.state.openInLabel}</MenuV2.GroupLabel>
+                  <MenuV2.RadioGroup
+                    value={props.state.currentId}
+                    onChange={(value) => {
+                      if (!OPEN_APPS.includes(value as OpenApp)) return
+                      props.state.onSelectApp(value)
+                    }}
+                  >
+                    <For each={props.state.options}>
+                      {(o) => (
+                        <MenuV2.RadioItem
+                          value={o.id}
+                          disabled={props.state.opening}
+                          onSelect={() => {
+                            props.state.onMenuOpenChange(false)
+                            props.state.onOpenDir(o.id)
+                          }}
+                        >
+                          <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
+                            <AppIcon id={o.icon} />
+                          </div>
+                          <span>{o.label}</span>
+                        </MenuV2.RadioItem>
+                      )}
+                    </For>
+                  </MenuV2.RadioGroup>
+                </MenuV2.Group>
+                <MenuV2.Separator />
+                <MenuV2.Item
+                  onSelect={() => {
+                    props.state.onMenuOpenChange(false)
+                    props.state.onCopyPath()
+                  }}
+                >
+                  <div class="flex size-5 shrink-0 items-center justify-center">
+                    <IconV2 name="copy" size="small" />
+                  </div>
+                  <span>{props.state.copyPathLabel}</span>
+                </MenuV2.Item>
+              </MenuV2.Content>
+            </MenuV2.Portal>
+          </MenuV2>
+        </div>
+      </Show>
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
