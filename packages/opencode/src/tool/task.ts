@@ -10,10 +10,12 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Cause, Effect, Exit, Schema, Scope } from "effect"
+import { Cause, DateTime, Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -25,12 +27,12 @@ const id = "task"
 const BACKGROUND_DESCRIPTION = [
   "",
   "",
-  [
-    "Background mode: background=true launches the subagent asynchronously and returns immediately.",
-    "Foreground is the default; use it when you need the result before continuing.",
-    "Use background only for independent work that can run while you continue elsewhere.",
-    "You will be notified automatically when it finishes.",
-  ].join(" "),
+    [
+      "Background mode: background=true launches the subagent asynchronously and returns immediately.",
+      "Foreground is the default; use it when you need the result before continuing.",
+      "Use background only for independent work that can run while you continue elsewhere.",
+      "Completion is observable via task/session events and status; parent auto-continuation is not automatic.",
+    ].join(" "),
 ].join("\n")
 
 const BaseParameterFields = {
@@ -49,7 +51,7 @@ const BaseParameters = Schema.Struct(BaseParameterFields)
 export const Parameters = Schema.Struct({
   ...BaseParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({
-    description: "Run the agent in the background. You will be notified when it completes.",
+    description: "Run the agent in the background. Completion is observable via task/session events and status.",
   }),
 })
 
@@ -62,30 +64,9 @@ function backgroundOutput(sessionID: SessionID) {
     `<task id="${sessionID}" state="running">`,
     "<summary>Background task started</summary>",
     "<task_result>",
-    "Background task started. You will be notified automatically when it finishes; do not poll for progress.",
+    "Background task started. Completion is observable via task/session events and status; parent auto-continuation is not automatic.",
     "Do not duplicate its work. Continue only with non-overlapping work, or stop if there is nothing else useful to do.",
     "</task_result>",
-    "</task>",
-  ].join("\n")
-}
-
-function backgroundMessage(input: {
-  sessionID: SessionID
-  description: string
-  state: "completed" | "error"
-  text: string
-}) {
-  const tag = input.state === "completed" ? "task_result" : "task_error"
-  const title =
-    input.state === "completed"
-      ? `Background task completed: ${input.description}`
-      : `Background task failed: ${input.description}`
-  return [
-    `<task id="${input.sessionID}" state="${input.state}">`,
-    `<summary>${title}</summary>`,
-    `<${tag}>`,
-    input.text,
-    `</${tag}>`,
     "</task>",
   ].join("\n")
 }
@@ -95,6 +76,21 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+const backgroundEvent = (input: {
+  sessionID: SessionID
+  parentSessionID: SessionID
+  jobID: string
+  taskID?: string
+  description?: string
+}) => ({
+  timestamp: DateTime.makeUnsafe(Date.now()),
+  sessionID: input.sessionID,
+  parentSessionID: input.parentSessionID,
+  jobID: input.jobID,
+  ...(input.taskID ? { taskID: input.taskID } : {}),
+  ...(input.description ? { description: input.description } : {}),
+})
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -102,9 +98,9 @@ export const TaskTool = Tool.define(
     const background = yield* BackgroundJob.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
-    const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const events = yield* EventV2Bridge.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -206,29 +202,33 @@ export const TaskTool = Tool.define(
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
-      const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
-        state: "completed" | "error",
-        text: string,
+      const publishBackground = Effect.fn("TaskTool.publishBackground")(function* (
+        state: "started" | "completed" | "failed" | "cancelled",
+        input: { jobID: string; error?: string },
       ) {
-        const currentParent = yield* sessions.get(ctx.sessionID)
-        yield* ops
-          .prompt({
-            sessionID: ctx.sessionID,
-            agent: currentParent.agent ?? ctx.agent,
-            parts: [
-              {
-                type: "text",
-                synthetic: true,
-                text: backgroundMessage({
-                  sessionID: nextSession.id,
-                  description: params.description,
-                  state,
-                  text,
-                }),
-              },
-            ],
-          })
-          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+        const data = backgroundEvent({
+          sessionID: nextSession.id,
+          parentSessionID: ctx.sessionID,
+          jobID: input.jobID,
+          taskID: nextSession.id,
+          description: params.description,
+        })
+        switch (state) {
+          case "started":
+            yield* events.publish(SessionEvent.Background.Started, data).pipe(Effect.catchCause(() => Effect.void))
+            return
+          case "completed":
+            yield* events.publish(SessionEvent.Background.Completed, data).pipe(Effect.catchCause(() => Effect.void))
+            return
+          case "failed":
+            yield* events
+              .publish(SessionEvent.Background.Failed, { ...data, error: input.error })
+              .pipe(Effect.catchCause(() => Effect.void))
+            return
+          case "cancelled":
+            yield* events.publish(SessionEvent.Background.Cancelled, data).pipe(Effect.catchCause(() => Effect.void))
+            return
+        }
       })
 
       const existing = yield* background.get(nextSession.id)
@@ -237,17 +237,21 @@ export const TaskTool = Tool.define(
       }
 
       if (runInBackground) {
+        yield* publishBackground("started", { jobID: nextSession.id })
         const info = yield* background.start({
           id: nextSession.id,
           type: id,
           title: params.description,
           metadata,
+          cancel: ops
+            .cancel(nextSession.id)
+            .pipe(Effect.andThen(publishBackground("cancelled", { jobID: nextSession.id }))),
           run: runTask().pipe(
-            Effect.tap((text) => inject("completed", text).pipe(Effect.ignore)),
+            Effect.tap(() => publishBackground("completed", { jobID: nextSession.id })),
             Effect.catchCause((cause) =>
               (Cause.hasInterruptsOnly(cause)
                 ? Effect.void
-                : inject("error", errorText(Cause.squash(cause))).pipe(Effect.ignore)
+                : publishBackground("failed", { jobID: nextSession.id, error: errorText(Cause.squash(cause)) })
               ).pipe(Effect.andThen(Effect.failCause(cause))),
             ),
           ),

@@ -37,6 +37,12 @@ const mailboxOptions = {
   },
 } as const
 
+const backgroundOptions = {
+  sync: {
+    aggregate: "sessionID",
+    version: 1,
+  },
+} as const
 
 export const MailboxState = Schema.Literals(["queued", "processing", "delivered", "failed", "cancelled"]).annotate({
   identifier: "session.mailbox.state",
@@ -107,6 +113,54 @@ export namespace Mailbox {
     ...mailboxOptions,
     schema: {
       ...MailboxBase,
+    },
+  })
+  export type Cancelled = typeof Cancelled.Type
+}
+
+const BackgroundBase = {
+  timestamp: V2Schema.DateTimeUtcFromMillis,
+  sessionID: SessionSchema.ID,
+  parentSessionID: SessionSchema.ID,
+  jobID: Schema.String,
+  taskID: Schema.String.pipe(Schema.optional),
+  description: Schema.String.pipe(Schema.optional),
+}
+
+export namespace Background {
+  export const Started = EventV2.define({
+    type: "session.background.started",
+    ...backgroundOptions,
+    schema: {
+      ...BackgroundBase,
+    },
+  })
+  export type Started = typeof Started.Type
+
+  export const Completed = EventV2.define({
+    type: "session.background.completed",
+    ...backgroundOptions,
+    schema: {
+      ...BackgroundBase,
+    },
+  })
+  export type Completed = typeof Completed.Type
+
+  export const Failed = EventV2.define({
+    type: "session.background.failed",
+    ...backgroundOptions,
+    schema: {
+      ...BackgroundBase,
+      error: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Failed = typeof Failed.Type
+
+  export const Cancelled = EventV2.define({
+    type: "session.background.cancelled",
+    ...backgroundOptions,
+    schema: {
+      ...BackgroundBase,
     },
   })
   export type Cancelled = typeof Cancelled.Type
