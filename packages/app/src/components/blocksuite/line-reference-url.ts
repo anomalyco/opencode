@@ -1,3 +1,5 @@
+import type { SelectedLineRange } from "@/context/file/types"
+
 export type LineRefInput = {
   path: string
   start: number
@@ -101,4 +103,31 @@ export function lineRefSegments(input: {
 
 export function lineRefSegmentsLabel(segments: LineRefSegment[]) {
   return segments.map((part) => part.label).join(" · ")
+}
+
+const side = (value?: string): value is SelectedLineRange["side"] =>
+  value === "additions" || value === "deletions"
+
+export function lineRefToSelection(input: Pick<
+  LineRefInput,
+  | "start"
+  | "end"
+  | "side"
+  | "endSide"
+  | "additionStart"
+  | "additionEnd"
+  | "deletionStart"
+  | "deletionEnd"
+>): SelectedLineRange {
+  const range: SelectedLineRange = {
+    start: input.start,
+    end: input.end,
+  }
+  if (side(input.side)) range.side = input.side
+  if (side(input.endSide)) range.endSide = input.endSide
+  if (input.additionStart) range.additionStart = input.additionStart
+  if (input.additionEnd) range.additionEnd = input.additionEnd
+  if (input.deletionStart) range.deletionStart = input.deletionStart
+  if (input.deletionEnd) range.deletionEnd = input.deletionEnd
+  return range
 }

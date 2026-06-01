@@ -76,6 +76,8 @@ import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
 import { PromptDrawingShell } from "./prompt-input/drawing-shell"
 import { createPromptDrawing } from "./prompt-input/drawing"
 import { createPromptDoc } from "./prompt-input/doc"
+import { createOpenSessionFile } from "./prompt-input/open-session-file"
+import { lineRefToSelection } from "@/components/blocksuite/line-reference-url"
 import { createPromptContextSync } from "./prompt-input/context-sync"
 import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
 import { DialogDocSubmit } from "./doc-submit/dialog-doc-submit"
@@ -217,44 +219,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return diffs.some((diff) => diff.file === path)
   }
 
+  const openSessionFile = createOpenSessionFile({
+    commentInReview,
+    reviewPanel: view().reviewPanel,
+    fileTree: layout.fileTree,
+    tabs: tabs(),
+    tabForPath: files.tab,
+    normalizePath: files.normalize,
+    expandTree: files.tree.expand,
+    loadFile: files.load,
+    setSelectedLines: files.setSelectedLines,
+    setCommentActive: comments.setActive,
+    setCommentFocus: comments.setFocus,
+    commentFocus: comments.focus,
+  })
+
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
     if (!item.commentID) return
-
-    const focus = { file: item.path, id: item.commentID }
-    comments.setActive(focus)
-
-    const queueCommentFocus = (attempts = 6) => {
-      const schedule = (left: number) => {
-        requestAnimationFrame(() => {
-          comments.setFocus({ ...focus })
-          if (left <= 0) return
-          requestAnimationFrame(() => {
-            const current = comments.focus()
-            if (!current) return
-            if (current.file !== focus.file || current.id !== focus.id) return
-            schedule(left - 1)
-          })
-        })
-      }
-
-      schedule(attempts)
-    }
-
-    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
-    if (wantsReview) {
-      if (!view().reviewPanel.opened()) view().reviewPanel.open()
-      layout.fileTree.setTab("changes")
-      tabs().setActive("review")
-      queueCommentFocus()
-      return
-    }
-
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.setTab("all")
-    const tab = files.tab(item.path)
-    tabs().open(tab)
-    tabs().setActive(tab)
-    Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
+    openSessionFile({
+      path: item.path,
+      origin: item.commentOrigin,
+      commentFocus: { file: item.path, id: item.commentID },
+    })
   }
 
   const recent = createMemo(() => {
@@ -453,9 +439,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         preview: input.preview,
       })
     })
+    bridge.setOpenLineReference((input) => {
+      if (store.mode !== "doc") return false
+      openSessionFile({ path: input.path, selection: lineRefToSelection(input) })
+      return true
+    })
+    bridge.setOpenFileReference((path, nodeType) => {
+      if (store.mode !== "doc") return false
+      openSessionFile({ path: relPath(path), nodeType: nodeType === "directory" ? "directory" : "file" })
+      return true
+    })
     onCleanup(() => {
       bridge.setAddReference(undefined)
       bridge.setAddLineReference(undefined)
+      bridge.setOpenLineReference(undefined)
+      bridge.setOpenFileReference(undefined)
       bridge.setMode("normal")
     })
   })

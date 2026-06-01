@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lineRefSegments, normLineRef } from "./line-reference-url"
+import { lineRefSegments, lineRefToSelection, normLineRef } from "./line-reference-url"
 
 describe("lineRefSegments", () => {
   test("mixed uses per-side line spans when present", () => {
@@ -30,6 +30,30 @@ describe("lineRefSegments", () => {
       { label: "L5", tone: "deletions" },
       { label: "L9", tone: "additions" },
     ])
+  })
+
+  test("lineRefToSelection maps diff spans", () => {
+    expect(
+      lineRefToSelection({
+        start: 5,
+        end: 9,
+        side: "deletions",
+        endSide: "additions",
+        additionStart: 2,
+        additionEnd: 4,
+        deletionStart: 1,
+        deletionEnd: 3,
+      }),
+    ).toEqual({
+      start: 5,
+      end: 9,
+      side: "deletions",
+      endSide: "additions",
+      additionStart: 2,
+      additionEnd: 4,
+      deletionStart: 1,
+      deletionEnd: 3,
+    })
   })
 
   test("normLineRef swaps sides when lines invert", () => {

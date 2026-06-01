@@ -3,6 +3,7 @@ import { CodeIcon, DeleteIcon, DragHandleConfigExtension, HoverController } from
 import { defineBlockSchema, type BlockSchemaType, type SchemaToModel } from "@blocksuite/store"
 import { css, html } from "lit"
 import { literal } from "lit/static-html.js"
+import { OPEN_LINE_REFERENCE, type OpenLineReferenceDetail } from "./doc-block-events"
 import { lineRefSegments, lineRefTone } from "./line-reference-url"
 
 export type LineReferenceBlockProps = {
@@ -193,10 +194,34 @@ export class LineReferenceBlockComponent extends BlockComponent<LineReferenceBlo
     ])
   }
 
+  private open() {
+    const pick = (value: number) => (value > 0 ? value : undefined)
+    const detail: OpenLineReferenceDetail = {
+      path: this.model.path,
+      start: this.model.start,
+      end: this.model.end,
+      side: this.model.side || undefined,
+      endSide: this.model.endSide || undefined,
+      additionStart: pick(this.model.additionStart),
+      additionEnd: pick(this.model.additionEnd),
+      deletionStart: pick(this.model.deletionStart),
+      deletionEnd: pick(this.model.deletionEnd),
+      comment: this.model.comment?.trim() || undefined,
+    }
+    this.dispatchEvent(
+      new CustomEvent(OPEN_LINE_REFERENCE, {
+        bubbles: true,
+        composed: true,
+        detail,
+      }),
+    )
+  }
+
   private press = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    this.select()
+    this.open()
+    this.focus()
   }
 
   private keys = (event: KeyboardEvent) => {

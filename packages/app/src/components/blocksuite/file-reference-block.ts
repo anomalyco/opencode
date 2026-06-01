@@ -3,6 +3,7 @@ import { DeleteIcon, DragHandleConfigExtension, getAttachmentFileIcons, HoverCon
 import { defineBlockSchema, type BlockSchemaType, type SchemaToModel } from "@blocksuite/store"
 import { css, html } from "lit"
 import { literal } from "lit/static-html.js"
+import { OPEN_FILE_REFERENCE, type OpenFileReferenceDetail } from "./doc-block-events"
 
 export type FileNodeType = "file" | "directory"
 
@@ -143,10 +144,25 @@ export class FileReferenceBlockComponent extends BlockComponent<FileReferenceBlo
     ])
   }
 
+  private open() {
+    const detail: OpenFileReferenceDetail = {
+      path: this.model.path,
+      nodeType: this.model.nodeType === "directory" ? "directory" : "file",
+    }
+    this.dispatchEvent(
+      new CustomEvent(OPEN_FILE_REFERENCE, {
+        bubbles: true,
+        composed: true,
+        detail,
+      }),
+    )
+  }
+
   private press = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    this.select()
+    this.open()
+    this.focus()
   }
 
   private keys = (event: KeyboardEvent) => {

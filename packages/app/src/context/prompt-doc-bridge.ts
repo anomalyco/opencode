@@ -2,6 +2,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createSignal } from "solid-js"
 import type { SelectedLineRange } from "@/context/file"
 import type { FileNodeType } from "@/components/blocksuite/file-reference-block"
+import type { LineRefInput } from "@/components/blocksuite/line-reference-url"
 
 type Mode = "normal" | "shell" | "draw" | "doc"
 
@@ -20,6 +21,8 @@ export const { use: usePromptDocBridge, provider: PromptDocBridgeProvider } = cr
     const [mode, setMode] = createSignal<Mode>("normal")
     let addFile: ((path: string, nodeType?: FileNodeType) => boolean) | undefined
     let addLine: ((input: LineReferenceInput) => boolean) | undefined
+    let openLine: ((input: LineRefInput) => boolean) | undefined
+    let openFile: ((path: string, nodeType?: FileNodeType) => boolean) | undefined
 
     return {
       mode,
@@ -32,6 +35,14 @@ export const { use: usePromptDocBridge, provider: PromptDocBridgeProvider } = cr
         addLine = next
       },
       addLineReference: (input: LineReferenceInput) => addLine?.(input) ?? false,
+      setOpenLineReference: (next: typeof openLine) => {
+        openLine = next
+      },
+      openLineReference: (input: LineRefInput) => openLine?.(input) ?? false,
+      setOpenFileReference: (next: typeof openFile) => {
+        openFile = next
+      },
+      openFileReference: (path: string, nodeType?: FileNodeType) => openFile?.(path, nodeType) ?? false,
     }
   },
 })

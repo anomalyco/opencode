@@ -417,6 +417,7 @@ export default function FileTree(props: {
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
                 >
                   <div
+                    data-file-tree-path={node.path}
                     classList={{
                       "group/foldernode w-full min-w-0 h-6 flex items-center justify-start gap-x-1 rounded-md pr-1.5 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors": true,
                       [props.nodeClass ?? ""]: !!props.nodeClass,
