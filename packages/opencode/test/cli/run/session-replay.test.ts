@@ -243,7 +243,12 @@ describe("run session replay", () => {
       replayLocalRows(
         [userMessage("msg-user-1", "start"), userMessage("msg-user-2", "retry")],
         [first, answer, second],
-        [{ commit: error, after: { kind: "assistant", messageID: "msg-assistant-1" } }],
+        [
+          {
+            commit: error,
+            after: { kind: "assistant", text: "partial answer", phase: "progress", messageID: "msg-assistant-1" },
+          },
+        ],
       ),
     ).toEqual([first, answer, error, second])
   })
@@ -304,8 +309,133 @@ describe("run session replay", () => {
 
     expect(
       replayLocalRows([userMessage("msg-user-1", "start")], [first, complete], [
-        { commit: error, after: { kind: "assistant", messageID: "msg-assistant-1", partID: "part-1", visible: "before " } },
+        {
+          commit: error,
+          after: {
+            kind: "assistant",
+            text: "before ",
+            phase: "progress",
+            messageID: "msg-assistant-1",
+            partID: "part-1",
+            visible: "before ",
+          },
+        },
       ]),
     ).toEqual([first, { ...complete, text: "before " }, error, { ...complete, text: "after" }])
+  })
+
+  test("places an unpersisted failed prompt before live output from that turn", () => {
+    const prompt = {
+      kind: "user",
+      text: "start",
+      phase: "start",
+      source: "system",
+      messageID: "msg-1",
+    } as const
+    const answer = {
+      kind: "assistant",
+      text: "partial answer",
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-2",
+    } as const
+    const error = {
+      kind: "error",
+      text: "stream failed",
+      phase: "start",
+      source: "system",
+      messageID: "msg-1",
+    } as const
+
+    expect(
+      replayLocalRows([], [answer], [
+        { commit: prompt },
+        {
+          commit: error,
+          after: { kind: "assistant", text: "partial answer", phase: "progress", messageID: "msg-2" },
+        },
+      ]),
+    ).toEqual([prompt, answer, error])
+  })
+
+  test("anchors a failure after the visible start of a tool that later completes", () => {
+    const prompt = {
+      kind: "user",
+      text: "run ls",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const running = {
+      kind: "tool",
+      text: "running bash",
+      phase: "start",
+      source: "tool",
+      messageID: "msg-assistant-1",
+      partID: "part-tool-1",
+      toolState: "running",
+    } as const
+    const completed = {
+      kind: "tool",
+      text: "file.txt",
+      phase: "final",
+      source: "tool",
+      messageID: "msg-assistant-1",
+      partID: "part-tool-1",
+      toolState: "completed",
+    } as const
+    const error = {
+      kind: "error",
+      text: "connection lost",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+
+    expect(
+      replayLocalRows([userMessage("msg-user-1", "run ls")], [prompt, running, completed], [
+        {
+          commit: error,
+          after: {
+            kind: "tool",
+            text: "running bash",
+            phase: "start",
+            messageID: "msg-assistant-1",
+            partID: "part-tool-1",
+            toolState: "running",
+          },
+        },
+      ]),
+    ).toEqual([prompt, running, error, completed])
+  })
+
+  test("retains an unpersisted local diagnostic before later persisted prompts", () => {
+    const first = {
+      kind: "user",
+      text: "before",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-1",
+    } as const
+    const error = {
+      kind: "error",
+      text: "failed to start new session",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-2",
+    } as const
+    const second = {
+      kind: "user",
+      text: "after",
+      phase: "start",
+      source: "system",
+      messageID: "msg-user-3",
+    } as const
+
+    expect(
+      replayLocalRows([userMessage("msg-user-1", "before"), userMessage("msg-user-3", "after")], [first, second], [
+        { commit: error },
+      ]),
+    ).toEqual([first, error, second])
   })
 })

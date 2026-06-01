@@ -904,8 +904,11 @@ function createLayer(input: StreamInput) {
           if (visible) {
             state.wait?.onVisibleOutput?.({
               kind: visible.kind,
+              text: visible.text,
+              phase: visible.phase,
               messageID: visible.messageID,
               partID: visible.partID,
+              toolState: visible.toolState,
               ...(visible.partID && state.data.visible.has(visible.partID)
                 ? { visible: state.data.visible.get(visible.partID) }
                 : {}),

@@ -311,8 +311,11 @@ export type StreamCommit = {
 
 export type LocalReplayAnchor = {
   kind: EntryKind
+  text: string
+  phase: StreamPhase
   messageID?: string
   partID?: string
+  toolState?: StreamToolState
   visible?: string
 }
 

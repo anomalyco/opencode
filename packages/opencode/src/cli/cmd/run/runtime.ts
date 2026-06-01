@@ -14,6 +14,7 @@
 //   4. runs the prompt queue until the footer closes.
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { MessageID } from "@/session/schema"
 import { createRunDemo } from "./demo"
 import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
@@ -646,12 +647,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
                       status: "failed to start new session",
                     },
                   })
-                  footer.append({
+                  const commit = {
                     kind: "error",
                     text: error instanceof Error ? error.message : String(error),
                     phase: "start",
                     source: "system",
-                  })
+                    messageID: MessageID.ascending(),
+                  } as const
+                  rememberLocal(commit)
+                  footer.append(commit)
                 }
               }
             : undefined,

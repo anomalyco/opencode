@@ -199,13 +199,26 @@ export function replayLocalRows(messages: SessionMessages, commits: StreamCommit
       return [...out, row]
     }
 
-    const anchored = local.after
-      ? out.findLastIndex((commit) =>
-          local.after?.partID
-            ? commit.partID === local.after.partID
-            : commit.kind === local.after?.kind && commit.messageID === local.after.messageID,
+    const exact = local.after
+      ? out.findIndex(
+          (commit) =>
+            commit.kind === local.after?.kind &&
+            commit.text === local.after.text &&
+            commit.phase === local.after.phase &&
+            commit.toolState === local.after.toolState &&
+            (local.after.partID ? commit.partID === local.after.partID : commit.messageID === local.after.messageID),
         )
       : -1
+    const anchored =
+      exact !== -1
+        ? exact
+        : local.after
+          ? out.findLastIndex((commit) =>
+              local.after?.partID
+                ? commit.partID === local.after.partID
+                : commit.kind === local.after?.kind && commit.messageID === local.after.messageID,
+            )
+          : -1
     if (anchored !== -1) {
       const commit = out[anchored]
       const visible = local.after?.visible
@@ -227,7 +240,7 @@ export function replayLocalRows(messages: SessionMessages, commits: StreamCommit
       return [...out.slice(0, after + 1), row, ...out.slice(after + 1)]
     }
 
-    const before = out.findIndex((commit) => commit.kind === "user" && commit.messageID && row.messageID! < commit.messageID)
+    const before = out.findIndex((commit) => commit.messageID && row.messageID! < commit.messageID)
     if (before === -1) {
       return [...out, row]
     }
