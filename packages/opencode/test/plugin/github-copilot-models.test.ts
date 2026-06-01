@@ -161,6 +161,10 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
                 supports: {},
               },
             },
+            {
+              model_picker_enabled: false,
+              id: "ignored-non-chat-record",
+            },
           ],
         }),
         { status: 200 },
@@ -179,6 +183,7 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
     },
   })
   expect(models["incomplete-internal-model"]).toBeUndefined()
+  expect(models["ignored-non-chat-record"]).toBeUndefined()
 })
 
 test("clears existing variants so refreshed models calculate provider-specific variants", async () => {

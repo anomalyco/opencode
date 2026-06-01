@@ -1,66 +1,66 @@
 import type { Model } from "@opencode-ai/sdk/v2"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 
-export const schema = Schema.Struct({
-  data: Schema.Array(
+const item = Schema.Struct({
+  model_picker_enabled: Schema.Boolean,
+  id: Schema.String,
+  name: Schema.String,
+  // every version looks like: `{model.id}-YYYY-MM-DD`
+  version: Schema.String,
+  supported_endpoints: Schema.optional(Schema.Array(Schema.String)),
+  policy: Schema.optional(
     Schema.Struct({
-      model_picker_enabled: Schema.Boolean,
-      id: Schema.String,
-      name: Schema.String,
-      // every version looks like: `{model.id}-YYYY-MM-DD`
-      version: Schema.String,
-      supported_endpoints: Schema.optional(Schema.Array(Schema.String)),
-      policy: Schema.optional(
-        Schema.Struct({
-          state: Schema.optional(Schema.String),
-        }),
-      ),
-      billing: Schema.optional(
-        Schema.Struct({
-          token_prices: Schema.optional(
-            Schema.Struct({
-              batch_size: Schema.Number,
-              default: Schema.Struct({
-                cache_price: Schema.Number,
-                input_price: Schema.Number,
-                output_price: Schema.Number,
-              }),
-            }),
-          ),
-        }),
-      ),
-      capabilities: Schema.Struct({
-        family: Schema.String,
-        limits: Schema.optional(
-          Schema.Struct({
-            max_context_window_tokens: Schema.optional(Schema.Number),
-            max_output_tokens: Schema.optional(Schema.Number),
-            max_prompt_tokens: Schema.optional(Schema.Number),
-            vision: Schema.optional(
-              Schema.Struct({
-                max_prompt_image_size: Schema.Number,
-                max_prompt_images: Schema.Number,
-                supported_media_types: Schema.Array(Schema.String),
-              }),
-            ),
-          }),
-        ),
-        supports: Schema.Struct({
-          adaptive_thinking: Schema.optional(Schema.Boolean),
-          max_thinking_budget: Schema.optional(Schema.Number),
-          min_thinking_budget: Schema.optional(Schema.Number),
-          reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
-          streaming: Schema.optional(Schema.Boolean),
-          structured_outputs: Schema.optional(Schema.Boolean),
-          tool_calls: Schema.optional(Schema.Boolean),
-          vision: Schema.optional(Schema.Boolean),
-        }),
-      }),
+      state: Schema.optional(Schema.String),
     }),
   ),
+  billing: Schema.optional(
+    Schema.Struct({
+      token_prices: Schema.optional(
+        Schema.Struct({
+          batch_size: Schema.Number,
+          default: Schema.Struct({
+            cache_price: Schema.Number,
+            input_price: Schema.Number,
+            output_price: Schema.Number,
+          }),
+        }),
+      ),
+    }),
+  ),
+  capabilities: Schema.Struct({
+    family: Schema.String,
+    limits: Schema.optional(
+      Schema.Struct({
+        max_context_window_tokens: Schema.optional(Schema.Number),
+        max_output_tokens: Schema.optional(Schema.Number),
+        max_prompt_tokens: Schema.optional(Schema.Number),
+        vision: Schema.optional(
+          Schema.Struct({
+            max_prompt_image_size: Schema.Number,
+            max_prompt_images: Schema.Number,
+            supported_media_types: Schema.Array(Schema.String),
+          }),
+        ),
+      }),
+    ),
+    supports: Schema.Struct({
+      adaptive_thinking: Schema.optional(Schema.Boolean),
+      max_thinking_budget: Schema.optional(Schema.Number),
+      min_thinking_budget: Schema.optional(Schema.Number),
+      reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
+      streaming: Schema.optional(Schema.Boolean),
+      structured_outputs: Schema.optional(Schema.Boolean),
+      tool_calls: Schema.optional(Schema.Boolean),
+      vision: Schema.optional(Schema.Boolean),
+    }),
+  }),
 })
 
-type Item = Schema.Schema.Type<typeof schema>["data"][number]
+export const schema = Schema.Struct({
+  data: Schema.Array(Schema.Unknown),
+})
+
+type Item = Schema.Schema.Type<typeof item>
 type SelectableItem = Item & {
   capabilities: Item["capabilities"] & {
     limits: NonNullable<Item["capabilities"]["limits"]> & {
@@ -73,6 +73,7 @@ type SelectableItem = Item & {
   }
 }
 const decodeModels = Schema.decodeUnknownSync(schema)
+const decodeItem = Schema.decodeUnknownOption(item)
 
 function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
   const reasoning =
@@ -213,7 +214,12 @@ export async function get(
   })
 
   const result = { ...existing }
-  const remote = new Map(data.data.filter(selectable).map((m) => [m.id, m] as const))
+  const remote = new Map(
+    data.data.flatMap((raw) => {
+      const item = Option.getOrUndefined(decodeItem(raw))
+      return item && selectable(item) ? ([[item.id, item]] as const) : []
+    }),
+  )
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {
