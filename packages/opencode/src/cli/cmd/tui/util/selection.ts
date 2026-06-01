@@ -1,4 +1,5 @@
 import * as Clipboard from "./clipboard"
+import { handleSmartSelection } from "./smart-selection"
 
 type Toast = {
   show: (input: { message: string; variant: "info" | "success" | "warning" | "error" }) => void
@@ -39,6 +40,7 @@ export function copy(renderer: Renderer, toast: Toast): boolean {
     .catch(toast.error)
 
   renderer.clearSelection()
+  handleSmartSelection(clipboardText)
   return true
 }
 
