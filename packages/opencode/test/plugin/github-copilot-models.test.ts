@@ -180,7 +180,7 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
     output: 60,
     cache: {
       read: 1,
-      write: 1,
+      write: 0,
     },
   })
   expect(models["incomplete-internal-model"]).toBeUndefined()

@@ -134,7 +134,8 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
       output: (prices?.default.output_price ?? 0) * usdPerMillion,
       cache: {
         read: (prices?.default.cache_price ?? 0) * usdPerMillion,
-        write: (prices?.default.cache_price ?? 0) * usdPerMillion,
+        // `/models` exposes cached-input reads only; per-request billing accounts for cache writes.
+        write: 0,
       },
     },
     options: prev?.options ?? {},
