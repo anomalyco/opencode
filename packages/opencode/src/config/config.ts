@@ -376,15 +376,6 @@ function writable(info: Info) {
   return next
 }
 
-function deduplicateInstructionOrigins(instructions: InstructionOrigin[]) {
-  const seen = new Set<string>()
-  return instructions.filter((instruction) => {
-    if (seen.has(instruction.spec)) return false
-    seen.add(instruction.spec)
-    return true
-  })
-}
-
 function writableGlobal(info: Info) {
   const next = writable(info)
   // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
@@ -571,10 +562,13 @@ export const layer = Layer.effect(
         ) {
           if (!list?.length) return
           const hit = kind ?? (yield* pluginScopeForSource(source))
-          result.instruction_origins = deduplicateInstructionOrigins([
-            ...(result.instruction_origins ?? []),
-            ...list.map((spec) => ({ spec, source, scope: hit })),
-          ])
+          const merged = [...(result.instruction_origins ?? []), ...list.map((spec) => ({ spec, source, scope: hit }))]
+          const seen = new Set<string>()
+          result.instruction_origins = merged.filter((item) => {
+            if (seen.has(item.spec)) return false
+            seen.add(item.spec)
+            return true
+          })
         })
 
         const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {

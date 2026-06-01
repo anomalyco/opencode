@@ -81,14 +81,13 @@ export const layer: Layer.Layer<
           .globUp(instruction, ctx.directory, ctx.worktree)
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
       }
-      const base =
-        origin?.source === "OPENCODE_CONFIG_CONTENT"
-          ? ctx.directory
-          : origin?.source && !origin.source.startsWith("http://") && !origin.source.startsWith("https://")
-            ? path.resolve(origin.source) === path.resolve(global.config)
-              ? global.config
-              : path.dirname(path.resolve(origin.source))
-            : global.config
+      const src = origin?.source
+      const base = (() => {
+        if (src === "OPENCODE_CONFIG_CONTENT") return ctx.directory
+        if (!src || src.startsWith("http://") || src.startsWith("https://")) return global.config
+        if (path.resolve(src) === path.resolve(global.config)) return global.config
+        return path.dirname(path.resolve(src))
+      })()
       return yield* fs.globUp(instruction, base, base).pipe(Effect.catch(() => Effect.succeed([] as string[])))
     })
 
