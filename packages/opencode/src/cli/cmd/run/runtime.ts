@@ -7,7 +7,7 @@
 //   runInteractiveLocalMode -- used for local in-process mode (no server)
 //
 // Both delegate to runInteractiveRuntime, which:
-//   1. resolves keybinds, diff style, model info, and session history,
+//   1. resolves TUI config, model info, and session history,
 //   2. creates the split-footer lifecycle (renderer + RunFooter),
 //   3. starts the stream transport (SDK event subscription), lazily for fresh
 //      local sessions,
@@ -15,7 +15,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createRunDemo } from "./demo"
-import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo, resolveSessionInfo } from "./runtime.boot"
+import { resolveModelInfo, resolveRunTuiConfig, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { recordRunSpanError, setRunSpanAttributes, withRunSpan } from "./otel"
 import { trace } from "./trace"
@@ -51,6 +51,8 @@ type RunRuntimeInput = {
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
+  replay?: boolean
+  replayLimit?: number
   demo?: RunInput["demo"]
 }
 
@@ -67,6 +69,8 @@ type RunLocalInput = {
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
+  replay?: boolean
+  replayLimit?: number
   demo?: RunInput["demo"]
 }
 
@@ -169,8 +173,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
     async (span) => {
       const start = performance.now()
       const log = trace()
-      const keybindTask = resolveFooterKeybinds()
-      const diffTask = resolveDiffStyle()
+      const tuiConfigTask = resolveRunTuiConfig()
       const ctx = await input.boot()
       const modelTask = resolveModelInfo(ctx.sdk, ctx.directory, ctx.model)
       const sessionTask =
@@ -182,12 +185,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
               variant: undefined,
             })
       const savedTask = resolveSavedVariant(ctx.model)
-      const [keybinds, diffStyle, session, savedVariant] = await Promise.all([
-        keybindTask,
-        diffTask,
-        sessionTask,
-        savedTask,
-      ])
+      const [tuiConfig, session, savedVariant] = await Promise.all([tuiConfigTask, sessionTask, savedTask])
       const state: RuntimeState = {
         shown: !session.first,
         aborting: false,
@@ -248,8 +246,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         agent: state.agent,
         model: state.model,
         variant: state.activeVariant,
-        keybinds,
-        diffStyle,
+        tuiConfig,
         onPermissionReply: async (next) => {
           if (state.demo?.permission(next)) {
             return
@@ -490,6 +487,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             directory: ctx.directory,
             sessionID: state.sessionID,
             thinking: input.thinking,
+            replay: input.replay,
+            replayLimit: input.replayLimit,
             limits: () => state.limits,
             footer,
             trace: log,
@@ -722,6 +721,8 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
         files: input.files,
         initialInput: input.initialInput,
         thinking: input.thinking,
+        replay: input.replay,
+        replayLimit: input.replayLimit,
         demo: input.demo,
         resolveSession: () => {
           if (session) {
@@ -774,6 +775,8 @@ export async function runInteractiveMode(input: RunInput & { createSession?: Cre
         files: input.files,
         initialInput: input.initialInput,
         thinking: input.thinking,
+        replay: input.replay,
+        replayLimit: input.replayLimit,
         demo: input.demo,
         boot: async () => ({
           sdk: input.sdk,

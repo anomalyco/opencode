@@ -22,6 +22,7 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import * as Log from "@opencode-ai/core/util/log"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -29,9 +30,11 @@ import { TestLLMServer } from "../lib/llm-server"
 
 // Same layer setup as prompt-effect.test.ts
 import { NodeFileSystem } from "@effect/platform-node"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent as AgentSvc } from "../../src/agent/agent"
+import { BackgroundJob } from "@/background/job"
 import { Git } from "../../src/git"
-import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
 import { LSP } from "@/lsp/lsp"
@@ -58,7 +61,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
-import { SyncEvent } from "@/sync"
+import { RepositoryCache } from "../../src/reference/repository-cache"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
@@ -105,7 +109,7 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
+const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
@@ -124,8 +128,10 @@ function makeHttp() {
     lsp,
     mcp,
     AppFileSystem.defaultLayer,
+    BackgroundJob.defaultLayer,
     status,
-    SyncEvent.defaultLayer,
+    Database.defaultLayer,
+    EventV2Bridge.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -133,10 +139,12 @@ function makeHttp() {
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(Git.defaultLayer),
     Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -145,9 +153,14 @@ function makeHttp() {
   const proc = SessionProcessor.layer.pipe(
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(Image.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
   )
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
+  const compact = SessionCompaction.layer.pipe(
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(proc),
+    Layer.provideMerge(deps),
+  )
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionSummary.defaultLayer,
@@ -163,6 +176,7 @@ function makeHttp() {
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
       Layer.provideMerge(deps),
     ),
   )
@@ -243,15 +257,19 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
 
       // Verify the tool call completed (in the first assistant message)
       const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
+      const user = allMsgs.find(
+        (msg): msg is SessionLegacy.WithParts & { info: SessionLegacy.User } => msg.info.role === "user",
+      )
       const tool = allMsgs
         .flatMap((m) => m.parts)
-        .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
+        .find((p): p is SessionLegacy.ToolPart => p.type === "tool" && p.tool === "bash")
       expect(tool?.state.status).toBe("completed")
+      if (!user) throw new Error("Expected user message")
 
-      // Poll for diff — summarize() is fire-and-forget
+      // Poll for the turn diff — summarize() is fire-and-forget.
       let diff: Array<{ file?: string }> = []
       for (let i = 0; i < 50; i++) {
-        diff = yield* summary.diff({ sessionID: session.id })
+        diff = yield* summary.diff({ sessionID: session.id, messageID: user.info.id })
         if (diff.length > 0) break
         yield* Effect.sleep("100 millis")
       }

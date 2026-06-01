@@ -1,11 +1,11 @@
 import { AccountID, OrgID } from "@/account/schema"
 import { MCP } from "@/mcp"
-import { ProviderID, ModelID } from "@/provider/schema"
+
 import { Session } from "@/session/session"
 import { Worktree } from "@/worktree"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
@@ -15,6 +15,7 @@ import {
 } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const ConsoleStateResponse = Schema.Struct({
   consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
@@ -49,11 +50,27 @@ const ToolListItem = Schema.Struct({
 const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
 export const ToolListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
-  provider: ProviderID,
-  model: ModelID,
+  provider: ProviderV2.ID,
+  model: ProviderV2.ModelID,
 })
 
 const WorktreeList = Schema.Array(Schema.String)
+const WorktreeErrorName = Schema.Union([
+  Schema.Literal("WorktreeNotGitError"),
+  Schema.Literal("WorktreeNameGenerationFailedError"),
+  Schema.Literal("WorktreeCreateFailedError"),
+  Schema.Literal("WorktreeStartCommandFailedError"),
+  Schema.Literal("WorktreeRemoveFailedError"),
+  Schema.Literal("WorktreeResetFailedError"),
+  Schema.Literal("WorktreeListFailedError"),
+])
+export class WorktreeApiError extends Schema.ErrorClass<WorktreeApiError>("WorktreeError")(
+  {
+    name: WorktreeErrorName,
+    data: Schema.Struct({ message: Schema.String }),
+  },
+  { httpApiStatus: 400 },
+) {}
 export const SessionListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   roots: Schema.optional(QueryBoolean),
@@ -141,6 +158,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {
           query: WorkspaceRoutingQuery,
           success: described(WorktreeList, "List of worktree directories"),
+          error: WorktreeApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.list",
@@ -149,10 +167,11 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.post("worktreeCreate", ExperimentalPaths.worktree, {
+          disableCodecs: true,
           query: WorkspaceRoutingQuery,
-          payload: Schema.optional(Worktree.CreateInput),
+          payload: [HttpApiSchema.NoContent, Worktree.CreateInput],
           success: described(Worktree.Info, "Worktree created"),
-          error: HttpApiError.BadRequest,
+          error: WorktreeApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.create",
@@ -164,7 +183,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           query: WorkspaceRoutingQuery,
           payload: Worktree.RemoveInput,
           success: described(Schema.Boolean, "Worktree removed"),
-          error: HttpApiError.BadRequest,
+          error: WorktreeApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.remove",
@@ -176,7 +195,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           query: WorkspaceRoutingQuery,
           payload: Worktree.ResetInput,
           success: described(Schema.Boolean, "Worktree reset"),
-          error: HttpApiError.BadRequest,
+          error: WorktreeApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.reset",

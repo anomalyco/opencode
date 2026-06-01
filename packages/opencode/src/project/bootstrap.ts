@@ -5,7 +5,6 @@ import { File } from "../file"
 import { Snapshot } from "../snapshot"
 import * as Project from "./project"
 import * as Vcs from "./vcs"
-import { Bus } from "../bus"
 import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
@@ -37,7 +36,7 @@ export const layer = Layer.effect(
 
     const run = Effect.gen(function* () {
       const ctx = yield* InstanceState.context
-      yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
+      yield* Effect.logInfo("bootstrapping").pipe(Effect.annotateLogs("directory", ctx.directory))
       // everything depends on config so eager load it for nice traces
       yield* config.get()
       // Plugin can mutate config so it has to be initialized before anything else.
@@ -57,7 +56,6 @@ export const layer = Layer.effect(
 
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide([
-    Bus.layer,
     Config.defaultLayer,
     File.defaultLayer,
     FileWatcher.defaultLayer,

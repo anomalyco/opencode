@@ -14,7 +14,7 @@ export const Image = Schema.Struct({
     description: "Maximum image height before resizing or rejecting the attachment (default: 2000)",
   }),
   max_base64_bytes: Schema.optional(PositiveInt).annotate({
-    description: "Maximum base64 payload bytes for an image attachment (default: 4718592)",
+    description: "Maximum base64 payload bytes for an image attachment (default: 5242880)",
   }),
 }).annotate({ identifier: "ImageAttachmentConfig" })
 export type Image = Schema.Schema.Type<typeof Image>

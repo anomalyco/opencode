@@ -323,4 +323,118 @@ describe("http-recorder", () => {
       }),
     )
   })
+
+  test("auto mode records to disk when the cassette is missing", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-auto-record-"))
+    using server = Bun.serve({
+      port: 0,
+      fetch: () => new Response('{"reply":"recorded"}', { headers: { "content-type": "application/json" } }),
+    })
+    const url = `http://127.0.0.1:${server.port}/echo`
+    // CI=true forces replay; clear it so we exercise the local-dev auto-record path.
+    const previous = process.env.CI
+    delete process.env.CI
+    try {
+      const result = await runWith("auto-record", { directory, mode: "auto" }, post(url, { step: 1 }))
+      expect(result).toBe('{"reply":"recorded"}')
+      expect(fs.existsSync(path.join(directory, "auto-record.json"))).toBe(true)
+    } finally {
+      if (previous !== undefined) process.env.CI = previous
+    }
+  })
+
+  test("passthrough mode bypasses the recorder entirely", async () => {
+    using server = Bun.serve({ port: 0, fetch: () => new Response("from-upstream") })
+    const url = `http://127.0.0.1:${server.port}/path`
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-passthrough-"))
+
+    const result = await runWith("passthrough-noop", { directory, mode: "passthrough" }, post(url, {}))
+    expect(result).toBe("from-upstream")
+    expect(fs.existsSync(path.join(directory, "passthrough-noop.json"))).toBe(false)
+  })
+
+  test("UnsafeCassetteError fails the request when a recording would write a known secret", async () => {
+    using server = Bun.serve({ port: 0, fetch: () => new Response("Bearer abcdefghijklmnopqrstuvwxyz1234") })
+    const url = `http://127.0.0.1:${server.port}/leaky`
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-unsafe-"))
+
+    const exit = await Effect.runPromise(
+      Effect.exit(
+        post(url, { ok: true }).pipe(
+          Effect.provide(HttpRecorder.cassetteLayer("unsafe-record", { directory, mode: "record" })),
+        ),
+      ),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(failureText(exit)).toContain("contains possible secrets")
+    expect(fs.existsSync(path.join(directory, "unsafe-record.json"))).toBe(false)
+  })
+
+  test("Cassette.list enumerates recorded cassette names", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-list-"))
+    await seedCassetteDirectory(directory, "alpha/one", [
+      {
+        transport: "http",
+        request: { method: "GET", url: "https://x.test/a", headers: {}, body: "" },
+        response: { status: 200, headers: {}, body: "a" },
+      },
+    ])
+    await seedCassetteDirectory(directory, "beta", [
+      {
+        transport: "http",
+        request: { method: "GET", url: "https://x.test/b", headers: {}, body: "" },
+        response: { status: 200, headers: {}, body: "b" },
+      },
+    ])
+
+    const names = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cassette = yield* HttpRecorder.Cassette.Service
+        return yield* cassette.list()
+      }).pipe(Effect.provide(HttpRecorder.Cassette.fileSystem({ directory })), Effect.provide(NodeFileSystem.layer)),
+    )
+    expect(names).toEqual(["alpha/one", "beta"])
+  })
+
+  test("WebSocket replay decodes binary frames recorded as base64", async () => {
+    const binaryServer = new Uint8Array([1, 2, 3, 4])
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const cassette = yield* HttpRecorder.Cassette.Service
+          const executor = yield* HttpRecorder.makeWebSocketExecutor({
+            name: "ws/binary",
+            cassette,
+            live: { open: () => Effect.die(new Error("unexpected live WebSocket open")) },
+          })
+          const connection = yield* executor.open({
+            url: "wss://example.test/binary",
+            headers: Headers.fromInput({}),
+          })
+          const messages: Array<string | Uint8Array> = []
+          yield* connection.messages.pipe(Stream.runForEach((m) => Effect.sync(() => messages.push(m))))
+          yield* connection.close
+
+          expect(messages).toHaveLength(1)
+          expect(messages[0]).toBeInstanceOf(Uint8Array)
+          expect(Array.from(messages[0] as Uint8Array)).toEqual([1, 2, 3, 4])
+        }).pipe(
+          Effect.provide(
+            HttpRecorder.Cassette.memory({
+              "ws/binary": [
+                {
+                  transport: "websocket",
+                  open: { url: "wss://example.test/binary", headers: {} },
+                  client: [],
+                  server: [
+                    { kind: "binary", body: Buffer.from(binaryServer).toString("base64"), bodyEncoding: "base64" },
+                  ],
+                },
+              ],
+            }),
+          ),
+        ),
+      ),
+    )
+  })
 })

@@ -1,17 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import { sseEvents, sseRaw } from "../lib/sse"
 
-const model = Gemini.model({
-  id: "gemini-2.5-flash",
-  baseURL: "https://generativelanguage.test/v1beta/",
-  headers: { "x-goog-api-key": "test" },
-})
+const model = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-2.5-flash" })
 
 const request = LLM.request({
   id: "req_1",
@@ -232,7 +233,7 @@ describe("Gemini route", () => {
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "stop",
           usage,
         },
@@ -291,7 +292,7 @@ describe("Gemini route", () => {
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "tool-calls",
           usage,
         },
@@ -325,7 +326,7 @@ describe("Gemini route", () => {
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
     }),
   )
 
@@ -344,10 +345,10 @@ describe("Gemini route", () => {
         ),
       )
 
-      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "request-finish"])
-      expect(length.events.at(-1)).toMatchObject({ type: "request-finish", reason: "length" })
-      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "request-finish"])
-      expect(filtered.events.at(-1)).toMatchObject({ type: "request-finish", reason: "content-filter" })
+      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length" })
+      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter" })
     }),
   )
 

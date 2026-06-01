@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
@@ -139,8 +140,7 @@ export const WebFetchTool = Tool.define(
 
             case "text":
               if (contentType.includes("text/html")) {
-                const text = yield* Effect.promise(() => extractTextFromHTML(content))
-                return { output: text, title, metadata: {} }
+                return { output: extractTextFromHTML(content), title, metadata: {} }
               }
               return { output: content, title, metadata: {} }
 
@@ -155,35 +155,27 @@ export const WebFetchTool = Tool.define(
   }),
 )
 
-async function extractTextFromHTML(html: string) {
+function extractTextFromHTML(html: string) {
   let text = ""
-  let skipContent = false
+  let skipDepth = 0
 
-  const rewriter = new HTMLRewriter()
-    .on("script, style, noscript, iframe, object, embed", {
-      element() {
-        skipContent = true
-      },
-      text() {
-        // Skip text content inside these elements
-      },
-    })
-    .on("*", {
-      element(element) {
-        // Reset skip flag when entering other elements
-        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
-          skipContent = false
-        }
-      },
-      text(input) {
-        if (!skipContent) {
-          text += input.text
-        }
-      },
-    })
-    .transform(new Response(html))
+  const parser = new Parser({
+    onopentag(name) {
+      if (skipDepth > 0 || ["script", "style", "noscript", "iframe", "object", "embed"].includes(name)) {
+        skipDepth++
+      }
+    },
+    ontext(input) {
+      if (skipDepth === 0) text += input
+    },
+    onclosetag() {
+      if (skipDepth > 0) skipDepth--
+    },
+  })
 
-  await rewriter.text()
+  parser.write(html)
+  parser.end()
+
   return text.trim()
 }
 

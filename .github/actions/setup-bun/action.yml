@@ -33,8 +33,9 @@ runs:
       shell: bash
       run: echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
 
-    - name: Cache Bun dependencies
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+    - name: Restore Bun dependencies
+      id: bun-cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.cache.outputs.dir }}
         key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
@@ -56,3 +57,10 @@ runs:
           bun install ${{ inputs.install-flags }}
         fi
       shell: bash
+
+    - name: Save Bun dependencies
+      if: steps.bun-cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.cache.outputs.dir }}
+        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
