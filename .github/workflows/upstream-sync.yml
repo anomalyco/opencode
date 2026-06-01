@@ -79,16 +79,9 @@ jobs:
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
         run: git push origin "$SYNC_BRANCH" --force-with-lease
 
-      - name: Create sync branch from upstream (for conflict PR)
+      - name: Push sync branch for conflict review
         if: steps.merge.outputs.result == 'conflict'
-        run: |
-          git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
-          # Remove workflow files — GITHUB_TOKEN cannot push workflow changes
-          git rm -rf .github/workflows/ || true
-          # Restore our workflow files so the branch matches ours for that dir
-          git checkout "origin/$TARGET_BRANCH" -- .github/ || true
-          git commit -m "chore: sync upstream code (excluding workflow files)" --allow-empty
-          git push origin "$SYNC_BRANCH" --force-with-lease
+        run: git push origin "$SYNC_BRANCH" --force-with-lease
 
       - name: Run typecheck
         id: typecheck
@@ -134,11 +127,12 @@ jobs:
           date=$(date +%Y-%m-%d)
           body="Automated upstream sync from \`sst/opencode\` hit merge conflicts on $date.
 
-          This PR contains upstream's latest code. GitHub will show which files conflict with \`$TARGET_BRANCH\`.
-          Use the **Resolve conflicts** button to pick and choose changes visually.
+          The workflow safely aborted the merge before modifying \`$TARGET_BRANCH\`.
 
           Conflicted files:
-          \`${{ steps.merge.outputs.conflicted_files }}\`"
+          \`${{ steps.merge.outputs.conflicted_files }}\`
+
+          This draft PR is opened anyway so the team has a review surface for the sync attempt. See the workflow logs for conflict details."
 
           existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
@@ -170,9 +164,9 @@ jobs:
           Conflicted files:
           \`${{ steps.merge.outputs.conflicted_files }}\`
 
-          A draft PR has been opened with upstream's code — use the **Resolve conflicts** button in the PR to visually pick and choose changes.
+          A draft PR was also opened/updated for review using the \`$SYNC_BRANCH\` branch.
 
-          Manual intervention is required to sync the latest upstream changes into \`$TARGET_BRANCH\`." \
+          Manual intervention is required to sync the latest upstream changes into \`$TARGET_BRANCH\`. Please resolve conflicts and merge manually." \
             --label bug
 
       - name: Fail on merge conflict
