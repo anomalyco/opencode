@@ -19,6 +19,7 @@ import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useServerSync } from "@/context/server-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
+import { computeStatusLight, type StatusLightColor } from "@opencode-ai/core/session/status-light"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
@@ -451,7 +452,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 (tab) => {
                   const sync = serverSync.createDirSyncContext(tab.dir)
                   const session = sync.session.get(tab.sessionId)
-                  return session ? { ...tab, info: session } : null
+                  if (!session) return null
+                  const statusColor = createMemo((): StatusLightColor | null => {
+                    const messages = sync.data.message[tab.sessionId]
+                    const lastAssistant = messages?.findLast((m) => m.role === "assistant")
+                    return computeStatusLight({
+                      enabled: !!sync.data.config.status_light,
+                      sessionStatus: sync.data.session_status[tab.sessionId],
+                      messages,
+                      pendingInput:
+                        (sync.data.permission?.[tab.sessionId]?.length ?? 0) > 0
+                        || (sync.data.question?.[tab.sessionId]?.length ?? 0) > 0,
+                      parts: lastAssistant ? sync.data.part[lastAssistant.id] : undefined,
+                    })
+                  })
+                  return { ...tab, info: session, statusColor }
                 },
               )
 
@@ -494,6 +509,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             project={projectForSession(tab.info, projects(), projectByID())}
                             directory={tab.dir}
                             sessionId={tab.info.id}
+                            statusColor={tab.statusColor}
                             onClose={() => tabsStoreActions.removeTab(tab.href)}
                           />
                         </>
@@ -736,6 +752,7 @@ function TabNavItem(props: {
   directory: string
   sessionId: string
   hideClose?: boolean
+  statusColor: () => StatusLightColor | null
   onClose: () => void
 }) {
   const match = useMatch(() => props.href)
@@ -761,7 +778,21 @@ function TabNavItem(props: {
         <span data-slot="project-avatar-slot">
           <ProjectTabAvatar project={props.project} directory={props.directory} sessionId={props.sessionId} />
         </span>
-        <span class="min-w-0 flex-1">{props.title}</span>
+        <Show
+          when={props.statusColor()}
+          fallback={<span class="min-w-0 flex-1">{props.title}</span>}
+        >
+          {(color) => (
+            <div
+              class="size-1.5 shrink-0 rounded-full"
+              classList={{
+                "bg-icon-success-base": color() === "green",
+                "bg-surface-warning-strong": color() === "yellow",
+                "bg-text-diff-delete-base": color() === "red",
+              }}
+            />
+          )}
+        </Show>
       </a>
 
       <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
