@@ -1,4 +1,4 @@
-import { AppIcon } from "@opencode-ai/ui/app-icon"
+import { AppIcon, type AppIconProps } from "@opencode-ai/ui/app-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -47,6 +47,34 @@ const OPEN_APPS = [
 
 type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
+
+type SessionHeaderOpenOption = { id: OpenApp; openWith?: string }
+
+export function sessionHeaderOpenVisible(input: { canOpen: boolean; directory: string }) {
+  return input.canOpen && !!input.directory
+}
+
+export function openSessionHeaderDirectory(input: {
+  opening: boolean
+  canOpen: boolean
+  openPath?: (path: string, app?: string) => Promise<void>
+  directory: string
+  app: OpenApp
+  options: readonly SessionHeaderOpenOption[]
+  setOpening: (app: OpenApp | undefined) => void
+  onError: (err: unknown) => void
+}) {
+  if (input.opening || !input.canOpen || !input.openPath) return
+  if (!input.directory) return
+
+  input.setOpening(input.app)
+  input
+    .openPath(input.directory, input.options.find((item) => item.id === input.app)?.openWith)
+    .catch(input.onError)
+    .finally(() => {
+      input.setOpening(undefined)
+    })
+}
 
 const MAC_APPS = [
   {
@@ -222,7 +250,7 @@ export function SessionHeader() {
     app: undefined as OpenApp | undefined,
   })
 
-  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
+  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && !!server.isLocal())
   const current = createMemo(
     () =>
       options().find((o) => o.id === prefs.app) ??
@@ -234,6 +262,12 @@ export function SessionHeader() {
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
   )
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
+    openVisible: sessionHeaderOpenVisible({ canOpen: canOpen(), directory: projectDirectory() }),
+    openLabel: language.t("session.header.open.ariaLabel", { app: current().label }),
+    openIcon: current().icon,
+    opening: opening(),
+    openTint: tint(),
+    onOpen: () => openDir(current().id),
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
     reviewLabel: language.t("command.review.toggle"),
@@ -248,19 +282,16 @@ export function SessionHeader() {
   }
 
   const openDir = (app: OpenApp) => {
-    if (opening() || !canOpen() || !platform.openPath) return
-    const directory = projectDirectory()
-    if (!directory) return
-
-    const item = options().find((o) => o.id === app)
-    const openWith = item && "openWith" in item ? item.openWith : undefined
-    setOpenRequest("app", app)
-    platform
-      .openPath(directory, openWith)
-      .catch((err: unknown) => showRequestError(language, err))
-      .finally(() => {
-        setOpenRequest("app", undefined)
-      })
+    openSessionHeaderDirectory({
+      opening: opening(),
+      canOpen: canOpen(),
+      openPath: platform.openPath,
+      directory: projectDirectory(),
+      app,
+      options: options(),
+      setOpening: (value) => setOpenRequest("app", value),
+      onError: (err) => showRequestError(language, err),
+    })
   }
 
   const copyPath = () => {
@@ -322,7 +353,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <Show
-              when={isDesktopV2}
+              when={isDesktopV2()}
               fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
@@ -520,6 +551,12 @@ export function SessionHeader() {
 }
 
 type SessionHeaderV2ActionsState = {
+  openVisible: boolean
+  openLabel: string
+  openIcon: AppIconProps["id"]
+  opening: boolean
+  openTint?: string
+  onOpen: () => void
   statusVisible: boolean
   statusLabel: string
   reviewLabel: string
@@ -531,6 +568,27 @@ type SessionHeaderV2ActionsState = {
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
     <div class="flex items-center gap-0">
+      <Show when={props.state.openVisible}>
+        <Tooltip placement="bottom" value={props.state.openLabel}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0 [&_[data-component=app-icon]]:size-5"
+            state={props.state.opening ? "pressed" : undefined}
+            disabled={props.state.opening}
+            onClick={props.state.onOpen}
+            aria-label={props.state.openLabel}
+            icon={
+              <span class="flex size-5 shrink-0 items-center justify-center">
+                <Show when={props.state.opening} fallback={<AppIcon id={props.state.openIcon} />}>
+                  <Spinner class="size-3.5" style={{ color: props.state.openTint ?? "var(--icon-base)" }} />
+                </Show>
+              </span>
+            }
+          />
+        </Tooltip>
+      </Show>
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
