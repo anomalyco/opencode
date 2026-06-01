@@ -283,6 +283,7 @@ export const dict = {
   "prompt.attachment.remove": "Ukloni prilog",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Nepodržan prilog",
   "prompt.toast.drawEmpty.title": "Nothing to send",

@@ -2343,14 +2343,12 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const projects = () => layout.projects.list()
-  const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
       mobile={mobile}
-      opened={() => layout.sidebar.opened()}
+      opened={layout.sidebar.opened()}
       aimMove={aim.move}
-      projects={projects}
+      projects={layout.projects.list()}
       renderProject={(project) => (
         <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
       )}
@@ -2358,15 +2356,17 @@ export default function Layout(props: ParentProps) {
       handleDragEnd={handleDragEnd}
       handleDragOver={handleDragOver}
       openProjectLabel={language.t("command.project.open")}
-      openProjectKeybind={() => command.keybind("project.open")}
+      openProjectKeybind={command.keybind("project.open")}
       onOpenProject={chooseProject}
-      renderProjectOverlay={projectOverlay}
-      settingsLabel={() => language.t("sidebar.settings")}
-      settingsKeybind={() => command.keybind("settings.open")}
+      projectOverlay={
+        <ProjectDragOverlay projects={layout.projects.list()} activeProject={store.activeProject} />
+      }
+      settingsLabel={language.t("sidebar.settings")}
+      settingsKeybind={command.keybind("settings.open")}
       onOpenSettings={openSettings}
-      helpLabel={() => language.t("sidebar.help")}
+      helpLabel={language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-      renderPanel={() =>
+      panel={
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
     />

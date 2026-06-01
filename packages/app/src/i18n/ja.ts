@@ -262,6 +262,7 @@ export const dict = {
   "prompt.attachment.remove": "添付ファイルを削除",
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",
+  "prompt.action.queue": "Add to queue",
   "prompt.toast.pasteUnsupported.title": "サポートされていない添付ファイル",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",

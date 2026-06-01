@@ -33,6 +33,10 @@ function historyBtn(root: HTMLElement | undefined, kind: "undo" | "redo") {
   return root?.querySelector(`[data-testid="button-${kind}"]`) as HTMLButtonElement | null
 }
 
+export function hasDrawContent(elements: readonly { isDeleted: boolean }[]) {
+  return elements.some((el) => !el.isDeleted)
+}
+
 export function createPromptDrawing(input: DrawingInput) {
   let api: ExcalidrawImperativeAPI | undefined
   let unmount: VoidFunction | undefined
@@ -45,12 +49,18 @@ export function createPromptDrawing(input: DrawingInput) {
 
   const [history, setHistory] = createStore({ undo: false, redo: false })
   const [ready, setReady] = createSignal(false)
+  const [filled, setFilled] = createSignal(false)
   const [stroke, setStroke] = createSignal("#1e1e1e")
 
   const sync = () => {
     const undo = historyBtn(root, "undo")
     const redo = historyBtn(root, "redo")
     setHistory({ undo: undo ? !undo.disabled : false, redo: redo ? !redo.disabled : false })
+  }
+
+  const syncFilled = () => {
+    const elements = api?.getSceneElements() ?? store.elements
+    setFilled(hasDrawContent(elements))
   }
 
   const restore = (elements: readonly ExcalidrawElement[], files: BinaryFiles) => {
@@ -64,6 +74,7 @@ export function createPromptDrawing(input: DrawingInput) {
       setStore("files", files)
       setStroke(state.currentItemStrokeColor)
       sync()
+      syncFilled()
       return
     }
     restore(store.elements, store.files)
@@ -96,6 +107,7 @@ export function createPromptDrawing(input: DrawingInput) {
         setReady(true)
         setStore("elements", next.getSceneElements())
         setStore("files", next.getFiles())
+        syncFilled()
         requestAnimationFrame(sync)
       },
       onChange,
@@ -150,11 +162,13 @@ export function createPromptDrawing(input: DrawingInput) {
     api = undefined
     root = undefined
     setReady(false)
+    setFilled(false)
     setHistory({ undo: false, redo: false })
   }
 
   return {
     ready,
+    filled,
     history,
     stroke,
     mount,

@@ -1,4 +1,5 @@
 import { Component, createSignal, JSX, Show } from "solid-js"
+import type { IconProps } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useClientEnv } from "@/context/client-env"
@@ -13,8 +14,10 @@ type ShellProps = {
   variant: "draw" | "doc"
   drawing: ReturnType<typeof createPromptDrawing>
   doc: ReturnType<typeof createPromptDoc>
-  working: () => boolean
-  tip: () => import("solid-js").JSX.Element
+  submitIcon: IconProps["name"]
+  submitLabel: string
+  submitDisabled?: boolean
+  tip: JSX.Element
   onExit: () => void | Promise<void>
   modes?: JSX.Element
 }
@@ -110,14 +113,19 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
         <Show when={props.variant === "draw"}>
           <PromptDrawingColors drawing={props.drawing} />
         </Show>
-        <Tooltip placement="top" inactive={!props.working()} value={props.tip()}>
+        <Tooltip
+          placement="top"
+          inactive={props.submitIcon === "arrow-up-bold" && !props.submitDisabled}
+          value={props.tip}
+        >
           <IconButton
             data-action="prompt-submit"
             type="submit"
-            icon={props.working() ? "stop" : "arrow-up-bold"}
+            icon={props.submitIcon}
             variant="primary"
             class="size-7.5"
-            aria-label={props.working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+            disabled={props.submitDisabled}
+            aria-label={props.submitLabel}
           />
         </Tooltip>
       </div>

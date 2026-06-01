@@ -36,11 +36,13 @@ export type ProjectSidebarContext = {
   setHoverSession: (id: string | undefined) => void
 }
 
+import { dragOverlayProject } from "./sidebar-drag"
+
 export const ProjectDragOverlay = (props: {
-  projects: Accessor<LocalProject[]>
-  activeProject: Accessor<string | undefined>
+  projects: LocalProject[]
+  activeProject?: string
 }): JSX.Element => {
-  const project = createMemo(() => props.projects().find((p) => p.worktree === props.activeProject()))
+  const project = createMemo(() => dragOverlayProject(props.projects, props.activeProject))
   return (
     <Show when={project()}>
       {(p) => (

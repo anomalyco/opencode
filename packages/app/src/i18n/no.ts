@@ -285,6 +285,7 @@ export const dict = {
   "prompt.attachment.remove": "Fjern vedlegg",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stopp",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
   "prompt.toast.drawEmpty.title": "Nothing to send",

@@ -24,7 +24,7 @@ export function SessionComposerRegion(props: {
   onSubmit: () => void
   onResponseSubmit: () => void
   followup?: {
-    queue: () => boolean
+    queue: boolean
     items: { id: string; text: string }[]
     sending?: string
     edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
@@ -242,7 +242,7 @@ export function SessionComposerRegion(props: {
                 onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                 edit={props.followup?.edit}
                 onEditLoaded={props.followup?.onEditLoaded}
-                shouldQueue={props.followup?.queue}
+                shouldQueue={props.followup?.queue ?? false}
                 onQueue={props.followup?.onQueue}
                 onAbort={props.followup?.onAbort}
                 onSubmit={props.onSubmit}

@@ -195,6 +195,7 @@ type PromptSubmitInput = {
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
+  onQueued?: (input: { sessionID: string; mode: "normal" | "shell" | "draw" | "doc" }) => void | Promise<void>
   onAbort?: () => void
   onSubmit?: () => void
   approve?: (input: PromptApprovalInput) => Promise<boolean> | boolean
@@ -433,8 +434,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
+    if (!isNewSession && mode !== "shell" && input.shouldQueue?.()) {
       input.onQueue?.(draft)
+      void input.onQueued?.({ sessionID: session.id, mode })
       clearContext()
       clearInput()
       return

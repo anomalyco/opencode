@@ -21,6 +21,7 @@ export type DocMountInput = {
   init?: boolean
   readonly?: boolean
   submit?: () => void
+  onDraftChange?: () => void
 }
 
 export type DocActor = {
@@ -151,9 +152,6 @@ export async function createPage(input: DocMountInput) {
   if (!doc.root && input.init !== false && !input.readonly) initDoc(doc)
   if (!input.readonly) baseline(doc)
   dnd(doc)
-  if (input.sync && !input.readonly) {
-    unlink = await link(direct!, collection.doc, doc.spaceDoc)
-  }
 
   const editor = new PageEditor()
   editor.doc = doc
@@ -193,6 +191,24 @@ export async function createPage(input: DocMountInput) {
   let unload: (() => void) | undefined
   let cursors: (() => void) | undefined
   let unkeys: (() => void) | undefined
+  let offY: (() => void) | undefined
+  let draftFrame: number | undefined
+
+  const notifyDraft = () => {
+    if (!input.onDraftChange) return
+    if (draftFrame) cancelAnimationFrame(draftFrame)
+    draftFrame = requestAnimationFrame(() => {
+      draftFrame = undefined
+      input.onDraftChange?.()
+    })
+  }
+
+  if (input.sync && !input.readonly) {
+    unlink = await link(direct!, collection.doc, doc.spaceDoc)
+    const onY = () => notifyDraft()
+    doc.spaceDoc.on("update", onY)
+    offY = () => doc.spaceDoc.off("update", onY)
+  }
 
   const rebind = () => {
     const current = editor.std?.doc ?? doc
@@ -326,7 +342,12 @@ export async function createPage(input: DocMountInput) {
       const preview = editor.querySelector("affine-preview-root")
       if (preview instanceof HTMLElement) resize.observe(preview)
       mutate?.disconnect()
-      mutate = input.readonly ? new MutationObserver(() => fit(el)) : undefined
+      mutate = input.readonly
+        ? undefined
+        : new MutationObserver(() => {
+            fit(el)
+            notifyDraft()
+          })
       mutate?.observe(editor, { childList: true, characterData: true, subtree: true })
       unload?.()
       const loaded = () => fit(el)
@@ -357,6 +378,7 @@ export async function createPage(input: DocMountInput) {
       }
       await frame()
       fit(el)
+      notifyDraft()
       if (!input.readonly && document.activeElement === editor.querySelector("affine-page-root")) await focus(ready)
     } finally {
       el.removeAttribute("aria-busy")
@@ -385,9 +407,11 @@ export async function createPage(input: DocMountInput) {
     if (empty) {
       if (!input.sync) doc.resetHistory()
       hadText = false
+      notifyDraft()
       return
     }
     hadText = true
+    notifyDraft()
   }
 
   const onHistory = () => {
@@ -395,6 +419,7 @@ export async function createPage(input: DocMountInput) {
     if (hadText && empty && !input.sync) doc.resetHistory()
     hadText = !empty
     ensureEditable(doc)
+    notifyDraft()
   }
 
   const guard = () => {
@@ -500,6 +525,10 @@ export async function createPage(input: DocMountInput) {
     dispose: async () => {
       reload?.()
       reload = undefined
+      if (draftFrame) cancelAnimationFrame(draftFrame)
+      draftFrame = undefined
+      offY?.()
+      offY = undefined
       unkeys?.()
       unkeys = undefined
       cursors?.()

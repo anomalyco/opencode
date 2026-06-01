@@ -282,6 +282,7 @@ export const dict = {
   "prompt.attachment.remove": "เอาไฟล์แนบออก",
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
   "prompt.toast.drawEmpty.title": "Nothing to send",

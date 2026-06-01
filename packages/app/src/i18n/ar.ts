@@ -263,6 +263,7 @@ export const dict = {
   "prompt.attachment.remove": "إزالة المرفق",
   "prompt.action.send": "إرسال",
   "prompt.action.stop": "توقف",
+  "prompt.action.queue": "Add to queue",
   "prompt.toast.pasteUnsupported.title": "مرفق غير مدعوم",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",

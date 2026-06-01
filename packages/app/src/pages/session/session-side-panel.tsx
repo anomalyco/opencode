@@ -28,7 +28,7 @@ import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
-  reviewPanel: () => JSX.Element
+  reviewPanel: JSX.Element
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
@@ -324,7 +324,7 @@ export function SessionSidePanel(props: {
 
                   <Show when={reviewTab()}>
                     <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                      <Show when={activeTab() === "review"}>{props.reviewPanel()}</Show>
+                      <Show when={activeTab() === "review"}>{props.reviewPanel}</Show>
                     </Tabs.Content>
                   </Show>
 

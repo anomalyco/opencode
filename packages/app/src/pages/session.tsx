@@ -41,6 +41,7 @@ import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { followupQueueAllowed, sessionBusy } from "@/components/prompt-input/composer-state"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
@@ -1041,8 +1042,8 @@ export default function Page() {
       <SessionReviewTab
         title={changesTitle()}
         empty={reviewEmpty(input)}
-        diffs={reviewDiffs}
-        view={view}
+        diffs={reviewDiffs()}
+        view={view()}
         diffStyle={input.diffStyle}
         onDiffStyleChange={input.onDiffStyleChange}
         onScrollRef={(el) => setTree("reviewScroll", el)}
@@ -1060,7 +1061,7 @@ export default function Page() {
     </Show>
   )
 
-  const reviewPanel = () => (
+  const reviewPanel = createMemo(() => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         {reviewContent({
@@ -1071,7 +1072,7 @@ export default function Page() {
         })}
       </div>
     </div>
-  )
+  ))
 
   createEffect(
     on(
@@ -1412,10 +1413,8 @@ export default function Page() {
     })
 
   const busy = (sessionID: string) => {
-    if ((sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle") return true
-    return (sync.data.message[sessionID] ?? []).some(
-      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
+    const status = sync.data.session_status[sessionID] ?? { type: "idle" as const }
+    return sessionBusy(status, sync.data.message[sessionID])
   }
 
   const queuedFollowups = createMemo(() => {
@@ -1466,11 +1465,9 @@ export default function Page() {
     return followupMutation.variables?.id
   })
 
-  const queueEnabled = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked()
-  })
+  const followupQueue = createMemo(() => settings.general.followup() === "queue")
+
+  const queueAllowed = createMemo(() => followupQueueAllowed(params.id, followupQueue(), busy(params.id ?? "")))
 
   const followupText = (item: FollowupDraft) => {
     const text = item.prompt
@@ -1778,7 +1775,7 @@ export default function Page() {
         followup={
           params.id
             ? {
-                queue: queueEnabled,
+                queue: queueAllowed(),
                 items: followupDock(),
                 sending: sendingFollowup(),
                 edit: editingFollowup(),
@@ -1865,7 +1862,7 @@ export default function Page() {
         <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
           <SessionPanelColumn class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0" />
           <SessionSidePanel
-            reviewPanel={reviewPanel}
+            reviewPanel={reviewPanel()}
             activeDiff={tree.activeDiff}
             focusReviewDiff={focusReviewDiff}
             reviewSnap={ui.reviewSnap}
@@ -1918,7 +1915,7 @@ export default function Page() {
         />
 
         <SessionSidePanel
-          reviewPanel={reviewPanel}
+          reviewPanel={reviewPanel()}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}

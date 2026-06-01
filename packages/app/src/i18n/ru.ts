@@ -282,6 +282,7 @@ export const dict = {
   "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
   "prompt.toast.drawEmpty.title": "Nothing to send",

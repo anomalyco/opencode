@@ -263,6 +263,7 @@ export const dict = {
   "prompt.attachment.remove": "Supprimer la pièce jointe",
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
+  "prompt.action.queue": "Add to queue",
   "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",

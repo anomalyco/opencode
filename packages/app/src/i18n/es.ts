@@ -282,6 +282,7 @@ export const dict = {
   "prompt.attachment.remove": "Eliminar adjunto",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
   "prompt.toast.drawEmpty.title": "Nothing to send",

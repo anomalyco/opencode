@@ -287,6 +287,7 @@ export const dict = {
   "prompt.attachment.remove": "Eki kaldır",
   "prompt.action.send": "Gönder",
   "prompt.action.stop": "Durdur",
+  "prompt.action.queue": "Add to queue",
 
   "prompt.toast.pasteUnsupported.title": "Desteklenmeyen ek",
   "prompt.toast.drawEmpty.title": "Nothing to send",

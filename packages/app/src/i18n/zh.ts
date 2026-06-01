@@ -302,6 +302,7 @@ export const dict = {
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
+  "prompt.action.queue": "Add to queue",
   "prompt.toast.pasteUnsupported.title": "不支持的附件",
   "prompt.toast.drawEmpty.title": "Nothing to send",
   "prompt.toast.drawEmpty.description": "Add a drawing, text, or attachment before sending.",
