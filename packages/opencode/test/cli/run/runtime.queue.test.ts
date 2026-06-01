@@ -326,9 +326,9 @@ describe("run runtime queue", () => {
     const first = ui.events.find((item) => item.type === "queued.prompts")
     const event = ui.events.findLast((item) => item.type === "queued.prompts")
     expect(first?.type === "queued.prompts" ? first.prompts : []).toEqual([])
-    expect(first?.type === "queued.prompts" && event?.type === "queued.prompts" ? first.prompts === event.prompts : true).toBe(
-      false,
-    )
+    expect(
+      first?.type === "queued.prompts" && event?.type === "queued.prompts" ? first.prompts === event.prompts : true,
+    ).toBe(false)
     expect(ui.events.findLast((item) => item.type === "queue")).toEqual({ type: "queue", queue: 1 })
     expect(event?.type === "queued.prompts" ? event.prompts.map((item) => item.prompt.text) : []).toEqual(["two"])
     if (event?.type === "queued.prompts") ui.removeQueued(event.prompts[0]!.messageID)

@@ -329,7 +329,10 @@ export function RunCommandMenuBody(props: {
               category: "Suggested",
               display: "Manage queued prompts",
               footer: `${props.queued().length} queued`,
-              keywords: props.queued().map((item) => item.prompt.text).join(" "),
+              keywords: props
+                .queued()
+                .map((item) => item.prompt.text)
+                .join(" "),
             },
           ]
         : []),

@@ -210,7 +210,6 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             if (next.type === "error") {
               throw next.error
             }
-
           } finally {
             if (state.ctrl === ctrl) {
               state.ctrl = undefined

@@ -203,7 +203,9 @@ export function RunFooterView(props: RunFooterViewProps) {
   const subagentShortcut = useKeymapSelector(
     (keymap: OpenTuiKeymap) =>
       formatKeyBindings(
-        keymap.getCommandBindings({ visibility: "registered", commands: ["session.child.first"] }).get("session.child.first"),
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.child.first"] })
+          .get("session.child.first"),
         props.tuiConfig,
       ) ?? "",
   )
@@ -697,7 +699,9 @@ export function RunFooterView(props: RunFooterViewProps) {
                     gap={1}
                     flexShrink={0}
                   >
-                    <Show when={busy() || exiting() || duration().length > 0 || queuedIndicator() || subagentIndicator()}>
+                    <Show
+                      when={busy() || exiting() || duration().length > 0 || queuedIndicator() || subagentIndicator()}
+                    >
                       <box id="run-direct-footer-hint-left" flexDirection="row" gap={1} flexShrink={0} marginLeft={1}>
                         <Show when={exiting()}>
                           <text id="run-direct-footer-hint-exit" fg={theme().highlight} wrapMode="none" truncate>

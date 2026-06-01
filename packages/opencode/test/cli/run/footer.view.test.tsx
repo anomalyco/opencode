@@ -198,8 +198,8 @@ async function renderFooter(
           onVariantSelect={() => {}}
           onRows={() => {}}
           onLayout={() => {}}
-           onStatus={() => {}}
-           onQueuedRemove={async () => true}
+          onStatus={() => {}}
+          onQueuedRemove={async () => true}
         />
       </OpencodeKeymapProvider>
     )
