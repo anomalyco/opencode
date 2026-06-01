@@ -593,9 +593,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "Czcionka interfejsu",
   "settings.general.row.uiFont.description": "Dostosuj czcionkę używaną w całym interfejsie",
   "settings.general.row.followup.title": "Zachowanie kontynuacji",
-  "settings.general.row.followup.description": "Wybierz, czy kontynuacja ma być natychmiastowa, czy czekać w kolejce",
+  "settings.general.row.followup.description":
+    "Wybierz: kolejka, natychmiastowe sterowanie lub tylko zatrzymanie, gdy agent jest zajęty",
   "settings.general.row.followup.option.queue": "Kolejka",
   "settings.general.row.followup.option.steer": "Sterowanie",
+  "settings.general.row.followup.option.none": "Brak",
   "settings.general.row.reasoningSummaries.title": "Pokaż podsumowania wnioskowania",
   "settings.general.row.reasoningSummaries.description": "Wyświetlaj podsumowania wnioskowania modelu na osi czasu",
   "settings.general.row.shellToolPartsExpanded.title": "Rozwijaj elementy narzędzia shell",

@@ -2,6 +2,15 @@ import type { Prompt } from "@/context/prompt"
 
 export const NON_EMPTY_TEXT = /[^\s\u200B]/
 
+export type FollowupMode = "queue" | "steer" | "none"
+
+const followupModes = new Set<FollowupMode>(["queue", "steer", "none"])
+
+export function parseFollowupMode(value: string | undefined): FollowupMode {
+  if (value && followupModes.has(value as FollowupMode)) return value as FollowupMode
+  return "none"
+}
+
 type SessionStatus = { type: string }
 
 type BusyMessage = {
@@ -20,15 +29,17 @@ export function sessionBusy(status: SessionStatus, messages: readonly BusyMessag
 
 export type SubmitIntent = "send" | "stop" | "queue"
 
-export function submitIntent(working: boolean, draft: boolean, queue: boolean): SubmitIntent {
+export function submitIntent(working: boolean, draft: boolean, mode: FollowupMode): SubmitIntent {
   if (!working) return "send"
   if (!draft) return "stop"
-  if (queue) return "queue"
+  if (mode === "queue") return "queue"
+  if (mode === "none") return "stop"
   return "send"
 }
 
-export function followupQueueAllowed(sessionID: string | undefined, queueMode: boolean, busy: boolean) {
-  if (!sessionID || !queueMode) return false
+export function followupShouldQueue(sessionID: string | undefined, mode: FollowupMode, busy: boolean) {
+  if (mode !== "queue") return false
+  if (!sessionID) return false
   return busy
 }
 

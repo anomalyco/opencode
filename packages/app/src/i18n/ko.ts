@@ -605,9 +605,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "UI 글꼴",
   "settings.general.row.uiFont.description": "인터페이스 전반에 사용되는 글꼴을 사용자 지정",
   "settings.general.row.followup.title": "후속 조치 동작",
-  "settings.general.row.followup.description": "후속 프롬프트를 즉시 실행할지 대기열에 넣을지 선택하세요",
+  "settings.general.row.followup.description":
+    "후속 프롬프트를 대기열에 넣을지, 즉시 실행(조종)할지, 에이전트 실행 중에는 중지만 허용할지 선택하세요",
   "settings.general.row.followup.option.queue": "대기열",
   "settings.general.row.followup.option.steer": "조종",
+  "settings.general.row.followup.option.none": "없음",
   "settings.general.row.reasoningSummaries.title": "추론 요약 표시",
   "settings.general.row.reasoningSummaries.description": "타임라인에 모델 추론 요약 표시",
   "settings.general.row.shellToolPartsExpanded.title": "shell 도구 파트 펼치기",

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { hasDrawContent } from "./drawing"
-import { followupQueueAllowed, promptHasDraft, sessionBusy, submitIntent } from "./composer-state"
+import {
+  followupShouldQueue,
+  parseFollowupMode,
+  promptHasDraft,
+  sessionBusy,
+  submitIntent,
+} from "./composer-state"
 
 describe("sessionBusy", () => {
   test("idle without in-flight assistant", () => {
@@ -16,35 +22,53 @@ describe("sessionBusy", () => {
   })
 })
 
-describe("submitIntent", () => {
-  test("stop when busy without draft", () => {
-    expect(submitIntent(true, false, true)).toBe("stop")
+describe("parseFollowupMode", () => {
+  test("accepts known modes", () => {
+    expect(parseFollowupMode("queue")).toBe("queue")
+    expect(parseFollowupMode("steer")).toBe("steer")
+    expect(parseFollowupMode("none")).toBe("none")
   })
 
-  test("queue when busy with draft and queue allowed", () => {
-    expect(submitIntent(true, true, true)).toBe("queue")
-  })
-
-  test("send when busy with draft but queue off", () => {
-    expect(submitIntent(true, true, false)).toBe("send")
+  test("falls back to none for unknown values", () => {
+    expect(parseFollowupMode("steer-old")).toBe("none")
+    expect(parseFollowupMode(undefined)).toBe("none")
   })
 })
 
-describe("followupQueueAllowed", () => {
-  test("false without session", () => {
-    expect(followupQueueAllowed(undefined, true, true)).toBe(false)
+describe("submitIntent", () => {
+  test("stop when busy without draft", () => {
+    expect(submitIntent(true, false, "queue")).toBe("stop")
   })
 
-  test("false when followup mode is not queue", () => {
-    expect(followupQueueAllowed("ses_1", false, true)).toBe(false)
+  test("queue when busy with draft in queue mode", () => {
+    expect(submitIntent(true, true, "queue")).toBe("queue")
+  })
+
+  test("send when busy with draft in steer mode", () => {
+    expect(submitIntent(true, true, "steer")).toBe("send")
+  })
+
+  test("stop when busy with draft in none mode", () => {
+    expect(submitIntent(true, true, "none")).toBe("stop")
+  })
+})
+
+describe("followupShouldQueue", () => {
+  test("false without session", () => {
+    expect(followupShouldQueue(undefined, "queue", true)).toBe(false)
+  })
+
+  test("false when mode is not queue", () => {
+    expect(followupShouldQueue("ses_1", "steer", true)).toBe(false)
+    expect(followupShouldQueue("ses_1", "none", true)).toBe(false)
   })
 
   test("false when session is idle", () => {
-    expect(followupQueueAllowed("ses_1", true, false)).toBe(false)
+    expect(followupShouldQueue("ses_1", "queue", false)).toBe(false)
   })
 
   test("true when queue mode and session is busy", () => {
-    expect(followupQueueAllowed("ses_1", true, true)).toBe(true)
+    expect(followupShouldQueue("ses_1", "queue", true)).toBe(true)
   })
 })
 

@@ -602,9 +602,10 @@ export const dict = {
   "settings.general.row.uiFont.description": "Personnaliser la police utilisée dans toute l'interface",
   "settings.general.row.followup.title": "Comportement de suivi",
   "settings.general.row.followup.description":
-    "Choisissez si les messages de suivi dirigent immédiatement ou attendent dans une file d'attente",
+    "Choisissez si les messages de suivi sont en file, dirigent immédiatement ou n'autorisent l'arrêt que pendant l'exécution",
   "settings.general.row.followup.option.queue": "File d'attente",
   "settings.general.row.followup.option.steer": "Diriger",
+  "settings.general.row.followup.option.none": "Aucun",
   "settings.general.row.reasoningSummaries.title": "Afficher les résumés de raisonnement",
   "settings.general.row.reasoningSummaries.description":
     "Afficher les résumés de raisonnement du modèle dans la chronologie",

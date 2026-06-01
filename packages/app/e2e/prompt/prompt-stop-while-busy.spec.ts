@@ -21,19 +21,24 @@ const userCount = async (
   return items.filter((item) => item.info.role === "user").length
 }
 
-const seedFollowupQueue = async (page: Page) => {
-  await page.evaluate(() => {
+const seedFollowup = async (page: Page, followup: "queue" | "none") => {
+  await page.evaluate((mode) => {
     const key = "settings.v3"
     const raw = localStorage.getItem(key)
     const value = raw ? JSON.parse(raw) : {}
-    value.general = { ...value.general, followup: "queue" }
+    value.general = { ...value.general, followup: mode }
     localStorage.setItem(key, JSON.stringify(value))
-  })
+  }, followup)
 }
 
-const prepare = async (page: Page, sessionID: string, gotoSession: (sessionID?: string) => Promise<void>) => {
+const prepare = async (
+  page: Page,
+  sessionID: string,
+  gotoSession: (sessionID?: string) => Promise<void>,
+  followup: "queue" | "none" = "queue",
+) => {
   await gotoSession(sessionID)
-  await seedFollowupQueue(page)
+  await seedFollowup(page, followup)
   await gotoSession(sessionID)
   await page.locator(`${docShellSelector}, ${promptSelector}`).first().waitFor({ timeout: 60_000 })
 }
@@ -110,6 +115,34 @@ test.describe("normal mode", () => {
     })
   })
 
+  test("submit stays stop with draft when followup is none", async ({ page, sdk, gotoSession }) => {
+    test.setTimeout(120_000)
+
+    await withSession(sdk, `e2e busy none ${Date.now()}`, async (session) => {
+      const aborts = await trackAbort(page, session.id)
+      await prepare(page, session.id, gotoSession, "none")
+
+      const prompt = page.locator(promptSelector)
+      const submit = page.locator(submitSelector)
+      const dock = page.locator(followupDockSelector)
+      const token = `busy-none-${Date.now()}`
+
+      await sendNormal(page, `Reply with exactly: ${token}`)
+      await expect(submit).toHaveAttribute("data-icon", "stop", { timeout: 60_000 })
+
+      const before = await userCount(sdk, session.id)
+      await page.locator(normalModeSelector).first().click()
+      await prompt.click()
+      await page.keyboard.type("follow-up while none mode")
+      await expect(submit).toHaveAttribute("data-icon", "stop", { timeout: 15_000 })
+
+      await submit.click()
+      await expect.poll(aborts, { timeout: 15_000 }).toBeGreaterThan(0)
+      await expect(dock).toHaveCount(0)
+      await expect.poll(async () => userCount(sdk, session.id), { timeout: 15_000 }).toBe(before)
+    })
+  })
+
   test("enter queues follow-up while session is busy", async ({ page, sdk, gotoSession }) => {
     test.setTimeout(120_000)
 
@@ -181,6 +214,31 @@ test.describe("doc mode", () => {
       await expect(dock).toBeVisible({ timeout: 15_000 })
       await expect(dock).toContainText("doc follow-up queued")
       expect(aborts()).toBe(0)
+      await expect.poll(async () => userCount(sdk, session.id), { timeout: 15_000 }).toBe(before)
+    })
+  })
+
+  test("submit stays stop with draft when followup is none", async ({ page, sdk, gotoSession }) => {
+    test.setTimeout(120_000)
+
+    await withSession(sdk, `e2e doc busy none ${Date.now()}`, async (session) => {
+      const aborts = await trackAbort(page, session.id)
+      await prepare(page, session.id, gotoSession, "none")
+
+      const submit = page.locator(docSubmitSelector)
+      const dock = page.locator(followupDockSelector)
+      const token = `doc-busy-none-${Date.now()}`
+
+      await sendDoc(page, `Reply with exactly: ${token}`)
+      await expect(submit).toHaveAttribute("data-icon", "stop", { timeout: 60_000 })
+
+      const before = await userCount(sdk, session.id)
+      await sendDoc(page, "doc follow-up none mode")
+      await expect(submit).toHaveAttribute("data-icon", "stop", { timeout: 15_000 })
+
+      await submit.click()
+      await expect.poll(aborts, { timeout: 15_000 }).toBeGreaterThan(0)
+      await expect(dock).toHaveCount(0)
       await expect.poll(async () => userCount(sdk, session.id), { timeout: 15_000 }).toBe(before)
     })
   })

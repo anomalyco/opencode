@@ -654,9 +654,11 @@ export const dict = {
   "settings.general.row.uiFont.title": "UI-skrifttype",
   "settings.general.row.uiFont.description": "Tilpas skrifttypen, der bruges i hele brugerfladen",
   "settings.general.row.followup.title": "Opfølgningsadfærd",
-  "settings.general.row.followup.description": "Vælg om opfølgende forespørgsler skal styre straks eller vente i kø",
+  "settings.general.row.followup.description":
+    "Vælg om opfølgning skal køes, styres med det samme eller kun tillade stop mens agenten er optaget",
   "settings.general.row.followup.option.queue": "Kø",
   "settings.general.row.followup.option.steer": "Styr",
+  "settings.general.row.followup.option.none": "Ingen",
   "settings.general.row.reasoningSummaries.title": "Vis tænkeoversigter",
   "settings.general.row.reasoningSummaries.description": "Vis model tænkeoversigter i tidslinjen",
 

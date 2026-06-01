@@ -57,7 +57,14 @@ import {
   promptLength,
 } from "./prompt-input/history"
 import { clearAfterQueue } from "./prompt-input/composer-submit"
-import { NON_EMPTY_TEXT, promptHasDraft, sessionBusy, submitIntent } from "./prompt-input/composer-state"
+import {
+  followupShouldQueue,
+  NON_EMPTY_TEXT,
+  promptHasDraft,
+  sessionBusy,
+  submitIntent,
+  type FollowupMode,
+} from "./prompt-input/composer-state"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
@@ -80,7 +87,7 @@ interface PromptInputProps {
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
   onEditLoaded?: () => void
-  shouldQueue?: boolean
+  followupMode?: FollowupMode
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
@@ -417,9 +424,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!prompt.dirty()) return false
     return promptHasDraft(prompt.current())
   })
-  const submitAction = createMemo(() =>
-    submitIntent(working(), hasDraft(), props.shouldQueue ?? false),
-  )
+  const mode = () => props.followupMode ?? "none"
+  const submitAction = createMemo(() => submitIntent(working(), hasDraft(), mode()))
   const submitIcon = createMemo(() => {
     if (submitAction() === "stop") return "stop" as const
     return "arrow-up-bold" as const
@@ -1514,7 +1520,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setPopover: (popover) => setStore("popover", popover),
     newSessionWorktree: () => (store.mode === "doc" ? "main" : props.newSessionWorktree),
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: () => props.shouldQueue ?? false,
+    shouldQueue: () => followupShouldQueue(params.id, mode(), working()),
     onQueue: props.onQueue,
     onQueued: async ({ sessionID, mode }) => {
       try {

@@ -41,7 +41,7 @@ import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { followupQueueAllowed, sessionBusy } from "@/components/prompt-input/composer-state"
+import { sessionBusy } from "@/components/prompt-input/composer-state"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
@@ -1465,9 +1465,7 @@ export default function Page() {
     return followupMutation.variables?.id
   })
 
-  const followupQueue = createMemo(() => settings.general.followup() === "queue")
-
-  const queueAllowed = createMemo(() => followupQueueAllowed(params.id, followupQueue(), busy(params.id ?? "")))
+  const followupMode = createMemo(() => settings.general.followup())
 
   const followupText = (item: FollowupDraft) => {
     const text = item.prompt
@@ -1775,7 +1773,7 @@ export default function Page() {
         followup={
           params.id
             ? {
-                queue: queueAllowed(),
+                mode: followupMode(),
                 items: followupDock(),
                 sending: sendingFollowup(),
                 edit: editingFollowup(),

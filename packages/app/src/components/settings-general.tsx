@@ -139,9 +139,10 @@ export const SettingsGeneral: Component = () => {
     { value: "dark", label: language.t("theme.scheme.dark") },
   ])
 
-  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
+  const followupOptions = createMemo((): { value: "queue" | "steer" | "none"; label: string }[] => [
     { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
     { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
+    { value: "none", label: language.t("settings.general.row.followup.option.none") },
   ])
 
   const languageOptions = createMemo(() =>
