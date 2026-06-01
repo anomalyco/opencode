@@ -1040,6 +1040,39 @@ it.effect("deduplicates duplicate instructions from global and local configs", (
   ),
 )
 
+it.effect("tracks instruction origins by config source", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const global = yield* tmpdirScoped()
+    const directory = path.join(root, "project")
+    const local = path.join(directory, ".opencode")
+
+    yield* Effect.all(
+      [
+        writeConfigEffect(global, schemaConfig({ instructions: ["global.md"] })),
+        writeConfigEffect(directory, schemaConfig({ instructions: ["project.md"] })),
+        writeConfigEffect(local, schemaConfig({ instructions: ["local.md"] })),
+      ],
+      { concurrency: "unbounded" },
+    )
+
+    yield* withGlobalConfigDir(
+      global,
+      withInstanceDir(
+        directory,
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
+          expect(config.instruction_origins).toEqual([
+            { spec: "global.md", source: global, scope: "global" },
+            { spec: "project.md", source: path.join(directory, "opencode.json"), scope: "local" },
+            { spec: "local.md", source: path.join(local, "opencode.json"), scope: "local" },
+          ])
+        }),
+      ),
+    )
+  }),
+)
+
 it.effect("deduplicates duplicate plugins from global and local configs", () =>
   withConfigTree(
     {

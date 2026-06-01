@@ -316,6 +316,13 @@ export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
+  instruction_origins?: InstructionOrigin[]
+}
+
+export type InstructionOrigin = {
+  spec: string
+  source: string
+  scope: ConfigPlugin.Scope
 }
 
 type State = {
@@ -365,8 +372,17 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
 }
 
 function writable(info: Info) {
-  const { plugin_origins: _plugin_origins, ...next } = info
+  const { plugin_origins: _plugin_origins, instruction_origins: _instruction_origins, ...next } = info
   return next
+}
+
+function deduplicateInstructionOrigins(instructions: InstructionOrigin[]) {
+  const seen = new Set<string>()
+  return instructions.filter((instruction) => {
+    if (seen.has(instruction.spec)) return false
+    seen.add(instruction.spec)
+    return true
+  })
 }
 
 function writableGlobal(info: Info) {
@@ -548,9 +564,27 @@ export const layer = Layer.effect(
           result.plugin_origins = plugins
         })
 
+        const mergeInstructionOrigins = Effect.fnUntraced(function* (
+          source: string,
+          list: string[] | undefined,
+          kind?: ConfigPlugin.Scope,
+        ) {
+          if (!list?.length) return
+          const hit = kind ?? (yield* pluginScopeForSource(source))
+          result.instruction_origins = deduplicateInstructionOrigins([
+            ...(result.instruction_origins ?? []),
+            ...list.map((spec) => ({ spec, source, scope: hit })),
+          ])
+        })
+
         const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
           result = mergeConfigConcatArrays(result, next)
-          return mergePluginOrigins(source, next.plugin, kind)
+          return Effect.all(
+            [mergePluginOrigins(source, next.plugin, kind), mergeInstructionOrigins(source, next.instructions, kind)],
+            {
+              discard: true,
+            },
+          )
         }
 
         for (const [key, value] of Object.entries(auth)) {

@@ -21,9 +21,13 @@ const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSys
 
 const configLayer = TestConfig.layer()
 
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (
+  global: Partial<Global.Interface>,
+  flags: Partial<RuntimeFlags.Info> = {},
+  config = configLayer,
+) =>
   Instruction.layer.pipe(
-    Layer.provide(configLayer),
+    Layer.provide(config),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Global.layerWith(global)),
@@ -31,9 +35,9 @@ const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<Runt
   )
 
 const provideInstruction =
-  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
+  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>, config = configLayer) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global, flags)))
+    self.pipe(Effect.provide(instructionLayer(global, flags, config)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -55,6 +59,23 @@ const withFiles = <A, E, R>(files: Record<string, string>, self: (dir: string) =
       return yield* self(dir).pipe(provideInstruction({ home: dir, config: dir }))
     }),
   )
+
+function withProcessEnv<A, E, R>(key: string, value: string | undefined, effect: Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const original = process.env[key]
+      if (value === undefined) delete process.env[key]
+      if (value !== undefined) process.env[key] = value
+      return original
+    }),
+    () => effect,
+    (original) =>
+      Effect.sync(() => {
+        if (original === undefined) delete process.env[key]
+        if (original !== undefined) process.env[key] = original
+      }),
+  )
+}
 
 const tmpWithFiles = (files: Record<string, string>) =>
   Effect.gen(function* () {
@@ -234,6 +255,31 @@ describe("Instruction.system", () => {
       }).pipe(
         provideInstance(projectTmp),
         provideInstruction({ home: globalTmp, config: globalTmp }, { disableClaudeCodePrompt: true }),
+      )
+    }),
+  )
+
+  it.live("loads explicit config instructions when project config is disabled", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const projectTmp = yield* tmpWithFiles({ "AGENTS.md": "# Explicit Instructions" })
+      const source = path.join(projectTmp, "custom-opencode.json")
+
+      const config = TestConfig.layer({
+        get: () =>
+          Effect.succeed({
+            instructions: ["AGENTS.md"],
+            instruction_origins: [{ spec: "AGENTS.md", source, scope: "local" }],
+          }),
+      })
+
+      yield* withProcessEnv(
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "true",
+        Effect.gen(function* () {
+          const rules = yield* (yield* Instruction.Service).system()
+          expect(rules).toEqual([`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Explicit Instructions`])
+        }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }, {}, config)),
       )
     }),
   )

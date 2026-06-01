@@ -74,16 +74,22 @@ export const layer: Layer.Layer<
       ),
     )
 
-    const relative = Effect.fnUntraced(function* (instruction: string) {
+    const relative = Effect.fnUntraced(function* (instruction: string, origin?: Config.InstructionOrigin) {
       const ctx = yield* InstanceState.context
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
         return yield* fs
           .globUp(instruction, ctx.directory, ctx.worktree)
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
       }
-      return yield* fs
-        .globUp(instruction, global.config, global.config)
-        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      const base =
+        origin?.source === "OPENCODE_CONFIG_CONTENT"
+          ? ctx.directory
+          : origin?.source && !origin.source.startsWith("http://") && !origin.source.startsWith("https://")
+            ? path.resolve(origin.source) === path.resolve(global.config)
+              ? global.config
+              : path.dirname(path.resolve(origin.source))
+            : global.config
+      return yield* fs.globUp(instruction, base, base).pipe(Effect.catch(() => Effect.succeed([] as string[])))
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
@@ -134,6 +140,7 @@ export const layer: Layer.Layer<
         for (const raw of config.instructions) {
           if (raw.startsWith("https://") || raw.startsWith("http://")) continue
           const instruction = raw.startsWith("~/") ? path.join(global.home, raw.slice(2)) : raw
+          const origin = config.instruction_origins?.find((item) => item.spec === raw)
           const matches = yield* (
             path.isAbsolute(instruction)
               ? fs.glob(path.basename(instruction), {
@@ -141,7 +148,7 @@ export const layer: Layer.Layer<
                   absolute: true,
                   include: "file",
                 })
-              : relative(instruction)
+              : relative(instruction, origin)
           ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
           matches.forEach((item) => paths.add(path.resolve(item)))
         }
