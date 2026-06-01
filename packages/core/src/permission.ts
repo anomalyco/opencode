@@ -4,7 +4,7 @@ import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effec
 import { eq } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventV2 } from "./event"
-import { ProjectV2 } from "./project"
+import { Location } from "./location"
 import { SessionV2 } from "./session"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
@@ -98,7 +98,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Per
   requestID: ID,
 }) {}
 
-export type Error = DeniedError | RejectedError | CorrectedError | SessionV2.NotFoundError
+export type Error = DeniedError | RejectedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Ruleset[]): Rule {
   return (
@@ -117,7 +117,7 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
 }
 
 export interface Interface {
-  readonly ask: (input: AssertInput) => EffectRuntime.Effect<Request, SessionV2.NotFoundError>
+  readonly ask: (input: AssertInput) => EffectRuntime.Effect<Request>
   readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error>
   readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
   readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
@@ -128,7 +128,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 interface Pending {
   readonly request: Request
-  readonly projectID: ProjectV2.ID
   readonly rules: Ruleset
   readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
@@ -138,7 +137,7 @@ export const layer = Layer.effect(
   EffectRuntime.gen(function* () {
     const { db } = yield* Database.Service
     const events = yield* EventV2.Service
-    const sessions = yield* SessionV2.Service
+    const location = yield* Location.Service
     const pending = new Map<ID, Pending>()
 
     yield* EffectRuntime.addFinalizer(() =>
@@ -153,25 +152,24 @@ export const layer = Layer.effect(
       ),
     )
 
-    const remembered = EffectRuntime.fn("PermissionV2.remembered")(function* (projectID: ProjectV2.ID) {
+    const remembered = EffectRuntime.fn("PermissionV2.remembered")(function* () {
       const rows = yield* db
         .select()
         .from(PermissionTable)
-        .where(eq(PermissionTable.project_id, projectID))
+        .where(eq(PermissionTable.project_id, location.project.id))
         .all()
         .pipe(EffectRuntime.orDie)
       return rows.map((row): Rule => ({ action: row.action, resource: row.resource, effect: "allow" }))
     })
 
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
-      const projectID = (yield* sessions.get(input.sessionID)).projectID
-      const rules = [...input.rules, ...(yield* remembered(projectID))]
+      const rules = [...input.rules, ...(yield* remembered())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, rules).effect)
       const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
-      return { effect, rules, projectID }
+      return { effect, rules }
     })
 
-    const create = EffectRuntime.fnUntraced(function* (input: AssertInput, projectID: ProjectV2.ID) {
+    const create = EffectRuntime.fnUntraced(function* (input: AssertInput) {
       const request: Request = {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
@@ -182,14 +180,15 @@ export const layer = Layer.effect(
         source: input.source,
       }
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-      const item = { request, projectID, rules: input.rules, deferred }
+      const item = { request, rules: input.rules, deferred }
       pending.set(request.id, item)
       yield* events.publish(Event.Asked, request)
       return item
     })
 
     const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
-      return (yield* create(input, (yield* sessions.get(input.sessionID)).projectID)).request
+      const pending = yield* create(input)
+      return pending.request
     })
 
     const assert = EffectRuntime.fn("PermissionV2.assert")(function* (input: AssertInput) {
@@ -200,7 +199,7 @@ export const layer = Layer.effect(
         })
       }
       if (result.effect === "allow") return
-      const item = yield* create(input, result.projectID)
+      const item = yield* create(input)
       return yield* Deferred.await(item.deferred).pipe(
         EffectRuntime.ensuring(
           EffectRuntime.sync(() => {
@@ -243,23 +242,25 @@ export const layer = Layer.effect(
           .insert(PermissionTable)
           .values(
             existing.request.remember.map((resource) => ({
-              project_id: existing.projectID,
+              project_id: location.project.id,
               action: existing.request.action,
               resource,
             })),
           )
           .onConflictDoNothing()
           .run()
-        .pipe(EffectRuntime.orDie)
+          .pipe(EffectRuntime.orDie)
       }
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply !== "always" || !existing.request.remember?.length) return
 
-      const rememberedRules = yield* remembered(existing.projectID)
+      const rememberedRules = yield* remembered()
       for (const [id, item] of pending) {
-        if (item.projectID !== existing.projectID) continue
         const rules = [...item.rules, ...rememberedRules]
-        if (!item.request.resources.every((resource) => evaluate(item.request.action, resource, rules).effect === "allow")) continue
+        if (
+          !item.request.resources.every((resource) => evaluate(item.request.action, resource, rules).effect === "allow")
+        )
+          continue
         pending.delete(id)
         yield* events.publish(Event.Replied, {
           sessionID: item.request.sessionID,
@@ -282,8 +283,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(SessionV2.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(Database.defaultLayer),
-)
+export const locationLayer = layer

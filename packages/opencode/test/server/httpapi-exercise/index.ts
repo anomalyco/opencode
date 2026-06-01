@@ -579,6 +579,19 @@ const scenarios: Scenario[] = [
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
     .json(404, object, "status"),
+  http.protected.get("/api/permission", "v2.permission.list").json(200, array),
+  http.protected
+    .post("/api/session/{sessionID}/permission/{requestID}/reply", "v2.permission.reply")
+    .seeded((ctx) => ctx.session({ title: "Permission owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission/{requestID}/reply", {
+        sessionID: ctx.state.id,
+        requestID: "per_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+      body: { reply: "once" },
+    }))
+    .json(404, object, "status"),
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))

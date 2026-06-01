@@ -3671,6 +3671,18 @@ export type ProviderV2Info = {
   }
 }
 
+export type PermissionV2Request = {
+  id: string
+  sessionID: string
+  action: string
+  resources: Array<string>
+  remember?: Array<string>
+  metadata?: {
+    [key: string]: unknown
+  }
+  source?: PermissionV2Source
+}
+
 export type EventModelsDevRefreshed = {
   id: string
   type: "models-dev.refreshed"
@@ -8321,6 +8333,79 @@ export type V2ProviderGetResponses = {
 }
 
 export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
+
+export type V2PermissionListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/permission"
+}
+
+export type V2PermissionListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2PermissionListError = V2PermissionListErrors[keyof V2PermissionListErrors]
+
+export type V2PermissionListResponses = {
+  /**
+   * Success
+   */
+  200: Array<PermissionV2Request>
+}
+
+export type V2PermissionListResponse = V2PermissionListResponses[keyof V2PermissionListResponses]
+
+export type V2PermissionReplyData = {
+  body?: {
+    reply: PermissionV2Reply
+    message?: string
+  }
+  path: {
+    sessionID: string
+    requestID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/permission/{requestID}/reply"
+}
+
+export type V2PermissionReplyErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError | PermissionNotFoundError
+   */
+  404: SessionNotFoundError | PermissionNotFoundError
+}
+
+export type V2PermissionReplyError = V2PermissionReplyErrors[keyof V2PermissionReplyErrors]
+
+export type V2PermissionReplyResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2PermissionReplyResponse = V2PermissionReplyResponses[keyof V2PermissionReplyResponses]
 
 export type TuiAppendPromptData = {
   body?: {

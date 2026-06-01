@@ -117,6 +117,7 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PermissionV2Reply,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
   ProjectInitGitErrors,
@@ -248,6 +249,10 @@ import type {
   TuiSubmitPromptResponses,
   V2ModelListErrors,
   V2ModelListResponses,
+  V2PermissionListErrors,
+  V2PermissionListResponses,
+  V2PermissionReplyErrors,
+  V2PermissionReplyResponses,
   V2ProviderGetErrors,
   V2ProviderGetResponses,
   V2ProviderListErrors,
@@ -4557,6 +4562,69 @@ export class Provider2 extends HeyApiClient {
   }
 }
 
+export class Permission2 extends HeyApiClient {
+  /**
+   * List pending permissions
+   *
+   * Retrieve pending permission requests for a location.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2PermissionListResponses, V2PermissionListErrors, ThrowOnError>({
+      url: "/api/permission",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to pending permission
+   *
+   * Respond to a pending permission request owned by a session.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      requestID: string
+      reply?: PermissionV2Reply
+      message?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "requestID" },
+            { in: "body", key: "reply" },
+            { in: "body", key: "message" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2PermissionReplyResponses, V2PermissionReplyErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/permission/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _session?: Session3
   get session(): Session3 {
@@ -4571,6 +4639,11 @@ export class V2 extends HeyApiClient {
   private _provider?: Provider2
   get provider(): Provider2 {
     return (this._provider ??= new Provider2({ client: this.client }))
+  }
+
+  private _permission?: Permission2
+  get permission(): Permission2 {
+    return (this._permission ??= new Permission2({ client: this.client }))
   }
 }
 

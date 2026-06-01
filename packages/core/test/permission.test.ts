@@ -2,40 +2,32 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
+const current = Layer.succeed(
+  Location.Service,
+  Location.Service.of(location({ directory: AbsolutePath.make("project") })),
+)
 const events = EventV2.layer.pipe(Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(database))
-const layer = PermissionV2.layer.pipe(Layer.provideMerge(database), Layer.provideMerge(events), Layer.provideMerge(sessions))
+const layer = PermissionV2.locationLayer.pipe(Layer.provideMerge(database), Layer.provideMerge(events), Layer.provideMerge(current))
 const it = testEffect(layer)
 
-function setup() {
+function project() {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
       .insert(ProjectTable)
       .values({ id: Project.ID.global, worktree: "project", sandboxes: [] })
-      .onConflictDoNothing()
-      .run()
-      .pipe(Effect.orDie)
-    yield* db
-      .insert(SessionTable)
-      .values({
-        id: SessionV2.ID.make("ses_test"),
-        project_id: Project.ID.global,
-        slug: "test",
-        directory: "project",
-        title: "test",
-        version: "test",
-      })
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
@@ -73,7 +65,6 @@ function waitForRequest() {
 describe("PermissionV2", () => {
   it.effect("asks without evaluating configured rules or blocking", () =>
     Effect.gen(function* () {
-      yield* setup()
       const service = yield* PermissionV2.Service
       const request = yield* service.ask(assertion({ rules: [{ action: "read", resource: "*", effect: "allow" }] }))
       expect(yield* service.get(request.id)).toEqual(request)
@@ -84,7 +75,6 @@ describe("PermissionV2", () => {
 
   it.effect("allows and denies from explicit rules without asking", () =>
     Effect.gen(function* () {
-      yield* setup()
       const service = yield* PermissionV2.Service
       yield* service.assert(
         assertion({ rules: [{ action: "read", resource: "*", effect: "allow" }] }),
@@ -99,7 +89,6 @@ describe("PermissionV2", () => {
 
   it.effect("resolves an asked permission once", () =>
     Effect.gen(function* () {
-      yield* setup()
       const { service, fiber, request } = yield* waitForRequest()
       expect(yield* service.list()).toEqual([request])
       expect(yield* service.get(request.id)).toEqual(request)
@@ -110,9 +99,9 @@ describe("PermissionV2", () => {
     }),
   )
 
-  it.effect("stores remembered resources for the session project", () =>
+  it.effect("stores remembered resources for the location project", () =>
     Effect.gen(function* () {
-      yield* setup()
+      yield* project()
       const service = yield* PermissionV2.Service
       const asked = yield* Deferred.make<PermissionV2.Request>()
       const events = yield* EventV2.Service
