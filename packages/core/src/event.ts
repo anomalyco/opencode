@@ -34,6 +34,10 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
 }
 
+export type EncodedPayload<D extends Definition = Definition> = Omit<Payload<D>, "data"> & {
+  readonly data: Record<string, unknown>
+}
+
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
 type AnyProjector = (event: Payload) => Effect.Effect<void>
 export type Listener = (event: Payload) => Effect.Effect<void>
@@ -101,6 +105,60 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
 
 export function definitions() {
   return registry.values().toArray()
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
+  return {}
+}
+
+function normalizeLegacyData(definition: Definition, data: Record<string, unknown>): Record<string, unknown> {
+  if (!definition.type.startsWith("session.next.")) return data
+  const timestamp = data.timestamp
+  if (typeof timestamp !== "string") return data
+  const millis = Date.parse(timestamp)
+  if (!Number.isFinite(millis)) return data
+  return { ...data, timestamp: millis }
+}
+
+export function encodeData<D extends Definition>(definition: D, data: Data<D>): Record<string, unknown> {
+  const schema = definition.data as Schema.Encoder<Record<string, unknown>>
+  return asRecord(Schema.encodeUnknownSync(schema)(data))
+}
+
+export function decodeData<D extends Definition>(definition: D, data: Record<string, unknown>): Data<D> {
+  const schema = definition.data as Schema.Decoder<unknown>
+  return Schema.decodeUnknownSync(schema)(normalizeLegacyData(definition, data)) as Data<D>
+}
+
+export function encodePayload<D extends Definition>(definition: D, payload: Payload<D>): EncodedPayload<D> {
+  return { ...payload, data: encodeData(definition, payload.data) }
+}
+
+export function decodePayload<D extends Definition>(definition: D, payload: EncodedPayload<D>): Payload<D> {
+  return { ...payload, data: decodeData(definition, payload.data) }
+}
+
+export function encodeKnownPayload(payload: Payload): EncodedPayload {
+  const definition = registry.get(payload.type)
+  if (!definition) return { ...payload, data: asRecord(payload.data) }
+  return encodePayload(definition, payload as Payload<typeof definition>)
+}
+
+export function encodeKnownPayloadForFanout(
+  payload: Payload,
+  onError?: (error: unknown) => void,
+): EncodedPayload | undefined {
+  try {
+    return encodeKnownPayload(payload)
+  } catch (error) {
+    // Live fanout is best-effort compatibility delivery. Transactional sync
+    // persistence remains fail-fast via encodeData/encodeKnownPayload callers,
+    // but GlobalBus/SSE must not let one unencodable event abort publish or
+    // disconnect streams. Callers should log and drop only this event.
+    onError?.(error)
+    return undefined
+  }
 }
 
 export interface PublishOptions {
@@ -220,6 +278,7 @@ export const layer = Layer.effect(
                       })
                       .run()
                       .pipe(Effect.orDie)
+                    const data = encodeData(definition, event.data)
                     yield* db
                       .insert(EventTable)
                       .values([
@@ -228,7 +287,7 @@ export const layer = Layer.effect(
                           aggregate_id: aggregateID,
                           seq,
                           type: versionedType(definition.type, sync.version),
-                          data: event.data as Record<string, unknown>,
+                          data,
                         },
                       ])
                       .run()
@@ -289,7 +348,7 @@ export const layer = Layer.effect(
             id: event.id,
             type: definition.type,
             version: definition.sync.version,
-            data: event.data,
+            data: decodeData(definition, event.data),
           } as Payload
           yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
           if (options?.publish) {
