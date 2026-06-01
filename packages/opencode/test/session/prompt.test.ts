@@ -2362,3 +2362,43 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+noLLMServer.instance(
+  "saves data URL image attachment to disk and stores savedPath in metadata",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      // Minimal 1x1 red PNG as base64
+      const pngBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+      const dataUrl = `data:image/png;base64,${pngBase64}`
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "What is in this image?" },
+          {
+            type: "file",
+            mime: "image/png",
+            url: dataUrl,
+            filename: "screenshot.png",
+          },
+        ],
+      })
+
+      expect(msg.info.role).toBe("user")
+      const fileParts = msg.parts.filter((p) => p.type === "file")
+      expect(fileParts.length).toBeGreaterThanOrEqual(1)
+      const savedFilePart = fileParts.find((p) => p.metadata?.savedPath)
+      expect(savedFilePart).toBeDefined()
+      if (savedFilePart) {
+        expect(savedFilePart.metadata!.savedPath).toBeString()
+        expect(savedFilePart.metadata!.savedPath).toContain(session.id)
+      }
+    }),
+)

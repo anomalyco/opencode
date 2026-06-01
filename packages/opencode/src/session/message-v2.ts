@@ -218,12 +218,22 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
             })
           } else {
-            userMessage.parts.push({
+            const filePart: {
+              type: "file"
+              url: string
+              mediaType: string
+              filename?: string
+              savedPath?: string
+            } = {
               type: "file",
               url: part.url,
               mediaType: part.mime,
               filename: part.filename,
-            })
+            }
+            if (part.metadata?.savedPath) {
+              filePart.savedPath = part.metadata.savedPath
+            }
+            userMessage.parts.push(filePart as any)
           }
         }
 

@@ -21,5 +21,11 @@ export type Image = Schema.Schema.Type<typeof Image>
 
 export const Info = Schema.Struct({
   image: Schema.optional(Image).annotate({ description: "Image attachment configuration" }),
+  save_to_disk: Schema.optional(Schema.Boolean).annotate({
+    description: "Save attachments to disk on receipt (default: true)",
+  }),
+  save_to_disk_path: Schema.optional(Schema.String).annotate({
+    description: "Target directory for saved attachments (default: {Global.Path.tmp}/attachments)",
+  }),
 }).annotate({ identifier: "AttachmentConfig" })
 export type Info = Schema.Schema.Type<typeof Info>

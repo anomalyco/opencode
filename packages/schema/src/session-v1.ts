@@ -175,6 +175,7 @@ export const FilePart = Schema.Struct({
   filename: Schema.optional(Schema.String),
   url: Schema.String,
   source: Schema.optional(FilePartSource),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 }).annotate({ identifier: "FilePart" })
 export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
 
@@ -417,6 +418,7 @@ export const FilePartInput = Schema.Struct({
   filename: Schema.optional(Schema.String),
   url: Schema.String,
   source: Schema.optional(FilePartSource),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 }).annotate({ identifier: "FilePartInput" })
 export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
 

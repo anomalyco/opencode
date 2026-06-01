@@ -1838,6 +1838,109 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
+describe("ProviderTransform.message - unsupportedParts with savedPath", () => {
+  const textOnlyModel = {
+    id: "test/text-only",
+    providerID: "test",
+    api: { id: "text-model", url: "https://api.test.com", npm: "@ai-sdk/test" },
+    name: "Text Only Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.001, output: 0.002, cache: { read: 0, write: 0 } },
+    limit: { context: 10000, output: 1000 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const visionModel = {
+    ...textOnlyModel,
+    id: "test/vision",
+    capabilities: {
+      ...textOnlyModel.capabilities,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+    },
+  } as any
+
+  test("appends saved path when present on file part with unsupported modality", () => {
+    const msgs = [{
+      role: "user",
+      content: [
+        { type: "text", text: "What is in this image?" },
+        { type: "file", mediaType: "image/png", filename: "photo.png", savedPath: "/tmp/attachments/photo.png" },
+      ],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, textOnlyModel, {})
+
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "What is in this image?" })
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "photo.png" (this model does not support image input). Inform the user. (saved to /tmp/attachments/photo.png)',
+    })
+  })
+
+  test("no path suffix when savedPath is absent", () => {
+    const msgs = [{
+      role: "user",
+      content: [
+        { type: "text", text: "What is in this PDF?" },
+        { type: "file", mediaType: "application/pdf", filename: "doc.pdf" },
+      ],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, textOnlyModel, {})
+
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "doc.pdf" (this model does not support pdf input). Inform the user.',
+    })
+  })
+
+  test("vision model receives image transparently (non-regression R5)", () => {
+    const msgs = [{
+      role: "user",
+      content: [
+        { type: "text", text: "What is in this image?" },
+        { type: "file", mediaType: "image/png", filename: "photo.png", savedPath: "/tmp/attachments/photo.png" },
+      ],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, visionModel, {})
+
+    expect(result[0].content).toHaveLength(2)
+    // Vision model should pass the file through unchanged
+    expect(result[0].content[1]).toEqual({
+      type: "file",
+      mediaType: "image/png",
+      filename: "photo.png",
+      savedPath: "/tmp/attachments/photo.png",
+    })
+  })
+
+  test("no path suffix when savedPath is absent for PDF", () => {
+    const msgs = [{
+      role: "user",
+      content: [
+        { type: "file", mediaType: "application/pdf", savedPath: undefined },
+      ],
+    }] as any[]
+
+    const result = ProviderTransform.message(msgs, textOnlyModel, {})
+
+    expect(result[0].content[0].text).not.toContain("saved to")
+  })
+})
+
 describe("ProviderTransform.message - anthropic empty content filtering", () => {
   const anthropicModel = {
     id: "anthropic/claude-3-5-sonnet",

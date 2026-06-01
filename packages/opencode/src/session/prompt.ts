@@ -41,6 +41,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
+import { saveDataUrlToFile } from "@/util/attachment-save"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -836,6 +837,20 @@ export const layer = Layer.effect(
                   },
                   { ...part, messageID: info.id, sessionID: input.sessionID },
                 ]
+              }
+              if (part.mime.startsWith("image/") || part.mime === "application/pdf") {
+                const cfg = yield* config.get()
+                const attachmentCfg = cfg.attachment ?? {}
+                const savedPath = yield* saveDataUrlToFile(part.url, attachmentCfg, input.sessionID)
+                const result: Draft<SessionLegacy.Part> = {
+                  ...part,
+                  messageID: info.id,
+                  sessionID: input.sessionID,
+                }
+                if (savedPath) {
+                  ;(result as any).metadata = { savedPath }
+                }
+                return [result]
               }
               break
             case "file:": {

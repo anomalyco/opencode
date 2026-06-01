@@ -12,4 +12,6 @@ export class Image extends Schema.Class<Image>("ConfigV2.Attachments.Image")({
 
 export class Info extends Schema.Class<Info>("ConfigV2.Attachments")({
   image: Image.pipe(Schema.optional),
+  save_to_disk: Schema.Boolean.pipe(Schema.optional),
+  save_to_disk_path: Schema.String.pipe(Schema.optional),
 }) {}

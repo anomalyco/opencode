@@ -399,9 +399,11 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       if (model.capabilities.input[modality]) return part
 
       const name = filename ? `"${filename}"` : modality
+      const savedPath = (part as any).savedPath
+      const suffix = savedPath ? ` (saved to ${savedPath})` : ""
       return {
         type: "text" as const,
-        text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.`,
+        text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.${suffix}`,
       }
     })
 
