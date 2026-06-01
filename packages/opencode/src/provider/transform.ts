@@ -672,7 +672,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   switch (model.api.npm) {
     case "@openrouter/ai-sdk-provider":
-      if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) return {}
+      if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) {
+        return Object.fromEntries(
+          OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]),
+        )
+      }
       return Object.fromEntries(
         (id.includes("gpt") ? openaiCompatibleReasoningEfforts(id) : OPENAI_EFFORTS).map((effort) => [
           effort,
