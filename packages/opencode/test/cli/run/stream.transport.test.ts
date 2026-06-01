@@ -857,18 +857,14 @@ describe("run stream transport", () => {
     const firstReset = defer()
     const statusGate = defer()
     const statusStarted = defer()
-    const promptSent = defer()
     let blockStatus = false
+    const trace = mock((_type: string, _data?: unknown) => {})
     const resetA = mock(() => firstReset.promise)
     const resetB = mock(() => Promise.resolve())
     const resetC = mock(() => Promise.resolve())
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        promptAsync: async () => {
-          promptSent.resolve()
-          return ok(undefined)
-        },
         status: async () => {
           if (blockStatus) {
             statusStarted.resolve()
@@ -882,6 +878,7 @@ describe("run stream transport", () => {
       replay: true,
       limits: () => ({}),
       footer: ui.api,
+      trace: { write: trace },
     })
     const turn = transport.runPromptTurn({
       agent: undefined,
@@ -893,14 +890,13 @@ describe("run stream transport", () => {
     })
 
     try {
-      await promptSent.promise
-      await Bun.sleep(10)
+      await waitFor(() => ui.events.find((event) => event.type === "turn.wait"))
       const active = transport.replayOnResize({ localRows: () => [], reset: resetA })
       await waitFor(() => (resetA.mock.calls.length === 1 ? true : undefined))
       blockStatus = true
       src.push(busy())
       src.push(idle())
-      await Bun.sleep(10)
+      await waitFor(() => (trace.mock.calls.filter((call) => call[0] === "recv.event").length >= 2 ? true : undefined))
 
       expect(await transport.replayOnResize({ localRows: () => [], reset: resetB })).toBe(false)
       firstReset.resolve()
