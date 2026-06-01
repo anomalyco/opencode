@@ -30,4 +30,10 @@ describe("i18n parity", () => {
       }
     }
   })
+
+  test("open folder label is present in English and Chinese locales", () => {
+    expect(en["session.files.openFolder"]).toBe("Open Folder")
+    expect(zh["session.files.openFolder"]).toBe("打开文件夹")
+    expect(zht["session.files.openFolder"]).toBe("開啟資料夾")
+  })
 })
