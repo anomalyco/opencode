@@ -215,6 +215,116 @@ test("clears existing variants so refreshed models calculate provider-specific v
   expect(models["claude-opus-4.7"].variants).toBeUndefined()
 })
 
+test("keeps catalog variants when Copilot omits a supported reasoning effort", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "gpt-5.5",
+              name: "GPT-5.5",
+              version: "gpt-5.5-2026-04-23",
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: 272000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 272000,
+                },
+                supports: {
+                  reasoning_effort: ["low", "medium", "high"],
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = await CopilotModels.get(
+    "https://api.githubcopilot.com",
+    {},
+    {
+      "gpt-5.5": {
+        id: "gpt-5.5",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.5",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+        name: "GPT-5.5",
+        family: "gpt",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: {
+            text: true,
+            audio: false,
+            image: true,
+            video: false,
+            pdf: false,
+          },
+          output: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          interleaved: false,
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+        limit: {
+          context: 272000,
+          input: 272000,
+          output: 128000,
+        },
+        options: {},
+        headers: {},
+        release_date: "2026-04-23",
+        variants: {
+          low: {
+            reasoningEffort: "catalog-low",
+          },
+          xhigh: {
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"],
+          },
+        },
+        status: "active",
+      },
+    },
+  )
+
+  expect(models["gpt-5.5"].variants?.xhigh).toEqual({
+    reasoningEffort: "xhigh",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"],
+  })
+  expect(models["gpt-5.5"].variants?.low).toEqual({
+    reasoningEffort: "low",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"],
+  })
+})
+
 test("remaps fallback oauth model urls to the enterprise host", async () => {
   globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
 
