@@ -459,7 +459,7 @@ function createLayer(input: StreamInput) {
         let replaying = false
         let replayDisabled = false
         let replayPending: SessionResizeReplayInput | undefined
-        const buffered: Event[] = []
+        const buffered: RunEvent[] = []
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
         const tracked = (sessionID: string | undefined) =>
@@ -883,7 +883,7 @@ function createLayer(input: StreamInput) {
           })
         }
 
-        const applyEvent = Effect.fn("RunStreamTransport.applyEvent")(function* (event: Event) {
+        const applyEvent = Effect.fn("RunStreamTransport.applyEvent")(function* (event: RunEvent) {
           if (event.type === "message.part.delta" && event.properties.sessionID === input.sessionID) {
             if (replayedParts.has(event.properties.partID)) {
               const seen = state.data.text.get(event.properties.partID) ?? ""
@@ -956,7 +956,7 @@ function createLayer(input: StreamInput) {
         const drainBuffered = Effect.fn("RunStreamTransport.drainBuffered")(function* () {
           let pending = buffered.splice(0)
           while (pending.length > 0) {
-            const next: Event[] = []
+            const next: RunEvent[] = []
             let changed = false
             for (const event of pending) {
               if (!tracked(sid(event))) {

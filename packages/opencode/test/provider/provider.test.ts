@@ -72,7 +72,7 @@ const runList = (directory: string) =>
   Effect.runPromise(
     Provider.use.list()
       .pipe(provideInstanceEffect(directory))
-      .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+      .pipe(Effect.provide(Layer.mergeAll(providerLayer(), InstanceLayer.layer, CrossSpawnSpawner.defaultLayer))),
   )
 
 const paid = (providers: Record<string, { models: Record<string, { cost: { input: number } }> }>) => {
