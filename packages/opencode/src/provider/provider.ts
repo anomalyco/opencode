@@ -32,11 +32,6 @@ import { ProviderError } from "./error"
 
 const log = Log.create({ service: "provider" })
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
-function shouldUseCopilotResponsesApi(modelID: string): boolean {
-  const match = /^gpt-(\d+)/.exec(modelID)
-  if (!match) return false
-  return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
-}
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -152,10 +147,6 @@ type CustomDep = {
   get: (key: string) => Effect.Effect<string | undefined>
 }
 
-function useLanguageModel(sdk: any) {
-  return sdk.responses === undefined && sdk.chat === undefined
-}
-
 function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
@@ -218,8 +209,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       Effect.succeed({
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
+          const match = /^gpt-(\d+)/.exec(modelID)
+          if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
+          return sdk.chat(modelID)
         },
         options: {},
       }),
@@ -1171,18 +1164,15 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function suggestionModelIDs(provider: Info | undefined, enableExperimentalModels: boolean) {
-  if (!provider) return []
-  return Object.keys(provider.models).filter((id) => {
-    const model = provider.models[id]
-    if (model.status === "deprecated") return false
-    if (model.status === "alpha" && !enableExperimentalModels) return false
-    return true
-  })
-}
-
 function modelSuggestions(provider: Info | undefined, modelID: ProviderV2.ModelID, enableExperimentalModels: boolean) {
-  const available = suggestionModelIDs(provider, enableExperimentalModels)
+  const available = provider
+    ? Object.keys(provider.models).filter((id) => {
+        const model = provider.models[id]
+        if (model.status === "deprecated") return false
+        if (model.status === "alpha" && !enableExperimentalModels) return false
+        return true
+      })
+    : []
   const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
   if (fuzzy.length) return fuzzy
   const query = modelID
