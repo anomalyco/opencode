@@ -1,0 +1,200 @@
+import { describe, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
+import { promisify } from "util"
+import { execFile } from "child_process"
+import { pathToFileURL } from "url"
+import { Effect, Layer } from "effect"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Global } from "@opencode-ai/core/global"
+import { AppProcess } from "@opencode-ai/core/process"
+import { Repository } from "@opencode-ai/core/repository"
+import { RepositoryCache } from "@opencode-ai/core/repository-cache"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { tmpdir } from "./fixture/tmpdir"
+import { testEffect } from "./lib/effect"
+
+const exec = promisify(execFile)
+const it = testEffect(Layer.empty)
+
+describe("RepositoryCache", () => {
+  it.live("clones, reuses, and refreshes a managed checkout", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        const cloned = yield* cache.ensure({ reference: fixture.reference })
+        const cached = yield* cache.ensure({ reference: fixture.reference })
+
+        expect(cloned.status).toBe("cloned")
+        expect(cached.status).toBe("cached")
+        expect(cached.localPath).toBe(cloned.localPath)
+        expect(yield* read(path.join(cloned.localPath, "README.md"))).toBe("one\n")
+
+        yield* Effect.promise(() => commit(fixture.source, "two\n", "second"))
+        const refreshed = yield* cache.ensure({ reference: fixture.reference, refresh: true })
+
+        expect(refreshed.status).toBe("refreshed")
+        expect(refreshed.head).not.toBe(cloned.head)
+        expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("two\n")
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("fetches and checks out a requested branch", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        yield* cache.ensure({ reference: fixture.reference })
+        yield* Effect.promise(() => branch(fixture.source, "feature/docs", "feature\n"))
+
+        const refreshed = yield* cache.ensure({ reference: fixture.reference, branch: "feature/docs" })
+
+        expect(refreshed.status).toBe("refreshed")
+        expect(refreshed.branch).toBe("feature/docs")
+        expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("feature\n")
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("replaces a stale cache directory before cloning", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const localPath = Repository.cachePath(path.join(fixture.root, "repos"), fixture.reference)
+        yield* Effect.promise(async () => {
+          await fs.mkdir(localPath, { recursive: true })
+          await fs.writeFile(path.join(localPath, "stale.txt"), "stale")
+        })
+
+        const result = yield* (yield* RepositoryCache.Service).ensure({ reference: fixture.reference })
+
+        expect(result.status).toBe("cloned")
+        expect(yield* exists(path.join(localPath, "stale.txt"))).toBe(false)
+        expect(yield* read(path.join(localPath, "README.md"))).toBe("one\n")
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("serializes concurrent materialization for the same checkout", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        const results = yield* Effect.all(
+          [cache.ensure({ reference: fixture.reference }), cache.ensure({ reference: fixture.reference })],
+          { concurrency: "unbounded" },
+        )
+
+        expect(results.map((result) => result.status).toSorted()).toEqual(["cached", "cloned"])
+        expect(results[0].localPath).toBe(results[1].localPath)
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("replaces an existing checkout whose origin does not match", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        const initial = yield* cache.ensure({ reference: fixture.reference })
+        yield* Effect.promise(async () => {
+          await git(initial.localPath, "config", "remote.origin.url", "https://github.com/other/repo.git")
+          await fs.writeFile(path.join(initial.localPath, "stale.txt"), "stale")
+        })
+
+        const replaced = yield* cache.ensure({ reference: fixture.reference })
+
+        expect(replaced.status).toBe("cloned")
+        expect(yield* exists(path.join(replaced.localPath, "stale.txt"))).toBe(false)
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("returns typed validation and clone failures", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const cache = yield* RepositoryCache.Service
+        const invalidRepository = yield* Effect.flip(RepositoryCache.parseRemote("not-a-repo"))
+        expect(invalidRepository).toBeInstanceOf(RepositoryCache.InvalidRepositoryError)
+
+        const invalidBranch = yield* Effect.flip(cache.ensure({ reference: fixture.reference, branch: "../unsafe" }))
+        expect(invalidBranch).toBeInstanceOf(RepositoryCache.InvalidBranchError)
+
+        const cloneFailure = yield* Effect.flip(
+          cache.ensure({
+            reference: { ...fixture.reference, remote: pathToFileURL(path.join(fixture.root, "missing.git")).href },
+          }),
+        )
+        expect(cloneFailure).toBeInstanceOf(RepositoryCache.CloneFailedError)
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+})
+
+function cacheLayer(root: string) {
+  const dependencies = Layer.mergeAll(
+    Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") }),
+    AppFileSystem.defaultLayer,
+    AppProcess.defaultLayer,
+  )
+  return RepositoryCache.layer.pipe(
+    Layer.provide(EffectFlock.layer.pipe(Layer.provide(dependencies))),
+    Layer.provide(dependencies),
+  )
+}
+
+function withRemote<A, E, R>(body: (fixture: Awaited<ReturnType<typeof remote>>) => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.promise(async () => {
+      const root = await tmpdir()
+      return { root, fixture: await remote(root.path) }
+    }),
+    (input) => body(input.fixture),
+    (input) => Effect.promise(() => input.root[Symbol.asyncDispose]()),
+  )
+}
+
+async function remote(root: string) {
+  const origin = path.join(root, "origin.git")
+  const source = path.join(root, "source")
+  await git(root, "init", "--bare", origin)
+  await git(root, "init", source)
+  await git(source, "config", "user.email", "test@example.com")
+  await git(source, "config", "user.name", "Test")
+  await fs.writeFile(path.join(source, "README.md"), "one\n")
+  await git(source, "add", "README.md")
+  await git(source, "commit", "-m", "initial")
+  await git(source, "branch", "-M", "main")
+  await git(source, "remote", "add", "origin", pathToFileURL(origin).href)
+  await git(source, "push", "-u", "origin", "main")
+  await git(root, "--git-dir", origin, "symbolic-ref", "HEAD", "refs/heads/main")
+  return {
+    root,
+    source,
+    reference: { ...Repository.parseRemote("owner/repo"), remote: pathToFileURL(origin).href },
+  }
+}
+
+async function commit(source: string, content: string, message: string) {
+  await fs.writeFile(path.join(source, "README.md"), content)
+  await git(source, "add", "README.md")
+  await git(source, "commit", "-m", message)
+  await git(source, "push")
+}
+
+async function branch(source: string, name: string, content: string) {
+  await git(source, "checkout", "-b", name)
+  await fs.writeFile(path.join(source, "README.md"), content)
+  await git(source, "add", "README.md")
+  await git(source, "commit", "-m", name)
+  await git(source, "push", "-u", "origin", name)
+}
+
+async function git(cwd: string, ...args: string[]) {
+  await exec("git", args, { cwd })
+}
+
+function read(file: string) {
+  return Effect.promise(() => fs.readFile(file, "utf8"))
+}
+
+function exists(file: string) {
+  return Effect.promise(() => fs.stat(file).then(() => true, () => false))
+}
