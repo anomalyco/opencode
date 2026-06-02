@@ -50,6 +50,13 @@ const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
 
+/** Windows stores session.directory with backslashes; URL/query often uses forward slashes. */
+function normalizeListDirectory(directory: string | undefined): string | undefined {
+  if (!directory) return undefined
+  if (process.platform !== "win32") return directory
+  return path.win32.normalize(directory)
+}
+
 export function isDefaultTitle(title: string) {
   return new RegExp(
     `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
@@ -623,7 +630,8 @@ export const layer: Layer.Layer<
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
       const conditions: SQL[] = []
-      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
+      const directory = normalizeListDirectory(input?.directory)
+      if (directory) conditions.push(eq(SessionTable.directory, directory))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
@@ -1042,6 +1050,7 @@ function listByProject(
     experimentalWorkspaces: boolean
   },
 ) {
+  const directory = normalizeListDirectory(input.directory)
   const conditions = [eq(SessionTable.project_id, input.projectID)]
 
   if (input.workspaceID) {
@@ -1055,14 +1064,14 @@ function listByProject(
       ]
 
       conditions.push(
-        input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+        directory
+          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, directory))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
-    if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+    if (directory) {
+      conditions.push(eq(SessionTable.directory, directory))
     }
   }
   if (input.roots) {
@@ -1100,9 +1109,10 @@ export function* listGlobal(input?: {
   archived?: boolean
 }) {
   const conditions: SQL[] = []
+  const directory = normalizeListDirectory(input?.directory)
 
-  if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+  if (directory) {
+    conditions.push(eq(SessionTable.directory, directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
