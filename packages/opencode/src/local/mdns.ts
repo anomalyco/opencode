@@ -194,6 +194,43 @@ async function probeLAN(): Promise<LocalLlamaSwapService[]> {
   return Promise.all(found.map(async (svc) => ({ ...svc, name: await reverseHostname(svc.host) })))
 }
 
+// scanMDNSOnly listens for _llamaswap._tcp mDNS announcements for timeoutMs and
+// returns the raw services found — no localhost/LAN fallback, no model probing.
+// Useful for verifying that llama-skein mDNS advertisement is working on the LAN.
+export async function scanMDNSOnly(timeoutMs = 4000): Promise<LocalLlamaSwapService[]> {
+  const found: LocalLlamaSwapService[] = []
+  await new Promise<void>((resolve) => {
+    let bonjour: InstanceType<typeof Bonjour> | undefined
+    try {
+      bonjour = new Bonjour()
+      const browsers = LLAMA_SWAP_SERVICE_TYPES.map((type) => bonjour!.find({ type, protocol: "tcp" }))
+      for (const browser of browsers) {
+        browser.on("up", (svc) => {
+          const refererAddress = /^\d+\.\d+\.\d+\.\d+$/.test(svc.referer?.address ?? "")
+            ? svc.referer?.address
+            : undefined
+          const advertisedAddress = svc.addresses?.find((item: string) => /^\d+\.\d+\.\d+\.\d+$/.test(item))
+          const host = refererAddress ?? advertisedAddress ?? svc.host ?? svc.addresses?.[0] ?? ""
+          if (!host) return
+          const baseURL = `http://${host}:${svc.port}/v1`
+          const name = normalizeHostname((svc.txt as Record<string, string> | undefined)?.host ?? svc.name)
+          found.push({ name, host, port: svc.port, baseURL })
+        })
+      }
+      setTimeout(() => {
+        try {
+          for (const browser of browsers) browser.stop()
+          bonjour?.destroy()
+        } catch {}
+        resolve()
+      }, timeoutMs)
+    } catch {
+      resolve()
+    }
+  })
+  return found
+}
+
 export async function scanLlamaSwap(
   timeoutMs = 4000,
 ): Promise<Array<LocalLlamaSwapService & { models: string[]; online: boolean }>> {
