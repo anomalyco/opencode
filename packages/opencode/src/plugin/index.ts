@@ -21,6 +21,7 @@ import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
 import { OverflowGuardPlugin } from "@/securecode/plugins/overflow-guard"
+import { UntrustedContentWrapperPlugin } from "@/securecode/plugins/untrusted-content-wrapper"
 import { QwenQuestionNormalizePlugin } from "@/securecode/plugins/qwen-question-normalize"
 import { QwenThinkingDefaultPlugin } from "@/securecode/plugins/qwen-thinking-default"
 import { PermissionPolicyPlugin } from "@/securecode/plugins/permission-policy"
@@ -73,6 +74,9 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   DigitalOceanAuthPlugin,
   XaiAuthPlugin,
   OverflowGuardPlugin,
+  // Must run after OverflowGuardPlugin so the wrapper sees the truncated
+  // output, otherwise wrapping inflates the payload pre-truncation.
+  UntrustedContentWrapperPlugin,
   QwenQuestionNormalizePlugin,
   QwenThinkingDefaultPlugin,
   PermissionPolicyPlugin,
