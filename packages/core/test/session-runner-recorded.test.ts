@@ -13,6 +13,7 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRuntime } from "@opencode-ai/core/session/runtime"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { describe, expect } from "bun:test"
@@ -32,12 +33,14 @@ const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const registry = ToolRegistry.layer()
 const model = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://api.openai.com/v1" }, auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture") })
+  .with({
+    endpoint: { baseURL: "https://api.openai.com/v1" },
+    auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
+    generation: { maxTokens: 20, temperature: 0 },
+  })
   .model({ id: "gpt-4o-mini" })
-const runner = SessionRunnerLLM.layer({
-  resolveModel: () => Effect.succeed(model),
-  request: { system: "You are concise.", generation: { maxTokens: 20, temperature: 0 } },
-}).pipe(Layer.provide(database), Layer.provide(events), Layer.provide(client))
+const models = SessionRunnerModel.layer(() => Effect.succeed(model))
+const runner = SessionRunnerLLM.layer.pipe(Layer.provide(database), Layer.provide(events), Layer.provide(client), Layer.provide(models))
   .pipe(Layer.provide(registry))
 const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
@@ -46,7 +49,7 @@ const sessions = SessionV2.layer.pipe(
   Layer.provide(Project.defaultLayer),
   Layer.provide(runtime),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, executor, client, registry, runner, runtime, sessions))
+const it = testEffect(Layer.mergeAll(database, events, projector, executor, client, registry, models, runner, runtime, sessions))
 const sessionID = SessionV2.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {

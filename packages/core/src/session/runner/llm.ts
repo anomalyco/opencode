@@ -1,4 +1,4 @@
-import { LLM, LLMClient, LLMEvent, type GenerationOptions, type Model, type SystemPart } from "@opencode-ai/llm"
+import { LLM, LLMClient, LLMEvent } from "@opencode-ai/llm"
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Stream } from "effect"
 import { Database } from "../../database/database"
@@ -13,15 +13,7 @@ import { Service } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { ToolRegistry } from "../../tool-registry"
-
-export type ModelResolver = (session: SessionSchema.Info) => Effect.Effect<Model>
-export type Options = {
-  readonly resolveModel: ModelResolver
-  readonly request?: {
-    readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
-    readonly generation?: GenerationOptions.Input
-  }
-}
+import { SessionRunnerModel } from "./model"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -37,7 +29,7 @@ export type Options = {
  *
  * - Runtime context assembly
  *   - [x] Load Session placement and chronological projected V2 history.
- *   - [x] Resolve the selected model through an injected boundary.
+ *   - [x] Resolve the selected model through `SessionRunnerModel.Service`.
  *   - [ ] Load the selected agent and effective permissions.
  *   - [ ] Build provider/model-specific base instructions and environment facts.
  *   - [ ] Load configured project instructions such as `AGENTS.md`, remote instructions, and
@@ -74,18 +66,18 @@ export type Options = {
  * `llm.stream({ request, tools, stopWhen })` convenience overload: that executes tools and
  * loops in memory, skipping the durable Session boundaries needed for recovery and routing.
  *
- * The current slice loads V2 history, translates it, resolves an injected model, and persists one
+ * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
  * provider turn. Registry definitions are advertised and local tool calls are settled durably, but
  * intentionally do not start a continuation turn yet.
  */
-export const layer = (options: Options) =>
-  Layer.effect(
+export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       const events = yield* EventV2.Service
       const llm = yield* LLMClient.Service
       const tools = yield* ToolRegistry.Service
+      const models = yield* SessionRunnerModel.Service
 
       const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
@@ -98,9 +90,9 @@ export const layer = (options: Options) =>
       })
 
       const runTurn = Effect.fn("SessionRunner.runTurn")(function* (session: SessionSchema.Info) {
-        const model = yield* options.resolveModel(session)
+        const model = yield* models.resolve(session)
         const context = yield* getContext(session.id)
-        const request = LLM.request({ ...options.request, model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
+        const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
         const publishLLMEvent = createLLMEventPublisher(events, {
           sessionID: session.id,
           agent: session.agent ?? "build",

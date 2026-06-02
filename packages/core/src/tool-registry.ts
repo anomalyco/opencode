@@ -6,9 +6,13 @@ import { castDraft, enableMapSet } from "immer"
 import { State } from "./state"
 import { SessionSchema } from "./session/schema"
 
-export type AuthorizeInput = {
+export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
   readonly call: ToolCall
+}
+
+export type AuthorizeInput = ExecuteInput & {
+  readonly parameters: unknown
 }
 
 export type Entry = {
@@ -31,7 +35,7 @@ export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
   readonly update: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
   readonly definitions: () => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
-  readonly execute: (input: AuthorizeInput) => Effect.Effect<ToolResultValue>
+  readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -60,30 +64,30 @@ export const layer = (initial: Readonly<Record<string, Entry>> = {}) =>
         return Tool.toDefinitions(Object.fromEntries(Array.from(state.get().entries, ([name, entry]) => [name, entry.tool])))
       })
 
-      const execute = Effect.fn("ToolRegistry.execute")(function* (input: AuthorizeInput) {
+      const execute = Effect.fn("ToolRegistry.execute")(function* (input: ExecuteInput) {
         const entry = state.get().entries.get(input.call.name)
         if (!entry) return { type: "error" as const, value: `Unknown tool: ${input.call.name}` }
         if (!entry.tool.execute) return { type: "error" as const, value: `Tool has no execute handler: ${input.call.name}` }
 
-        return yield* entry.authorize(input).pipe(
-          Effect.andThen(
-            entry.tool._decode(input.call.input).pipe(
-              Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
-              Effect.flatMap((decoded) => entry.tool.execute!(decoded, { id: input.call.id, name: input.call.name })),
-              Effect.flatMap((value) =>
-                entry.tool._encode(value).pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new ToolFailure({
-                        message: `Tool returned an invalid value for its success schema: ${error.message}`,
-                      }),
-                  ),
-                ),
-              ),
-              Effect.map((value): ToolResultValue =>
-                ToolResult.is(value) ? value : { type: "json", value }),
+        return yield* entry.tool._decode(input.call.input).pipe(
+          Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
+          Effect.flatMap((parameters) =>
+            entry.authorize({ ...input, parameters }).pipe(
+              Effect.andThen(entry.tool.execute!(parameters, { id: input.call.id, name: input.call.name })),
             ),
           ),
+          Effect.flatMap((value) =>
+            entry.tool._encode(value).pipe(
+              Effect.mapError(
+                (error) =>
+                  new ToolFailure({
+                    message: `Tool returned an invalid value for its success schema: ${error.message}`,
+                  }),
+              ),
+            ),
+          ),
+          Effect.map((value): ToolResultValue =>
+            ToolResult.is(value) ? value : { type: "json", value }),
           Effect.catchTag("LLM.ToolFailure", (failure) =>
             Effect.succeed({ type: "error" as const, value: failure.message }),
           ),

@@ -23,11 +23,13 @@ import { ProjectReference } from "./project-reference"
 import { RepositoryCache } from "./repository-cache"
 import { Pty } from "./pty"
 import { SkillV2 } from "./skill"
+import { ToolRegistry } from "./tool-registry"
+import { ReadTool } from "./tool/read"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Location.layer(ref)
-    return Layer.mergeAll(
+    const services = Layer.mergeAll(
       location,
       Policy.locationLayer,
       Config.locationLayer,
@@ -41,7 +43,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Watcher.locationLayer,
       Pty.locationLayer,
       SkillV2.locationLayer,
-    ).pipe(Layer.provideMerge(location), Layer.fresh)
+      ToolRegistry.layer(),
+    ).pipe(Layer.provideMerge(location))
+    return Layer.mergeAll(services, ReadTool.layer.pipe(Layer.provide(services))).pipe(Layer.provideMerge(services), Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

@@ -12,6 +12,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRuntime } from "@opencode-ai/core/session/runtime"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Effect, Layer, Schema, Stream } from "effect"
@@ -49,11 +50,13 @@ const registry = ToolRegistry.layer({
     }),
   },
 })
-const runner = SessionRunnerLLM.layer({ resolveModel: () => Effect.succeed(model) }).pipe(
+const models = SessionRunnerModel.layer(() => Effect.succeed(model))
+const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(events),
   Layer.provide(client),
   Layer.provide(registry),
+  Layer.provide(models),
 )
 const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
@@ -62,7 +65,7 @@ const sessions = SessionV2.layer.pipe(
   Layer.provide(Project.defaultLayer),
   Layer.provide(runtime),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, client, registry, runner, runtime, sessions))
+const it = testEffect(Layer.mergeAll(database, events, projector, client, registry, models, runner, runtime, sessions))
 const sessionID = SessionV2.ID.make("ses_runner_test")
 
 const setup = Effect.gen(function* () {
