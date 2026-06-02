@@ -67,7 +67,7 @@ export function SessionSidePanel(props: {
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
-    if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
+    if (reviewOpen()) return "auto"
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
@@ -214,11 +214,18 @@ export function SessionSidePanel(props: {
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
+          "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": settings.general.newLayoutDesigns(),
+          "flex-1": reviewOpen(),
         }}
         style={{ width: panelWidth() }}
       >
         <Show when={open()}>
-          <div class="size-full flex border-l border-border-weaker-base">
+          <div
+            class="size-full flex"
+            classList={{
+              "border-l border-border-weaker-base": !settings.general.newLayoutDesigns(),
+            }}
+          >
             <div
               aria-hidden={!reviewOpen()}
               inert={!reviewOpen()}
