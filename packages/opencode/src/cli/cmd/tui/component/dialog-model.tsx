@@ -131,12 +131,7 @@ export function DialogModel(props: { providerID?: string }) {
   function onSelect(providerID: string, modelID: string) {
     local.model.set({ providerID, modelID }, { recent: true })
     const list = local.model.variant.list()
-    const cur = local.model.variant.selected()
-    if (cur === "default" || (cur && list.includes(cur))) {
-      dialog.clear()
-      return
-    }
-    if (list.length > 0) {
+    if (shouldShowVariantDialogAfterModelSelect(list)) {
       dialog.replace(() => <DialogVariant />)
       return
     }
@@ -182,4 +177,8 @@ export function sortModelOptions<T extends { footer?: string; releaseDate: strin
     (option) => option.footer !== "Free",
     (option) => option.title,
   )
+}
+
+export function shouldShowVariantDialogAfterModelSelect(variants: readonly string[]) {
+  return variants.length > 0
 }

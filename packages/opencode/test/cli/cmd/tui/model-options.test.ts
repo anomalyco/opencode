@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { sortModelOptions } from "../../../../src/cli/cmd/tui/component/dialog-model"
+import {
+  shouldShowVariantDialogAfterModelSelect,
+  sortModelOptions,
+} from "../../../../src/cli/cmd/tui/component/dialog-model"
 
 describe("sortModelOptions", () => {
   test("orders provider-scoped model choices by newest release first", () => {
@@ -26,5 +29,10 @@ describe("sortModelOptions", () => {
     )
 
     expect(sorted.map((model) => model.title)).toEqual(["Alpha", "Gamma", "Beta"])
+  })
+
+  test("opens the variant picker whenever the selected model has variants", () => {
+    expect(shouldShowVariantDialogAfterModelSelect(["default", "high"])).toBe(true)
+    expect(shouldShowVariantDialogAfterModelSelect([])).toBe(false)
   })
 })
