@@ -62,5 +62,5 @@ function withRemote<A, E, R>(body: (fixture: Awaited<ReturnType<typeof gitRemote
 }
 
 function read(file: string) {
-  return Effect.promise(() => fs.readFile(file, "utf8"))
+  return Effect.promise(() => fs.readFile(file, "utf8")).pipe(Effect.map((content) => content.replace(/\r\n/g, "\n")))
 }
