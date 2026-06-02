@@ -132,6 +132,60 @@ test("orphan live deltas do not suppress hydrated parts", async () => {
   }
 })
 
+test("hydration does not clear text streamed before it starts", async () => {
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let resolveMessages!: (response: Response) => void
+  const messages = new Promise<Response>((resolve) => {
+    resolveMessages = resolve
+  })
+  let requested = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      requested = true
+      return messages
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  })
+
+  try {
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
+    emit(
+      global({
+        id: "evt_part",
+        type: "message.part.updated",
+        properties: {
+          sessionID,
+          time: 1,
+          part: { id: partID, sessionID, messageID, type: "text", text: "" },
+        },
+      }),
+    )
+    emit(
+      global({
+        id: "evt_delta",
+        type: "message.part.delta",
+        properties: { sessionID, messageID, partID, field: "text", delta: "visible streamed content" },
+      }),
+    )
+    await wait(() => sync.data.part[messageID]?.[0]?.type === "text" && sync.data.part[messageID][0].text !== "")
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requested)
+    resolveMessages(json([{ info: assistant, parts: [{ id: partID, sessionID, messageID, type: "text", text: "" }] }]))
+    await hydrate
+
+    expect(sync.data.part[messageID][0]).toMatchObject({ text: "visible streamed content" })
+  } finally {
+    app.renderer.destroy()
+    Global.Path.state = previous
+  }
+})
+
 test("live messages merged during hydration retain the 100 message window", async () => {
   const previous = Global.Path.state
   await using tmp = await tmpdir()
@@ -175,6 +229,7 @@ test("live messages merged during hydration retain the 100 message window", asyn
     expect(sync.data.message[sessionID]).toHaveLength(100)
     expect(sync.data.message[sessionID].at(-1)?.id).toBe(live.id)
     expect(sync.data.message[sessionID].some((message) => message.id === "msg_000")).toBe(false)
+    expect(sync.data.part.msg_000).toBeUndefined()
   } finally {
     app.renderer.destroy()
     Global.Path.state = previous

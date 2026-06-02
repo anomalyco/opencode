@@ -113,15 +113,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const kv = useKV()
 
     const fullSyncedSessions = new Set<string>()
-    const liveMessageRevision = new Map<string, number>()
-    const livePartRevision = new Map<string, number>()
-    let activeSessionSyncs = 0
-    let liveRevision = 0
-    const touchMessage = (messageID: string) => {
-      if (activeSessionSyncs > 0) liveMessageRevision.set(messageID, ++liveRevision)
+    const syncingSessions = new Map<string, Promise<void>>()
+    const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const touchMessage = (sessionID: string, messageID: string) => {
+      hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
-    const touchPart = (partID: string) => {
-      if (activeSessionSyncs > 0) livePartRevision.set(partID, ++liveRevision)
+    const touchPart = (sessionID: string, partID: string) => {
+      hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -261,7 +259,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.updated": {
-          touchMessage(event.properties.info.id)
+          touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
             setStore("message", event.properties.info.sessionID, [event.properties.info])
@@ -301,7 +299,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.removed": {
-          touchMessage(event.properties.messageID)
+          touchMessage(event.properties.sessionID, event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
           const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
@@ -316,7 +314,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
-          touchPart(event.properties.part.id)
+          touchPart(event.properties.part.sessionID, event.properties.part.id)
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -342,7 +340,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (!parts) break
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (!result.found) break
-          touchPart(event.properties.partID)
+          touchPart(event.properties.sessionID, event.properties.partID)
           setStore(
             "part",
             event.properties.messageID,
@@ -357,7 +355,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.removed": {
-          touchPart(event.properties.partID)
+          touchPart(event.properties.sessionID, event.properties.partID)
           const parts = store.part[event.properties.messageID]
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (result.found) {
@@ -535,9 +533,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const startedAt = liveRevision
-          activeSessionSyncs++
-          try {
+          const syncing = syncingSessions.get(sessionID)
+          if (syncing) return syncing
+          const tracker = { messages: new Set<string>(), parts: new Set<string>() }
+          hydratingSessions.set(sessionID, tracker)
+          const task = (async () => {
             const [session, messages, todo, diff] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
@@ -552,49 +552,52 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.todo[sessionID] = todo.data ?? []
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
-                  if ((liveMessageRevision.get(message.info.id) ?? 0) <= startedAt) return [message.info]
+                  if (!tracker.messages.has(message.info.id)) return [message.info]
                   const current = currentMessages.find((item) => item.id === message.info.id)
                   return current ? [current] : []
                 })
                 infos.push(
                   ...currentMessages.filter(
-                    (message) =>
-                      (liveMessageRevision.get(message.id) ?? 0) > startedAt &&
-                      !infos.some((item) => item.id === message.id),
+                    (message) => tracker.messages.has(message.id) && !infos.some((item) => item.id === message.id),
                   ),
                 )
                 for (const message of messages.data ?? []) {
                   const currentParts = draft.part[message.info.id] ?? []
                   const parts = message.parts.flatMap((part) => {
-                    if ((livePartRevision.get(part.id) ?? 0) <= startedAt) return [part]
                     const current = currentParts.find((item) => item.id === part.id)
-                    return current ? [current] : []
+                    if (tracker.parts.has(part.id)) return current ? [current] : []
+                    if (
+                      current &&
+                      (part.type === "text" || part.type === "reasoning") &&
+                      (current.type === "text" || current.type === "reasoning") &&
+                      part.text.length === 0 &&
+                      current.text.length > 0
+                    ) {
+                      return [current]
+                    }
+                    return [part]
                   })
                   parts.push(
                     ...currentParts.filter(
-                      (part) =>
-                        (livePartRevision.get(part.id) ?? 0) > startedAt && !parts.some((item) => item.id === part.id),
+                      (part) => tracker.parts.has(part.id) && !parts.some((item) => item.id === part.id),
                     ),
                   )
-                  draft.part[message.info.id] = parts.toSorted((a, b) => a.id.localeCompare(b.id))
+                  draft.part[message.info.id] = parts
                 }
-                const visible = infos.toSorted((a, b) => a.id.localeCompare(b.id)).slice(-100)
-                const visibleIDs = new Set(visible.map((message) => message.id))
-                for (const message of currentMessages) {
-                  if (!visibleIDs.has(message.id)) delete draft.part[message.id]
-                }
+                const removed = infos.slice(0, -100)
+                const visible = infos.slice(-100)
+                for (const message of removed) delete draft.part[message.id]
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
             )
             fullSyncedSessions.add(sessionID)
-          } finally {
-            activeSessionSyncs--
-            if (activeSessionSyncs === 0) {
-              liveMessageRevision.clear()
-              livePartRevision.clear()
-            }
-          }
+          })().finally(() => {
+            syncingSessions.delete(sessionID)
+            hydratingSessions.delete(sessionID)
+          })
+          syncingSessions.set(sessionID, task)
+          return task
         },
       },
       bootstrap,
