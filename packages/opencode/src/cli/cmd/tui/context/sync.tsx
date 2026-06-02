@@ -561,7 +561,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                     (message) => tracker.messages.has(message.id) && !infos.some((item) => item.id === message.id),
                   ),
                 )
+                const removed = infos.slice(0, -100)
+                const visible = infos.slice(-100)
+                const visibleIDs = new Set(visible.map((message) => message.id))
                 for (const message of messages.data ?? []) {
+                  if (!visibleIDs.has(message.info.id)) {
+                    delete draft.part[message.info.id]
+                    continue
+                  }
                   const currentParts = draft.part[message.info.id] ?? []
                   const parts = message.parts.flatMap((part) => {
                     const current = currentParts.find((item) => item.id === part.id)
@@ -584,8 +591,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   )
                   draft.part[message.info.id] = parts
                 }
-                const removed = infos.slice(0, -100)
-                const visible = infos.slice(-100)
                 for (const message of removed) delete draft.part[message.id]
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []

@@ -235,3 +235,44 @@ test("live messages merged during hydration retain the 100 message window", asyn
     Global.Path.state = previous
   }
 })
+
+test("a message removed during hydration does not regain stale parts", async () => {
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let resolveMessages!: (response: Response) => void
+  const messages = new Promise<Response>((resolve) => {
+    resolveMessages = resolve
+  })
+  let requested = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      requested = true
+      return messages
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  })
+
+  try {
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
+    await wait(() => sync.data.message[sessionID]?.length === 1)
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requested)
+    emit(global({ id: "evt_removed", type: "message.removed", properties: { sessionID, messageID } }))
+    await wait(() => sync.data.message[sessionID]?.length === 0)
+    resolveMessages(
+      json([{ info: assistant, parts: [{ id: partID, sessionID, messageID, type: "text", text: "stale" }] }]),
+    )
+    await hydrate
+
+    expect(sync.data.message[sessionID]).toEqual([])
+    expect(sync.data.part[messageID]).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+    Global.Path.state = previous
+  }
+})
