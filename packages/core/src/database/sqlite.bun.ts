@@ -2,20 +2,13 @@ import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
-import * as Fiber from "effect/Fiber"
-import { identity } from "effect/Function"
 import * as Layer from "effect/Layer"
-import * as Scope from "effect/Scope"
-import * as Semaphore from "effect/Semaphore"
-import * as Stream from "effect/Stream"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import * as Client from "effect/unstable/sql/SqlClient"
-import type { Connection } from "effect/unstable/sql/SqlConnection"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
-import * as Statement from "effect/unstable/sql/Statement"
 import { Sqlite } from "./sqlite"
-
-const ATTR_DB_SYSTEM_NAME = "db.system.name"
+import { buildConnection, buildClient } from "./sqlite-shared"
+import type { Config } from "./sqlite-shared"
 
 const TypeId = "~@opencode-ai/core/database/SqliteBun" as const
 type TypeId = typeof TypeId
@@ -28,30 +21,9 @@ interface SqliteClient extends Client.SqlClient {
   readonly updateValues: never
 }
 
-interface Config {
-  readonly filename: string
-  readonly readonly?: boolean
-  readonly create?: boolean
-  readonly readwrite?: boolean
-  readonly disableWAL?: boolean
-  readonly spanAttributes?: Record<string, unknown>
-  readonly transformResultNames?: (str: string) => string
-  readonly transformQueryNames?: (str: string) => string
-}
-
-interface SqliteConnection extends Connection {
-  readonly export: Effect.Effect<Uint8Array, SqlError>
-  readonly loadExtension: (path: string) => Effect.Effect<void, SqlError>
-}
-
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as Database
-
-    const compiler = Statement.makeCompilerSqlite(options.transformQueryNames)
-    const transformRows = options.transformResultNames
-      ? Statement.defaultTransforms(options.transformResultNames).array
-      : undefined
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
@@ -85,22 +57,7 @@ const make = (options: Config) =>
         }
       })
 
-    const connection = identity<SqliteConnection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
+    const connection = buildConnection(run, runValues, {
       export: Effect.try({
         try: () => native.serialize(),
         catch: (cause) =>
@@ -108,7 +65,7 @@ const make = (options: Config) =>
             reason: classifySqliteError(cause, { message: "Failed to export database", operation: "export" }),
           }),
       }),
-      loadExtension: (path) =>
+      loadExtension: (path: string) =>
         Effect.try({
           try: () => native.loadExtension(path),
           catch: (cause) =>
@@ -118,37 +75,15 @@ const make = (options: Config) =>
         }),
     })
 
-    const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
-    const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-      const fiber = Fiber.getCurrent()!
-      const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-      return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
-      )
-    })
-
-    const client = Object.assign(
-      (yield* Client.make({
-        acquirer,
-        compiler,
-        transactionAcquirer,
-        spanAttributes: [
-          ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
-          [ATTR_DB_SYSTEM_NAME, "sqlite"],
-        ],
-        transformRows,
-      })) as SqliteClient,
-      {
+    return Object.assign(
+      yield* buildClient(options, connection, (conn, acquirer) => ({
         [TypeId]: TypeId,
         config: options,
-        export: Effect.flatMap(acquirer, (_) => _.export),
-        loadExtension: (path: string) => Effect.flatMap(acquirer, (_) => _.loadExtension(path)),
-      },
-    )
-
-    return client
+        export: Effect.flatMap(acquirer, () => conn.export),
+        loadExtension: (path: string) => Effect.flatMap(acquirer, () => conn.loadExtension(path)),
+      })),
+      { updateValues: undefined as never },
+    ) as SqliteClient
   })
 
 const nativeLayer = (config: Config) =>
