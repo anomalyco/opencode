@@ -70,7 +70,7 @@ export const ModelsDevPlugin = PluginV2.define({
               ? {
                   type: "aisdk",
                   package: item.npm,
-                  ...(item.api ? { url: item.api } : {}),
+                  url: item.api,
                 }
               : {
                   type: "unknown",
@@ -86,7 +86,7 @@ export const ModelsDevPlugin = PluginV2.define({
                 ? {
                     type: "aisdk",
                     package: model.provider?.npm,
-                    ...(model.provider.api ? { url: model.provider.api } : {}),
+                    url: model.provider.api,
                   }
                 : {
                     type: "unknown",

@@ -1,6 +1,5 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
-import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
@@ -20,7 +19,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.provid
           const catalog = yield* Catalog.Service
           const pluginBoot = yield* PluginBoot.Service
           yield* pluginBoot.wait().pipe(Effect.catchDefect(() => Effect.fail(catalogUnavailable)))
-          return (yield* catalog.provider.available()).map((provider) => new ProviderV2.Info(provider))
+          return yield* catalog.provider.available()
         }),
       )
       .handle(
@@ -30,7 +29,6 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.provid
           const pluginBoot = yield* PluginBoot.Service
           yield* pluginBoot.wait().pipe(Effect.catchDefect(() => Effect.fail(catalogUnavailable)))
           return yield* catalog.provider.get(ctx.params.providerID).pipe(
-            Effect.map((provider) => new ProviderV2.Info(provider)),
             Effect.catchTag("CatalogV2.ProviderNotFound", (error) =>
               Effect.fail(
                 new ProviderNotFoundError({
