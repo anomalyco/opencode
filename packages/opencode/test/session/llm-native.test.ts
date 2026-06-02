@@ -417,7 +417,35 @@ describe("session.llm-native.request", () => {
         provider: { ...providerInfo, id: ProviderV2.ID.make("google") },
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, or anthropic" })
+    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, anthropic, or bifrost" })
+    expect(
+      LLMNativeRuntime.status({
+        model: {
+          ...baseModel,
+          providerID: ProviderV2.ID.bifrost,
+          api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible", url: "http://localhost:8080/openai" },
+        },
+        provider: {
+          ...providerInfo,
+          id: ProviderV2.ID.bifrost,
+          name: "Bifrost",
+          env: [],
+          options: { apiKey: "bifrost-key", baseURL: "http://localhost:8080/openai" },
+        },
+        auth: undefined,
+      }),
+    ).toMatchObject({ type: "supported", apiKey: "bifrost-key", baseURL: "http://localhost:8080/openai" })
+    expect(
+      LLMNativeRuntime.status({
+        model: {
+          ...baseModel,
+          providerID: ProviderV2.ID.make("custom-provider"),
+          api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" },
+        },
+        provider: { ...providerInfo, id: ProviderV2.ID.make("custom-provider") },
+        auth: undefined,
+      }),
+    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, anthropic, or bifrost" })
     expect(
       LLMNativeRuntime.status({
         model: baseModel,
