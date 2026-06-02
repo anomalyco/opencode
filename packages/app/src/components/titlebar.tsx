@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, mapArray, Match, Show, startTransition, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, For, Match, Show, startTransition, Switch, untrack } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -30,6 +30,7 @@ import {
   SESSION_TABS_REMOVED_EVENT,
   type SessionTabsRemovedDetail,
 } from "@/components/titlebar-session-events"
+import { createTitlebarTabsEnriched, type TitlebarTab } from "./titlebar-tabs"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -255,10 +256,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            type Tab = { dir: string; sessionId: string; href: string }
-
             const [tabsStore, tabsStoreActions] = iife(() => {
-              const [store, setStore] = createStore<Tab[]>(
+              const [store, setStore] = createStore<TitlebarTab[]>(
                 iife(() => {
                   if (!params.dir || !params.id) return []
                   return [
@@ -272,7 +271,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               )
 
               const actions = {
-                addTab: (tab: Tab) => {
+                addTab: (tab: TitlebarTab) => {
                   setStore(
                     produce((tabs) => {
                       if (tabs.some((t) => t.href === tab.href)) return
@@ -448,17 +447,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return commands
             })
 
-            const tabsEnriched = iife(() => {
-              const base = mapArray(
-                () => tabsStore,
-                (tab) => {
-                  const sync = serverSync.createDirSyncContext(tab.dir)
-                  const session = sync.session.get(tab.sessionId)
-                  return session ? { ...tab, info: session } : null
-                },
-              )
-
-              return () => base().flatMap((s) => (s ? [s] : []))
+            const tabsEnriched = createTitlebarTabsEnriched(tabsStore, (tab) => {
+              const sync = serverSync.createDirSyncContext(tab.dir)
+              return () => sync.session.get(tab.sessionId)
             })
 
             return (
@@ -486,21 +477,25 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
                   <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
                     <For each={tabsEnriched()}>
-                      {(tab, i) => (
-                        <>
-                          {i() !== 0 && (
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          )}
-                          <TabNavItem
-                            href={tab.href}
-                            title={tab.info.title}
-                            project={projectForSession(tab.info, projects(), projectByID())}
-                            directory={tab.dir}
-                            sessionId={tab.info.id}
-                            onClose={() => tabsStoreActions.removeTab(tab.href)}
-                          />
-                        </>
-                      )}
+                      {(tab, i) => {
+                        const info = tab.info()
+                        if (!info) return null
+                        return (
+                          <>
+                            {i() !== 0 && (
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            )}
+                            <TabNavItem
+                              href={tab.href}
+                              title={tab.title() ?? ""}
+                              project={projectForSession(info, projects(), projectByID())}
+                              directory={tab.dir}
+                              sessionId={info.id}
+                              onClose={() => tabsStoreActions.removeTab(tab.href)}
+                            />
+                          </>
+                        )
+                      }}
                     </For>
                   </div>
                   <Show
