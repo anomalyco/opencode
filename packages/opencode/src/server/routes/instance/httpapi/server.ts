@@ -41,6 +41,7 @@ import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { UiProjectView } from "@/ui/project-view"
 import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
@@ -82,6 +83,7 @@ import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
+import { uiHandlers } from "./handlers/ui"
 import { v2Handlers } from "./handlers/v2"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
@@ -145,6 +147,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     syncHandlers,
     v2Handlers,
     tuiHandlers,
+    uiHandlers,
     workspaceHandlers,
   ]),
 )
@@ -229,6 +232,7 @@ export function createRoutes(
       Skill.defaultLayer,
       Todo.defaultLayer,
       ToolRegistry.defaultLayer,
+      UiProjectView.defaultLayer,
       Vcs.defaultLayer,
       Workspace.defaultLayer,
       Worktree.appLayer,

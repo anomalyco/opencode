@@ -125,7 +125,7 @@ function HomeDesign() {
 
   function addProject(directory: string) {
     layout.projects.open(directory)
-    server.projects.touch(directory)
+    layout.projects.touch(directory)
     setState("project", directory)
   }
 
@@ -136,13 +136,13 @@ function HomeDesign() {
       return
     }
     layout.projects.open(project.worktree)
-    server.projects.touch(project.worktree)
+    layout.projects.touch(project.worktree)
     navigate(`/${base64Encode(project.worktree)}/session`)
   }
 
   function openProjectNewSession(directory: string) {
     layout.projects.open(directory)
-    server.projects.touch(directory)
+    layout.projects.touch(directory)
     navigate(`/${base64Encode(directory)}/session`)
   }
 
@@ -163,7 +163,7 @@ function HomeDesign() {
   function openSession(session: Session) {
     const project = projectForSession(session, projects(), projectByID())
     layout.projects.open(project?.worktree ?? session.directory)
-    server.projects.touch(project?.worktree ?? session.directory)
+    layout.projects.touch(project?.worktree ?? session.directory)
     navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
@@ -704,7 +704,7 @@ function LegacyHome() {
 
   function openProject(directory: string) {
     layout.projects.open(directory)
-    server.projects.touch(directory)
+    layout.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
   }
 

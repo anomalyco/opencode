@@ -76,6 +76,7 @@ export type Event =
   | EventPtyDeleted
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventUiProjectViewUpdated
   | EventServerConnected
   | EventGlobalDisposed
   | EventAccountAdded
@@ -1403,6 +1404,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "ui.project_view.updated"
+        properties: {
+          viewID: string
+        }
+      }
+    | {
+        id: string
         type: "server.connected"
         properties: {
           [key: string]: unknown
@@ -2566,6 +2574,41 @@ export type EventTuiSessionSelect = {
      */
     sessionID: string
   }
+}
+
+export type UiProjectViewEntry = {
+  project: Project
+  position: number
+  expanded: boolean
+}
+
+export type UiProjectView = {
+  projects: Array<UiProjectViewEntry>
+  lastProject?: Project
+}
+
+export type UiProjectViewReplaceOpenProjectsInput = {
+  projects: Array<{
+    projectID: string
+    expanded?: boolean
+  }>
+}
+
+export type UiProjectViewOpenProjectInput = {
+  projectID?: string
+  directory?: string
+  position?: number
+  expanded?: boolean
+}
+
+export type UiProjectViewUpdateOpenProjectInput = {
+  expanded?: boolean
+  position?: number
+}
+
+export type UiProjectViewLastProjectInput = {
+  projectID?: string
+  directory?: string
 }
 
 export type Workspace = {
@@ -4454,6 +4497,14 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type EventUiProjectViewUpdated = {
+  id: string
+  type: "ui.project_view.updated"
+  properties: {
+    viewID: string
   }
 }
 
@@ -8646,6 +8697,204 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type UiProjectViewGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view"
+}
+
+export type UiProjectViewGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type UiProjectViewGetError = UiProjectViewGetErrors[keyof UiProjectViewGetErrors]
+
+export type UiProjectViewGetResponses = {
+  /**
+   * UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewGetResponse = UiProjectViewGetResponses[keyof UiProjectViewGetResponses]
+
+export type UiProjectViewOpenProjectsOpenData = {
+  body?: UiProjectViewOpenProjectInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects"
+}
+
+export type UiProjectViewOpenProjectsOpenErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewOpenProjectsOpenError =
+  UiProjectViewOpenProjectsOpenErrors[keyof UiProjectViewOpenProjectsOpenErrors]
+
+export type UiProjectViewOpenProjectsOpenResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsOpenResponse =
+  UiProjectViewOpenProjectsOpenResponses[keyof UiProjectViewOpenProjectsOpenResponses]
+
+export type UiProjectViewOpenProjectsReplaceData = {
+  body?: UiProjectViewReplaceOpenProjectsInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects"
+}
+
+export type UiProjectViewOpenProjectsReplaceErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewOpenProjectsReplaceError =
+  UiProjectViewOpenProjectsReplaceErrors[keyof UiProjectViewOpenProjectsReplaceErrors]
+
+export type UiProjectViewOpenProjectsReplaceResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsReplaceResponse =
+  UiProjectViewOpenProjectsReplaceResponses[keyof UiProjectViewOpenProjectsReplaceResponses]
+
+export type UiProjectViewOpenProjectsCloseData = {
+  body?: never
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects/{projectID}"
+}
+
+export type UiProjectViewOpenProjectsCloseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type UiProjectViewOpenProjectsCloseError =
+  UiProjectViewOpenProjectsCloseErrors[keyof UiProjectViewOpenProjectsCloseErrors]
+
+export type UiProjectViewOpenProjectsCloseResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsCloseResponse =
+  UiProjectViewOpenProjectsCloseResponses[keyof UiProjectViewOpenProjectsCloseResponses]
+
+export type UiProjectViewOpenProjectsUpdateData = {
+  body?: UiProjectViewUpdateOpenProjectInput
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/open-projects/{projectID}"
+}
+
+export type UiProjectViewOpenProjectsUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewOpenProjectsUpdateError =
+  UiProjectViewOpenProjectsUpdateErrors[keyof UiProjectViewOpenProjectsUpdateErrors]
+
+export type UiProjectViewOpenProjectsUpdateResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewOpenProjectsUpdateResponse =
+  UiProjectViewOpenProjectsUpdateResponses[keyof UiProjectViewOpenProjectsUpdateResponses]
+
+export type UiProjectViewLastProjectSetData = {
+  body?: UiProjectViewLastProjectInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/ui/project-view/last-project"
+}
+
+export type UiProjectViewLastProjectSetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type UiProjectViewLastProjectSetError =
+  UiProjectViewLastProjectSetErrors[keyof UiProjectViewLastProjectSetErrors]
+
+export type UiProjectViewLastProjectSetResponses = {
+  /**
+   * Updated UI project view
+   */
+  200: UiProjectView
+}
+
+export type UiProjectViewLastProjectSetResponse =
+  UiProjectViewLastProjectSetResponses[keyof UiProjectViewLastProjectSetResponses]
 
 export type ExperimentalWorkspaceAdapterListData = {
   body?: never

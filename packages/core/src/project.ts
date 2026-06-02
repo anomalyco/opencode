@@ -103,16 +103,20 @@ export const layer = Layer.effect(
       return root ? ID.make(root) : undefined
     })
 
+    function local(repo: Git.Repo) {
+      return ID.make(Hash.fast(`git-local:${repo.store}`))
+    }
+
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.find(input)
       if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
 
       const previous = yield* cached(repo.store)
-      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
+      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo)) ?? local(repo)
 
       return {
         previous,
-        id: id ?? ID.global,
+        id,
         directory: repo.directory,
         vcs: { type: "git" as const, store: repo.store },
       }

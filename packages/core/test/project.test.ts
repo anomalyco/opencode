@@ -15,6 +15,10 @@ function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
 }
 
+function localID(store: string) {
+  return ProjectV2.ID.make(Hash.fast(`git-local:${store}`))
+}
+
 function abs(value: string) {
   return AbsolutePath.make(value)
 }
@@ -55,7 +59,7 @@ describe("ProjectV2.resolve", () => {
     }),
   )
 
-  it.live("returns git global for repo with no commits and no remote", () =>
+  it.live("falls back to local git store for repo with no commits and no remote", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -66,10 +70,33 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(ProjectV2.ID.make("global"))
+      expect(result.id).toBe(localID(yield* real(path.join(tmp.path, ".git"))))
       expect(result.directory).toBe(yield* real(tmp.path))
       expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("returns distinct local ids for empty git repos", () =>
+    Effect.gen(function* () {
+      const a = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const b = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(a.path))
+      yield* Effect.promise(() => initRepo(b.path))
+      const project = yield* ProjectV2.Service
+
+      const resultA = yield* project.resolve(abs(a.path))
+      const resultB = yield* project.resolve(abs(b.path))
+
+      expect(resultA.id).toBe(localID(yield* real(path.join(a.path, ".git"))))
+      expect(resultB.id).toBe(localID(yield* real(path.join(b.path, ".git"))))
+      expect(resultA.id).not.toBe(resultB.id)
     }),
   )
 
