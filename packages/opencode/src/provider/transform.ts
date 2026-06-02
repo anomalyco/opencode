@@ -184,8 +184,8 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
-  // Gemini rejects contents entries without parts. Empty reasoning-only blocks
-  // can survive UI message conversion after step-start splitting.
+  // Gemini rejects contents entries without parts. The Google serializer drops
+  // empty text and reasoning parts, so remove messages that would become empty.
   if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
     msgs = msgs.filter((msg) => {
       if (msg.content === "") return false

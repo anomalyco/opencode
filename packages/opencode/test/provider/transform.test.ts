@@ -1623,6 +1623,19 @@ describe("ProviderTransform.message - empty content filtering", () => {
     })
   })
 
+  test("filters signed empty reasoning-only messages for google providers", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "", providerOptions: { vertex: { thoughtSignature: "sig" } } }],
+      },
+    ] as any[]
+
+    ;[googleModel, vertexModel].forEach((model) => {
+      expect(ProviderTransform.message(msgs, model, {})).toHaveLength(0)
+    })
+  })
+
   test("does not filter for openai provider", () => {
     const openaiModel = {
       ...anthropicModel,
