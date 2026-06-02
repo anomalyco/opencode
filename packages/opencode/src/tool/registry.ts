@@ -37,7 +37,7 @@ import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -45,7 +45,7 @@ import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Git } from "@/git"
@@ -102,7 +102,7 @@ export const layer: Layer.Layer<
   | Reference.Service
   | LSP.Service
   | Instruction.Service
-  | AppFileSystem.Service
+  | FSUtil.Service
   | EventV2Bridge.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
@@ -392,7 +392,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Reference.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
-      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(FSUtil.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),

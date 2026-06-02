@@ -1,6 +1,6 @@
 import path from "path"
 import { Effect, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@/git"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./repo_overview.txt"
@@ -98,10 +98,10 @@ function commonEntrypoints(files: Set<string>) {
   ].filter((file) => files.has(file))
 }
 
-export const RepoOverviewTool = Tool.define<typeof Parameters, Metadata, AppFileSystem.Service | Git.Service>(
+export const RepoOverviewTool = Tool.define<typeof Parameters, Metadata, FSUtil.Service | Git.Service>(
   "repo_overview",
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const git = yield* Git.Service
 
     const resolveTarget = Effect.fn("RepoOverviewTool.resolveTarget")(function* (

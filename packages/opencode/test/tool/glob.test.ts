@@ -5,8 +5,8 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
@@ -30,7 +30,7 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
@@ -148,7 +148,7 @@ describe("tool.glob", () => {
     () =>
       Effect.gen(function* () {
         yield* TestInstance
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const cache = path.join(Global.Path.repos, "github.com", "opencode-glob-reference", "repo")
         yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
         yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))

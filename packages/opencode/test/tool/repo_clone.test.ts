@@ -2,7 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "node:url"
 import { Cause, Effect, Exit, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "../../src/git"
@@ -32,7 +32,7 @@ const ctx = {
 const it = testEffect(
   Layer.mergeAll(
     Agent.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Git.defaultLayer,
     RepositoryCache.defaultLayer,
@@ -82,7 +82,7 @@ const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
 describe("tool.repo_clone", () => {
   it.instance("clones a repo into the managed cache and reuses it on subsequent calls", () =>
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const source = yield* tmpdirScoped({ git: true })
       const remoteRoot = yield* tmpdirScoped()
       const remoteDir = path.join(remoteRoot, "owner")
@@ -110,7 +110,7 @@ describe("tool.repo_clone", () => {
 
   it.instance("refresh updates an existing cached clone", () =>
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const source = yield* tmpdirScoped({ git: true })
       const remoteRoot = yield* tmpdirScoped()
       const remoteDir = path.join(remoteRoot, "owner")
@@ -147,7 +147,7 @@ describe("tool.repo_clone", () => {
 
   it.instance("clones a configured branch", () =>
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const source = yield* tmpdirScoped({ git: true })
       const remoteRoot = yield* tmpdirScoped()
       const remoteDir = path.join(remoteRoot, "owner")

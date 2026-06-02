@@ -11,13 +11,14 @@ import { EventV2 } from "./event"
 import { Auth } from "./auth"
 import { Npm } from "./npm"
 import { ModelsDev } from "./models-dev"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Database } from "./database/database"
 import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { SessionV2 } from "./session"
-import { LocationFileSystem } from "./location-filesystem"
+import { FileSystem } from "./filesystem"
+import { Watcher } from "./filesystem/watcher"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -31,7 +32,8 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
       PermissionV2.locationLayer,
-      LocationFileSystem.locationLayer,
+      FileSystem.locationLayer,
+      Watcher.locationLayer,
     ).pipe(Layer.provideMerge(location), Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
@@ -41,7 +43,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     Auth.defaultLayer,
     Npm.defaultLayer,
     ModelsDev.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     Global.defaultLayer,
     Database.defaultLayer,
     SessionV2.defaultLayer,

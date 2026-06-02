@@ -179,7 +179,7 @@ Intentional boundaries:
 In effectified code, yield existing services instead of dropping to ad hoc
 platform APIs.
 
-- Use `AppFileSystem.Service` instead of raw `fs/promises` for app file IO.
+- Use `FSUtil.Service` instead of raw `fs/promises` for app file IO.
 - Use `AppProcess.Service` instead of direct `ChildProcessSpawner.spawn` or
   legacy process helpers.
 - Use `HttpClient.HttpClient` instead of raw `fetch` inside Effect code.
