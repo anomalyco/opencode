@@ -185,7 +185,8 @@ function normalizeMessages(
   }
 
   // Gemini rejects contents entries without parts. The Google serializer drops
-  // empty text and reasoning parts, so remove messages that would become empty.
+  // empty text and reasoning parts, including signature-bearing ones, so remove
+  // messages that would become empty. Keep this aligned with the serializer.
   if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
     msgs = msgs.filter((msg) => {
       if (msg.content === "") return false
