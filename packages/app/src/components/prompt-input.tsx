@@ -1348,7 +1348,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!search) return projects()
     return projects().filter((project) => displayName(project).toLowerCase().includes(search))
   })
-  const showAgentControl = createMemo(() => settings.general.showCustomAgents() && agentNames().length > 0)
+  const showAgentControl = createMemo(() => agentNames().length > 0)
   const selectProject = (worktree: string) => {
     setPicker({
       projectOpen: false,
