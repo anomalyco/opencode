@@ -11123,22 +11123,13 @@
             "$ref": "#/components/schemas/EventInstallationUpdate-available"
           },
           {
-            "$ref": "#/components/schemas/EventFileEdited"
-          },
-          {
-            "$ref": "#/components/schemas/EventLspUpdated"
-          },
-          {
-            "$ref": "#/components/schemas/EventPermissionAsked"
-          },
-          {
-            "$ref": "#/components/schemas/EventPermissionReplied"
-          },
-          {
             "$ref": "#/components/schemas/EventPermissionV2Asked"
           },
           {
             "$ref": "#/components/schemas/EventPermissionV2Replied"
+          },
+          {
+            "$ref": "#/components/schemas/EventFileEdited"
           },
           {
             "$ref": "#/components/schemas/EventAccountAdded"
@@ -11148,6 +11139,18 @@
           },
           {
             "$ref": "#/components/schemas/EventAccountSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/EventFileWatcherUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventLspUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventPermissionAsked"
+          },
+          {
+            "$ref": "#/components/schemas/EventPermissionReplied"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -11169,9 +11172,6 @@
           },
           {
             "$ref": "#/components/schemas/EventCommandExecuted"
-          },
-          {
-            "$ref": "#/components/schemas/EventFileWatcherUpdated"
           },
           {
             "$ref": "#/components/schemas/EventProjectUpdated"
@@ -14504,6 +14504,88 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["permission.v2.asked"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^per"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "resources": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "save": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "metadata": {
+                        "type": "object"
+                      },
+                      "source": {
+                        "$ref": "#/components/schemas/PermissionV2Source"
+                      }
+                    },
+                    "required": ["id", "sessionID", "action", "resources"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["permission.v2.replied"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "requestID": {
+                        "type": "string",
+                        "pattern": "^per"
+                      },
+                      "reply": {
+                        "$ref": "#/components/schemas/PermissionV2Reply"
+                      }
+                    },
+                    "required": ["sessionID", "requestID", "reply"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["file.edited"]
                   },
                   "properties": {
@@ -14514,6 +14596,112 @@
                       }
                     },
                     "required": ["file"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["account.added"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "account": {
+                        "$ref": "#/components/schemas/AuthInfo"
+                      }
+                    },
+                    "required": ["account"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["account.removed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "account": {
+                        "$ref": "#/components/schemas/AuthInfo"
+                      }
+                    },
+                    "required": ["account"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["account.switched"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "serviceID": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["serviceID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["file.watcher.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "file": {
+                        "type": "string"
+                      },
+                      "event": {
+                        "type": "string",
+                        "enum": ["add", "change", "unlink"]
+                      }
+                    },
+                    "required": ["file", "event"],
                     "additionalProperties": false
                   }
                 },
@@ -14625,166 +14813,6 @@
                       }
                     },
                     "required": ["sessionID", "requestID", "reply"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["permission.v2.asked"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "pattern": "^per"
-                      },
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      },
-                      "action": {
-                        "type": "string"
-                      },
-                      "resources": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "save": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "metadata": {
-                        "type": "object"
-                      },
-                      "source": {
-                        "$ref": "#/components/schemas/PermissionV2Source"
-                      }
-                    },
-                    "required": ["id", "sessionID", "action", "resources"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["permission.v2.replied"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      },
-                      "requestID": {
-                        "type": "string",
-                        "pattern": "^per"
-                      },
-                      "reply": {
-                        "$ref": "#/components/schemas/PermissionV2Reply"
-                      }
-                    },
-                    "required": ["sessionID", "requestID", "reply"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.added"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/AuthInfo"
-                      }
-                    },
-                    "required": ["account"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.removed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/AuthInfo"
-                      }
-                    },
-                    "required": ["account"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.switched"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "serviceID": {
-                        "type": "string"
-                      },
-                      "from": {
-                        "type": "string"
-                      },
-                      "to": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["serviceID"],
                     "additionalProperties": false
                   }
                 },
@@ -15005,34 +15033,6 @@
                       }
                     },
                     "required": ["name", "sessionID", "arguments", "messageID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["file.watcher.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "file": {
-                        "type": "string"
-                      },
-                      "event": {
-                        "type": "string",
-                        "enum": ["add", "change", "unlink"]
-                      }
-                    },
-                    "required": ["file", "event"],
                     "additionalProperties": false
                   }
                 },
@@ -23890,6 +23890,88 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventPermissionV2Asked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["permission.v2.asked"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^per"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "action": {
+                "type": "string"
+              },
+              "resources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "save": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "source": {
+                "$ref": "#/components/schemas/PermissionV2Source"
+              }
+            },
+            "required": ["id", "sessionID", "action", "resources"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventPermissionV2Replied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["permission.v2.replied"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^per"
+              },
+              "reply": {
+                "$ref": "#/components/schemas/PermissionV2Reply"
+              }
+            },
+            "required": ["sessionID", "requestID", "reply"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventFileEdited": {
         "type": "object",
         "properties": {
@@ -23908,6 +23990,112 @@
               }
             },
             "required": ["file"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.added"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/AuthInfo"
+              }
+            },
+            "required": ["account"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountRemoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.removed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/AuthInfo"
+              }
+            },
+            "required": ["account"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.switched"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "serviceID": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": ["serviceID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventFileWatcherUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["file.watcher.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string",
+                "enum": ["add", "change", "unlink"]
+              }
+            },
+            "required": ["file", "event"],
             "additionalProperties": false
           }
         },
@@ -24025,166 +24213,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventPermissionV2Asked": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["permission.v2.asked"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^per"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "action": {
-                "type": "string"
-              },
-              "resources": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "save": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "metadata": {
-                "type": "object"
-              },
-              "source": {
-                "$ref": "#/components/schemas/PermissionV2Source"
-              }
-            },
-            "required": ["id", "sessionID", "action", "resources"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventPermissionV2Replied": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["permission.v2.replied"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^per"
-              },
-              "reply": {
-                "$ref": "#/components/schemas/PermissionV2Reply"
-              }
-            },
-            "required": ["sessionID", "requestID", "reply"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountAdded": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.added"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "account": {
-                "$ref": "#/components/schemas/AuthInfo"
-              }
-            },
-            "required": ["account"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountRemoved": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.removed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "account": {
-                "$ref": "#/components/schemas/AuthInfo"
-              }
-            },
-            "required": ["account"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.switched"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "serviceID": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": ["serviceID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventMcpToolsChanged": {
         "type": "object",
         "properties": {
@@ -24265,34 +24293,6 @@
               }
             },
             "required": ["name", "sessionID", "arguments", "messageID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventFileWatcherUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["file.watcher.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "type": "string",
-                "enum": ["add", "change", "unlink"]
-              }
-            },
-            "required": ["file", "event"],
             "additionalProperties": false
           }
         },

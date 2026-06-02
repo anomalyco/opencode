@@ -11,8 +11,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
@@ -33,7 +33,7 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
@@ -220,7 +220,7 @@ describe("tool.grep", () => {
     () =>
       Effect.gen(function* () {
         yield* TestInstance
-        const appfs = yield* AppFileSystem.Service
+        const appfs = yield* FSUtil.Service
         const cache = path.join(Global.Path.repos, "github.com", "opencode-grep-reference", "repo")
         yield* appfs.remove(cache, { recursive: true }).pipe(Effect.ignore)
         yield* Effect.addFinalizer(() => appfs.remove(cache, { recursive: true }).pipe(Effect.ignore))

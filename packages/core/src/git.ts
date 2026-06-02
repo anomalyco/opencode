@@ -4,7 +4,7 @@ import path from "path"
 import { Context, Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath } from "./schema"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { AppProcess } from "./process"
 
 export interface Repo {
@@ -32,6 +32,7 @@ export interface Interface {
   readonly roots: (repo: Repo) => Effect.Effect<string[]>
   readonly origin: (directory: string) => Effect.Effect<string | undefined>
   readonly head: (directory: string) => Effect.Effect<string | undefined>
+  readonly dir: (directory: string) => Effect.Effect<string | undefined>
   readonly branch: (directory: string) => Effect.Effect<string | undefined>
   readonly remoteHead: (directory: string) => Effect.Effect<string | undefined>
   readonly clone: (input: {
@@ -51,7 +52,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Gi
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const proc = yield* AppProcess.Service
 
     const find = Effect.fn("Git.find")(function* (input: AbsolutePath) {
@@ -101,6 +102,12 @@ export const layer = Layer.effect(
       return result.text.trim() || undefined
     })
 
+    const dir = Effect.fn("Git.dir")(function* (directory: string) {
+      const result = yield* run(directory, proc)(["rev-parse", "--git-dir"])
+      if (result.exitCode !== 0) return undefined
+      return AbsolutePath.make(resolvePath(directory, result.text))
+    })
+
     const branch = Effect.fn("Git.branch")(function* (directory: string) {
       const result = yield* run(directory, proc)(["symbolic-ref", "--quiet", "--short", "HEAD"])
       if (result.exitCode !== 0) return undefined
@@ -148,6 +155,7 @@ export const layer = Layer.effect(
       roots,
       origin,
       head,
+      dir,
       branch,
       remoteHead,
       clone,
@@ -159,10 +167,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(AppProcess.defaultLayer))
 
 export interface Result {
   readonly exitCode: number
@@ -200,7 +205,7 @@ function execute(cwd: string, proc: AppProcess.Interface) {
 function resolvePath(cwd: string, value: string) {
   const trimmed = value.replace(/[\r\n]+$/, "")
   if (!trimmed) return cwd
-  const normalized = AppFileSystem.windowsPath(trimmed)
+  const normalized = FSUtil.windowsPath(trimmed)
   if (path.isAbsolute(normalized)) return path.normalize(normalized)
   return path.resolve(cwd, normalized)
 }

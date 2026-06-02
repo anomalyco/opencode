@@ -28,7 +28,7 @@ import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { SessionCompaction } from "../../src/session/compaction"
 import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
@@ -47,7 +47,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
@@ -179,7 +179,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     ProviderSvc.defaultLayer,
     lsp,
     mcp,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
     Database.defaultLayer,
@@ -296,12 +296,12 @@ function providerCfg(url: string) {
 }
 
 const writeText = Effect.fn("test.writeText")(function* (file: string, text: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(file, text)
 })
 
 const ensureDir = Effect.fn("test.ensureDir")(function* (dir: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.ensureDir(dir)
 })
 
@@ -1619,7 +1619,7 @@ unixNoLLMServer(
       Effect.gen(function* () {
         const { prompt, chat } = yield* boot()
         const { directory: dir } = yield* TestInstance
-        const afs = yield* AppFileSystem.Service
+        const afs = yield* FSUtil.Service
         const ready = path.join(dir, ".trap-ready")
 
         const sh = yield* prompt
