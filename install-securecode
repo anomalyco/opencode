@@ -70,6 +70,7 @@ Options:
   -a, --archive <path>    Install from a local platform archive (.zip / .tar.gz).
       --install-dir <dir> Override install dir (default \$HOME/.local/bin).
       --no-modify-path    Don't append PATH entries to shell rc files.
+      --no-alias          Don't add 'scode' alias to shell rc files.
       --no-config         Skip running the bundled setup/install.sh (plugin/config seed).
 
 Examples:
@@ -97,6 +98,7 @@ binary_path=""
 archive_path=""
 install_dir="${SECURECODE_INSTALL_DIR:-$HOME/.local/bin}"
 no_modify_path=false
+no_alias=false
 no_config=false
 
 while [[ $# -gt 0 ]]; do
@@ -119,6 +121,7 @@ while [[ $# -gt 0 ]]; do
       else echo -e "${RED}Error: --install-dir requires a path${NC}" >&2; exit 1
       fi ;;
     --no-modify-path) no_modify_path=true; shift ;;
+    --no-alias) no_alias=true; shift ;;
     --no-config) no_config=true; shift ;;
     *) echo -e "${ORANGE}Warning: Unknown option '$1'${NC}" >&2; shift ;;
   esac
@@ -387,6 +390,42 @@ modify_path_for_shell() {
   esac
 }
 
+add_alias_rc() {
+  local rc="$1" line="$2"
+  if [ ! -f "$rc" ]; then return 0; fi
+  if grep -Fxq "$line" "$rc"; then
+    info "Alias already present in $rc"
+    return 0
+  fi
+  printf '\n# Acompany SecureCode alias\n%s\n' "$line" >> "$rc"
+  info "Appended alias to $rc"
+}
+
+add_alias_for_shell() {
+  case "$(basename "${SHELL:-bash}")" in
+    fish)
+      add_alias_rc "$HOME/.config/fish/config.fish" "alias scode securecode" ;;
+    zsh)
+      add_alias_rc "${ZDOTDIR:-$HOME}/.zshrc" "alias scode='securecode'" ;;
+    bash|bash.exe)
+      add_alias_rc "$HOME/.bashrc" "alias scode='securecode'"
+      add_alias_rc "$HOME/.bash_profile" "alias scode='securecode'" ;;
+    *)
+      info "Unknown shell. Manually add: alias scode='securecode'" ;;
+  esac
+}
+
+# Prompt to add 'scode' alias only when running in an interactive TTY.
+# curl ... | bash pipes stdin so [ -t 0 ] is false and the prompt is skipped.
+prompt_install_alias_for_shell() {
+  [ -t 0 ] || return 0
+  printf "Add 'scode' alias for 'securecode'? (y/N) "
+  local answer
+  read -r answer
+  [[ "$answer" =~ ^[Yy]$ ]] || return 0
+  add_alias_for_shell
+}
+
 main() {
   if [ -n "$binary_path" ]; then
     [ -f "$binary_path" ] || { err "Binary not found: $binary_path"; exit 1; }
@@ -465,6 +504,10 @@ main() {
       *":$install_dir:"*) : ;;
       *) modify_path_for_shell "$install_dir" ;;
     esac
+  fi
+
+  if [ "$no_alias" != "true" ]; then
+    prompt_install_alias_for_shell
   fi
 
   if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" = "true" ]; then
