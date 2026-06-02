@@ -1,6 +1,6 @@
 export * as ReadTool from "./read"
 
-import { tool, ToolFailure } from "@opencode-ai/llm"
+import { Tool, ToolFailure } from "@opencode-ai/llm"
 import { Cause, Effect, Layer } from "effect"
 import { FileSystem } from "../filesystem"
 import { PermissionV2 } from "../permission"
@@ -9,12 +9,11 @@ import { ToolRegistry } from "../tool-registry"
 export const name = "read"
 const MAX_BYTES = 50 * 1024
 
-const definition = () =>
-  tool({
-    description: "Read a text or binary file relative to the current location.",
-    parameters: FileSystem.ReadInput,
-    success: FileSystem.Content,
-  })
+const definition = Tool.make({
+  description: "Read a text or binary file relative to the current location.",
+  parameters: FileSystem.ReadInput,
+  success: FileSystem.Content,
+})
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -24,9 +23,9 @@ export const layer = Layer.effectDiscard(
 
     yield* registry.contribute((editor) =>
       editor.set(name, {
-        tool: definition(),
+        tool: definition,
         execute: ({ parameters, sessionID }) => {
-          const input = parameters as FileSystem.ReadInput
+          const input = parameters
           return Effect.gen(function* () {
             const target = yield* filesystem.resolveRead(input)
             if (target.size > MAX_BYTES) return yield* Effect.die(new Error(`File exceeds ${MAX_BYTES} byte read limit`))

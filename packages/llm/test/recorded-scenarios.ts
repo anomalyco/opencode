@@ -13,7 +13,7 @@ import {
   type Model,
 } from "../src"
 import { LLMClient } from "../src/route"
-import { tool } from "../src/tool"
+import { Tool } from "../src/tool"
 
 export const weatherToolName = "get_weather"
 
@@ -40,7 +40,7 @@ export const weatherTool = ToolDefinition.make({
   },
 })
 
-export const weatherRuntimeTool = tool({
+export const weatherRuntimeTool = Tool.make({
   description: weatherTool.description,
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),

@@ -8,7 +8,7 @@ export type {
   Service as LLMClientService,
 } from "./route/client"
 export * from "./schema"
-export { Tool, ToolFailure, toDefinitions, tool } from "./tool"
+export { Tool, ToolFailure, toDefinitions } from "./tool"
 export type {
   AnyExecutableTool,
   AnyTool,

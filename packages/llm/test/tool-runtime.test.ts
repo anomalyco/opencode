@@ -5,7 +5,7 @@ import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
-import { tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
+import { Tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
 import { it } from "./lib/effect"
 import * as TestToolRuntime from "./lib/tool-runtime"
@@ -26,7 +26,7 @@ const baseRequest = LLM.request({
 })
 const weatherFailureCause = new Error("weather lookup denied")
 
-const get_weather = tool({
+const get_weather = Tool.make({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -38,7 +38,7 @@ const get_weather = tool({
     }),
 })
 
-const schema_only_weather = tool({
+const schema_only_weather = Tool.make({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -142,7 +142,7 @@ describe("LLMClient tools", () => {
 
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {
-      const screenshot = tool({
+      const screenshot = Tool.make({
         description: "Capture a screenshot.",
         jsonSchema: { type: "object", properties: {} },
         execute: () =>
@@ -201,7 +201,7 @@ describe("LLMClient tools", () => {
   it.effect("passes tool call context to execute", () =>
     Effect.gen(function* () {
       let context: ToolExecuteContext | undefined
-      const contextual = tool({
+      const contextual = Tool.make({
         description: "Capture tool context.",
         parameters: Schema.Struct({ value: Schema.String }),
         success: Schema.Struct({ ok: Schema.Boolean }),

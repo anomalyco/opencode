@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { tool, ToolFailure } from "@opencode-ai/llm"
+import { Tool, ToolFailure } from "@opencode-ai/llm"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { Effect, Exit, Schema, Scope } from "effect"
@@ -7,7 +7,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(ToolRegistry.layer())
 
-const echo = tool({
+const echo = Tool.make({
   description: "Echo text",
   parameters: Schema.Struct({ text: Schema.String }),
   success: Schema.Struct({ text: Schema.String }),
@@ -51,7 +51,7 @@ describe("ToolRegistry", () => {
       yield* transform((editor) =>
         editor.set("denied", {
           authorize: () => Effect.fail(new ToolFailure({ message: "Denied" })),
-          tool: tool({
+          tool: Tool.make({
             description: "Denied tool",
             parameters: Schema.Struct({}),
             success: Schema.Struct({ ok: Schema.Boolean }),

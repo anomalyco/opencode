@@ -1,7 +1,7 @@
 export * as ToolRegistry from "./tool-registry"
 
-import { Tool, ToolFailure, ToolResultValue as ToolResult, type AnyTool, type ToolCall, type ToolResultValue } from "@opencode-ai/llm"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Tool, ToolFailure, ToolResultValue as ToolResult, type Tool as TypedTool, type ToolCall, type ToolResultValue, type ToolSchema } from "@opencode-ai/llm"
+import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { castDraft, enableMapSet } from "immer"
 import { State } from "./state"
 import { SessionSchema } from "./session/schema"
@@ -11,14 +11,14 @@ export type ExecuteInput = {
   readonly call: ToolCall
 }
 
-export type AuthorizeInput = ExecuteInput & {
-  readonly parameters: unknown
+export type AuthorizeInput<Parameters = unknown> = ExecuteInput & {
+  readonly parameters: Parameters
 }
 
-export type Entry = {
-  readonly tool: AnyTool
-  readonly authorize?: (input: AuthorizeInput) => Effect.Effect<void, ToolFailure>
-  readonly execute?: (input: AuthorizeInput) => Effect.Effect<unknown, ToolFailure>
+export type Entry<Parameters extends ToolSchema<any> = ToolSchema<any>, Success extends ToolSchema<any> = ToolSchema<any>> = {
+  readonly tool: TypedTool<Parameters, Success>
+  readonly authorize?: (input: AuthorizeInput<Schema.Schema.Type<Parameters>>) => Effect.Effect<void, ToolFailure>
+  readonly execute?: (input: AuthorizeInput<Schema.Schema.Type<Parameters>>) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
 }
 
 type Data = {
@@ -28,7 +28,7 @@ type Data = {
 export type Editor = {
   readonly list: () => ReadonlyArray<readonly [string, Entry]>
   readonly get: (name: string) => Entry | undefined
-  readonly set: (name: string, entry: Entry) => void
+  readonly set: <Parameters extends ToolSchema<any>, Success extends ToolSchema<any>>(name: string, entry: Entry<Parameters, Success>) => void
   readonly remove: (name: string) => void
 }
 

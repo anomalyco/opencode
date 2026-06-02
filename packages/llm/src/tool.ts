@@ -153,8 +153,6 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
   }
 }
 
-export const tool = make
-
 /**
  * A record of named tools. The record key becomes the tool name on the wire.
  */

@@ -2,21 +2,21 @@ import { Effect, Schema } from "effect"
 import { LLM } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { Auth } from "../src/route"
-import { tool } from "../src/tool"
+import { Tool } from "../src/tool"
 
 const request = LLM.request({
   model: OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" }),
   prompt: "Use the tool.",
 })
 
-const executable = tool({
+const executable = Tool.make({
   description: "Get weather.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.String }),
   execute: (input) => Effect.succeed({ forecast: input.city }),
 })
 
-const schemaOnly = tool({
+const schemaOnly = Tool.make({
   description: "Get weather.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.String }),
