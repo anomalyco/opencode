@@ -16,6 +16,7 @@ import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, RelativePath } from "./schema"
+import { AgentV2 } from "./agent"
 
 // get project -> project.locations
 //
@@ -141,14 +142,12 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
 function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
-  return new SessionSchema.Info({
+  return SessionSchema.Info.make({
     id: SessionSchema.ID.make(row.id),
     projectID: ProjectV2.ID.make(row.project_id),
-    workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
-    path: row.path ?? "",
-    agent: row.agent ?? undefined,
+    agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,
     model: row.model
       ? {
           id: ModelV2.ID.make(row.model.id),
@@ -166,6 +165,11 @@ function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
         write: row.tokens_cache_write,
       },
     },
+    location: Location.Ref.make({
+      directory: AbsolutePath.make(row.directory),
+      workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
+    }),
+    subpath: row.path ? RelativePath.make(row.path) : undefined,
     time: {
       created: DateTime.makeUnsafe(row.time_created),
       updated: DateTime.makeUnsafe(row.time_updated),

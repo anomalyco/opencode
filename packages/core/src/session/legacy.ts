@@ -2,7 +2,7 @@ export * as SessionLegacy from "./legacy"
 
 import { Effect, Schema, Types } from "effect"
 import { EventV2 } from "../event"
-import { PermissionV2 } from "../permission"
+import { PermissionLegacy } from "../permission/legacy"
 import { ProjectV2 } from "../project"
 import { ProviderV2 } from "../provider"
 import { optionalOmitUndefined, withStatics } from "../schema"
@@ -558,7 +558,7 @@ export const SessionInfo = Schema.Struct({
     compacting: optionalOmitUndefined(NonNegativeInt),
     archived: optionalOmitUndefined(Schema.Finite),
   }),
-  permission: optionalOmitUndefined(PermissionV2.Ruleset),
+  permission: optionalOmitUndefined(PermissionLegacy.Ruleset),
   revert: optionalOmitUndefined(SessionRevert),
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type

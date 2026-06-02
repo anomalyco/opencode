@@ -330,23 +330,32 @@ export function make(input: {
     }
   })
 
+  const abortBackingSession = Effect.fn("ACP.abortBackingSession")(function* (current: ACPSession.Info) {
+    yield* request(
+      () => input.sdk.session.abort({ directory: current.cwd, sessionID: current.id }, { throwOnError: true }),
+      "session",
+    ).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          log.error("failed to abort ACP backing session", { error, sessionID: current.id })
+        }),
+      ),
+    )
+  })
+
   const closeSession = Effect.fn("ACP.closeSession")(function* (params: CloseSessionRequest) {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
     if (!removed) return {}
 
-    yield* request(
-      () => input.sdk.session.abort({ directory: removed.cwd, sessionID: params.sessionId }, { throwOnError: true }),
-      "session",
-    ).pipe(
-      Effect.catch((error) =>
-        Effect.sync(() => {
-          log.error("failed to abort session while closing ACP session", { error, sessionID: params.sessionId })
-        }),
-      ),
-    )
+    yield* abortBackingSession(removed)
     return {}
+  })
+
+  const cancel = Effect.fn("ACP.cancel")(function* (params: CancelNotification) {
+    const current = yield* session.get(params.sessionId)
+    yield* abortBackingSession(current)
   })
 
   const forkSession = Effect.fn("ACP.forkSession")(function* (params: ForkSessionRequest) {
@@ -563,9 +572,7 @@ export function make(input: {
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
       return promptResponse(undefined, params.messageId)
     }),
-    cancel: Effect.fn("ACP.cancel")(function* (_input: CancelNotification) {
-      return yield* new ACPError.UnsupportedOperationError({ method: "session/cancel" })
-    }),
+    cancel,
   }
 }
 

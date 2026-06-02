@@ -3,7 +3,7 @@ import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable, MessageTable, PartTable, TodoTable } from "@opencode-ai/core/session/sql"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import path from "path"
 import { existsSync } from "fs"
@@ -108,13 +108,12 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
 
   // Pre-scan all files upfront to avoid repeated glob operations
   log.info("scanning files...")
-  const [projectFiles, sessionFiles, messageFiles, partFiles, todoFiles, permFiles, shareFiles] = await Promise.all([
+  const [projectFiles, sessionFiles, messageFiles, partFiles, todoFiles, shareFiles] = await Promise.all([
     list("project/*.json"),
     list("session/*/*.json"),
     list("message/*/*.json"),
     list("part/*/*.json"),
     list("todo/*.json"),
-    list("permission/*.json"),
     list("session_share/*.json"),
   ])
 
@@ -124,7 +123,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     messages: messageFiles.length,
     parts: partFiles.length,
     todos: todoFiles.length,
-    permissions: permFiles.length,
     shares: shareFiles.length,
   })
 
@@ -135,7 +133,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
       messageFiles.length +
       partFiles.length +
       todoFiles.length +
-      permFiles.length +
       shareFiles.length,
   )
   const progress = options?.progress
@@ -355,31 +352,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   log.info("migrated todos", { count: stats.todos })
   if (orphans.todos > 0) {
     log.warn("skipped orphaned todos", { count: orphans.todos })
-  }
-
-  // Migrate permissions
-  const permProjects = permFiles.map((file) => path.basename(file, ".json"))
-  const permValues: unknown[] = []
-  for (let i = 0; i < permFiles.length; i += batchSize) {
-    const end = Math.min(i + batchSize, permFiles.length)
-    const batch = await read(permFiles, i, end)
-    permValues.length = 0
-    for (let j = 0; j < batch.length; j++) {
-      const data = batch[j]
-      if (!data) continue
-      const projectID = permProjects[i + j]
-      if (!projectIds.has(projectID)) {
-        orphans.permissions++
-        continue
-      }
-      permValues.push({ project_id: projectID, data })
-    }
-    stats.permissions += insert(permValues, PermissionTable, "permission")
-    step("permissions", end - i)
-  }
-  log.info("migrated permissions", { count: stats.permissions })
-  if (orphans.permissions > 0) {
-    log.warn("skipped orphaned permissions", { count: orphans.permissions })
   }
 
   // Migrate session shares
