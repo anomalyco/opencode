@@ -103,7 +103,7 @@ Options:
       --variant                       model variant (provider-specific reasoning effort, e.g., high,
                                       max, minimal)                                         [string]
       --thinking                      show thinking blocks                                 [boolean]
-      --replay                        replay visible session history on interactive resume
+      --replay                        replay interactive session history on resume and after resize
                                                                           [boolean] [default: false]
       --replay-limit                  cap visible interactive replay to the newest N messages
                                                                                             [number]

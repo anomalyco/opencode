@@ -13,6 +13,7 @@ import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -304,7 +305,7 @@ function insertProject(id: ProjectV2.ID, worktree: string) {
       .insert(ProjectTable)
       .values({
         id,
-        worktree,
+        worktree: AbsolutePath.make(worktree),
         vcs: null,
         name: null,
         time_created: Date.now(),
