@@ -38,12 +38,18 @@ export class V2LocationMiddleware extends HttpApiMiddleware.Service<
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 
+function normalizeWindowsDirectory(value: string): string {
+  if (/^[a-zA-Z]:\//.test(value)) return value.replaceAll("/", "\\")
+  return value
+}
+
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
+  const dir = normalizeWindowsDirectory(
+    query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+  )
   return {
-    directory: AbsolutePath.make(
-      query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
-    ),
+    directory: AbsolutePath.make(dir),
     workspaceID: query.get("location[workspace]") || request.headers["x-opencode-workspace"],
   }
 }
