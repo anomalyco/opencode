@@ -88,3 +88,95 @@ test("stale session hydration does not overwrite live message parts", async () =
     Global.Path.state = previous
   }
 })
+
+test("orphan live deltas do not suppress hydrated parts", async () => {
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let resolveMessages!: (response: Response) => void
+  const messages = new Promise<Response>((resolve) => {
+    resolveMessages = resolve
+  })
+  let requested = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      requested = true
+      return messages
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  })
+
+  try {
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requested)
+    emit(
+      global({
+        id: "evt_delta",
+        type: "message.part.delta",
+        properties: { sessionID, messageID, partID, field: "text", delta: "ignored until part exists" },
+      }),
+    )
+    resolveMessages(
+      json([{ info: assistant, parts: [{ id: partID, sessionID, messageID, type: "text", text: "hydrated" }] }]),
+    )
+    await hydrate
+
+    expect(sync.data.part[messageID][0]).toMatchObject({ text: "hydrated" })
+  } finally {
+    app.renderer.destroy()
+    Global.Path.state = previous
+  }
+})
+
+test("live messages merged during hydration retain the 100 message window", async () => {
+  const previous = Global.Path.state
+  await using tmp = await tmpdir()
+  Global.Path.state = tmp.path
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+
+  let resolveMessages!: (response: Response) => void
+  const messages = new Promise<Response>((resolve) => {
+    resolveMessages = resolve
+  })
+  let requested = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      requested = true
+      return messages
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  })
+
+  try {
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requested)
+    const live = { ...assistant, id: "msg_z_live" }
+    emit(global({ id: "evt_live", type: "message.updated", properties: { sessionID, info: live } }))
+    await wait(() => sync.data.message[sessionID]?.some((message) => message.id === live.id) ?? false)
+    resolveMessages(
+      json(
+        Array.from({ length: 100 }, (_, index) => {
+          const id = `msg_${String(index).padStart(3, "0")}`
+          return {
+            info: { ...assistant, id },
+            parts: [{ id: `prt_${id}`, sessionID, messageID: id, type: "text", text: id }],
+          }
+        }),
+      ),
+    )
+    await hydrate
+
+    expect(sync.data.message[sessionID]).toHaveLength(100)
+    expect(sync.data.message[sessionID].at(-1)?.id).toBe(live.id)
+    expect(sync.data.message[sessionID].some((message) => message.id === "msg_000")).toBe(false)
+  } finally {
+    app.renderer.destroy()
+    Global.Path.state = previous
+  }
+})

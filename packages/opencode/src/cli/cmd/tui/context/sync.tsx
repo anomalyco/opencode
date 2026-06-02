@@ -338,11 +338,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.delta": {
-          touchPart(event.properties.partID)
           const parts = store.part[event.properties.messageID]
           if (!parts) break
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
           if (!result.found) break
+          touchPart(event.properties.partID)
           setStore(
             "part",
             event.properties.messageID,
@@ -578,7 +578,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   )
                   draft.part[message.info.id] = parts.toSorted((a, b) => a.id.localeCompare(b.id))
                 }
-                draft.message[sessionID] = infos.toSorted((a, b) => a.id.localeCompare(b.id))
+                const visible = infos.toSorted((a, b) => a.id.localeCompare(b.id)).slice(-100)
+                const visibleIDs = new Set(visible.map((message) => message.id))
+                for (const message of currentMessages) {
+                  if (!visibleIDs.has(message.id)) delete draft.part[message.id]
+                }
+                draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
             )
