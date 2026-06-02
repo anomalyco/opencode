@@ -761,10 +761,10 @@ function TabNavItem(props: {
         <span data-slot="project-avatar-slot">
           <ProjectTabAvatar project={props.project} directory={props.directory} sessionId={props.sessionId} />
         </span>
-        <span class="min-w-0 flex-1 truncate">{props.title}</span>
+        <span class="min-w-0 flex-1">{props.title}</span>
       </a>
 
-      <div class="absolute right-0 inset-y-0 flex flex-row items-center overflow-hidden rounded-r-[6px] pr-1 py-1 w-8 pl-2">
+      <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
         <div
           class="absolute inset-0 rounded-r-[6px] bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
           style={{
