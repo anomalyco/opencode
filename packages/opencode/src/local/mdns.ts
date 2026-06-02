@@ -275,14 +275,18 @@ export async function scanLlamaSwap(
     withTimeout(probeLAN(), Math.min(LAN_SCAN_BUDGET_MS, timeoutMs), []),
   ])
 
-  // Merge hits, deduplicating by host:port against mDNS results
-  const seen = new Set(raw.map((s) => `${s.host}:${s.port}`))
+  // Merge hits, deduplicating by name (primary) and host:port (fallback).
+  // mDNS results are preferred — a machine discovered via mDNS should not also
+  // appear as a localhost or LAN hit.
+  const seenNames = new Set(raw.map((s) => s.name.toLowerCase()))
+  const seenHostPorts = new Set(raw.map((s) => `${s.host}:${s.port}`))
   for (const hit of [...localHits, ...lanHits]) {
+    if (seenNames.has(hit.name.toLowerCase())) continue
     const key = `${hit.host}:${hit.port}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      raw.push(hit)
-    }
+    if (seenHostPorts.has(key)) continue
+    seenNames.add(hit.name.toLowerCase())
+    seenHostPorts.add(key)
+    raw.push(hit)
   }
 
   return Promise.all(
