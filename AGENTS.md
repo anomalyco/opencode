@@ -1,6 +1,9 @@
 @ECOSYSTEM.md
 
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
+- The llama-skein local provider API is design-first and owned by `/Users/andreas/dev/llama-swap/contracts/llama-skein.openapi.json`; read `/Users/andreas/dev/llama-swap/docs/openapi-contract.md` before changing llama-skein provider integration.
+- To regenerate the llama-skein TypeScript client, run `bun run build:llama-skein-client` from `packages/opencode`; generated files live in `packages/opencode/src/local/llama-skein/gen/`.
+- Do not manually mirror llama-skein OpenAPI schemas in handwritten TypeScript when generated types exist.
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
