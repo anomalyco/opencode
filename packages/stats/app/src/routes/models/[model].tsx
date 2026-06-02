@@ -167,16 +167,17 @@ function ModelNotFound(props: { model: string }) {
 function ModelHero(props: { data: StatsModelData }) {
   return (
     <section id="overview" data-section="model-hero">
-      <p data-slot="hero-meta">
-        <ProviderIcon aria-hidden="true" id={getProviderIconId(props.data.author)} />
-        <span>{props.data.author}</span>
-      </p>
+      <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
+        Stats
+      </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
-          <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-            Stats
-          </a>
+          <p data-slot="hero-meta">
+            <ProviderIcon aria-hidden="true" id={getProviderIconId(props.data.author)} />
+            <span>{props.data.author}</span>
+          </p>
           <h1>{props.data.model}</h1>
+          <div data-slot="model-hero-pattern" aria-hidden="true" />
           <p>
             Ranked #{props.data.rank} across recent OpenCode token usage with {formatPercent(props.data.tokenShare)} of
             observed volume.
@@ -220,7 +221,13 @@ function ModelOverview(props: { data: StatsModelData }) {
 }
 
 function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
+  const [activeIndex, setActiveIndex] = createSignal<number>()
   const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.tokens)) || 1)
+  const activePoint = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined) return undefined
+    return props.data[index]
+  })
 
   return (
     <section id="usage" data-section="model-panel">
@@ -231,28 +238,84 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
       >
         <div
           data-component="model-usage-chart"
+          data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
           role="img"
           aria-label="Daily token usage chart"
           style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "touch") return
+            setActiveIndex(undefined)
+          }}
         >
-          <For each={props.data}>
-            {(point, index) => (
-              <div
-                data-slot="model-usage-column"
-                data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
-              >
-                <span data-slot="model-usage-label">
-                  <strong>{formatTokens(point.tokens)}</strong>
-                  <span>{point.date}</span>
-                </span>
-                <div data-slot="model-usage-track">
-                  <i
+          <div data-slot="model-usage-axis" aria-hidden="true">
+            <For each={props.data}>
+              {(point, index) => (
+                <div
+                  data-active={activeIndex() === index() ? "true" : undefined}
+                  data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
+                >
+                  <span data-slot="model-usage-label">
+                    <span data-slot="model-usage-total">{formatTokens(point.tokens)}</span>
+                    <span data-slot="model-usage-date">{point.date}</span>
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
+          <div data-slot="model-usage-bars">
+            <For each={props.data}>
+              {(point, index) => (
+                <div
+                  data-slot="model-usage-column"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${point.date} ${formatTokens(point.tokens)} tokens`}
+                  data-active={activeIndex() === index() ? "true" : undefined}
+                  data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
+                  onPointerDown={(event) => {
+                    if (event.pointerType !== "touch") return
+                    setActiveIndex(index())
+                  }}
+                  onPointerEnter={() => setActiveIndex(index())}
+                  onPointerMove={(event) => {
+                    if (event.pointerType === "touch") return
+                    setActiveIndex(index())
+                  }}
+                  onClick={() => setActiveIndex(index())}
+                  onFocus={() => setActiveIndex(index())}
+                  onBlur={() => setActiveIndex(undefined)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    setActiveIndex(index())
+                  }}
+                >
+                  <div
+                    data-slot="model-usage-bar"
                     style={{ "--model-usage-fill": `${modelUsageHeight(point.tokens, max())}%` } as JSX.CSSProperties}
                   />
+                  <Show when={activeIndex() === index() && activePoint()}>
+                    {(active) => (
+                      <div
+                        data-component="chart-tooltip"
+                        data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
+                      >
+                        <strong>{active().date}</strong>
+                        <span>{formatTokens(active().tokens)} tokens</span>
+                        <div data-slot="tooltip-divider" />
+                        <p>
+                          <span data-slot="tooltip-label">
+                            <i /> Daily tokens
+                          </span>
+                          <b>{formatTokens(active().tokens)}</b>
+                        </p>
+                      </div>
+                    )}
+                  </Show>
                 </div>
-              </div>
-            )}
-          </For>
+              )}
+            </For>
+          </div>
         </div>
       </Show>
     </section>
@@ -410,6 +473,10 @@ function getProviderIconId(author: string) {
 function modelUsageHeight(tokens: number, max: number) {
   if (tokens <= 0) return 0
   return Math.max(2, Math.min(100, (tokens / max) * 100))
+}
+
+function isModelUsageDense(count: number) {
+  return count > 20
 }
 
 function isModelUsageLabelHidden(index: number, count: number) {

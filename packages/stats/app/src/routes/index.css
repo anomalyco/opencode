@@ -2675,7 +2675,20 @@
   overflow-wrap: anywhere;
 }
 
-[data-page="stats"] [data-slot="model-hero-copy"] p {
+[data-page="stats"] [data-slot="model-hero-pattern"] {
+  width: min(100%, 720px);
+  height: 18px;
+  overflow: hidden;
+  background: var(--stats-hero-pattern);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-repeat: repeat;
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-slot="model-hero-copy"] p:not([data-slot="hero-meta"]) {
   max-width: 720px;
   color: var(--stats-muted);
   font-size: 16px;
@@ -2759,71 +2772,222 @@
 }
 
 [data-page="stats"] [data-component="model-usage-chart"] {
+  --model-usage-bar-gap: 6px;
+  --model-usage-dot-size: 6px;
+  --model-usage-dot-offset: 2px;
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(var(--model-usage-count), minmax(0, 1fr));
-  gap: 6px;
-  height: 392px;
+  grid-template-rows: 40px minmax(0, 1fr);
+  gap: 12px;
+  height: clamp(320px, 42vh, 392px);
   min-width: 0;
 }
 
-[data-page="stats"] [data-slot="model-usage-column"] {
-  display: grid;
-  grid-template-rows: 42px minmax(0, 1fr);
-  gap: 12px;
+[data-page="stats"] [data-slot="model-usage-axis"],
+[data-page="stats"] [data-slot="model-usage-bars"] {
+  display: flex;
   min-width: 0;
+}
+
+[data-page="stats"] [data-slot="model-usage-axis"] {
+  gap: var(--model-usage-bar-gap);
+}
+
+[data-page="stats"] [data-slot="model-usage-axis"] > div {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--stats-faint);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+[data-page="stats"] [data-slot="model-usage-axis"] > div[data-active="true"] {
+  color: var(--stats-text);
 }
 
 [data-page="stats"] [data-slot="model-usage-label"] {
-  display: grid;
-  align-content: start;
-  color: var(--stats-faint);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.25;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-[data-page="stats"] [data-slot="model-usage-label"] strong {
+[data-page="stats"] [data-slot="model-usage-total"] {
   color: var(--stats-muted);
-  font-size: 10px;
   font-weight: 600;
-  line-height: 1.25;
 }
 
-[data-page="stats"] [data-slot="model-usage-label"] span {
+[data-page="stats"] [data-slot="model-usage-date"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-slot="model-usage-column"][data-label-hidden="true"] [data-slot="model-usage-label"] {
+[data-page="stats"] [data-slot="model-usage-column"] {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding-inline: calc(var(--model-usage-bar-gap) / 2);
+  outline: none;
+  cursor: pointer;
+}
+
+[data-page="stats"] [data-slot="model-usage-column"]::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: calc(100% - var(--model-usage-bar-gap));
+  transform: translateX(-50%);
+  content: "";
+  background: var(--stats-dot);
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position: var(--model-usage-dot-offset) top;
+  mask-repeat: repeat;
+  mask-size: var(--model-usage-dot-size) var(--model-usage-dot-size);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-position: var(--model-usage-dot-offset) top;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: var(--model-usage-dot-size) var(--model-usage-dot-size);
+}
+
+@supports (width: round(down, 100%, 1px)) {
+  [data-page="stats"] [data-slot="model-usage-column"]::before {
+    width: round(down, calc(100% - var(--model-usage-bar-gap)), var(--model-usage-dot-size));
+  }
+}
+
+[data-page="stats"] [data-slot="model-usage-bar"] {
+  position: absolute;
+  right: calc(var(--model-usage-bar-gap) / 2);
+  bottom: 0;
+  left: calc(var(--model-usage-bar-gap) / 2);
+  z-index: 1;
+  height: var(--model-usage-fill);
+  min-height: 0;
+  background: var(--stats-accent);
+  box-shadow: 0 -4px 0 var(--stats-bg);
+  transition:
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+[data-page="stats"] [data-slot="model-usage-column"][data-muted="true"] [data-slot="model-usage-bar"] {
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"][data-dense-labels="true"]
+  [data-slot="model-usage-axis"]
+  > div {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"][data-dense-labels="true"] [data-slot="model-usage-label"] {
+  position: absolute;
+  left: 50%;
+  width: max-content;
+  max-width: 72px;
+  transform: rotate(-90deg) translateX(-50%);
+  transform-origin: left center;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"][data-dense-labels="true"] [data-slot="model-usage-total"] {
+  display: none;
+}
+
+[data-page="stats"]
+  [data-slot="model-usage-axis"]
+  > div[data-label-hidden="true"]:not([data-active="true"])
+  [data-slot="model-usage-label"] {
   visibility: hidden;
 }
 
-[data-page="stats"] [data-slot="model-usage-track"] {
-  position: relative;
-  min-height: 0;
-  background: var(--stats-dot);
-  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: center top;
-  mask-repeat: repeat;
-  mask-size: 6px 6px;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: center top;
-  -webkit-mask-repeat: repeat;
-  -webkit-mask-size: 6px 6px;
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] {
+  top: 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 176px;
+  min-width: 176px;
+  padding: 0;
+  border: 0;
+  box-shadow:
+    0 0 0 0.5px #00000024,
+    0 8px 16px #0000000f,
+    0 4px 8px #00000014;
+  color: var(--stats-text);
 }
 
-[data-page="stats"] [data-slot="model-usage-track"] i {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"][data-placement="right"] {
+  right: auto;
+  left: calc(100% + 8px);
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"][data-placement="left"] {
+  right: calc(100% + 8px);
+  left: auto;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] strong,
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] > span {
   display: block;
-  height: var(--model-usage-fill);
+  font-size: 11px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] strong {
+  padding: 8px 8px 0;
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] > span {
+  padding: 4px 8px 8px;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"]
+  [data-component="model-usage-chart"]
+  [data-component="chart-tooltip"]
+  [data-slot="tooltip-divider"] {
+  height: 0.5px;
+  margin: 0;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] p {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  height: 20px;
+  margin: 8px 0;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 12px;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] [data-slot="tooltip-label"] {
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 4px;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] i {
+  width: 6px;
+  height: 6px;
+  justify-self: center;
   background: var(--stats-accent);
-  font-style: normal;
-  mask-image: none;
-  -webkit-mask-image: none;
+}
+
+[data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] b {
+  font-weight: 500;
 }
 
 [data-page="stats"] [data-component="model-split-grid"] {
@@ -3475,7 +3639,11 @@
     line-height: 1;
   }
 
-  [data-page="stats"] [data-slot="model-hero-copy"] p {
+  [data-page="stats"] [data-slot="model-hero-pattern"] {
+    height: 14px;
+  }
+
+  [data-page="stats"] [data-slot="model-hero-copy"] p:not([data-slot="hero-meta"]) {
     font-size: 13px;
   }
 
@@ -3490,7 +3658,7 @@
   }
 
   [data-page="stats"] [data-component="model-usage-chart"] {
-    grid-template-columns: repeat(var(--model-usage-count), 16px);
+    --model-usage-mobile-bar-width: 16px;
     width: calc(100% + 48px);
     height: 360px;
     margin-inline: -24px;
@@ -3504,17 +3672,14 @@
     display: none;
   }
 
-  [data-page="stats"] [data-slot="model-usage-label"] {
-    position: relative;
-    left: 50%;
-    width: max-content;
-    max-width: 72px;
-    transform: rotate(-90deg) translateX(-50%);
-    transform-origin: left center;
+  [data-page="stats"] [data-slot="model-usage-axis"],
+  [data-page="stats"] [data-slot="model-usage-bars"] {
+    min-width: calc(var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)));
   }
 
-  [data-page="stats"] [data-slot="model-usage-label"] strong {
-    display: none;
+  [data-page="stats"] [data-slot="model-usage-axis"] > div,
+  [data-page="stats"] [data-slot="model-usage-column"] {
+    flex: 0 0 var(--model-usage-mobile-bar-width);
   }
 
   [data-page="stats"] [data-component="model-peer-list"] a {
@@ -3711,6 +3876,23 @@
   }
 
   [data-page="stats"] [data-section="top-models"] [data-component="chart-tooltip"][data-placement] {
+    right: 12px;
+    left: 12px;
+  }
+
+  [data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"] {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    z-index: 40;
+    width: auto;
+    min-width: 0;
+    transform: none;
+  }
+
+  [data-page="stats"] [data-component="model-usage-chart"] [data-component="chart-tooltip"][data-placement] {
     right: 12px;
     left: 12px;
   }
