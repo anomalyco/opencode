@@ -505,11 +505,16 @@ export const ProvidersLoginCommand = effectCmd({
 })
 
 export const ProvidersLogoutCommand = effectCmd({
-  command: "logout",
+  command: "logout [provider]",
   describe: "log out from a configured provider",
   // Removes a global auth credential; no project instance needed.
   instance: false,
-  handler: Effect.fn("Cli.providers.logout")(function* (_args) {
+  builder: (yargs) =>
+    yargs.positional("provider", {
+      describe: "provider id or name to log out from (skips provider selection)",
+      type: "string",
+    }),
+  handler: Effect.fn("Cli.providers.logout")(function* (args) {
     const authSvc = yield* Auth.Service
     const modelsDev = yield* ModelsDev.Service
 
@@ -521,14 +526,27 @@ export const ProvidersLogoutCommand = effectCmd({
       return
     }
     const database = yield* modelsDev.get()
-    const selected = yield* Prompt.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
-    })
-    yield* Effect.orDie(authSvc.remove(yield* promptValue(selected)))
+
+    if (args.provider) {
+      const match = credentials.find(
+        ([key]) => key === args.provider || database[key]?.name?.toLowerCase() === args.provider.toLowerCase(),
+      )
+      if (!match) return yield* fail(`Unknown provider "${args.provider}"`)
+      yield* Effect.orDie(authSvc.remove(match[0]))
+      yield* Prompt.outro("Logout successful")
+      return
+    }
+
+    const provider = yield* promptValue(
+      yield* Prompt.select({
+        message: "Select provider",
+        options: credentials.map(([key, value]) => ({
+          label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+          value: key,
+        })),
+      }),
+    )
+    yield* Effect.orDie(authSvc.remove(provider))
     yield* Prompt.outro("Logout successful")
   }),
 })
