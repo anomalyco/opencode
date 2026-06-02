@@ -225,9 +225,9 @@ describe("FileSystem", () => {
   it.live("rejects aliases when project references are disabled", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        expect(
-          Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit)),
-        ).toBe(true)
+        expect(Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit))).toBe(
+          true,
+        )
       }).pipe(provide(directory)),
     ),
   )
