@@ -122,7 +122,7 @@ export const layer = Layer.effect(
         if (!target) return { name, kind: "reference", reference, path: reference.path }
 
         const resolved = path.resolve(reference.path, target)
-        if (!contains(reference.path, resolved)) return { name, kind: "invalid", target, message: "Reference target escapes its root" }
+        if (!AppFileSystem.contains(reference.path, resolved)) return { name, kind: "invalid", target, message: "Reference target escapes its root" }
         if (!(yield* fs.existsSafe(resolved))) return { name, kind: "missing", target, path: resolved, message: "Reference target does not exist" }
         return { name, kind: "reference", reference, target, path: resolved }
       }),
