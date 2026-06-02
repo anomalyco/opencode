@@ -6,10 +6,10 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
-import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
+import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -20,10 +20,10 @@ import { useServerSync } from "@/context/server-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
+import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
+import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { StatusPopoverV2 } from "@/components/status-popover"
 import {
   readSessionTabsRemovedDetail,
   SESSION_TABS_REMOVED_EVENT,
@@ -52,7 +52,7 @@ const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
 const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
 const legacyTitlebarHeight = 40
-const v2TitlebarHeight = 44
+const v2TitlebarHeight = 36
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 
@@ -133,8 +133,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   })
   const v2RightState = createMemo<TitlebarV2RightState>(() => ({
     update: updateState(),
-    statusVisible: !params.dir && settings.general.showStatus(),
-    statusLabel: language.t("status.popover.trigger"),
   }))
 
   const back = () => {
@@ -222,7 +220,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     <header
       classList={{
         "shrink-0 relative overflow-hidden flex flex-row": true,
-        "h-11 bg-v2-background-bg-deep": useV2Titlebar(),
+        "h-9 bg-v2-background-bg-deep": useV2Titlebar(),
         "h-10 bg-background-base": !useV2Titlebar(),
       }}
       style={{
@@ -370,22 +368,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return true
             }
 
-            makeEventListener(
-              document,
-              "keydown",
-              (event) => {
-                if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-                if (event.key.toLowerCase() !== "w") return
-                if (!(closeCurrentSessionTab() || closeNewSessionTab())) return
+            const openNewTab = () => navigate(newSessionHref())
 
-                event.preventDefault()
-                event.stopPropagation()
-              },
-              { capture: true },
-            )
+            const closeActiveTab = () => closeCurrentSessionTab() || closeNewSessionTab()
 
             command.register(() => {
               const commands = [
+                {
+                  id: "tab.new",
+                  category: "tab",
+                  title: language.t("command.session.new"),
+                  keybind: "mod+t",
+                  hidden: true,
+                  onSelect: openNewTab,
+                },
+                {
+                  id: "tab.close",
+                  category: "tab",
+                  title: language.t("command.tab.close"),
+                  keybind: "mod+w",
+                  hidden: true,
+                  onSelect: closeActiveTab,
+                },
                 {
                   id: `tab.prev`,
                   category: "tab",
@@ -456,7 +460,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             return (
               <div
-                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 py-2"
+                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 pt-2"
                 classList={{
                   "pl-2": mac(),
                   "pl-4": !mac(),
@@ -489,6 +493,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             title={tab.info.title}
                             project={projectForSession(tab.info, projects(), projectByID())}
                             directory={tab.dir}
+                            sessionId={tab.info.id}
                             onClose={() => tabsStoreActions.removeTab(tab.href)}
                           />
                         </>
@@ -696,19 +701,12 @@ type TitlebarUpdatePillState = {
 
 type TitlebarV2RightState = {
   update: TitlebarUpdatePillState
-  statusVisible: boolean
-  statusLabel: string
 }
 
 function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
   return (
     <div class="flex shrink-0 items-center justify-end gap-0">
       <TitlebarUpdatePill state={props.state.update} />
-      <Show when={props.state.statusVisible}>
-        <Tooltip placement="bottom" value={props.state.statusLabel}>
-          <StatusPopoverV2 scope="server" />
-        </Tooltip>
-      </Show>
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>
   )
@@ -736,26 +734,39 @@ function TabNavItem(props: {
   title: string
   project?: LocalProject
   directory: string
+  sessionId: string
+  hideClose?: boolean
   onClose: () => void
 }) {
   const match = useMatch(() => props.href)
   const isActive = () => !!match()
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
   return (
     <div
       class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
     >
       <a
         href={props.href}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
-        <ProjectTabAvatar project={props.project} directory={props.directory} />
-        <span class="text-clip leading-5">{props.title}</span>
+        <span data-slot="project-avatar-slot">
+          <ProjectTabAvatar project={props.project} directory={props.directory} sessionId={props.sessionId} />
+        </span>
+        <span class="min-w-0 flex-1">{props.title}</span>
       </a>
 
       <div class="absolute not-group-hover:not-group-data-[active=true]:left-52 group-hover:right-0 group-data-[active=true]:right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
         <div
-          class="absolute inset-0 bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
+          class="absolute inset-0 rounded-r-[6px] bg-(image:--inactive-bg) group-hover:bg-(image:--active-bg) group-data-[active=true]:bg-(image:--active-bg)"
           style={{
             "--inactive-bg": "linear-gradient(to right, transparent 0%, var(--tab-bg) 80%)",
             "--active-bg": "linear-gradient(90deg, transparent 0%, var(--tab-bg) 25%)",
@@ -765,7 +776,7 @@ function TabNavItem(props: {
           size="small"
           variant="ghost-muted"
           class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100 z-10"
-          onClick={props.onClose}
+          onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
         />
       </div>
@@ -773,22 +784,35 @@ function TabNavItem(props: {
   )
 }
 
-function ProjectTabAvatar(props: { project?: LocalProject; directory: string }) {
+function ProjectTabAvatar(props: { project?: LocalProject; directory: string; sessionId: string }) {
+  const directory = () => props.directory
+  const sessionId = () => props.sessionId
+  const state = useSessionTabAvatarState(directory, sessionId)
   return (
-    <AvatarV2
+    <ProjectAvatar
       fallback={displayName(props.project ?? { worktree: props.directory })}
       src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
-      kind="org"
-      size="small"
-      {...getAvatarColors(props.project?.icon?.color)}
-      class="size-4 rounded"
+      variant={getProjectAvatarVariant(props.project?.icon?.color)}
+      unread={state.unread()}
+      loading={state.loading()}
     />
   )
 }
 
 function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
+  const closeTab = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onClose()
+  }
   return (
-    <div class="group relative flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
+    <div
+      class="group relative flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]"
+      onMouseDown={(event) => {
+        if (event.button !== 1) return
+        closeTab(event)
+      }}
+    >
       <a
         href={props.href}
         aria-current="page"
@@ -807,11 +831,7 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
             event.preventDefault()
             event.stopPropagation()
           }}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            props.onClose()
-          }}
+          onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
           aria-label="Close tab"
         />

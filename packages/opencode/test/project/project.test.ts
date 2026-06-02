@@ -8,7 +8,7 @@ import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -219,16 +219,6 @@ describe("Project.fromDirectory", () => {
         .run()
         .pipe(Effect.orDie)
       yield* db
-        .insert(PermissionTable)
-        .values({
-          project_id: rootProject.id,
-          data: [{ permission: "edit", pattern: "*", action: "allow" }],
-          time_created: Date.now(),
-          time_updated: Date.now(),
-        })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
         .insert(WorkspaceTable)
         .values({ id: workspaceID, type: "local", name: "test", project_id: rootProject.id })
         .run()
@@ -245,14 +235,6 @@ describe("Project.fromDirectory", () => {
         (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
-      expect(
-        yield* db
-          .select()
-          .from(PermissionTable)
-          .where(eq(PermissionTable.project_id, remoteID))
-          .get()
-          .pipe(Effect.orDie),
-      ).toBeDefined()
       expect(
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,

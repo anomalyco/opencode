@@ -166,8 +166,14 @@ export const layer = Layer.effect(
           model: {
             get: (providerID, modelID) => draft.providers.get(providerID)?.models.get(modelID),
             update: (providerID, modelID, fn) => {
-              result.provider.update(providerID, () => {})
-              const record = draft.providers.get(providerID)!
+              let record = draft.providers.get(providerID)
+              if (!record) {
+                record = castDraft({
+                  provider: ProviderV2.Info.empty(providerID),
+                  models: new Map<ModelV2.ID, ModelV2.Info>(),
+                })
+                draft.providers.set(providerID, record)
+              }
               const model = record.models.get(modelID) ?? castDraft(ModelV2.Info.empty(providerID, modelID))
               if (!record.models.has(modelID)) record.models.set(modelID, model)
               fn(model)
@@ -190,6 +196,7 @@ export const layer = Layer.effect(
       },
       finalize: Effect.fn("CatalogV2.finalize")(function* (catalog, reason) {
         if (reason !== "plugin.added") yield* plugin.trigger("catalog.transform", catalog, {}).pipe(Effect.asVoid)
+        if (!policy.hasStatements()) return
         for (const record of [...catalog.provider.list()]) {
           if ((yield* policy.evaluate("provider.use", record.provider.id, "allow")) === "deny") {
             catalog.provider.remove(record.provider.id)

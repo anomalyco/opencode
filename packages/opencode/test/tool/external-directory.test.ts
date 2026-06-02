@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
@@ -26,7 +27,7 @@ const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 
 function makeCtx() {
-  const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
   const ctx: Tool.Context = {
     ...baseCtx,
     ask: (req) =>

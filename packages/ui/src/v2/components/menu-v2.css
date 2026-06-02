@@ -6,12 +6,11 @@
   padding: 2px;
   min-width: 160px;
 
-  background: var(--v2-background-bg-layer-01);
+  background: var(--background-bg-layer-01);
   border-radius: 6px;
-  box-shadow: var(--v2-elevation-floating);
+  box-shadow: var(--elevation-floating);
 
   outline: none;
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -31,9 +30,9 @@
   --menu-v2-fg-subtle: var(--text-text-muted);
   --menu-v2-icon: var(--icon-icon-base);
   --menu-v2-accent: var(--text-text-accent);
-  --menu-v2-badge-bg: var(--v2-background-bg-layer-02);
-  --menu-v2-badge-border: var(--v2-border-border-base);
-  --menu-v2-hover: var(--v2-overlay-simple-overlay-hover);
+  --menu-v2-badge-bg: var(--background-bg-layer-02);
+  --menu-v2-badge-border: var(--border-border-base);
+  --menu-v2-hover: var(--overlay-simple-overlay-hover);
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -52,7 +51,6 @@
   cursor: default;
   user-select: none;
 
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
   font-variation-settings: "slnt" 0;
   font-variant-numeric: tabular-nums;
   color: var(--menu-v2-fg);
@@ -153,7 +151,7 @@
   height: 1px;
   width: calc(100% + 4px);
   margin: 2px -2px;
-  background: var(--v2-border-border-muted);
+  background: var(--border-border-muted);
   border: none;
 }
 
@@ -164,7 +162,6 @@
   height: 28px;
   padding: 0 12px;
 
-  font-family: var(--v2-font-family-sans), "Inter", system-ui, sans-serif;
   font-size: 11px;
   font-weight: 530;
   line-height: 100%;
