@@ -570,6 +570,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    submitting: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -578,6 +579,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    submitting: false,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -645,6 +647,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!submit()) return
     if (!prompt.dirty() && !hasUserPrompt()) return
     setSubmit(false)
+  })
+
+  // Reset submitting state when working becomes true
+  createEffect(() => {
+    if (working() && store.submitting) {
+      setStore("submitting", false)
+    }
   })
 
   const suggest = createMemo(() => !hasUserPrompt() && !submit())
@@ -1618,7 +1627,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     shouldQueue: props.shouldQueue,
     onQueue: props.onQueue,
     onAbort: props.onAbort,
-    onSubmit: props.onSubmit,
+    onSubmit: () => {
+      setStore("submitting", true)
+      props.onSubmit?.()
+    },
     onSubmitted: () => {
       setSubmit(true)
       props.onSubmitted?.()
@@ -2003,12 +2015,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <IconButton
                       data-action="prompt-submit"
                       type="submit"
-                      disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                      disabled={store.mode !== "normal" || store.submitting || (!prompt.dirty() && !working() && commentCount() === 0)}
                       tabIndex={store.mode === "normal" ? undefined : -1}
-                      icon={working() ? "stop" : "arrow-up-bold"}
+                      icon={working() ? "stop" : store.submitting ? "arrow-sync" : "arrow-up-bold"}
                       variant="primary"
                       iconSize={working() ? "normal" : "medium"}
                       class="size-10 rounded-full shadow-xs-border"
+                      classList={{
+                        "animate-spin": store.submitting && !working(),
+                      }}
                       style={buttons()}
                       aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                     />
