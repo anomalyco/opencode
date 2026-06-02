@@ -1822,7 +1822,7 @@ First, install [`@qvac/cli`](https://www.npmjs.com/package/@qvac/cli) and start 
         "model": "QWEN3_1_7B_INST_Q4",
         "preload": true,
         "config": {
-          "ctx_size": 4096,
+          "ctx_size": 8192,
           "reasoning_budget": 0
         }
       }
@@ -1860,8 +1860,8 @@ Then point opencode at it:
         "qwen3-1.7b": {
           "name": "Qwen3 1.7B (local)",
           "limit": {
-            "context": 4096,
-            "output": 2048
+            "context": 8192,
+            "output": 4096
           }
         }
       }
@@ -1876,10 +1876,10 @@ In this example:
 
 - `qvac` is the custom provider ID. This can be any string you want.
 - `npm` specifies the package to use for this provider — `@qvac/ai-sdk-provider`, the branded QVAC wrapper around `@ai-sdk/openai-compatible`.
-- `options.baseURL` is the endpoint for your local `qvac serve` (set this to match your serve port).
+- `options.baseURL` is the endpoint for your local `qvac serve` (set this to match your serve port). Note that `qvac serve openai` defaults to port `11434` — the same default as Ollama. If you run both, pass `--port` to one of them and update `baseURL` to match.
 - `options.apiKey` can be any non-empty string — `qvac serve` does not validate it, but some clients refuse to send a request without an `Authorization` header.
 - The model IDs (`qwen3-4b`, `qwen3-1.7b`) must match the **serve aliases** in `qvac.config.json` — those aliases are what the provider sends as the OpenAI `model` field.
-- `model` is the main chat model; `small_model` is the lighter model opencode uses for titles and other utility calls. Pointing them at two different files lets QVAC run both concurrently.
+- `model` is the main chat model; `small_model` is the lighter model opencode uses for titles, summarization, and compaction. Give it enough context (8k+) for those tasks, and point it at a different file from `model` so QVAC can run both concurrently.
 
 :::note
 QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool definitions and system prompt. Set it explicitly (16k+ for chat) in `qvac.config.json`, and set `reasoning_budget: 0` to suppress `<think>` blocks that opencode would otherwise render verbatim.
