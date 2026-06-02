@@ -8545,6 +8545,7 @@ export type V2FsReadData = {
       workspace?: string
     }
     path: string
+    reference?: string
   }
   url: "/api/fs/read"
 }
@@ -8580,6 +8581,7 @@ export type V2FsListData = {
       workspace?: string
     }
     path?: string
+    reference?: string
   }
   url: "/api/fs/list"
 }

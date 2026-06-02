@@ -9380,6 +9380,14 @@
               "type": "string"
             },
             "required": true
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -9458,6 +9466,14 @@
           },
           {
             "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "reference",
             "in": "query",
             "schema": {
               "type": "string"
