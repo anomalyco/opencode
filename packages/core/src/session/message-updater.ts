@@ -1,5 +1,5 @@
 import { produce, type WritableDraft } from "immer"
-import { Effect, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { ToolOutput } from "../tool-output"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
@@ -436,7 +436,33 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.next.retried": () => Effect.void,
+      "session.next.retried": (event) => {
+        return Effect.gen(function* () {
+          const currentAssistant = yield* adapter.getCurrentAssistant()
+          if (currentAssistant) {
+            yield* adapter.updateAssistant(
+              produce(currentAssistant, (draft) => {
+                if (
+                  draft.retries?.some(
+                    (retry) =>
+                      retry.attempt === event.data.attempt &&
+                      DateTime.toEpochMillis(retry.time.created) === DateTime.toEpochMillis(event.data.timestamp),
+                  )
+                )
+                  return
+                draft.retries = [
+                  ...(draft.retries ?? []),
+                  new SessionMessage.AssistantRetry({
+                    attempt: event.data.attempt,
+                    error: event.data.error,
+                    time: { created: event.data.timestamp },
+                  }),
+                ]
+              }),
+            )
+          }
+        })
+      },
       "session.next.compaction.started": (event) => {
         return adapter.appendMessage(
           new SessionMessage.Compaction({

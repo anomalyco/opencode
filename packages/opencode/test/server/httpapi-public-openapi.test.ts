@@ -3,7 +3,13 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
-type OpenApiSchema = { readonly $ref?: string }
+type OpenApiSchema = {
+  readonly $ref?: string
+  readonly type?: string
+  readonly properties?: Record<string, OpenApiSchema>
+  readonly required?: ReadonlyArray<string>
+  readonly items?: OpenApiSchema
+}
 type OpenApiResponse = {
   readonly description?: string
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
@@ -14,7 +20,10 @@ type OpenApiOperation = {
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
-type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
+type OpenApiSpec = {
+  readonly paths: Record<string, OpenApiPathItem>
+  readonly components?: { readonly schemas?: Record<string, OpenApiSchema> }
+}
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
@@ -41,6 +50,12 @@ function componentName(ref: string) {
 
 function isBuiltInEndpointError(name: string) {
   return name.startsWith("EffectHttpApiError") || name.startsWith("effect_HttpApiError_")
+}
+
+function schema(spec: OpenApiSpec, name: string) {
+  const result = spec.components?.schemas?.[name]
+  if (!result) throw new Error(`Missing OpenAPI schema ${name}`)
+  return result
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
@@ -142,6 +157,23 @@ describe("PublicApi OpenAPI v2 errors", () => {
         /^UnknownError\d*$/,
       )
     }
+  })
+
+  test("documents v2 assistant retry metadata on session messages", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const assistant = schema(spec, "SessionMessageAssistant")
+    const retry = schema(spec, "SessionMessageAssistantRetry")
+
+    expect(assistant.properties?.retries).toEqual({
+      type: "array",
+      items: { $ref: "#/components/schemas/SessionMessageAssistantRetry" },
+    })
+    expect(assistant.required ?? []).not.toContain("retries")
+    expect(retry.required).toEqual(["attempt", "error", "time"])
+    expect(retry.properties?.attempt?.type).toBe("number")
+    expect(retry.properties?.error?.$ref).toBe("#/components/schemas/SessionNextRetry_error")
+    expect(retry.properties?.time?.properties?.created?.type).toBe("number")
+    expect(retry.properties?.time?.required).toEqual(["created"])
   })
 
   test("documents session busy errors", () => {

@@ -194,6 +194,54 @@ function publishTranscript() {
   })
 }
 
+function retryError() {
+  return {
+    message: "provider returned 429",
+    statusCode: 429,
+    isRetryable: true,
+    responseHeaders: { "retry-after": "1" },
+    responseBody: "rate limited",
+    metadata: { provider: "test" },
+  }
+}
+
+function retryTranscriptEvents() {
+  return Effect.gen(function* () {
+    const events = yield* EventV2.Service
+    const stepStarted = yield* events.publish(
+      SessionEvent.Step.Started,
+      { sessionID, timestamp: at(10), agent: "build", model, snapshot: "before-retry" },
+      { id: eventID("retry_assistant") },
+    )
+    const retried = yield* events.publish(
+      SessionEvent.Retried,
+      { sessionID, timestamp: at(20), attempt: 2, error: retryError() },
+      { id: eventID("retried") },
+    )
+    return [stepStarted, retried]
+  })
+}
+
+function assertNoLegacyIDs(value: unknown) {
+  const strings: string[] = []
+  const visit = (current: unknown) => {
+    if (typeof current === "string") {
+      strings.push(current)
+      return
+    }
+    if (Array.isArray(current)) {
+      current.forEach(visit)
+      return
+    }
+    if (current && typeof current === "object") Object.values(current).forEach(visit)
+  }
+  visit(value)
+  for (const string of strings) {
+    expect(string.startsWith("msg_")).toBe(false)
+    expect(string.startsWith("prt_")).toBe(false)
+  }
+}
+
 describe("SessionProjector", () => {
   test("projects session.next transcript events into v2 messages", async () => {
     const dbPath = await makeDbPath()
@@ -319,6 +367,94 @@ describe("SessionProjector", () => {
         expect(assistant?.type).toBe("assistant")
         if (assistant?.type !== "assistant") return
         expect(assistant.content[0]).toMatchObject({ type: "tool", state: { status: "completed" } })
+      }),
+    )
+  })
+
+  test("projects retry metadata onto the active assistant without creating a message", async () => {
+    const dbPath = await makeDbPath()
+    await run(
+      dbPath,
+      Effect.gen(function* () {
+        yield* seedSession()
+        yield* retryTranscriptEvents()
+
+        const messages = yield* readMessages()
+        expect(messages.map((message) => message.type)).toEqual(["assistant"])
+
+        const assistant = messages[0]
+        expect(assistant?.type).toBe("assistant")
+        if (assistant?.type !== "assistant") return
+
+        expect(assistant.id).toBe(eventID("retry_assistant"))
+        expect(assistant).toMatchObject({
+          retries: [
+            {
+              attempt: 2,
+              error: retryError(),
+              time: { created: at(20) },
+            },
+          ],
+        })
+        assertNoLegacyIDs(assistant)
+      }),
+    )
+  })
+
+  test("drops retry metadata before any active assistant and leaves the transcript empty", async () => {
+    const dbPath = await makeDbPath()
+    await run(
+      dbPath,
+      Effect.gen(function* () {
+        yield* seedSession()
+        const events = yield* EventV2.Service
+        yield* events.publish(
+          SessionEvent.Retried,
+          { sessionID, timestamp: at(10), attempt: 2, error: retryError() },
+          { id: eventID("retry_without_assistant") },
+        )
+
+        expect(yield* readMessages()).toEqual([])
+      }),
+    )
+  })
+
+  test("replaying retry events does not duplicate assistant retry metadata", async () => {
+    const sourceDb = await makeDbPath()
+    const targetDb = await makeDbPath()
+    const events = await run(
+      sourceDb,
+      Effect.gen(function* () {
+        yield* seedSession()
+        return (yield* retryTranscriptEvents()).map(serialized)
+      }),
+    )
+
+    await run(
+      targetDb,
+      Effect.gen(function* () {
+        yield* seedSession()
+        const service = yield* EventV2.Service
+        yield* service.replayAll(events)
+        yield* resetStoredEvents()
+        yield* service.replayAll(events)
+
+        const messages = yield* readMessages()
+        expect(messages.map((message) => message.type)).toEqual(["assistant"])
+
+        const assistant = messages[0]
+        expect(assistant?.type).toBe("assistant")
+        if (assistant?.type !== "assistant") return
+
+        expect(assistant).toMatchObject({
+          retries: [
+            {
+              attempt: 2,
+              error: retryError(),
+              time: { created: at(20) },
+            },
+          ],
+        })
       }),
     )
   })

@@ -3805,6 +3805,14 @@ export type SessionMessageAssistantTool = {
   }
 }
 
+export type SessionMessageAssistantRetry = {
+  attempt: number
+  error: SessionNextRetryError
+  time: {
+    created: number
+  }
+}
+
 export type SessionMessageAssistant = {
   id: string
   metadata?: {
@@ -3828,6 +3836,7 @@ export type SessionMessageAssistant = {
   }
   finish?: string
   cost?: number
+  retries?: Array<SessionMessageAssistantRetry>
   tokens?: {
     input: number
     output: number

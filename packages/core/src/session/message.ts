@@ -131,6 +131,14 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
 )
 export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
 
+export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Message.Assistant.Retry")({
+  attempt: SessionEvent.Retried.data.fields.attempt,
+  error: SessionEvent.Retried.data.fields.error,
+  time: Schema.Struct({
+    created: V2Schema.DateTimeUtcFromMillis,
+  }),
+}) {}
+
 export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistant")({
   ...Base,
   type: Schema.Literal("assistant"),
@@ -143,6 +151,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
   }).pipe(Schema.optional),
   finish: Schema.String.pipe(Schema.optional),
   cost: Schema.Finite.pipe(Schema.optional),
+  retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
   tokens: Schema.Struct({
     input: Schema.Finite,
     output: Schema.Finite,
