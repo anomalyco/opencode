@@ -7,6 +7,18 @@ import * as Global from "../global"
 import { Schema } from "effect"
 import { Glob } from "./glob"
 
+function localStamp(): string {
+  const d = new Date()
+  const z = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`
+}
+
+function localTime(): string {
+  const d = new Date()
+  const z = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`
+}
+
 export const Level = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
   identifier: "LogLevel",
   description: "Log level",
@@ -69,7 +81,7 @@ export async function init(options: Options) {
   if (options.print) return
   logpath = path.join(
     Global.Path.log,
-    options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
+    options.dev ? "dev.log" : localStamp() + ".log",
   )
   const runID = process.env.OPENCODE_RUN_ID
   const shouldTruncate = !options.dev || !runID || process.env[initializedRunID] !== runID
@@ -137,7 +149,7 @@ export function create(tags?: Record<string, any>) {
     const next = new Date()
     const diff = next.getTime() - last
     last = next.getTime()
-    return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+    return [localTime(), "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
   }
   const result: Logger = {
     debug(message?: any, extra?: Record<string, any>) {

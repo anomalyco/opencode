@@ -50,9 +50,18 @@ const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
 
+function toLocalISO(): string {
+  const d = new Date()
+  const z = (n: number) => String(n).padStart(2, "0")
+  const off = d.getTimezoneOffset()
+  const sign = off > 0 ? "-" : "+"
+  const absOff = Math.abs(off)
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, "0")}${sign}${z(Math.floor(absOff / 60))}:${z(absOff % 60)}`
+}
+
 export function isDefaultTitle(title: string) {
   return new RegExp(
-    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}(Z|[+-]\\d{2}:\\d{2})$`,
   ).test(title)
 }
 
@@ -583,7 +592,7 @@ export const layer: Layer.Layer<
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
-        title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString(),
+        title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + toLocalISO(),
         agent: input.agent,
         model: input.model,
         metadata: input.metadata,

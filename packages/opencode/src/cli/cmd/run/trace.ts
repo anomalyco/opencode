@@ -22,10 +22,9 @@ export type Trace = {
 let state: Trace | false | undefined
 
 function stamp() {
-  return new Date()
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d+Z$/, "Z")
+  const d = new Date()
+  const z = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}T${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}Z`
 }
 
 function file() {
@@ -65,7 +64,7 @@ export function trace(): Trace | undefined {
   fs.writeFileSync(
     latest(),
     text({
-      time: new Date().toISOString(),
+      time: new Date().toLocaleString(),
       pid: process.pid,
       cwd: process.cwd(),
       argv: process.argv.slice(2),
@@ -77,7 +76,7 @@ export function trace(): Trace | undefined {
       fs.appendFileSync(
         target,
         text({
-          time: new Date().toISOString(),
+          time: new Date().toLocaleString(),
           pid: process.pid,
           type,
           data,
