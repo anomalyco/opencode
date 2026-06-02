@@ -325,7 +325,7 @@ export function Autocomplete(props: {
       ...(problem
         ? [`Problem: ${problem}`]
         : [
-            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
+            "Inspect the configured reference with Read, Glob, and Grep when useful.",
           ]),
     ].join("\n")
   }

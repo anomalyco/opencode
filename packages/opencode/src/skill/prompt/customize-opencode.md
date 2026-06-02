@@ -227,8 +227,7 @@ file, `disable: true` in frontmatter.
 
 ### Built-in agents
 
-opencode ships with `build`, `plan`, `general`, `explore`, plus optionally
-`scout` (gated on `OPENCODE_EXPERIMENTAL_SCOUT`). Hidden internal agents:
+opencode ships with `build`, `plan`, `general`, `explore`. Hidden internal agents:
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`.
 
@@ -335,8 +334,8 @@ rules last.
 everything" and is rarely what the user wants.
 
 Known permission keys: `read, edit, glob, grep, list, bash, task,
-external_directory, todowrite, question, webfetch, websearch, repo_clone,
-repo_overview, lsp, doom_loop, skill`. Some of these (`todowrite,
+external_directory, todowrite, question, webfetch, websearch, lsp, doom_loop,
+skill`. Some of these (`todowrite,
 question, webfetch, websearch, doom_loop`) only accept a flat
 action, not a per-pattern object.
 

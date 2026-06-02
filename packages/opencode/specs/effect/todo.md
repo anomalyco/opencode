@@ -172,7 +172,7 @@ Recently completed:
 - [x] Built-in websearch provider selection uses the same runtime flags as
       tool visibility.
 - [x] Removed global default-plugin disabling from test preload.
-- [x] `RF-1` Scout reads routed through runtime flags (#27318).
+- [x] `RF-1` Reference reads routed through runtime flags (#27318).
 - [x] `RF-2` Plan-mode prompt read routed through runtime flags (#27320).
 - [x] `RF-3` Event-system reads routed through runtime flags (#27323).
 - [x] `RF-4` Workspaces reads routed through runtime flags for session

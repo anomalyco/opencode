@@ -63,7 +63,7 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))
-const scout = testEffect(Layer.mergeAll(readLayer({ experimentalScout: true }), testInstanceStoreLayer))
+const references = testEffect(Layer.mergeAll(readLayer({ experimentalReferences: true }), testInstanceStoreLayer))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
@@ -264,7 +264,7 @@ describe("tool.read external_directory permission", () => {
     }),
   )
 
-  scout.live("does not ask for external_directory permission when reading configured references", () =>
+  references.live("does not ask for external_directory permission when reading configured references", () =>
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")

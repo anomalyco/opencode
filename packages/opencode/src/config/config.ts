@@ -209,7 +209,6 @@ export const Info = Schema.Struct({
         // subagent
         general: Schema.optional(ConfigAgent.Info),
         explore: Schema.optional(ConfigAgent.Info),
-        scout: Schema.optional(ConfigAgent.Info),
         // specialized
         title: Schema.optional(ConfigAgent.Info),
         summary: Schema.optional(ConfigAgent.Info),

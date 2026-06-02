@@ -7,7 +7,7 @@ const Git = Schema.Struct({
     description: "Git repository URL, host/path reference, or GitHub owner/repo shorthand",
   }),
   branch: Schema.optional(Schema.String).annotate({
-    description: "Branch or ref Scout should clone and inspect",
+    description: "Branch or ref to clone and inspect",
   }),
 })
 

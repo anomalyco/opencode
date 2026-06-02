@@ -27,8 +27,6 @@ const InputObject = Schema.StructWithRest(
     question: Schema.optional(Action),
     webfetch: Schema.optional(Action),
     websearch: Schema.optional(Action),
-    repo_clone: Schema.optional(Rule),
-    repo_overview: Schema.optional(Rule),
     lsp: Schema.optional(Rule),
     doom_loop: Schema.optional(Action),
     skill: Schema.optional(Rule),
