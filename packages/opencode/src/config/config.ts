@@ -41,6 +41,9 @@ import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
+import { ConfigBrowser } from "./browser"
+import { ConfigChannels } from "./channels"
+import { ConfigSelfImprovement } from "./self-improvement"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ConfigExperimental } from "@opencode-ai/core/config/experimental"
@@ -305,7 +308,16 @@ export const Info = Schema.Struct({
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),
-    }),
+       browser: Schema.optional(ConfigBrowser.Browser).annotate({
+         description: "Browser automation configuration (Playwright-based browser tools)",
+       }),
+       channels: Schema.optional(ConfigChannels.Channels).annotate({
+         description: "External notification channel configuration (Slack, Discord)",
+       }),
+       self_improvement: Schema.optional(ConfigSelfImprovement.SelfImprovement).annotate({
+         description: "Self-improvement system configuration",
+       }),
+     }),
   ),
 }).annotate({ identifier: "Config" })
 

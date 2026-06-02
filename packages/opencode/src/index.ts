@@ -30,11 +30,15 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
+import { ChannelCommand } from "./cli/cmd/channel"
+import { MemoryCommand } from "./cli/cmd/memory"
+import { CurationCommand } from "./cli/cmd/curation"
 import { Global } from "@opencode-ai/core/global"
 import { JsonMigration } from "@/storage/json-migration"
 import { Database } from "@opencode-ai/core/database/database"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { BrowserCommand } from "./cli/cmd/browser"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
@@ -179,6 +183,10 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(ChannelCommand)
+  .command(BrowserCommand)
+  .command(MemoryCommand)
+  .command(CurationCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

@@ -40,6 +40,10 @@ export interface Interface {
    */
   readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
   /**
+   * Handles binary output (screenshots, etc.) by truncating at maxBytes and saving to file if needed.
+   */
+  readonly binaryOutput: (data: Buffer, maxBytes?: number) => Effect.Effect<Result>
+  /**
    * Resolved truncation limits: values from `tool_output` in opencode config, or MAX_LINES / MAX_BYTES if unset.
    */
   readonly limits: () => Effect.Effect<{ maxLines: number; maxBytes: number }>
@@ -151,7 +155,19 @@ export const layer = Layer.effect(
       Effect.forkScoped,
     )
 
-    return Service.of({ cleanup, write, output, limits })
+    const binaryOutput = Effect.fn("Truncate.binaryOutput")(function* (data: Buffer, maxBytes?: number) {
+      const limit = maxBytes ?? MAX_BYTES
+      if (data.length <= limit) return { content: data.toString("base64"), truncated: false } as const
+
+      const file = yield* write(data.toString("base64"))
+      return {
+        content: `Binary output (${data.length} bytes) truncated. Full output saved to: ${file}`,
+        truncated: true,
+        outputPath: file,
+      } as const
+    })
+
+    return Service.of({ cleanup, write, output, binaryOutput, limits })
   }),
 )
 

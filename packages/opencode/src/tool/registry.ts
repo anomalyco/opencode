@@ -42,6 +42,10 @@ import { Format } from "../format"
 import { MemoryStore } from "../self-improvement/memory-store"
 import { RememberTool } from "../self-improvement/tools/remember"
 import { RecallTool } from "../self-improvement/tools/recall"
+import { NavigateTool } from "./browser/navigate"
+import { ActionTool } from "./browser/action"
+import { ObserveTool } from "./browser/observe"
+import { EvalTool } from "./browser/eval"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
@@ -145,6 +149,10 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const remember = yield* RememberTool
     const recall = yield* RecallTool
+    const browserNav = yield* NavigateTool
+    const browserActionTool = yield* ActionTool
+    const browserObserveTool = yield* ObserveTool
+    const browserEvalTool = yield* EvalTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -256,6 +264,10 @@ export const layer: Layer.Layer<
           plan: Tool.init(plan),
           remember: Tool.init(remember),
           recall: Tool.init(recall),
+          browser_navigate: Tool.init(browserNav),
+          browser_action: Tool.init(browserActionTool),
+          browser_observe: Tool.init(browserObserveTool),
+          browser_eval: Tool.init(browserEvalTool),
         })
 
         return {
@@ -280,7 +292,11 @@ export const layer: Layer.Layer<
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
             tool.remember,
             tool.recall,
-          ],
+            tool.browser_navigate,
+            tool.browser_action,
+            tool.browser_observe,
+            tool.browser_eval,
+          ] as Tool.Def[],
           task: tool.task,
           read: tool.read,
         }

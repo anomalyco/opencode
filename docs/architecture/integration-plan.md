@@ -347,21 +347,21 @@ Cycle steps (derived from Hermes two-layer curator):
 
 ### 5.1 Design
 
-Channels (Slack, Discord, VS Code extension bridge, etc.) provide alternative interfaces to the same session runtime. Unlike browser tools (which are agent-side), channels are external surfaces.
+Channels (Slack, Microsoft Teams, Discord, Telegram, WhatsApp, Gmail, Outlook, Google Calendar, Microsoft Outlook, etc.) provide alternative interfaces to the same session runtime. Unlike browser tools (which are agent-side), channels are external surfaces.
 
 **Architecture:** Each channel is a `@opencode-ai/plugin` that uses the `event` hook for observation and injects messages via the SDK or MCP.
 
 ```
-External Channel (Slack/Discord)
+External Channel (Slack/Teams/Discord/Telegram/WhatsApp/Gmail/Outlook/Calendar/etc.)
         │
         ▼
 Channel Plugin ─── event hook (receive bus events) ───→ Relayed to external
         │
         ▼
-  SDK Client ─── tool/API calls ───→ OpenCode session
+   SDK Client ─── tool/API calls ───→ OpenCode session
         │
         ▼
-  MCP Transport ─── bidirectional ───→ MCP Server in opencode
+   MCP Transport ─── bidirectional ───→ MCP Server in opencode
 ```
 
 ### 5.2 Directory Structure
@@ -373,8 +373,22 @@ packages/opencode/src/channels/
 └── transports/
     ├── slack.ts          # Slack adapter
     ├── slack.md          # Plugin scaffold template for Slack
+    ├── teams.ts          # Microsoft Teams adapter
+    ├── teams.md          # Plugin scaffold template for Microsoft Teams
     ├── discord.ts        # Discord adapter
-    └── discord.md        # Plugin scaffold template for Discord
+    ├── discord.md        # Plugin scaffold template for Discord
+    ├── telegram.ts       # Telegram adapter
+    ├── telegram.md       # Plugin scaffold template for Telegram
+    ├── whatsapp.ts       # WhatsApp adapter
+    ├── whatsapp.md       # Plugin scaffold template for WhatsApp
+    ├── gmail.ts          # Gmail adapter
+    ├── gmail.md          # Plugin scaffold template for Gmail
+    ├── outlook.ts        # Outlook adapter
+    ├── outlook.md        # Plugin scaffold template for Outlook
+    ├── calendar.ts       # Google Calendar adapter
+    ├── calendar.md       # Plugin scaffold template for Google Calendar
+    └── outlook365.ts     # Microsoft Outlook adapter
+        └── outlook365.md # Plugin scaffold template for Microsoft Outlook
 ```
 
 ### 5.3 Channel Plugin Template
@@ -431,7 +445,7 @@ Two parallel paths:
 
 | Path | Use Case | Implementation |
 |------|----------|----------------|
-| **Built-in tools** | Agent navigates web, fills forms, takes screenshots | Playwright as optional dep, 6 tools in ToolRegistry |
+| **Built-in tools** | Agent navigates web, fills forms, takes screenshots | Playwright as optional dep, **7 high-level tools** in ToolRegistry (replacing dozens of individual operations) |
 | **Workspace adapter** | Browser-based sandbox for agent execution (openClaw's browser agent) | New `browser` adapter registered via `experimental_workspace` |
 
 ### 6.2 Directory Structure
@@ -441,12 +455,13 @@ packages/opencode/src/tool/browser/
 ├── index.ts           # Tool registration + Playwright engine lifecycle
 ├── engine.ts          # Playwright lifecycle (launch/browser/context management per-session)
 ├── schema.ts          # Tool input/output schemas + config types
-├── navigate.ts        # browser_navigate
-├── click.ts           # browser_click
-├── type.ts            # browser_type
-├── snapshot.ts        # browser_snapshot
-├── screenshot.ts      # browser_screenshot
-└── evaluate.ts        # browser_evaluate
+├── navigate.ts        # browser_navigate (was: browser_navigate)
+├── click.ts           # browser_click (was: browser_click)
+├── type.ts            # browser_type (was: browser_type)
+├── snapshot.ts        # browser_snapshot (was: browser_snapshot)
+├── screenshot.ts      # browser_screenshot (was: browser_screenshot)
+├── evaluate.ts        # browser_evaluate (was: browser_evaluate)
+└── high-level-tools.ts # NEW: Seven core high-level browser tools
 ```
 
 ### 6.3 Browser Playwright Engine Lifecycle
@@ -457,11 +472,15 @@ packages/opencode/src/tool/browser/
 class BrowserEngine {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
-  private page: Page | null = null
-  private sessionMap: Map<SessionID, Page> = new Map()
+  private pages: Map<SessionID, Map<string, Page>> = new Map() // sessionID -> (pageID -> Page)
 
-  async ensurePage(sessionID: string): Promise<Page> {
-    if (this.sessionMap.has(sessionID)) return this.sessionMap.get(sessionID)!
+  async ensurePage(sessionID: string, pageID: string = "default"): Promise<Page> {
+    if (!this.sessionMap.has(sessionID)) {
+      this.sessionMap.set(sessionID, new Map())
+    }
+    
+    const sessionPages = this.sessionMap.get(sessionID)!
+    if (sessionPages.has(pageID)) return sessionPages.get(pageID)!
 
     if (!this.browser) {
       this.browser = await chromium.launch({
@@ -475,13 +494,15 @@ class BrowserEngine {
       })
     }
     const page = await this.context.newPage()
-    this.sessionMap.set(sessionID, page)
+    sessionPages.set(pageID, page)
     return page
   }
 
   async dispose(): Promise<void> {
-    for (const page of this.sessionMap.values()) {
-      await page.close().catch(() => {})
+    for (const sessionPages of this.sessionMap.values()) {
+      for (const page of sessionPages.values()) {
+        await page.close().catch(() => {})
+      }
     }
     await this.context?.close().catch(() => {})
     await this.browser?.close().catch(() => {})

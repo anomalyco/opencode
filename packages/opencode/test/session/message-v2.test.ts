@@ -683,7 +683,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("replaces compacted tool output with placeholder", async () => {
+  test("replaces compacted tool output with informative summary", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -708,8 +708,8 @@ describe("session.message-v2.toModelMessage", () => {
             tool: "bash",
             state: {
               status: "completed",
-              input: { cmd: "ls" },
-              output: "this should be cleared",
+              input: { command: "ls -la" },
+              output: "file1\nfile2\nfile3",
               title: "Bash",
               metadata: {},
               time: { start: 0, end: 1, compacted: 1 },
@@ -731,7 +731,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-call",
             toolCallId: "call-1",
             toolName: "bash",
-            input: { cmd: "ls" },
+            input: { command: "ls -la" },
             providerExecuted: undefined,
           },
         ],
@@ -743,7 +743,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "[Old tool result content cleared]" },
+            output: { type: "text", value: "ran `ls -la` → 3 lines" },
           },
         ],
       },
