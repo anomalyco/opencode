@@ -5,10 +5,12 @@ import { pathToFileURL } from "url"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AppFileSystem } from "./filesystem"
 import { Location } from "./location"
+import { ProjectReference } from "./project-reference"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
+  reference: Schema.String.pipe(Schema.optional),
 })
 export type ReadInput = typeof ReadInput.Type
 
@@ -30,6 +32,7 @@ export type Content = typeof Content.Type
 
 export const ListInput = Schema.Struct({
   path: RelativePath.pipe(Schema.optional),
+  reference: Schema.String.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
 
@@ -77,31 +80,41 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/LocationFileSystem") {}
 
-export const locationLayer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const location = yield* Location.Service
+    const references = yield* ProjectReference.Service
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
-    const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
+    const select = Effect.fnUntraced(function* (reference?: string) {
+      if (!reference) return { directory: location.directory, root }
+      const resolved = yield* references.get(reference)
+      if (!resolved) return yield* Effect.die(new Error(`Unknown project reference: ${reference}`))
+      if (resolved.kind === "invalid") return yield* Effect.die(new Error(resolved.message))
+      if (resolved.kind === "git") yield* references.ensurePath(resolved.path).pipe(Effect.orDie)
+      return { directory: resolved.path, root: yield* fs.realPath(resolved.path).pipe(Effect.orDie) }
+    })
+    const resolve = Effect.fnUntraced(function* (input?: RelativePath, reference?: string) {
       if (input && path.isAbsolute(input)) return yield* Effect.die(new Error("Path must be relative to the location"))
-      const absolute = path.resolve(location.directory, input ?? ".")
-      if (!AppFileSystem.contains(location.directory, absolute))
+      const selected = yield* select(reference)
+      const absolute = path.resolve(selected.directory, input ?? ".")
+      if (!AppFileSystem.contains(selected.directory, absolute))
         return yield* Effect.die(new Error("Path escapes the location"))
       const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
-      if (!AppFileSystem.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
-      return { absolute, real }
+      if (!AppFileSystem.contains(selected.root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+      return { absolute, real, ...selected }
     })
-    const entry = Effect.fnUntraced(function* (absolute: string) {
+    const entry = Effect.fnUntraced(function* (absolute: string, selected: { directory: string; root: string }) {
       const real = yield* fs.realPath(absolute).pipe(Effect.catch(() => Effect.void))
       if (!real) return
-      if (!AppFileSystem.contains(root, real)) return
+      if (!AppFileSystem.contains(selected.root, real)) return
       const info = yield* fs.stat(real).pipe(Effect.catch(() => Effect.void))
       if (!info) return
       const type = info.type === "Directory" ? "directory" : info.type === "File" ? "file" : undefined
       if (!type) return
       return new Entry({
-        path: RelativePath.make(path.relative(location.directory, absolute)),
+        path: RelativePath.make(path.relative(selected.directory, absolute)),
         uri: pathToFileURL(real).href,
         type,
         mime: type === "directory" ? "application/x-directory" : AppFileSystem.mimeType(real),
@@ -124,7 +137,7 @@ export const locationLayer = Layer.effect(
 
     return Service.of({
       read: Effect.fn("LocationFileSystem.read")(function* (input) {
-        const file = yield* resolve(input.path)
+        const file = yield* resolve(input.path, input.reference)
         const info = yield* fs.stat(file.real).pipe(Effect.orDie)
         if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
         const bytes = yield* fs.readFile(file.real).pipe(Effect.orDie)
@@ -143,13 +156,13 @@ export const locationLayer = Layer.effect(
         })
       }),
       list: Effect.fn("LocationFileSystem.list")(function* (input = {}) {
-        const directory = yield* resolve(input.path)
+        const directory = yield* resolve(input.path, input.reference)
         const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
         if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
         return yield* fs.readDirectoryEntries(directory.real).pipe(
           Effect.orDie,
           Effect.flatMap((items) =>
-            Effect.forEach(items, (item) => entry(path.join(directory.absolute, item.name)), {
+            Effect.forEach(items, (item) => entry(path.join(directory.absolute, item.name), directory), {
               concurrency: "unbounded",
             }),
           ),
@@ -177,3 +190,5 @@ export const locationLayer = Layer.effect(
     })
   }),
 )
+
+export const locationLayer = layer.pipe(Layer.provideMerge(ProjectReference.locationLayer))
