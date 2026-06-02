@@ -1191,6 +1191,24 @@ export function options(input: {
     }
   }
 
+  // Honor user-supplied `provider.<id>.options.extraBody`. Merging into result
+  // routes the fields through providerOptions() under the SDK-recognized key,
+  // so server-specific chat-completions body params (e.g. `chat_template_kwargs`
+  // for vLLM/SGLang, NVIDIA NIM, etc.) reach the wire without requiring a
+  // hardcoded per-provider block here. The alibaba-cn block above proves the
+  // routing works: providerOptions[providerName] entries land on the request
+  // body for `@ai-sdk/openai-compatible` providers.
+  // User config wins over the hardcoded blocks above by design — operators with
+  // custom OpenAI-compatible servers need to be able to override defaults.
+  // Closes #13584, #23995, #24264.
+  if (
+    input.providerOptions?.extraBody &&
+    typeof input.providerOptions.extraBody === "object" &&
+    !Array.isArray(input.providerOptions.extraBody)
+  ) {
+    Object.assign(result, input.providerOptions.extraBody)
+  }
+
   return result
 }
 

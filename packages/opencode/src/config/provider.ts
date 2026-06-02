@@ -109,6 +109,13 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        extraBody: Schema.optional(Schema.Record(Schema.String, Schema.Any)).annotate({
+          description:
+            "Additional fields merged into every chat-completions request body for this provider. " +
+            "Useful for OpenAI-compatible servers that accept server-specific knobs not in the standard OpenAI schema " +
+            "(e.g. vLLM/SGLang `chat_template_kwargs`, NVIDIA NIM `chat_template_kwargs`). " +
+            "Routed through `providerOptions[<sdk-key>]` for `@ai-sdk/openai-compatible` providers; user values override hardcoded per-provider defaults.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),

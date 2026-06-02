@@ -3849,3 +3849,134 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.options - extraBody propagation", () => {
+  // Regression coverage for #13584 / #23995 / #24264: users of OpenAI-compatible
+  // servers (vLLM, SGLang, NVIDIA NIM, direct DashScope) must be able to set
+  // server-specific chat-completions body fields (e.g. `chat_template_kwargs`)
+  // via `provider.<id>.options.extraBody` in opencode.json. Until this fix,
+  // the field was permitted by the rest record on the schema but never read.
+  const sessionID = "test-session-extra-body"
+
+  const vllmModel = {
+    id: "vllm-local/qwen3.6-35b",
+    providerID: "vllm-local",
+    api: {
+      id: "qwen3.6-35b",
+      url: "http://localhost:8000/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Qwen3.6-35B (vLLM)",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 200_000, output: 32_000 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("merges extraBody fields into the result (qwen3 vLLM enable_thinking case)", () => {
+    const result = ProviderTransform.options({
+      model: vllmModel,
+      sessionID,
+      providerOptions: {
+        extraBody: { chat_template_kwargs: { enable_thinking: false } },
+      },
+    })
+    expect(result.chat_template_kwargs).toEqual({ enable_thinking: false })
+  })
+
+  test("preserves nested objects in extraBody intact", () => {
+    const result = ProviderTransform.options({
+      model: vllmModel,
+      sessionID,
+      providerOptions: {
+        extraBody: {
+          chat_template_kwargs: { enable_thinking: true, deep: { tool: "ok" } },
+          guided_json: { type: "object" },
+        },
+      },
+    })
+    expect(result.chat_template_kwargs).toEqual({ enable_thinking: true, deep: { tool: "ok" } })
+    expect(result.guided_json).toEqual({ type: "object" })
+  })
+
+  test("undefined extraBody is a no-op", () => {
+    const result = ProviderTransform.options({
+      model: vllmModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("null extraBody does not crash and is treated as a no-op", () => {
+    const result = ProviderTransform.options({
+      model: vllmModel,
+      sessionID,
+      providerOptions: { extraBody: null as any },
+    })
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("array extraBody is rejected (must be a plain object)", () => {
+    const result = ProviderTransform.options({
+      model: vllmModel,
+      sessionID,
+      providerOptions: { extraBody: ["chat_template_kwargs"] as any },
+    })
+    expect(result["0"]).toBeUndefined()
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("extraBody preserves non-overlapping fields set by other blocks", () => {
+    // Use a model that triggers an existing block (alibaba-cn enable_thinking).
+    const alibabaModel = {
+      ...vllmModel,
+      id: "alibaba-cn/qwen3-235b",
+      providerID: "alibaba-cn",
+      api: {
+        id: "qwen3-235b",
+        url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: { ...vllmModel.capabilities, reasoning: true },
+    }
+    const result = ProviderTransform.options({
+      model: alibabaModel as any,
+      sessionID,
+      providerOptions: { extraBody: { foo: "bar" } },
+    })
+    expect(result.enable_thinking).toBe(true) // set by alibaba-cn block
+    expect(result.foo).toBe("bar") // added by extraBody
+  })
+
+  test("extraBody overrides hardcoded fields by design (user config wins)", () => {
+    const alibabaModel = {
+      ...vllmModel,
+      id: "alibaba-cn/qwen3-235b",
+      providerID: "alibaba-cn",
+      api: {
+        id: "qwen3-235b",
+        url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: { ...vllmModel.capabilities, reasoning: true },
+    }
+    const result = ProviderTransform.options({
+      model: alibabaModel as any,
+      sessionID,
+      providerOptions: { extraBody: { enable_thinking: false } },
+    })
+    // Hardcoded block sets enable_thinking=true; user explicit override wins.
+    expect(result.enable_thinking).toBe(false)
+  })
+})
