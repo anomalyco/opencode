@@ -4578,8 +4578,8 @@ export class Session3 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      id?: string
       prompt?: Prompt
-      idempotencyKey?: string
       delivery?: SessionDelivery
     },
     options?: Options<never, ThrowOnError>,
@@ -4592,8 +4592,8 @@ export class Session3 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
             { in: "body", key: "prompt" },
-            { in: "body", key: "idempotencyKey" },
             { in: "body", key: "delivery" },
           ],
         },

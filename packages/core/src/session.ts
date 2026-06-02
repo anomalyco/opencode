@@ -2,7 +2,7 @@ export * as SessionV2 from "./session"
 export * from "./session/schema"
 
 import { Effect, Layer, Schema, Context } from "effect"
-import { and, asc, desc, eq, gt, gte, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -24,6 +24,8 @@ import { ProjectTable } from "./project/sql"
 import path from "path"
 import { fromRow } from "./session/info"
 import { PromptConflictError, SessionRuntime } from "./session/runtime"
+import { SessionRunner } from "./session/runner/index"
+import { SessionContext } from "./session/context"
 
 export { PromptConflictError } from "./session/runtime"
 
@@ -68,7 +70,7 @@ export const ListInput = Schema.Union([ListDirectoryInput, ListProjectInput, Lis
 export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
-  idempotencyKey?: SessionSchema.CreateIdempotencyKey
+  id?: SessionSchema.ID
   agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
@@ -101,7 +103,7 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
 }) {}
 
 export class CreateConflictError extends Schema.TaggedErrorClass<CreateConflictError>()("Session.CreateConflictError", {
-  idempotencyKey: SessionSchema.CreateIdempotencyKey,
+  sessionID: SessionSchema.ID,
 }) {}
 
 export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError | CreateConflictError
@@ -127,9 +129,8 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly prompt: (input: {
-    id?: EventV2.ID
+    id?: SessionMessage.ID
     sessionID: SessionSchema.ID
-    idempotencyKey?: Prompt.IdempotencyKey
     prompt: Prompt
     delivery?: SessionSchema.Delivery
     resume?: boolean
@@ -150,7 +151,7 @@ export interface Interface {
   }) => Effect.Effect<void, never>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -177,19 +178,19 @@ export const layer = Layer.effect(
       )
 
     const findCreateAdmission = Effect.fnUntraced(function* (input: {
-      idempotencyKey: SessionSchema.CreateIdempotencyKey
+      sessionID: SessionSchema.ID
       contract: SessionSchema.CreateContract
     }) {
       const admitted = yield* db
         .select()
         .from(SessionCreateAdmissionTable)
-        .where(eq(SessionCreateAdmissionTable.idempotency_key, input.idempotencyKey))
+        .where(eq(SessionCreateAdmissionTable.session_id, input.sessionID))
         .get()
         .pipe(Effect.orDie)
       if (!admitted) return undefined
       const contract = yield* SessionSchema.decodeCreateContract(admitted.contract).pipe(Effect.orDie)
       if (!SessionSchema.createContractEquivalence(contract, input.contract)) {
-        return yield* new CreateConflictError({ idempotencyKey: input.idempotencyKey })
+        return yield* new CreateConflictError({ sessionID: input.sessionID })
       }
       return yield* decodeSession(admitted.session).pipe(Effect.orDie)
     })
@@ -212,11 +213,10 @@ export const layer = Layer.effect(
                 }),
               }),
         })
-        const admission = input.idempotencyKey === undefined ? undefined : { idempotencyKey: input.idempotencyKey, contract }
-        if (admission !== undefined) {
-          const admitted = yield* findCreateAdmission(admission)
-          if (admitted) return admitted
-        }
+        const sessionID = input.id ?? SessionSchema.ID.create()
+        const admission = { sessionID, contract }
+        const admitted = yield* findCreateAdmission(admission)
+        if (admitted) return admitted
         const project = yield* projects.resolve(input.location.directory)
         yield* db
           .insert(ProjectTable)
@@ -225,7 +225,6 @@ export const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
         const now = Date.now()
-        const sessionID = SessionSchema.ID.descending()
         const info = SessionLegacy.SessionInfo.make({
           id: sessionID,
           slug: Slug.create(),
@@ -256,7 +255,7 @@ export const layer = Layer.effect(
           .pipe(
             Effect.as<SessionSchema.Info | undefined>(undefined),
             Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.CreateAdmissionRace) || admission === undefined) {
+              if (!(defect instanceof SessionProjector.CreateAdmissionRace)) {
                 return Effect.die(defect)
               }
               return findCreateAdmission(admission).pipe(
@@ -349,35 +348,7 @@ export const layer = Layer.effect(
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
-        const compaction = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
-          .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
-          .limit(1)
-          .get()
-          .pipe(Effect.orDie)
-        const rows = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(
-            and(
-              eq(SessionMessageTable.session_id, sessionID),
-              compaction
-                ? or(
-                    gt(SessionMessageTable.time_created, compaction.time_created),
-                    and(
-                      eq(SessionMessageTable.time_created, compaction.time_created),
-                      gte(SessionMessageTable.id, compaction.id),
-                    ),
-                  )
-                : undefined,
-            ),
-          )
-          .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
-          .all()
-          .pipe(Effect.orDie)
-        return yield* Effect.forEach(rows, decode)
+        return yield* SessionContext.load(db, sessionID)
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
@@ -409,7 +380,11 @@ export const layer = Layer.effect(
 const DefaultDatabase = Database.defaultLayer
 const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
 const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
-const DefaultRuntime = SessionRuntime.localLayer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
+const DefaultRuntime = SessionRuntime.localLayer.pipe(
+  Layer.provide(DefaultEvents),
+  Layer.provide(DefaultDatabase),
+  Layer.provide(SessionRunner.noopLayer),
+)
 
 export const defaultLayer = layer.pipe(
   Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, DefaultRuntime, ProjectV2.defaultLayer)),

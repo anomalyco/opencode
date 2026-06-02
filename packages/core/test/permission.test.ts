@@ -13,6 +13,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionRuntime } from "@opencode-ai/core/session/runtime"
+import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -23,7 +24,11 @@ const current = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
 const events = EventV2.layer.pipe(Layer.provide(database))
-const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database))
+const runtime = SessionRuntime.localLayer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(SessionRunner.noopLayer),
+)
 const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer), Layer.provide(runtime))
 const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(

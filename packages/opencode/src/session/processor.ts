@@ -625,6 +625,7 @@ export const layer = Layer.effect(
                 yield* events.publish(SessionEvent.Text.Started, {
                   sessionID: ctx.sessionID,
                   timestamp: DateTime.makeUnsafe(Date.now()),
+                  textID: value.id,
                 })
               }
             }
@@ -673,6 +674,7 @@ export const layer = Layer.effect(
                   sessionID: ctx.sessionID,
                   text: ctx.currentText.text,
                   timestamp: DateTime.makeUnsafe(Date.now()),
+                  textID: value.id,
                 })
               }
             }

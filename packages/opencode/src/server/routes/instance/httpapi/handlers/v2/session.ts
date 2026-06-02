@@ -61,8 +61,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
           return yield* session
             .prompt({
               sessionID: ctx.params.sessionID,
+              id: ctx.payload.id,
               prompt: ctx.payload.prompt,
-              idempotencyKey: ctx.payload.idempotencyKey,
               delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
             })
             .pipe(
@@ -77,8 +77,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
               Effect.catchTag("Session.PromptConflictError", (error) =>
                 Effect.fail(
                   new ConflictError({
-                    message: `Prompt idempotency key already exists with a different prompt: ${error.idempotencyKey}`,
-                    resource: error.idempotencyKey,
+                    message: `Prompt message ID already exists with a different prompt: ${error.messageID}`,
+                    resource: error.messageID,
                   }),
                 ),
               ),

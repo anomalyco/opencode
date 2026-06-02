@@ -1,6 +1,7 @@
 export * as SessionMessage from "./message"
 
 import { Schema } from "effect"
+import { ProviderMetadata } from "@opencode-ai/llm"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { ToolOutput } from "../tool-output"
@@ -101,7 +102,7 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
   name: Schema.String,
   provider: Schema.Struct({
     executed: Schema.Boolean,
-    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+    metadata: ProviderMetadata.pipe(Schema.optional),
   }).pipe(Schema.optional),
   state: ToolState,
   time: Schema.Struct({
@@ -114,6 +115,7 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
 
 export class AssistantText extends Schema.Class<AssistantText>("Session.Message.Assistant.Text")({
   type: Schema.Literal("text"),
+  id: Schema.String,
   text: Schema.String,
 }) {}
 

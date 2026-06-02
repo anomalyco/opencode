@@ -265,6 +265,7 @@
         "@npmcli/config": "10.8.1",
         "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
         "@opencode-ai/effect-sqlite-node": "workspace:*",
+        "@opencode-ai/llm": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.8.1",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/context-async-hooks": "2.6.1",
@@ -294,6 +295,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@opencode-ai/http-recorder": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
         "@parcel/watcher-darwin-x64": "2.5.1",
         "@parcel/watcher-linux-arm64-glibc": "2.5.1",

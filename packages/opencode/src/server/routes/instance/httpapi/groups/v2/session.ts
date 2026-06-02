@@ -111,8 +111,8 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       payload: Schema.Struct({
+        id: SessionMessage.ID.pipe(Schema.optional),
         prompt: Prompt,
-        idempotencyKey: Prompt.IdempotencyKey.pipe(Schema.optional),
         delivery: SessionV2.Delivery.pipe(Schema.optional),
       }),
       success: SessionMessage.Message,

@@ -138,15 +138,15 @@ export const SessionPromptAdmissionTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    idempotency_key: text().$type<Prompt.IdempotencyKey>().notNull(),
+    message_id: text("idempotency_key").$type<SessionMessage.ID>().notNull(),
     prompt: text({ mode: "json" }).$type<Prompt>().notNull(),
     message: text({ mode: "json" }).$type<(typeof SessionMessage.User)["Encoded"]>().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.session_id, table.idempotency_key] })],
+  (table) => [primaryKey({ columns: [table.session_id, table.message_id] })],
 )
 
 export const SessionCreateAdmissionTable = sqliteTable("session_create_admission", {
-  idempotency_key: text().$type<SessionSchema.CreateIdempotencyKey>().primaryKey(),
+  session_id: text("idempotency_key").$type<SessionSchema.ID>().primaryKey(),
   contract: text({ mode: "json" }).$type<SessionSchema.CreateContract>().notNull(),
   session: text({ mode: "json" }).$type<(typeof SessionSchema.Info)["Encoded"]>().notNull(),
 })

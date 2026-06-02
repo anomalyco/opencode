@@ -37,8 +37,8 @@ function latestTool(assistant: SessionMessageAssistant | undefined, callID?: str
   )
 }
 
-function latestText(assistant: SessionMessageAssistant | undefined) {
-  return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
+function latestText(assistant: SessionMessageAssistant | undefined, textID: string) {
+  return assistant?.content.findLast((item): item is SessionMessageAssistantText => item.type === "text" && item.id === textID)
 }
 
 function latestReasoning(assistant: SessionMessageAssistant | undefined, reasoningID: string) {
@@ -154,18 +154,18 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.text.started":
           update(event.properties.sessionID, (draft) => {
-            activeAssistant(draft)?.content.push({ type: "text", text: "" })
+            activeAssistant(draft)?.content.push({ type: "text", id: event.properties.textID, text: "" })
           })
           break
         case "session.next.text.delta":
           update(event.properties.sessionID, (draft) => {
-            const match = latestText(activeAssistant(draft))
+            const match = latestText(activeAssistant(draft), event.properties.textID)
             if (match) match.text += event.properties.delta
           })
           break
         case "session.next.text.ended":
           update(event.properties.sessionID, (draft) => {
-            const match = latestText(activeAssistant(draft))
+            const match = latestText(activeAssistant(draft), event.properties.textID)
             if (match) match.text = event.properties.text
           })
           break

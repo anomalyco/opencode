@@ -544,7 +544,7 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
-    "durably admits one v2 prompt for exact application-key retries",
+    "durably admits one v2 prompt for exact message-ID retries",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
@@ -554,7 +554,7 @@ describe("session HttpApi", () => {
         const admit = () => request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ idempotencyKey: "discord-message-123", prompt: { text: "hello" } }),
+          body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "hello" } }),
         })
         const first = yield* admit()
         const retried = yield* admit()
@@ -575,13 +575,13 @@ describe("session HttpApi", () => {
         const conflict = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ idempotencyKey: "discord-message-123", prompt: { text: "goodbye" } }),
+          body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "goodbye" } }),
         })
         expect(conflict.status).toBe(409)
         expect(yield* responseJson(conflict)).toEqual({
           _tag: "ConflictError",
-          message: "Prompt idempotency key already exists with a different prompt: discord-message-123",
-          resource: "discord-message-123",
+          message: "Prompt message ID already exists with a different prompt: evt_http_prompt",
+          resource: "evt_http_prompt",
         })
       }),
     { git: true, config: { formatter: false, lsp: false } },

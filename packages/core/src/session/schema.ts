@@ -9,11 +9,6 @@ import { Identifier } from "../util/identifier"
 import { V2Schema } from "../v2-schema"
 import { AgentV2 } from "../agent"
 
-export const CreateIdempotencyKey = Schema.NonEmptyString.check(Schema.isMaxLength(200)).pipe(
-  Schema.brand("Session.CreateIdempotencyKey"),
-)
-export type CreateIdempotencyKey = typeof CreateIdempotencyKey.Type
-
 export const CreateContract = Schema.Struct({
   location: Location.Ref,
   agent: AgentV2.ID.pipe(Schema.optional),
@@ -34,6 +29,7 @@ export const DefaultDelivery = "immediate" satisfies Delivery
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),
   withStatics((schema) => ({
+    create: () => schema.make("ses_" + Identifier.descending()),
     descending: (id?: string) => schema.make(id ?? "ses_" + Identifier.descending()),
   })),
 )

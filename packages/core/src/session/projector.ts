@@ -284,7 +284,14 @@ export const layer = Layer.effectDiscard(
     const { db } = yield* Database.Service
     yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
-        yield* db.insert(SessionTable).values(sessionRow(event.data.info)).run().pipe(Effect.orDie)
+        const stored = yield* db
+          .insert(SessionTable)
+          .values(sessionRow(event.data.info))
+          .onConflictDoNothing()
+          .returning({ sessionID: SessionTable.id })
+          .get()
+          .pipe(Effect.orDie)
+        if (!stored) return yield* Effect.die(new CreateAdmissionRace())
         if (event.data.info.workspaceID) {
           yield* db
             .update(WorkspaceTable)
@@ -300,12 +307,12 @@ export const layer = Layer.effectDiscard(
         const admitted = yield* db
           .insert(SessionCreateAdmissionTable)
           .values({
-            idempotency_key: admission.idempotencyKey,
+            session_id: event.data.sessionID,
             contract: admission.contract,
             session: encodeSession(fromRow(row)),
           })
           .onConflictDoNothing()
-          .returning({ idempotencyKey: SessionCreateAdmissionTable.idempotency_key })
+          .returning({ sessionID: SessionCreateAdmissionTable.session_id })
           .get()
           .pipe(Effect.orDie)
         if (!admitted) return yield* Effect.die(new CreateAdmissionRace())
@@ -462,7 +469,6 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
-        if (event.data.idempotencyKey === undefined) return
         const row = yield* db
           .select()
           .from(SessionMessageTable)
@@ -476,12 +482,12 @@ export const layer = Layer.effectDiscard(
           .insert(SessionPromptAdmissionTable)
           .values({
             session_id: event.data.sessionID,
-            idempotency_key: event.data.idempotencyKey,
+            message_id: event.id,
             prompt: event.data.prompt,
             message: encodeUserMessage(message),
           })
           .onConflictDoNothing()
-          .returning({ idempotencyKey: SessionPromptAdmissionTable.idempotency_key })
+          .returning({ messageID: SessionPromptAdmissionTable.message_id })
           .get()
           .pipe(Effect.orDie)
         if (!admitted) return yield* Effect.die(new PromptAdmissionRace())
@@ -490,18 +496,21 @@ export const layer = Layer.effectDiscard(
     // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     // yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     // yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    // yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Delta, (event) => run(db, event))
+    yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Delta, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Called, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Success, (event) => run(db, event))
+    yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Delta, (event) => run(db, event))
+    yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
     // yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
     // yield* events.project(SessionEvent.Compaction.Ended, (event) => run(db, event))

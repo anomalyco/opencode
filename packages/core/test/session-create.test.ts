@@ -14,6 +14,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRuntime } from "@opencode-ai/core/session/runtime"
+import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionCreateAdmissionTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
@@ -28,14 +29,18 @@ const projects = Layer.succeed(
   }),
 )
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database))
+const runtime = SessionRuntime.localLayer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(SessionRunner.noopLayer),
+)
 const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(projects), Layer.provide(runtime))
 const it = testEffect(Layer.mergeAll(database, events, projects, projector, runtime, sessions))
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const key = SessionV2.CreateIdempotencyKey.make("discord-thread-123")
+const id = SessionV2.ID.create()
 
 describe("SessionV2.create", () => {
-  it.effect("creates a fresh projected session when the application key is omitted", () =>
+  it.effect("creates a fresh projected session when the ID is omitted", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
 
@@ -47,10 +52,10 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("returns the original session when the application key is retried", () =>
+  it.effect("returns the original session when the ID is retried", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      const input = { idempotencyKey: key, location }
+      const input = { id, location }
 
       const first = yield* session.create(input)
       const retried = yield* session.create(input)
@@ -80,15 +85,15 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("rejects reuse of one application key with a different immutable create contract", () =>
+  it.effect("rejects reuse of one ID with a different immutable create contract", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      yield* session.create({ idempotencyKey: key, location })
+      yield* session.create({ id, location })
       const changed = [
-        { idempotencyKey: key, location: Location.Ref.make({ directory: AbsolutePath.make("/other") }) },
-        { idempotencyKey: key, location, agent: AgentV2.ID.make("build") },
+        { id, location: Location.Ref.make({ directory: AbsolutePath.make("/other") }) },
+        { id, location, agent: AgentV2.ID.make("build") },
         {
-          idempotencyKey: key,
+          id,
           location,
           model: ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic }),
         },
@@ -105,7 +110,7 @@ describe("SessionV2.create", () => {
   it.effect("returns one admitted session to concurrent exact retries", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      const input = { idempotencyKey: key, location }
+      const input = { id, location }
 
       const admitted = yield* Effect.all([session.create(input), session.create(input)], { concurrency: "unbounded" })
 
@@ -118,7 +123,7 @@ describe("SessionV2.create", () => {
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
-      const input = { idempotencyKey: key, location }
+      const input = { id, location }
       const admitted = yield* session.create(input)
 
       yield* db.delete(SessionTable).where(eq(SessionTable.id, admitted.id)).run().pipe(Effect.orDie)
@@ -145,14 +150,13 @@ describe("SessionV2.create", () => {
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
-      const admitted = yield* session.create({ idempotencyKey: key, location })
+      const admitted = yield* session.create({ id, location })
 
       expect(
         yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, admitted.id)).get().pipe(Effect.orDie),
       ).toMatchObject({
         data: {
           createAdmission: {
-            idempotencyKey: key,
             contract: { location },
           },
         },
@@ -167,7 +171,7 @@ describe("SessionV2.create", () => {
       const defect = new Error("unrelated projector defect")
       yield* event.project(SessionLegacy.Event.Created, () => Effect.die(defect))
 
-      expect(yield* session.create({ idempotencyKey: key, location }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
+      expect(yield* session.create({ id, location }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     }),
   )
 })

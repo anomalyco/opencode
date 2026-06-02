@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { ProviderMetadata } from "@opencode-ai/llm"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { NonNegativeInt } from "../schema"
@@ -63,7 +64,6 @@ export const Prompted = EventV2.define({
   ...options,
   schema: {
     ...Base,
-    idempotencyKey: Prompt.IdempotencyKey.pipe(Schema.optional),
     prompt: Prompt,
   },
 })
@@ -154,6 +154,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      textID: Schema.String,
     },
   })
   export type Started = typeof Started.Type
@@ -163,6 +164,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      textID: Schema.String,
       delta: Schema.String,
     },
   })
@@ -173,6 +175,7 @@ export namespace Text {
     ...options,
     schema: {
       ...Base,
+      textID: Schema.String,
       text: Schema.String,
     },
   })
@@ -259,7 +262,7 @@ export namespace Tool {
       input: Schema.Record(Schema.String, Schema.Unknown),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(Schema.optional),
       }),
     },
   })
@@ -287,7 +290,7 @@ export namespace Tool {
       content: Schema.Array(ToolOutput.Content),
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(Schema.optional),
       }),
     },
   })
@@ -302,7 +305,7 @@ export namespace Tool {
       error: UnknownError,
       provider: Schema.Struct({
         executed: Schema.Boolean,
-        metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+        metadata: ProviderMetadata.pipe(Schema.optional),
       }),
     },
   })

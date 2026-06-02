@@ -8,18 +8,18 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { Prompt } from "./prompt"
 import { SessionProjector } from "./projector"
+import { SessionRunner } from "./runner/index"
 import { SessionSchema } from "./schema"
 import { SessionMessageTable, SessionPromptAdmissionTable } from "./sql"
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
-  idempotencyKey: Prompt.IdempotencyKey,
+  messageID: SessionMessage.ID,
 }) {}
 
 export type PromptInput = {
-  id?: EventV2.ID
+  id?: SessionMessage.ID
   sessionID: SessionSchema.ID
-  idempotencyKey?: Prompt.IdempotencyKey
   prompt: Prompt
   delivery?: SessionSchema.Delivery
   resume?: boolean
@@ -29,7 +29,7 @@ export interface Interface {
   /** Durably admit input at the runtime that owns the Session's Location. */
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionMessage.User, PromptConflictError>
   /** Continue execution through an already-admitted message without appending another prompt. */
-  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
 }
 
 /**
@@ -50,6 +50,7 @@ export const localLayer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
+    const runner = yield* SessionRunner.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const decodeUserMessage = Schema.decodeUnknownEffect(SessionMessage.User)
 
@@ -68,7 +69,7 @@ export const localLayer = Layer.effect(
 
     const findAdmission = Effect.fnUntraced(function* (input: {
       sessionID: SessionSchema.ID
-      idempotencyKey: Prompt.IdempotencyKey
+      messageID: SessionMessage.ID
       prompt: Prompt
     }) {
       const admitted = yield* db
@@ -77,7 +78,7 @@ export const localLayer = Layer.effect(
         .where(
           and(
             eq(SessionPromptAdmissionTable.session_id, input.sessionID),
-            eq(SessionPromptAdmissionTable.idempotency_key, input.idempotencyKey),
+            eq(SessionPromptAdmissionTable.message_id, input.messageID),
           ),
         )
         .get()
@@ -87,7 +88,7 @@ export const localLayer = Layer.effect(
       if (!Prompt.equivalence(prompt, input.prompt)) {
         return yield* new PromptConflictError({
           sessionID: input.sessionID,
-          idempotencyKey: input.idempotencyKey,
+          messageID: input.messageID,
         })
       }
       return yield* decodeUserMessage(admitted.message).pipe(Effect.orDie)
@@ -95,21 +96,16 @@ export const localLayer = Layer.effect(
 
     return Service.of({
       prompt: Effect.fn("SessionRuntime.prompt")(function* (input) {
-        const admission = input.idempotencyKey === undefined
-          ? undefined
-          : { sessionID: input.sessionID, idempotencyKey: input.idempotencyKey, prompt: input.prompt }
-        if (admission !== undefined) {
-          const admitted = yield* findAdmission(admission)
-          if (admitted) return admitted
-        }
-        const messageID = input.id ?? EventV2.ID.create()
+        const messageID = input.id ?? SessionMessage.ID.create()
+        const admission = { sessionID: input.sessionID, messageID, prompt: input.prompt }
+        const admitted = yield* findAdmission(admission)
+        if (admitted) return admitted
         const raced = yield* events
           .publish(
             SessionEvent.Prompted,
             {
               sessionID: input.sessionID,
               timestamp: yield* DateTime.now,
-              idempotencyKey: input.idempotencyKey,
               prompt: input.prompt,
             },
             { id: messageID },
@@ -117,7 +113,7 @@ export const localLayer = Layer.effect(
           .pipe(
             Effect.as<SessionMessage.User | undefined>(undefined),
             Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.PromptAdmissionRace) || admission === undefined) {
+              if (!(defect instanceof SessionProjector.PromptAdmissionRace)) {
                 return Effect.die(defect)
               }
               return findAdmission(admission).pipe(
@@ -129,9 +125,9 @@ export const localLayer = Layer.effect(
         // TODO: Enqueue Session execution after admission without making prompt wait for the model loop.
         return yield* getUserMessage(messageID)
       }),
-      // TODO: Bridge this local continuation to the existing model loop without creating
-      // another user message. The routed implementation will proxy the same contract.
-      resume: Effect.fn("SessionRuntime.resume")(function* () {}),
+      resume: Effect.fn("SessionRuntime.resume")(function* (sessionID) {
+        yield* runner.run(sessionID)
+      }),
     })
   }),
 )

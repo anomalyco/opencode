@@ -1,5 +1,6 @@
 import { produce, type WritableDraft } from "immer"
 import { Effect } from "effect"
+import { ToolOutput } from "../tool-output"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 
@@ -95,8 +96,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.id === callID),
     )
 
-  const latestText = (assistant: DraftAssistant | undefined) =>
-    assistant?.content.findLast((item): item is DraftText => item.type === "text")
+  const latestText = (assistant: DraftAssistant | undefined, textID: string) =>
+    assistant?.content.findLast((item): item is DraftText => item.type === "text" && item.id === textID)
 
   const latestReasoning = (assistant: DraftAssistant | undefined, reasoningID: string) =>
     assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning" && item.id === reasoningID)
@@ -229,13 +230,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
-      "session.next.text.started": () => {
+      "session.next.text.started": (event) => {
         return Effect.gen(function* () {
           const currentAssistant = yield* adapter.getCurrentAssistant()
           if (currentAssistant) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
-                draft.content.push(new SessionMessage.AssistantText({ type: "text", text: "" }) as DraftText)
+                draft.content.push(new SessionMessage.AssistantText({ type: "text", id: event.data.textID, text: "" }) as DraftText)
               }),
             )
           }
@@ -247,7 +248,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           if (currentAssistant) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
-                const match = latestText(draft)
+                const match = latestText(draft, event.data.textID)
                 if (match) match.text += event.data.delta
               }),
             )
@@ -260,7 +261,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           if (currentAssistant) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
-                const match = latestText(draft)
+                const match = latestText(draft, event.data.textID)
                 if (match) match.text = event.data.text
               }),
             )
@@ -312,12 +313,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match) {
                   match.provider = event.data.provider
                   match.time.ran = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateRunning({
                     status: "running",
                     input: event.data.input,
                     structured: {},
                     content: [],
-                  }
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -350,12 +351,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match && match.state.status === "running") {
                   match.provider = event.data.provider
                   match.time.completed = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateCompleted({
                     status: "completed",
                     input: match.state.input,
                     structured: event.data.structured,
-                    content: [...event.data.content],
-                  }
+                    content: event.data.content.map((item) =>
+                      item.type === "text" ? new ToolOutput.TextContent(item) : new ToolOutput.FileContent(item)),
+                  }) as DraftTool["state"]
                 }
               }),
             )
@@ -372,13 +374,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 if (match && match.state.status === "running") {
                   match.provider = event.data.provider
                   match.time.completed = event.data.timestamp
-                  match.state = {
+                  match.state = new SessionMessage.ToolStateError({
                     status: "error",
                     error: event.data.error,
                     input: match.state.input,
                     structured: match.state.structured,
                     content: match.state.content,
-                  }
+                  }) as DraftTool["state"]
                 }
               }),
             )

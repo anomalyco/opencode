@@ -10,16 +10,24 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRuntime } from "@opencode-ai/core/session/runtime"
+import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database))
+const runnerCalls: SessionV2.ID[] = []
+const runner = Layer.succeed(SessionRunner.Service, SessionRunner.Service.of({
+  run: (sessionID) => Effect.sync(() => {
+    runnerCalls.push(sessionID)
+  }),
+}))
+const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer), Layer.provide(runtime))
-const it = testEffect(Layer.mergeAll(database, events, projector, runtime, sessions))
+const it = testEffect(Layer.mergeAll(database, events, projector, runner, runtime, sessions))
 const sessionID = SessionV2.ID.make("ses_prompt_test")
+const messageID = SessionMessage.ID.create()
 const runtimeCalls: SessionRuntime.PromptInput[] = []
 const resumeCalls: SessionV2.ID[] = []
 const delegatedMessage = new SessionMessage.User({
@@ -113,13 +121,15 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fix the failing tests" }) })
 
+      runnerCalls.length = 0
       yield* session.resume(sessionID)
 
       expect(yield* session.messages({ sessionID })).toEqual([message])
+      expect(runnerCalls).toEqual([sessionID])
     }),
   )
 
-  it.effect("admits distinct messages when the application key is omitted", () =>
+  it.effect("admits distinct messages when the ID is omitted", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -133,13 +143,13 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("returns the original admitted message when the application key is retried", () =>
+  it.effect("returns the original admitted message when the ID is retried", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       const input = {
         sessionID,
-        idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+        id: messageID,
         prompt: new Prompt({ text: "Fix the failing tests" }),
       }
 
@@ -151,20 +161,20 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("rejects reuse of one application key with a different prompt", () =>
+  it.effect("rejects reuse of one ID with a different prompt", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
 
       yield* session.prompt({
         sessionID,
-        idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+        id: messageID,
         prompt: new Prompt({ text: "Fix the failing tests" }),
       })
       const failure = yield* session
         .prompt({
           sessionID,
-          idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+          id: messageID,
           prompt: new Prompt({ text: "Delete the failing tests" }),
         })
         .pipe(Effect.flip)
@@ -180,7 +190,7 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const input = {
         sessionID,
-        idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+        id: messageID,
         prompt: new Prompt({ text: "Fix the failing tests" }),
       }
 

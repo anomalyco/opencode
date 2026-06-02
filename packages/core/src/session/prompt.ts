@@ -50,10 +50,3 @@ export class Prompt extends Schema.Class<Prompt>("Prompt")({
   static readonly decodeUnknown = Schema.decodeUnknownEffect(Prompt)
   static readonly equivalence = Schema.toEquivalence(Prompt)
 }
-
-export namespace Prompt {
-  export const IdempotencyKey = Schema.NonEmptyString.check(Schema.isMaxLength(200)).pipe(
-    Schema.brand("Prompt.IdempotencyKey"),
-  )
-  export type IdempotencyKey = typeof IdempotencyKey.Type
-}
