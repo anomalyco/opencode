@@ -144,7 +144,7 @@
     width: 12px;
     height: 12px;
     border-radius: 9999px;
-    border: 2px solid var(--color-v2-border-border-strong);
+    border: 2px solid color-mix(in srgb, var(--v2-icon-icon-accent) 30%, transparent);
     border-top-color: var(--v2-icon-icon-accent);
     animation: titlebar-update-loader-spin 0.67s linear infinite;
     transform-origin: 50% 50%;
