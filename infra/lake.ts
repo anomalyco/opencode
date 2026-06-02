@@ -268,6 +268,7 @@ export const lakeIngest = new sst.Linkable("LakeIngest", {
     secret: ingestSecret.result,
   },
 })
+export const lakeIngestSecret = new sst.Secret("LakeIngestSecret", ingestSecret.result)
 
 export const lakeQueryPermissions = [
   {
@@ -320,3 +321,39 @@ export const lakeQueryPermissions = [
     resources: ["*"],
   },
 ]
+
+////////////////
+// S3 Tables
+////////////////
+
+const modelsNamespace = new aws.s3tables.Namespace("LakeModelsNamespace", {
+  namespace: "models",
+  tableBucketArn: tableBucket.arn,
+})
+
+new aws.s3tables.Table(
+  "LakeModelsEventTable",
+  {
+    name: "hit",
+    namespace: modelsNamespace.namespace,
+    tableBucketArn: modelsNamespace.tableBucketArn,
+    format: "ICEBERG",
+    metadata: {
+      iceberg: {
+        schema: {
+          fields: [
+            { name: "event_timestamp", type: "string", required: false },
+            { name: "event_date", type: "string", required: false },
+            { name: "event_type", type: "string", required: false },
+            { name: "country", type: "string", required: false },
+            { name: "user_agent", type: "string", required: false },
+            { name: "ip", type: "string", required: false },
+            { name: "ip_prefix", type: "string", required: false },
+            { name: "path", type: "string", required: false },
+          ],
+        },
+      },
+    },
+  },
+  { deleteBeforeReplace: $app.stage !== "production" },
+)

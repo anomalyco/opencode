@@ -1,11 +1,6 @@
 import { lakeAthenaWorkgroup, lakeCatalog, lakeCluster, lakeQueryPermissions, lakeRegion, tableBucket } from "./lake"
 import { EMAILOCTOPUS_API_KEY } from "./app"
-
-const domain = (() => {
-  if ($app.stage === "production") return "stats.opencode.ai"
-  if ($app.stage === "dev") return "stats.dev.opencode.ai"
-  return `stats.${$app.stage}.dev.opencode.ai`
-})()
+import { domain } from "./stage"
 
 ////////////////
 // LAKE
@@ -42,6 +37,7 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "request_length", type: "long", required: false },
             { name: "status", type: "int", required: false },
             { name: "ip", type: "string", required: false },
+            { name: "ip_prefix", type: "string", required: false },
             { name: "is_stream", type: "boolean", required: false },
             { name: "session", type: "string", required: false },
             { name: "request", type: "string", required: false },
@@ -167,10 +163,10 @@ new sst.x.DevCommand("StatsStudio", {
 export const app = new sst.cloudflare.x.SolidStart("Stats", {
   path: "packages/stats/app",
   buildCommand: "bun run build",
-  domain,
+  domain: `stats.${domain}`,
   link: [database, EMAILOCTOPUS_API_KEY],
   environment: {
-    PUBLIC_URL: `https://${domain}/stats`,
+    PUBLIC_URL: `https://stats.${domain}/stats`,
   },
 })
 
