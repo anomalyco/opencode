@@ -61,6 +61,7 @@ import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { isOverflow } from "./overflow"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -87,8 +88,51 @@ function isOrphanedInterruptedTool(part: SessionLegacy.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+function hasMeaningfulAssistantOutput(parts: SessionLegacy.Part[]) {
+  return parts.some((part) => {
+    if (part.type === "text") return part.text.trim().length > 0
+    return part.type === "tool" || part.type === "patch" || part.type === "compaction"
+  })
+}
+
+function isEmptyAssistantResponse(info: SessionLegacy.Assistant, parts: SessionLegacy.Part[]) {
+  return !info.error && !hasMeaningfulAssistantOutput(parts)
+}
+
+function hasContextPressure(msgs: SessionLegacy.WithParts[], model: Provider.Model, cfg: Config.Info) {
+  return msgs
+    .slice(msgs.findLastIndex((msg) => msg.parts.some((part) => part.type === "compaction")) + 1)
+    .some((msg) => msg.info.role === "assistant" && (msg.info.finish === "length" || isOverflow({ cfg, tokens: msg.info.tokens, model })))
+}
+
+function isAutomaticCompactionContinuation(msgs: SessionLegacy.WithParts[], lastUserMsg: SessionLegacy.WithParts | undefined) {
+  if (!lastUserMsg) return false
+  if (
+    !lastUserMsg.parts.some(
+      (part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true,
+    )
+  )
+    return false
+
+  const compaction = msgs.findLast(
+    (msg) =>
+      msg.info.role === "user" &&
+      msg.info.id < lastUserMsg.info.id &&
+      msg.parts.some((part) => part.type === "compaction" && part.auto === true),
+  )
+  if (!compaction) return false
+  return msgs.some(
+    (msg) =>
+      msg.info.role === "assistant" &&
+      msg.info.summary === true &&
+      msg.info.parentID === compaction.info.id &&
+      msg.info.id < lastUserMsg.info.id,
+  )
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly cancelOrdinary: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionLegacy.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionLegacy.WithParts, Session.BusyError>
@@ -140,6 +184,12 @@ export const layer = Layer.effect(
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
+      yield* state.cancel(sessionID)
+    })
+
+    const cancelOrdinary = Effect.fn("SessionPrompt.cancelOrdinary")(function* (sessionID: SessionID) {
+      yield* elog.info("cancel ordinary", { sessionID })
+      if ((yield* compaction.state(sessionID)).type !== "idle") return
       yield* state.cancel(sessionID)
     })
 
@@ -1212,11 +1262,23 @@ export const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
+    const waitForPromptAppendBoundary = Effect.fn("SessionPrompt.waitForPromptAppendBoundary")(function* (
+      sessionID: SessionID,
+    ) {
+      const compact = yield* compaction.state(sessionID)
+      if (compact.type === "idle") return
+      yield* compaction.markResume(sessionID)
+      if (compact.type === "active" && compact.messageID) yield* loop({ sessionID })
+      if (compact.type === "pending") yield* loop({ sessionID })
+      yield* compaction.waitForIdle(sessionID)
+    })
+
     const prompt: (input: PromptInput) => Effect.Effect<SessionLegacy.WithParts, Image.Error> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
+      yield* waitForPromptAppendBoundary(input.sessionID)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
@@ -1239,6 +1301,55 @@ export const layer = Layer.effect(
       const msgs = yield* sessions.messages({ sessionID, limit: 1 }).pipe(Effect.orDie)
       if (msgs.length > 0) return msgs[0]
       throw new Error("Impossible")
+    })
+
+    const processCompactionTask = Effect.fn("SessionPrompt.processCompactionTask")(function* (input: {
+      messages: SessionLegacy.WithParts[]
+      parentID: MessageID
+      sessionID: SessionID
+      auto: boolean
+      overflow?: boolean
+    }) {
+      if (input.auto !== true) return yield* compaction.process(input)
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const exit = yield* compaction.process(input).pipe(Effect.exit)
+        if (Exit.isSuccess(exit) && exit.value === "continue") return "continue" as const
+        if (Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)) return yield* Effect.failCause(exit.cause)
+        if (attempt === 3) break
+
+        yield* status.set(input.sessionID, {
+          type: "retry",
+          attempt,
+          message: `Automatic compaction failed; retrying compaction ${attempt}/2`,
+          next: Date.now(),
+        })
+      }
+
+      const error = new NamedError.Unknown({ message: "Automatic compaction failed after 3 attempts" })
+      yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+      throw error
+    })
+
+    const handleAutoCompactionCreateResult = Effect.fn("SessionPrompt.handleAutoCompactionCreateResult")(function* (
+      sessionID: SessionID,
+      result: SessionCompaction.CreateResult,
+    ) {
+      if (result.type !== "joined") return
+      yield* compaction.markResume(sessionID)
+      yield* compaction.waitForIdle(sessionID)
+    })
+
+    const waitForCompactionBoundary = Effect.fn("SessionPrompt.waitForCompactionBoundary")(function* (
+      sessionID: SessionID,
+    ) {
+      const compact = yield* compaction.state(sessionID)
+      if (compact.type === "idle") return false
+      yield* compaction.markResume(sessionID)
+      if (compact.type === "active") {
+        yield* compaction.waitForIdle(sessionID)
+      }
+      return true
     })
 
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn("SessionPrompt.run")(
@@ -1301,23 +1412,40 @@ export const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
 
-          if (task?.type === "subtask") {
-            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
-            continue
-          }
-
           if (task?.type === "compaction") {
-            const result = yield* compaction.process({
+            const compact = yield* compaction.state(sessionID)
+            const processing =
+              compact.type === "active" &&
+              compact.messageID === task.messageID &&
+              msgs.some(
+                (msg) =>
+                  msg.info.role === "assistant" && msg.info.summary === true && msg.info.parentID === task.messageID,
+              )
+            if (processing) {
+              yield* compaction.markResume(sessionID)
+              yield* compaction.waitForIdle(sessionID)
+              continue
+            }
+            const result = yield* processCompactionTask({
               messages: msgs,
               parentID: lastUser.id,
               sessionID,
               auto: task.auto,
               overflow: task.overflow,
             })
+            if (yield* compaction.drainResume(sessionID)) continue
             if (result === "stop") break
+            continue
+          }
+
+          if (yield* waitForCompactionBoundary(sessionID)) continue
+
+          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+
+          if (task?.type === "subtask") {
+            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
             continue
           }
 
@@ -1326,7 +1454,8 @@ export const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            const result = yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            yield* handleAutoCompactionCreateResult(sessionID, result)
             continue
           }
 
@@ -1345,6 +1474,8 @@ export const layer = Layer.effect(
             Effect.provideService(AppFileSystem.Service, fsys),
             Effect.provideService(Session.Service, sessions),
           )
+
+          if (yield* waitForCompactionBoundary(sessionID)) continue
 
           const msg: SessionLegacy.Assistant = {
             id: MessageID.ascending(),
@@ -1372,6 +1503,11 @@ export const layer = Layer.effect(
             msg.time.completed = Date.now()
             yield* sessions.updateMessage(msg)
           })
+
+          if (yield* waitForCompactionBoundary(sessionID)) {
+            yield* finalizeInterruptedAssistant
+            continue
+          }
 
           const handle = yield* processor
             .create({
@@ -1434,6 +1570,8 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+            if (yield* waitForCompactionBoundary(sessionID)) return "continue" as const
+
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
@@ -1455,6 +1593,10 @@ export const layer = Layer.effect(
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
+            const currentParts = yield* MessageV2.parts(handle.message.id).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const isEmpty = isEmptyAssistantResponse(handle.message, currentParts)
 
             if (structured !== undefined) {
               handle.message.structured = structured
@@ -1475,16 +1617,52 @@ export const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            const isCompactionContinue = isAutomaticCompactionContinuation(msgs, lastUserMsg)
+            if (isEmpty && isCompactionContinue) {
+              handle.message.error = new NamedError.Unknown({
+                message: "Model returned an empty response after automatic compaction; stopping to avoid a compaction loop.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              return "break" as const
+            }
+
             if (result === "compact") {
-              yield* compaction.create({
+              const compact = yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
                 model: lastUser.model,
                 auto: true,
-                overflow: !handle.message.finish,
+                overflow: !handle.message.finish || handle.message.finish === "unknown",
               })
+              yield* handleAutoCompactionCreateResult(sessionID, compact)
+              return "continue" as const
             }
+
+            if (isEmpty) {
+              const cfg = yield* config.get().pipe(Effect.provideService(Config.Service, config))
+              if (hasContextPressure(msgs, model, cfg)) {
+                const compact = yield* compaction.create({
+                  sessionID,
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  auto: true,
+                  overflow: true,
+                })
+                yield* handleAutoCompactionCreateResult(sessionID, compact)
+                return "continue" as const
+              }
+
+              handle.message.error = new NamedError.Unknown({
+                message:
+                  "Model returned an empty response with no content, tool call, or patch; stopping instead of continuing silently.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              return "break" as const
+            }
+
+            if (result === "stop") return "break" as const
             return "continue" as const
           }).pipe(
             Effect.ensuring(instruction.clear(handle.message.id)),
@@ -1501,6 +1679,7 @@ export const layer = Layer.effect(
 
     const loop: (input: LoopInput) => Effect.Effect<SessionLegacy.WithParts> = Effect.fn("SessionPrompt.loop")(
       function* (input: LoopInput) {
+        if ((yield* compaction.state(input.sessionID)).type !== "idle") yield* compaction.markResume(input.sessionID)
         return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
       },
     )
@@ -1629,9 +1808,10 @@ export const layer = Layer.effect(
       return result
     })
 
-    return Service.of({
-      cancel,
-      prompt,
+      return Service.of({
+        cancel,
+        cancelOrdinary,
+        prompt,
       loop,
       shell,
       command,

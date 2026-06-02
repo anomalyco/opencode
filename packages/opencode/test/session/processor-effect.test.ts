@@ -120,6 +120,30 @@ const waitFor = <A>(check: Effect.Effect<A | undefined>, message: string) =>
     return yield* Effect.fail(new Error(message))
   })
 
+function emptyUnknownResponse(input: { usage: { input: number; output: number } }) {
+  return raw({
+    head: [
+      {
+        id: "chatcmpl-test",
+        object: "chat.completion.chunk",
+        choices: [{ delta: { role: "assistant" } }],
+      },
+    ],
+    tail: [
+      {
+        id: "chatcmpl-test",
+        object: "chat.completion.chunk",
+        choices: [{ delta: {}, finish_reason: "unknown" }],
+        usage: {
+          prompt_tokens: input.usage.input,
+          completion_tokens: input.usage.output,
+          total_tokens: input.usage.input + input.usage.output,
+        },
+      },
+    ],
+  })
+}
+
 const user = Effect.fn("TestSession.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
@@ -391,6 +415,57 @@ it.live("session.processor effect tests stop after token overflow requests compa
     { config: (url) => providerCfg(url) },
   ),
 )
+
+it.live("session.processor effect tests compact empty unknown responses near context limit", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "compact empty")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const base = yield* provider.getModel(ref.providerID, ref.modelID)
+        const mdl = { ...base, limit: { context: 20, output: 10 } }
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionLegacy.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "compact empty" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+
+        expect(value).toBe("compact")
+        expect(handle.message.finish).toBe("unknown")
+        expect(handle.message.error).toBeUndefined()
+        expect(parts.some((part) => part.type === "text")).toBe(false)
+        expect(parts.some((part) => part.type === "reasoning")).toBe(false)
+        expect(parts.some((part) => part.type === "tool")).toBe(false)
+        expect(parts.some((part) => part.type === "step-finish" && part.reason === "unknown")).toBe(true)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 
 it.live("session.processor effect tests capture reasoning from http mock", () =>
   provideTmpdirServer(

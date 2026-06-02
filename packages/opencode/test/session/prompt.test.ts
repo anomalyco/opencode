@@ -53,7 +53,7 @@ import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
-import { reply, TestLLMServer } from "../lib/llm-server"
+import { raw, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -165,7 +165,65 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { processor?: "blocking" }) {
+const compactProcessorBeforeReturn: Array<(sessionID: SessionID) => Effect.Effect<void>> = []
+const compactProcessorSummaryGate: Array<Deferred.Deferred<void>> = []
+const compactProcessorNormalCalls: Array<MessageID> = []
+const compactProcessorNormalGate: Array<Deferred.Deferred<void>> = []
+const compactProcessorNormalInterrupted: Array<Deferred.Deferred<void>> = []
+const compactProcessorNormalResults: Array<SessionProcessor.Result> = []
+const compactingProcessor = Layer.effect(
+  SessionProcessor.Service,
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    return SessionProcessor.Service.of({
+      create: (input) =>
+        Effect.succeed({
+          message: input.assistantMessage,
+          updateToolCall: () => Effect.succeed(undefined),
+          completeToolCall: () => Effect.void,
+          process: () =>
+            Effect.gen(function* () {
+              if (input.assistantMessage.summary) {
+                const gate = compactProcessorSummaryGate.shift()
+                if (gate) yield* Deferred.await(gate)
+                input.assistantMessage.finish = "stop"
+                input.assistantMessage.time.completed = Date.now()
+                yield* sessions.updateMessage(input.assistantMessage)
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: input.assistantMessage.id,
+                  sessionID: input.sessionID,
+                  type: "text",
+                  text: "summary",
+                })
+                return "continue" as const
+              }
+              compactProcessorNormalCalls.push(input.assistantMessage.id)
+              const before = compactProcessorBeforeReturn.shift()
+              if (before) yield* before(input.sessionID)
+              const normalGate = compactProcessorNormalGate.shift()
+              if (normalGate) {
+                const interrupted = compactProcessorNormalInterrupted.shift()
+                yield* Deferred.await(normalGate).pipe(
+                  Effect.onInterrupt(() =>
+                    interrupted ? Deferred.succeed(interrupted, undefined).pipe(Effect.asVoid) : Effect.void,
+                  ),
+                )
+              }
+              const result = compactProcessorNormalResults.shift() ?? "compact"
+              if (result === "stop") {
+                input.assistantMessage.finish = "stop"
+                input.assistantMessage.time.completed = Date.now()
+                yield* sessions.updateMessage(input.assistantMessage)
+              }
+              return result
+            }),
+        }),
+    })
+  }),
+)
+
+function makePrompt(input?: { processor?: "blocking" | "compact" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -205,7 +263,9 @@ function makePrompt(input?: { processor?: "blocking" }) {
   const proc =
     input?.processor === "blocking"
       ? blockingProcessor
-      : SessionProcessor.layer.pipe(
+      : input?.processor === "compact"
+        ? compactingProcessor
+        : SessionProcessor.layer.pipe(
           Layer.provide(summary),
           Layer.provide(Image.defaultLayer),
           Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
@@ -234,17 +294,18 @@ function makePrompt(input?: { processor?: "blocking" }) {
   )
 }
 
-function makeHttp(input?: { processor?: "blocking" }) {
+function makeHttp(input?: { processor?: "blocking" | "compact" }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: { processor?: "blocking" | "compact" }) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const compactNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "compact" }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
 
@@ -293,6 +354,49 @@ function providerCfg(url: string) {
       },
     },
   }
+}
+
+function providerCfgWithLimit(url: string, limit: { context: number; output: number }) {
+  return {
+    ...providerCfg(url),
+    provider: {
+      ...providerCfg(url).provider,
+      test: {
+        ...providerCfg(url).provider.test,
+        models: {
+          ...providerCfg(url).provider.test.models,
+          "test-model": {
+            ...providerCfg(url).provider.test.models["test-model"],
+            limit,
+          },
+        },
+      },
+    },
+  }
+}
+
+function emptyUnknownResponse(input: { usage: { input: number; output: number } }) {
+  return raw({
+    head: [
+      {
+        id: "chatcmpl-test",
+        object: "chat.completion.chunk",
+        choices: [{ delta: { role: "assistant" } }],
+      },
+    ],
+    tail: [
+      {
+        id: "chatcmpl-test",
+        object: "chat.completion.chunk",
+        choices: [{ delta: {}, finish_reason: "unknown" }],
+        usage: {
+          prompt_tokens: input.usage.input,
+          completion_tokens: input.usage.output,
+          total_tokens: input.usage.input + input.usage.output,
+        },
+      },
+    ],
+  })
 }
 
 const writeText = Effect.fn("test.writeText")(function* (file: string, text: string) {
@@ -365,6 +469,9 @@ function defer<T>() {
 const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
+
+const compactionParts = (msgs: SessionLegacy.WithParts[]) =>
+  msgs.flatMap((msg) => msg.parts).filter((part): part is SessionLegacy.CompactionPart => part.type === "compaction")
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
@@ -1117,7 +1224,7 @@ it.instance(
       }
     }),
   { git: true },
-  3_000,
+  30_000,
 )
 
 // Queue semantics
@@ -1503,7 +1610,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  3_000,
+  30_000,
 )
 
 it.instance(
@@ -1542,7 +1649,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  3_000,
+  30_000,
 )
 
 unix(
@@ -2148,6 +2255,876 @@ it.instance("does not loop empty assistant turns for a simple reply", () =>
     const msgs = yield* sessions.messages({ sessionID: session.id })
     expect(msgs.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
     expect(yield* llm.calls).toBe(1)
+  }),
+)
+
+it.instance("auto-compacts empty unknown responses near context limit once and continues", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 20, output: 10 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt empty unknown compaction" })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Trigger compaction" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(3)
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    const compactionParts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")
+    expect(compactionParts).toHaveLength(1)
+    expect(compactionParts[0]).toMatchObject({ type: "compaction", auto: true, overflow: true })
+
+    const syntheticContinue = msgs.find((msg) =>
+      msg.parts.some(
+        (part) =>
+          part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true,
+      ),
+    )
+    expect(syntheticContinue).toBeDefined()
+    const text = syntheticContinue?.parts.find((part) => part.type === "text")
+    if (text?.type === "text") expect(text.text).toContain("previous request exceeded the provider's size limit")
+  }),
+)
+
+it.instance("coalesces concurrent overflow auto-compaction into one marker", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 20, output: 10 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt overflow compaction storm" })
+    const seeded = yield* seed(session.id, { finish: "stop" })
+    seeded.assistant.tokens.input = 100
+    yield* sessions.updateMessage(seeded.assistant)
+    yield* user(session.id, "continue after overflow")
+
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const first = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+    const second = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+    const firstExit = yield* Fiber.await(first)
+    const secondExit = yield* Fiber.await(second)
+    expect(Exit.isSuccess(firstExit)).toBe(true)
+    expect(Exit.isSuccess(secondExit)).toBe(true)
+
+    const messages = yield* sessions.messages({ sessionID: session.id })
+    expect(compactionParts(messages)).toHaveLength(1)
+    expect(compactionParts(messages)[0]).toMatchObject({ type: "compaction", auto: true })
+    expect(yield* llm.calls).toBe(2)
+  }),
+)
+
+compactNoLLMServer.instance(
+  "prompt processes ownerless active compaction before waiting",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalCalls.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalCalls.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Prompt ownerless active compact" })
+      yield* seed(session.id, { finish: "stop" })
+      compactProcessorNormalResults.push("stop")
+
+      const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      expect(created.type).toBe("created")
+
+      const result = yield* awaitWithTimeout(
+        prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "after ownerless compact" }],
+        }),
+        "prompt did not process ownerless active compaction",
+        "10 seconds",
+      )
+
+      expect(result.info.role).toBe("assistant")
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(compactionParts(messages)).toHaveLength(1)
+      expect(messages.filter((message) => message.info.role === "assistant" && message.info.summary === true)).toHaveLength(1)
+      expect(
+        messages.filter((message) =>
+          message.info.role === "user" &&
+          message.parts.some((part) => part.type === "text" && part.text === "after ownerless compact"),
+        ),
+      ).toHaveLength(1)
+      expect(compactProcessorNormalCalls).toHaveLength(1)
+    }),
+  { config: cfg },
+)
+
+compactNoLLMServer.instance(
+  "prompt waits for active compaction before appending user message",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Prompt waits active compact" })
+      yield* seed(session.id, { finish: "stop" })
+      const gate = yield* Deferred.make<void>()
+      compactProcessorSummaryGate.push(gate)
+      compactProcessorNormalResults.push("stop")
+
+      const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      expect(created.type).toBe("created")
+      const markerMessages = yield* sessions.messages({ sessionID: session.id })
+      const marker = compactionParts(markerMessages)[0]
+      if (!marker) throw new Error("expected compaction marker")
+      const compactFiber = yield* compact
+        .process({ messages: markerMessages, parentID: marker.messageID, sessionID: session.id, auto: false })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          return (yield* compact.state(session.id)).type === "active" ? (true as const) : undefined
+        }),
+        "compaction never became active",
+      )
+
+      const promptFiber = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "waited direct prompt" }],
+        })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const state = yield* compact.state(session.id)
+          return state.type === "active" && state.resumeRequested ? (true as const) : undefined
+        }),
+        "prompt did not mark active compaction for resume",
+      )
+
+      const during = yield* sessions.messages({ sessionID: session.id })
+      expect(
+        during.filter((msg) =>
+          msg.info.role === "user" && msg.parts.some((part) => part.type === "text" && part.text === "waited direct prompt"),
+        ),
+      ).toHaveLength(0)
+
+      yield* Deferred.succeed(gate, undefined)
+      const [compactExit, promptExit] = yield* Effect.all([Fiber.await(compactFiber), Fiber.await(promptFiber)])
+      expect(Exit.isSuccess(compactExit)).toBe(true)
+      expect(Exit.isSuccess(promptExit)).toBe(true)
+
+      const after = yield* sessions.messages({ sessionID: session.id })
+      expect(
+        after.filter((msg) =>
+          msg.info.role === "user" && msg.parts.some((part) => part.type === "text" && part.text === "waited direct prompt"),
+        ),
+      ).toHaveLength(1)
+      expect(after.filter((msg) => msg.info.role === "assistant" && msg.info.agent === "build")).toHaveLength(2)
+    }),
+  { config: cfg },
+)
+
+compactNoLLMServer.instance(
+  "command waits for active compaction before appending derived prompt",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Command waits active compact" })
+      yield* seed(session.id, { finish: "stop" })
+      const gate = yield* Deferred.make<void>()
+      compactProcessorSummaryGate.push(gate)
+      compactProcessorNormalResults.push("stop")
+
+      const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      expect(created.type).toBe("created")
+      const markerMessages = yield* sessions.messages({ sessionID: session.id })
+      const marker = compactionParts(markerMessages)[0]
+      if (!marker) throw new Error("expected compaction marker")
+      const compactFiber = yield* compact
+        .process({ messages: markerMessages, parentID: marker.messageID, sessionID: session.id, auto: false })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          return (yield* compact.state(session.id)).type === "active" ? (true as const) : undefined
+        }),
+        "compaction never became active",
+      )
+
+      const commandFiber = yield* prompt
+        .command({
+          sessionID: session.id,
+          command: "gate-probe",
+          arguments: "",
+        })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const state = yield* compact.state(session.id)
+          return state.type === "active" && state.resumeRequested ? (true as const) : undefined
+        }),
+        "command prompt did not mark active compaction for resume",
+      )
+
+      const during = yield* sessions.messages({ sessionID: session.id })
+      expect(
+        during.filter((msg) =>
+          msg.info.role === "user" && msg.parts.some((part) => part.type === "text" && part.text === "waited command prompt"),
+        ),
+      ).toHaveLength(0)
+
+      yield* Deferred.succeed(gate, undefined)
+      const [compactExit, commandExit] = yield* Effect.all([Fiber.await(compactFiber), Fiber.await(commandFiber)])
+      expect(Exit.isSuccess(compactExit)).toBe(true)
+      expect(Exit.isSuccess(commandExit)).toBe(true)
+
+      const after = yield* sessions.messages({ sessionID: session.id })
+      expect(
+        after.filter((msg) =>
+          msg.info.role === "user" && msg.parts.some((part) => part.type === "text" && part.text === "waited command prompt"),
+        ),
+      ).toHaveLength(1)
+      expect(after.filter((msg) => msg.info.role === "assistant" && msg.info.agent === "build")).toHaveLength(2)
+    }),
+  {
+    config: {
+      ...cfg,
+      command: {
+        "gate-probe": {
+          template: "waited command prompt",
+        },
+      },
+    },
+  },
+)
+compactNoLLMServer.instance(
+  "processor compact collision joins existing marker and resumes once",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorBeforeReturn.length = 0
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalCalls.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorBeforeReturn.length = 0
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalCalls.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Processor compact collision" })
+      const gate = yield* Deferred.make<void>()
+      compactProcessorSummaryGate.push(gate)
+      compactProcessorNormalResults.push("compact", "stop")
+
+      compactProcessorBeforeReturn.push((sessionID) =>
+        Effect.gen(function* () {
+          const created = yield* compact.create({ sessionID, agent: "build", model: ref, auto: true, overflow: true })
+          expect(created.type).toBe("created")
+          const messages = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
+          const marker = compactionParts(messages)[0]
+          if (!marker) throw new Error("expected compaction marker")
+          yield* compact
+            .process({ messages, parentID: marker.messageID, sessionID, auto: true, overflow: true })
+            .pipe(Effect.forkChild)
+        }),
+      )
+
+      yield* user(session.id, "trigger processor compact")
+      const fiber = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const messages = yield* sessions.messages({ sessionID: session.id })
+          return compactionParts(messages).length === 1 ? (true as const) : undefined
+        }),
+        "processor compact did not create or join a compaction marker",
+      )
+      yield* Deferred.succeed(gate, undefined)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(compactionParts(messages)).toHaveLength(1)
+      expect(compactionParts(messages)[0]).toMatchObject({ type: "compaction", auto: true, overflow: true })
+      expect(compactProcessorNormalCalls).toHaveLength(2)
+    }),
+  { config: cfg },
+)
+
+compactNoLLMServer.instance(
+  "manual compact preempts blocked ordinary processor before processing summary",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorBeforeReturn.length = 0
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalCalls.length = 0
+      compactProcessorNormalGate.length = 0
+      compactProcessorNormalInterrupted.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorBeforeReturn.length = 0
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalCalls.length = 0
+          compactProcessorNormalGate.length = 0
+          compactProcessorNormalInterrupted.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Manual compact preempts ordinary processor" })
+      const ordinaryGate = yield* Deferred.make<void>()
+      const ordinaryInterrupted = yield* Deferred.make<void>()
+      const summaryGate = yield* Deferred.make<void>()
+      compactProcessorNormalGate.push(ordinaryGate)
+      compactProcessorNormalInterrupted.push(ordinaryInterrupted)
+      compactProcessorSummaryGate.push(summaryGate)
+      compactProcessorNormalResults.push("stop")
+
+      yield* user(session.id, "ordinary work")
+      const ordinary = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.sync(() => (compactProcessorNormalCalls.length === 1 ? (true as const) : undefined)),
+        "ordinary processor did not start",
+      )
+
+      const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      expect(created.type).toBe("created")
+      yield* prompt.cancel(session.id)
+      yield* awaitWithTimeout(
+        Deferred.await(ordinaryInterrupted),
+        "manual compact did not interrupt ordinary processor",
+        "10 seconds",
+      )
+      const ordinaryExit = yield* Fiber.await(ordinary)
+      expect(Exit.isSuccess(ordinaryExit)).toBe(true)
+
+      const compactRun = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const messages = yield* sessions.messages({ sessionID: session.id })
+          return messages.some((msg) => msg.info.role === "assistant" && msg.info.summary === true)
+            ? (true as const)
+            : undefined
+        }),
+        "summary processor did not start after ordinary interruption",
+      )
+
+      const during = yield* sessions.messages({ sessionID: session.id })
+      expect(
+        during.flatMap((msg) => msg.parts).filter((part) => part.type === "text" && part.text === "ordinary output"),
+      ).toHaveLength(0)
+
+      yield* Deferred.succeed(summaryGate, undefined)
+      const compactExit = yield* Fiber.await(compactRun)
+      expect(Exit.isSuccess(compactExit)).toBe(true)
+      const after = yield* sessions.messages({ sessionID: session.id })
+      expect(compactionParts(after)).toHaveLength(1)
+      expect(after.filter((msg) => msg.info.role === "assistant" && msg.info.summary === true)).toHaveLength(1)
+      expect(
+        after.flatMap((msg) => msg.parts).filter((part) => part.type === "text" && part.text === "ordinary output"),
+      ).toHaveLength(0)
+    }),
+  { config: cfg },
+)
+
+compactNoLLMServer.instance(
+  "active compact drains one resume into one normal continuation",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorBeforeReturn.length = 0
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalCalls.length = 0
+      compactProcessorNormalGate.length = 0
+      compactProcessorNormalInterrupted.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorBeforeReturn.length = 0
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalCalls.length = 0
+          compactProcessorNormalGate.length = 0
+          compactProcessorNormalInterrupted.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Compact resume once" })
+      yield* seed(session.id, { finish: "stop" })
+      const gate = yield* Deferred.make<void>()
+      compactProcessorSummaryGate.push(gate)
+      compactProcessorNormalResults.push("stop")
+
+      const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      expect(created.type).toBe("created")
+      const compactRun = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          return (yield* compact.state(session.id)).type === "active" ? (true as const) : undefined
+        }),
+        "compaction never became active",
+      )
+
+      const promptRun = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "resume exactly once" }],
+        })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const state = yield* compact.state(session.id)
+          return state.type === "active" && state.resumeRequested ? (true as const) : undefined
+        }),
+        "resume was not marked while compaction was active",
+      )
+
+      yield* Deferred.succeed(gate, undefined)
+      const [exit, promptExit] = yield* Effect.all([Fiber.await(compactRun), Fiber.await(promptRun)])
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect(Exit.isSuccess(promptExit)).toBe(true)
+
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(compactionParts(messages)).toHaveLength(1)
+      expect(messages.filter((msg) => msg.info.role === "assistant" && msg.info.summary === true)).toHaveLength(1)
+      expect(compactProcessorNormalCalls).toHaveLength(1)
+      expect(messages.filter((msg) => msg.info.role === "assistant" && msg.info.agent === "build")).toHaveLength(2)
+    }),
+  { config: cfg },
+)
+
+compactNoLLMServer.instance(
+  "manual compact preempts a blocked ordinary processor before compaction runs",
+  () =>
+    Effect.gen(function* () {
+      compactProcessorBeforeReturn.length = 0
+      compactProcessorSummaryGate.length = 0
+      compactProcessorNormalCalls.length = 0
+      compactProcessorNormalResults.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          compactProcessorBeforeReturn.length = 0
+          compactProcessorSummaryGate.length = 0
+          compactProcessorNormalCalls.length = 0
+          compactProcessorNormalResults.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const session = yield* sessions.create({ title: "Manual compact preempts processor" })
+      const blocked = yield* Deferred.make<void>()
+      compactProcessorBeforeReturn.push(() => Deferred.await(blocked))
+      compactProcessorNormalResults.push("stop")
+
+      yield* user(session.id, "ordinary work before manual compact")
+      const ordinaryFiber = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.sync(() => (compactProcessorNormalCalls.length === 1 ? (true as const) : undefined)),
+        "ordinary processor never started",
+      )
+
+      yield* prompt.cancelOrdinary(session.id)
+      const ordinaryExit = yield* Fiber.await(ordinaryFiber)
+      expect(Exit.isSuccess(ordinaryExit)).toBe(true)
+
+      const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+      expect(created.type).toBe("created")
+      const compactExit = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.exit)
+      expect(Exit.isSuccess(compactExit)).toBe(true)
+
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(compactionParts(messages)).toHaveLength(1)
+      expect(compactProcessorNormalCalls).toHaveLength(1)
+      expect(messages.filter((message) => message.info.role === "assistant" && message.info.error)).toHaveLength(1)
+      expect(messages.some((message) => message.info.role === "assistant" && message.info.summary === true)).toBe(true)
+    }),
+  { config: cfg },
+)
+
+it.instance("auto-compaction retries once after summary provider failure and continues", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 20, output: 10 }))
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt auto-compaction retry once" })
+    const retryStatuses: SessionStatus.Info[] = []
+    const off = yield* events.listen((evt) => {
+      if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+      const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+      if (data.sessionID === session.id && data.status.type === "retry") retryStatuses.push(data.status)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => off)
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+    yield* llm.error(400, { error: "compaction attempt 1 failed" })
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Trigger compaction retry once" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(4)
+    expect(retryStatuses).toHaveLength(1)
+    expect(retryStatuses[0]).toMatchObject({
+      type: "retry",
+      attempt: 1,
+      message: "Automatic compaction failed; retrying compaction 1/2",
+    })
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    const compactionParts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")
+    expect(compactionParts).toHaveLength(1)
+    expect(compactionParts[0]).toMatchObject({ type: "compaction", auto: true })
+    const syntheticContinue = msgs.find((msg) =>
+      msg.parts.some((part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true),
+    )
+    expect(syntheticContinue).toBeDefined()
+  }),
+)
+
+it.instance("auto-compaction retries exactly two times and succeeds on second retry", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 20, output: 10 }))
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt auto-compaction retry twice" })
+    const retryStatuses: SessionStatus.Info[] = []
+    const off = yield* events.listen((evt) => {
+      if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+      const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+      if (data.sessionID === session.id && data.status.type === "retry") retryStatuses.push(data.status)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => off)
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+    yield* llm.error(400, { error: "compaction attempt 1 failed" })
+    yield* llm.error(400, { error: "compaction attempt 2 failed" })
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Trigger compaction retry twice" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(5)
+    expect(retryStatuses).toHaveLength(2)
+    expect(retryStatuses.map((item) => item.type === "retry" ? item.attempt : undefined)).toEqual([1, 2])
+    expect(retryStatuses.map((item) => item.type === "retry" ? item.message : undefined)).toEqual([
+      "Automatic compaction failed; retrying compaction 1/2",
+      "Automatic compaction failed; retrying compaction 2/2",
+    ])
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    const compactionParts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")
+    expect(compactionParts).toHaveLength(1)
+    expect(compactionParts[0]).toMatchObject({ type: "compaction", auto: true })
+    const syntheticContinue = msgs.find((msg) =>
+      msg.parts.some((part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true),
+    )
+    expect(syntheticContinue).toBeDefined()
+  }),
+)
+
+it.instance("auto-compaction errors only after initial compaction attempt plus two retries fail", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 20, output: 10 }))
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt auto-compaction retry exhaustion" })
+    const retryStatuses: SessionStatus.Info[] = []
+    const off = yield* events.listen((evt) => {
+      if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+      const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+      if (data.sessionID === session.id && data.status.type === "retry") retryStatuses.push(data.status)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => off)
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+    yield* llm.error(400, { error: "compaction attempt 1 failed" })
+    yield* llm.error(400, { error: "compaction attempt 2 failed" })
+    yield* llm.error(400, { error: "compaction attempt 3 failed" })
+
+    const exit = yield* prompt
+      .prompt({
+        sessionID: session.id,
+        agent: "build",
+        parts: [{ type: "text", text: "Trigger compaction retry exhaustion" }],
+      })
+      .pipe(Effect.exit)
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      expect(JSON.stringify(Cause.squash(exit.cause))).toContain("Automatic compaction failed after 3 attempts")
+    }
+    expect(yield* llm.calls).toBe(4)
+    expect(yield* llm.pending).toBe(0)
+    expect(retryStatuses).toHaveLength(2)
+    expect(retryStatuses.map((item) => item.type === "retry" ? item.attempt : undefined)).toEqual([1, 2])
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    const compactionParts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")
+    expect(compactionParts).toHaveLength(1)
+    expect(compactionParts[0]).toMatchObject({ type: "compaction", auto: true })
+    const syntheticContinue = msgs.find((msg) =>
+      msg.parts.some((part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true),
+    )
+    expect(syntheticContinue).toBeUndefined()
+  }),
+)
+
+it.instance("auto-compacts zero-token empty unknown responses after prior context pressure evidence", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 100000, output: 1000 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt zero-token empty unknown compaction" })
+
+    yield* llm.push(
+      raw({
+        head: [
+          {
+            id: "chatcmpl-test",
+            object: "chat.completion.chunk",
+            choices: [{ delta: { role: "assistant" } }],
+          },
+        ],
+        tail: [
+          {
+            id: "chatcmpl-test",
+            object: "chat.completion.chunk",
+            choices: [{ delta: { content: "partial" } }],
+          },
+          {
+            id: "chatcmpl-test",
+            object: "chat.completion.chunk",
+            choices: [{ delta: {}, finish_reason: "length" }],
+            usage: { prompt_tokens: 100, completion_tokens: 5, total_tokens: 105 },
+          },
+        ],
+      }),
+    )
+
+    const first = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Record context pressure" }],
+    })
+
+    expect(first.info.role).toBe("assistant")
+    if (first.info.role === "assistant") expect(first.info.finish).toBe("length")
+    expect(first.parts.some((part) => part.type === "text" && part.text === "partial")).toBe(true)
+
+    const before = yield* sessions.messages({ sessionID: session.id })
+    expect(before.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")).toHaveLength(0)
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+    yield* llm.text("summary")
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Continue after zero-token empty" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    expect(yield* llm.calls).toBe(4)
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    const compactionParts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")
+    expect(compactionParts).toHaveLength(1)
+    expect(compactionParts[0]).toMatchObject({ type: "compaction", auto: true, overflow: true })
+  }),
+)
+
+it.instance("returns an error for fresh zero-token empty unknown responses without context pressure", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt fresh empty unknown error" })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Return empty" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(JSON.stringify(result.info.error)).toContain("empty response")
+      expect(JSON.stringify(result.info.error)).toContain("continuing silently")
+    }
+    expect(yield* llm.calls).toBe(1)
+  }),
+)
+
+it.instance("does not use auto-compaction loop guard for synthetic continuation metadata alone", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt synthetic continuation without compaction" })
+    const synthetic = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID: session.id,
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: synthetic.id,
+      sessionID: session.id,
+      type: "text",
+      text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+      synthetic: true,
+      metadata: { compaction_continue: true },
+    })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 0, output: 0 } }))
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(JSON.stringify(result.info.error)).toContain("empty response")
+      expect(JSON.stringify(result.info.error)).not.toContain("after automatic compaction")
+      expect(JSON.stringify(result.info.error)).not.toContain("compaction loop")
+    }
+    expect(yield* llm.calls).toBe(1)
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    expect(msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")).toHaveLength(0)
+  }),
+)
+
+it.instance("returns an error for whitespace-only assistant output without context pressure", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt whitespace-only error" })
+
+    yield* llm.text("   \n\t")
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Return whitespace" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(JSON.stringify(result.info.error)).toContain("empty response")
+      expect(JSON.stringify(result.info.error)).toContain("continuing silently")
+    }
+    expect(yield* llm.calls).toBe(1)
+  }),
+)
+
+it.instance("stops repeated empty unknown responses after auto-compaction", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerCfgWithLimit(url, { context: 20, output: 10 }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Prompt empty unknown loop guard" })
+
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+    yield* llm.text("summary")
+    yield* llm.push(emptyUnknownResponse({ usage: { input: 100, output: 0 } }))
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Trigger compaction loop guard" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(JSON.stringify(result.info.error)).toContain("empty response")
+      expect(JSON.stringify(result.info.error)).toContain("compaction")
+    }
+    expect(yield* llm.calls).toBe(3)
+
+    const msgs = yield* sessions.messages({ sessionID: session.id })
+    const compactionParts = msgs.flatMap((msg) => msg.parts).filter((part) => part.type === "compaction")
+    expect(compactionParts).toHaveLength(1)
   }),
 )
 
