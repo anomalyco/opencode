@@ -42,6 +42,32 @@ function cursor(input: Record<string, unknown>) {
   return Buffer.from(JSON.stringify(input)).toString("base64url")
 }
 
+function projectViewProjects(body: unknown) {
+  object(body)
+  array(body.projects)
+  return body.projects
+}
+
+function onlyProjectViewEntry(body: unknown) {
+  const projects = projectViewProjects(body)
+  check(projects.length === 1, "project view should contain one open project")
+  return projectViewEntry(projects[0])
+}
+
+function projectViewEntry(value: unknown) {
+  const entry = value
+  object(entry)
+  const project = entry.project
+  object(project)
+  return { entry, project }
+}
+
+function findProjectViewEntry(body: unknown, projectID: string) {
+  return projectViewProjects(body)
+    .map(projectViewEntry)
+    .find((item) => item.project.id === projectID)
+}
+
 const scenarios: Scenario[] = [
   http.protected
     .get("/global/health", "global.health")
@@ -156,6 +182,131 @@ const scenarios: Scenario[] = [
     },
     "status",
   ),
+  http.protected.get("/ui/project-view", "ui.projectView.get").json(200, (body) => {
+    object(body)
+    array(body.projects)
+    check(body.projects.length === 0, "initial project view should have no open projects")
+    check(body.lastProject === undefined, "initial project view should not include lastProject")
+  }),
+  http.protected
+    .post("/ui/project-view/open-projects", "ui.projectView.openProjects.open")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: "/ui/project-view/open-projects",
+      headers: ctx.headers(),
+      body: { directory: ctx.directory },
+    }))
+    .json(
+      200,
+      (body, ctx) => {
+        const { entry, project } = onlyProjectViewEntry(body)
+        check(project.id === ctx.state.id, "open project should resolve the directory to the current project")
+        check(entry.position === 0, "opened project should be first")
+        check(entry.expanded === true, "opened project should default to expanded")
+      },
+      "status",
+    ),
+  http.protected
+    .put("/ui/project-view/open-projects", "ui.projectView.openProjects.replace")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: "/ui/project-view/open-projects",
+      headers: ctx.headers(),
+      body: { projects: [{ projectID: ctx.state.id, expanded: false }] },
+    }))
+    .json(
+      200,
+      (body, ctx) => {
+        const { entry, project } = onlyProjectViewEntry(body)
+        check(project.id === ctx.state.id, "replace open projects should keep the requested project")
+        check(entry.position === 0, "replaced project should be first")
+        check(entry.expanded === false, "replace open projects should store expanded state")
+      },
+      "status",
+    ),
+  http.protected
+    .patch("/ui/project-view/open-projects/{projectID}", "ui.projectView.openProjects.update")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const project = yield* ctx.project()
+        const result = yield* ctx.api({
+          method: "POST",
+          path: "/ui/project-view/open-projects",
+          headers: ctx.headers(),
+          body: { projectID: project.id, expanded: true },
+        })
+        check(result.status === 200, "seed open project should succeed")
+        return project
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/ui/project-view/open-projects/{projectID}", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { expanded: false, position: 0 },
+    }))
+    .json(
+      200,
+      (body, ctx) => {
+        const current = findProjectViewEntry(body, ctx.state.id)
+        check(current !== undefined, "update open project should keep the requested project")
+        const { entry } = current
+        check(entry.position === 0, "update open project should keep position")
+        check(entry.expanded === false, "update open project should patch expanded state")
+      },
+      "status",
+    ),
+  http.protected
+    .delete("/ui/project-view/open-projects/{projectID}", "ui.projectView.openProjects.close")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const project = yield* ctx.project()
+        const result = yield* ctx.api({
+          method: "POST",
+          path: "/ui/project-view/open-projects",
+          headers: ctx.headers(),
+          body: { projectID: project.id },
+        })
+        check(result.status === 200, "seed open project should succeed")
+        return project
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/ui/project-view/open-projects/{projectID}", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(
+      200,
+      (body, ctx) => {
+        check(
+          findProjectViewEntry(body, ctx.state.id) === undefined,
+          "close project should remove the requested project",
+        )
+      },
+      "status",
+    ),
+  http.protected
+    .patch("/ui/project-view/last-project", "ui.projectView.lastProject.set")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: "/ui/project-view/last-project",
+      headers: ctx.headers(),
+      body: { projectID: ctx.state.id },
+    }))
+    .json(
+      200,
+      (body, ctx) => {
+        object(body)
+        const lastProject = body.lastProject
+        object(lastProject)
+        check(lastProject.id === ctx.state.id, "last project should be set to the requested project")
+      },
+      "status",
+    ),
   http.protected
     .patch("/project/{projectID}", "project.update")
     .mutating()
