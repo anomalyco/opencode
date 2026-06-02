@@ -324,9 +324,7 @@ export function Autocomplete(props: {
       ...(reference.kind === "invalid" ? [] : [`Reference root: ${reference.path}`]),
       ...(problem
         ? [`Problem: ${problem}`]
-        : [
-            "Inspect the configured reference with Read, Glob, and Grep when useful.",
-          ]),
+        : ["Inspect the configured reference with Read, Glob, and Grep when useful."]),
     ].join("\n")
   }
 

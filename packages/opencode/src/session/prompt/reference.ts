@@ -63,9 +63,7 @@ export function referenceTextPart(input: {
       ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
       ...(metadata.problem
         ? [`Problem: ${metadata.problem}`]
-        : [
-            "Inspect the configured reference with Read, Glob, and Grep when useful.",
-          ]),
+        : ["Inspect the configured reference with Read, Glob, and Grep when useful."]),
     ].join("\n"),
     metadata: { reference: metadata },
   }
