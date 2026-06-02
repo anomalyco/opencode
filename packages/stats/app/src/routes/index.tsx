@@ -1391,29 +1391,39 @@ function CacheRatioChart(props: {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
 }) {
-  const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.ratio)) || 100)
   const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
 
   return (
-    <div data-component="cache-ratio">
-      <For each={props.data}>
-        {(item, index) => (
-          <button
-            type="button"
-            data-component="token-row"
-            data-active={props.activeIndex === index() ? "true" : undefined}
-            onClick={() => props.onActiveIndexChange(index())}
-            onPointerEnter={() => props.onActiveIndexChange(index())}
-          >
-            <strong>{formatRatio(item.ratio)}</strong>
-            <span>{item.model}</span>
-            <MetricBar value={item.ratio} max={max()} active={props.activeIndex === index()} />
-          </button>
-        )}
-      </For>
+    <div data-component="cache-ratio" data-variant="marker">
+      <div data-slot="cache-ratio-heading" aria-hidden="true">
+        <strong>Ratio</strong>
+        <span>Model</span>
+        <b>0-100%</b>
+      </div>
+      <div data-slot="cache-ratio-rows">
+        <For each={props.data}>
+          {(item, index) => (
+            <button
+              type="button"
+              data-component="cache-ratio-row"
+              data-active={props.activeIndex === index() ? "true" : undefined}
+              onClick={() => props.onActiveIndexChange(index())}
+              onPointerEnter={() => props.onActiveIndexChange(index())}
+            >
+              <strong>{formatRatio(item.ratio)}</strong>
+              <span>{item.model}</span>
+              <CacheRatioMarker ratio={item.ratio} active={props.activeIndex === index()} />
+            </button>
+          )}
+        </For>
+      </div>
       <Show when={active()}>
         {(item) => (
-          <div data-component="token-tooltip" style={{ top: `${props.activeIndex * 36 + 2}px` }}>
+          <div
+            data-component="token-tooltip"
+            data-variant="cache-ratio"
+            style={{ top: `${props.activeIndex * 36 + 28}px` }}
+          >
             <p>
               <span>Cache Ratio</span>
               <strong>{formatRatio(item().ratio)}</strong>
@@ -1430,6 +1440,19 @@ function CacheRatioChart(props: {
         )}
       </Show>
     </div>
+  )
+}
+
+function CacheRatioMarker(props: { ratio: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(100, Math.max(0, props.ratio)))
+  return (
+    <i
+      data-component="cache-ratio-marker"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--cache-ratio-fill": `${fill()}%` } as JSX.CSSProperties}
+    >
+      <em />
+    </i>
   )
 }
 
