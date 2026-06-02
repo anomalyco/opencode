@@ -11,7 +11,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 
-import { Effect, Layer, Context, Schema } from "effect"
+import { Deferred, Effect, Exit, Layer, Context, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
@@ -93,6 +93,23 @@ type CompletedCompaction = {
   summary: string | undefined
 }
 
+export type CreateResult =
+  | { type: "created"; messageID: MessageID }
+  | { type: "joined"; messageID?: MessageID }
+  | { type: "pending"; messageID: MessageID }
+
+export type State =
+  | { type: "active"; messageID?: MessageID; resumeRequested: boolean }
+  | { type: "pending"; messageID: MessageID }
+  | { type: "idle" }
+
+type ActiveCompaction = {
+  idle: Deferred.Deferred<void>
+  created: Deferred.Deferred<void>
+  messageID?: MessageID
+  resumeRequested: boolean
+}
+
 function summaryText(message: SessionLegacy.WithParts) {
   const text = message.parts
     .filter((part): part is SessionLegacy.TextPart => part.type === "text")
@@ -119,6 +136,11 @@ function completedCompactions(messages: SessionLegacy.WithParts[]) {
     if (userIndex === undefined) return []
     return [{ userIndex, assistantIndex, summary: summaryText(msg) }]
   })
+}
+
+function pendingCompactionMessageID(messages: SessionLegacy.WithParts[]) {
+  const task = MessageV2.latest(messages).tasks.find((part) => part.type === "compaction")
+  return task?.messageID
 }
 
 function buildPrompt(input: { previousSummary?: string; context: string[] }) {
@@ -203,7 +225,12 @@ export interface Interface {
     model: { providerID: ProviderV2.ID; modelID: ProviderV2.ModelID }
     auto: boolean
     overflow?: boolean
-  }) => Effect.Effect<void>
+  }) => Effect.Effect<CreateResult>
+  readonly state: (sessionID: SessionID) => Effect.Effect<State>
+  readonly isActive: (sessionID: SessionID) => Effect.Effect<boolean>
+  readonly waitForIdle: (sessionID: SessionID) => Effect.Effect<void>
+  readonly markResume: (sessionID: SessionID) => Effect.Effect<void>
+  readonly drainResume: (sessionID: SessionID) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
@@ -221,6 +248,8 @@ export const layer = Layer.effect(
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const active = new Map<SessionID, ActiveCompaction>()
+    const resume = new Set<SessionID>()
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionLegacy.Assistant["tokens"]
@@ -341,7 +370,7 @@ export const layer = Layer.effect(
       }
     })
 
-    const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
+    const processCompactionInner = Effect.fn("SessionCompaction.process.inner")(function* (input: {
       parentID: MessageID
       messages: SessionLegacy.WithParts[]
       sessionID: SessionID
@@ -583,6 +612,94 @@ export const layer = Layer.effect(
       return result
     })
 
+    const makeActive = Effect.fnUntraced(function* (messageID?: MessageID) {
+      return {
+        idle: yield* Deferred.make<void>(),
+        created: yield* Deferred.make<void>(),
+        messageID,
+        resumeRequested: false,
+      } satisfies ActiveCompaction
+    })
+
+    const releaseActive = Effect.fnUntraced(function* (sessionID: SessionID, item: ActiveCompaction) {
+      if (active.get(sessionID) !== item) return
+      active.delete(sessionID)
+      yield* Deferred.succeed(item.created, undefined).pipe(Effect.ignore)
+      yield* Deferred.succeed(item.idle, undefined).pipe(Effect.ignore)
+    })
+
+    const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
+      parentID: MessageID
+      messages: SessionLegacy.WithParts[]
+      sessionID: SessionID
+      auto: boolean
+      overflow?: boolean
+    }) {
+      const current = active.get(input.sessionID)
+      const item = current ?? (yield* makeActive(input.parentID))
+      if (!current) {
+        active.set(input.sessionID, item)
+        if (resume.has(input.sessionID)) item.resumeRequested = true
+        yield* Deferred.succeed(item.created, undefined).pipe(Effect.ignore)
+      }
+      if (!item.messageID) item.messageID = input.parentID
+
+      return yield* processCompactionInner(input).pipe(Effect.ensuring(releaseActive(input.sessionID, item)))
+    })
+
+    const pendingMarker = Effect.fn("SessionCompaction.pendingMarker")(function* (sessionID: SessionID) {
+      const messages = yield* session
+        .messages({ sessionID })
+        .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])))
+      return pendingCompactionMessageID(messages)
+    })
+
+    const state = Effect.fn("SessionCompaction.state")(function* (sessionID: SessionID) {
+      const current = active.get(sessionID)
+      if (current)
+        return {
+          type: "active" as const,
+          messageID: current.messageID,
+          resumeRequested: current.resumeRequested,
+        }
+      const messageID = yield* pendingMarker(sessionID)
+      if (messageID) return { type: "pending" as const, messageID }
+      return { type: "idle" as const }
+    })
+
+    const isActive = Effect.fn("SessionCompaction.isActive")(function* (sessionID: SessionID) {
+      return (yield* state(sessionID)).type !== "idle"
+    })
+
+    const waitForIdle: Interface["waitForIdle"] = Effect.fn("SessionCompaction.waitForIdle")(function* (sessionID) {
+      const current = active.get(sessionID)
+      if (!current) return
+      yield* Deferred.await(current.idle)
+      return yield* waitForIdle(sessionID)
+    })
+
+    const markResume = Effect.fn("SessionCompaction.markResume")(function* (sessionID: SessionID) {
+      const current = active.get(sessionID)
+      if (current) {
+        current.resumeRequested = true
+        resume.add(sessionID)
+        return
+      }
+      const messageID = yield* pendingMarker(sessionID)
+      if (messageID) {
+        resume.add(sessionID)
+      }
+    })
+
+    const drainResume = Effect.fn("SessionCompaction.drainResume")((sessionID: SessionID) =>
+      Effect.sync(() => {
+        const current = active.get(sessionID)
+        if (current?.resumeRequested) current.resumeRequested = false
+        if (!resume.delete(sessionID)) return false
+        return true
+      }),
+    )
+
     const create = Effect.fn("SessionCompaction.create")(function* (input: {
       sessionID: SessionID
       agent: string
@@ -590,29 +707,51 @@ export const layer = Layer.effect(
       auto: boolean
       overflow?: boolean
     }) {
-      const msg = yield* session.updateMessage({
-        id: MessageID.ascending(),
-        role: "user",
-        model: input.model,
-        sessionID: input.sessionID,
-        agent: input.agent,
-        time: { created: Date.now() },
-      })
-      yield* session.updatePart({
-        id: PartID.ascending(),
-        messageID: msg.id,
-        sessionID: msg.sessionID,
-        type: "compaction",
-        auto: input.auto,
-        overflow: input.overflow,
-      })
-      if (flags.experimentalEventSystem) {
-        yield* events.publish(SessionEvent.Compaction.Started, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(Date.now()),
-          reason: input.auto ? "auto" : "manual",
-        })
+      const current = active.get(input.sessionID)
+      if (current) {
+        if (!current.messageID) yield* Deferred.await(current.created)
+        return { type: "joined" as const, messageID: current.messageID }
       }
+
+      const existing = yield* pendingMarker(input.sessionID)
+      if (existing) return { type: "pending" as const, messageID: existing }
+
+      const next = yield* makeActive()
+      active.set(input.sessionID, next)
+
+      const exit = yield* Effect.gen(function* () {
+        const msg = yield* session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          model: input.model,
+          sessionID: input.sessionID,
+          agent: input.agent,
+          time: { created: Date.now() },
+        })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID: msg.sessionID,
+          type: "compaction",
+          auto: input.auto,
+          overflow: input.overflow,
+        })
+        next.messageID = msg.id
+        yield* Deferred.succeed(next.created, undefined).pipe(Effect.ignore)
+        if (flags.experimentalEventSystem) {
+          yield* events.publish(SessionEvent.Compaction.Started, {
+            sessionID: input.sessionID,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+            reason: input.auto ? "auto" : "manual",
+          })
+        }
+        return { type: "created" as const, messageID: msg.id }
+      }).pipe(Effect.exit)
+
+      if (Exit.isFailure(exit)) {
+        yield* releaseActive(input.sessionID, next)
+      }
+      return yield* exit
     })
 
     return Service.of({
@@ -620,6 +759,11 @@ export const layer = Layer.effect(
       prune,
       process: processCompaction,
       create,
+      state,
+      isActive,
+      waitForIdle,
+      markResume,
+      drainResume,
     })
   }),
 )

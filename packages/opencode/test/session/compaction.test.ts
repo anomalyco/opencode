@@ -26,7 +26,7 @@ import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -190,6 +190,7 @@ function createCompactionMarker(sessionID: SessionID) {
         type: "compaction",
         auto: false,
       })
+      return msg
     }),
   )
 }
@@ -246,6 +247,20 @@ const env = Layer.mergeAll(
 )
 
 const it = testEffect(env)
+const itLocal = testEffect(Layer.empty)
+
+const failingPartSession = Layer.mock(SessionNs.Service)({
+  messages: () => Effect.succeed([]),
+  updateMessage: (message) => Effect.succeed(message),
+  updatePart: () => Effect.die(new Error("part write failed")),
+})
+
+const createFailureEnv = Layer.mergeAll(
+  failingPartSession,
+  SessionCompaction.layer.pipe(Layer.provide(failingPartSession), Layer.provideMerge(deps)),
+)
+
+const itCreateFailure = testEffect(createFailureEnv)
 
 const compactionEnv = Layer.mergeAll(
   SessionNs.defaultLayer,
@@ -306,6 +321,12 @@ function readCompactionPart(sessionID: SessionID) {
         messages.at(-2)?.parts.find((item): item is SessionLegacy.CompactionPart => item.type === "compaction"),
       ),
     )
+}
+
+function compactionMarkers(messages: SessionLegacy.WithParts[]) {
+  return messages.filter(
+    (message) => message.info.role === "user" && message.parts.some((part) => part.type === "compaction"),
+  )
 }
 
 function llm() {
@@ -594,6 +615,268 @@ describe("session.compaction.create", () => {
         })
       }),
     ),
+  )
+
+  itCompaction.instance(
+    "keeps created compaction active until a completed process finishes",
+    () => {
+      const stub = llm()
+      stub.push(reply("summary"))
+      return Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+
+        const result = yield* compact.create({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        expect(result.type).toBe("created")
+        if (result.type === "created") {
+          expect(yield* compact.state(session.id)).toEqual({
+            type: "active",
+            messageID: result.messageID,
+            resumeRequested: false,
+          })
+          yield* compact.markResume(session.id)
+          expect(yield* compact.state(session.id)).toEqual({
+            type: "active",
+            messageID: result.messageID,
+            resumeRequested: true,
+          })
+          const messages = yield* ssn.messages({ sessionID: session.id })
+          yield* compact.process({ parentID: result.messageID, messages, sessionID: session.id, auto: false })
+        }
+        yield* awaitWithTimeout(compact.waitForIdle(session.id), "compaction process active state did not release")
+        expect(yield* compact.state(session.id)).toEqual({ type: "idle" })
+        expect(yield* compact.drainResume(session.id)).toBe(true)
+        expect(yield* compact.drainResume(session.id)).toBe(false)
+      }).pipe(withCompaction({ llm: stub.layer }))
+    },
+  )
+
+  it.live(
+    "joins duplicate creates in one session and writes one marker",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+
+        const results = yield* Effect.all(
+          [
+            compact.create({ sessionID: info.id, agent: "build", model: ref, auto: false }),
+            compact.create({ sessionID: info.id, agent: "build", model: ref, auto: false }),
+          ],
+          { concurrency: "unbounded" },
+        )
+
+        const messages = yield* ssn.messages({ sessionID: info.id })
+        expect(compactionMarkers(messages)).toHaveLength(1)
+        expect(results.some((result) => result.type === "created")).toBe(true)
+        expect(results.some((result) => result.type === "joined" || result.type === "pending")).toBe(true)
+      }),
+    ),
+  )
+
+  itLocal.live(
+    "joined create waits for marker persistence before returning",
+    Effect.gen(function* () {
+      const writeStarted = yield* Deferred.make<void>()
+      const releaseWrite = yield* Deferred.make<void>()
+      const parts: SessionLegacy.Part[] = []
+      const gatedSession = Layer.mock(SessionNs.Service)({
+        messages: () => Effect.succeed([]),
+        updateMessage: (message) => Effect.succeed(message),
+        updatePart: (part) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(writeStarted, undefined).pipe(Effect.ignore)
+            yield* Deferred.await(releaseWrite)
+            parts.push(part)
+            return part
+          }),
+      })
+      const effect = Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const sessionID = SessionID.descending()
+        const first = yield* compact
+          .create({ sessionID, agent: "build", model: ref, auto: false })
+          .pipe(Effect.forkChild)
+
+        yield* awaitWithTimeout(Deferred.await(writeStarted), "first compaction marker write did not start")
+        const second = yield* compact
+          .create({ sessionID, agent: "build", model: ref, auto: false })
+          .pipe(Effect.forkChild)
+
+        yield* Deferred.succeed(releaseWrite, undefined)
+        const firstResult = yield* Fiber.join(first)
+        const secondResult = yield* Fiber.join(second)
+
+        expect(firstResult.type).toBe("created")
+        expect(secondResult).toEqual({
+          type: "joined",
+          messageID: firstResult.type === "created" ? firstResult.messageID : undefined,
+        })
+        expect(parts.filter((part) => part.type === "compaction")).toHaveLength(1)
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(gatedSession, SessionCompaction.layer.pipe(Layer.provide(gatedSession), Layer.provideMerge(deps))),
+        ),
+      )
+      yield* effect
+    }),
+  )
+
+  it.live(
+    "returns pending for an existing unprocessed marker",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const marker = yield* createCompactionMarker(info.id)
+
+        const result = yield* compact.create({
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        expect(result).toEqual({ type: "pending", messageID: marker.id })
+        expect(compactionMarkers(yield* ssn.messages({ sessionID: info.id }))).toHaveLength(1)
+      }),
+    ),
+  )
+
+  itCompaction.instance(
+    "preserves resume request for a history-pending marker until processing finishes",
+    () => {
+      const stub = llm()
+      stub.push(reply("summary"))
+      return Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const marker = yield* createCompactionMarker(session.id)
+
+        expect(yield* compact.state(session.id)).toEqual({ type: "pending", messageID: marker.id })
+        yield* compact.markResume(session.id)
+
+        const messages = yield* ssn.messages({ sessionID: session.id })
+        yield* compact.process({ parentID: marker.id, messages, sessionID: session.id, auto: false })
+        yield* awaitWithTimeout(compact.waitForIdle(session.id), "history-pending compaction did not release active state")
+
+        expect(yield* compact.state(session.id)).toEqual({ type: "idle" })
+        expect(yield* compact.drainResume(session.id)).toBe(true)
+        expect(yield* compact.drainResume(session.id)).toBe(false)
+      }).pipe(withCompaction({ llm: stub.layer }))
+    },
+  )
+
+  it.live(
+    "does not treat summarized compaction markers as pending",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+        const marker = yield* createCompactionMarker(info.id)
+        yield* createSummaryAssistantMessage(info.id, marker.id, dir, "summary")
+
+        const result = yield* compact.create({
+          sessionID: info.id,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+
+        expect(result.type).toBe("created")
+        expect(compactionMarkers(yield* ssn.messages({ sessionID: info.id }))).toHaveLength(2)
+      }),
+    ),
+  )
+
+  it.live(
+    "keeps creates isolated across sessions",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const first = yield* ssn.create({})
+        const second = yield* ssn.create({})
+
+        const results = yield* Effect.all(
+          [
+            compact.create({ sessionID: first.id, agent: "build", model: ref, auto: false }),
+            compact.create({ sessionID: second.id, agent: "build", model: ref, auto: false }),
+          ],
+          { concurrency: "unbounded" },
+        )
+
+        expect(results.map((result) => result.type)).toEqual(["created", "created"])
+        expect(compactionMarkers(yield* ssn.messages({ sessionID: first.id }))).toHaveLength(1)
+        expect(compactionMarkers(yield* ssn.messages({ sessionID: second.id }))).toHaveLength(1)
+      }),
+    ),
+  )
+
+  itCompaction.instance(
+    "keeps active state while process is running and releases on cancellation",
+    () => {
+      const ready = Effect.runSync(Deferred.make<void>())
+      return Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const created = yield* compact.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+        expect(created.type).toBe("created")
+        if (created.type !== "created") return
+
+        const messages = yield* ssn.messages({ sessionID: session.id })
+        const fiber = yield* compact
+          .process({ parentID: created.messageID, messages, sessionID: session.id, auto: false })
+          .pipe(Effect.forkChild)
+
+        yield* awaitWithTimeout(Deferred.await(ready), "compaction process did not reach blocking plugin")
+        yield* compact.markResume(session.id)
+        expect(yield* compact.state(session.id)).toEqual({
+          type: "active",
+          messageID: created.messageID,
+          resumeRequested: true,
+        })
+
+        yield* Fiber.interrupt(fiber)
+        yield* awaitWithTimeout(compact.waitForIdle(session.id), "cancelled compaction process kept active state")
+        expect(yield* compact.state(session.id)).toEqual({ type: "pending", messageID: created.messageID })
+        expect(yield* compact.drainResume(session.id)).toBe(true)
+        expect(yield* compact.drainResume(session.id)).toBe(false)
+      }).pipe(withCompaction({ plugin: plugin(ready) }))
+    },
+  )
+
+  itCreateFailure.live(
+    "releases active state when marker creation fails",
+    Effect.gen(function* () {
+      const compact = yield* SessionCompaction.Service
+      const sessionID = SessionID.descending()
+
+      const exit = yield* compact
+        .create({
+          sessionID,
+          agent: "build",
+          model: ref,
+          auto: false,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(yield* compact.state(sessionID)).toEqual({ type: "idle" })
+      yield* awaitWithTimeout(compact.waitForIdle(sessionID), "failed compaction create kept active state")
+    }),
   )
 
   it.live.skip(
