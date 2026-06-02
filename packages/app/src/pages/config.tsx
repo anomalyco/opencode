@@ -861,7 +861,7 @@ function MarkdownField(props: {
 
 function SaveButton(props: { label: string; disabled?: boolean; onClick: () => void }) {
   return (
-    <Button size="small" variant="secondary" icon="check-small" onClick={props.onClick} disabled={props.disabled}>
+    <Button size="small" variant="secondary" icon="save" onClick={props.onClick} disabled={props.disabled}>
       {props.label}
     </Button>
   )
@@ -1821,14 +1821,8 @@ function CustomEditor(props: {
             </div>
 
             <div class="rounded-xl border border-border-weak-base bg-background-base p-4">
-              <div class="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <div class="text-13-medium text-text-strong">{language.t("config.custom.models.title")}</div>
-                  <div class="text-12-regular text-text-weak">{language.t("config.custom.models.description")}</div>
-                </div>
-                <Button size="small" variant="ghost" icon="plus-small" onClick={props.onAddModel}>
-                  {language.t("config.custom.models.add")}
-                </Button>
+              <div class="mb-3">
+                <div class="text-13-medium text-text-strong">{language.t("config.custom.models.title")}</div>
               </div>
               <div class="mb-3">
                 <FetchProviderModels
@@ -1839,14 +1833,14 @@ function CustomEditor(props: {
                   onAdd={props.onAddFetchedModel}
                 />
               </div>
-              <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-3 mb-3">
                 <For each={props.form.models}>
                   {(item, idx) => (
                     <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" data-row={item.row}>
                       <TextField
                         label={language.t("config.custom.models.id")}
                         hideLabel
-                        placeholder="gpt-4.1"
+                        placeholder="模型 ID (如: gpt-4o, claude-3-opus)"
                         value={item.id}
                         onChange={(value) => props.onModel(idx(), "id", value)}
                         validationState={item.err.id ? "invalid" : undefined}
@@ -1855,7 +1849,7 @@ function CustomEditor(props: {
                       <TextField
                         label={language.t("config.custom.models.name")}
                         hideLabel
-                        placeholder="GPT-4.1"
+                        placeholder="显示名称 (如: GPT-4o, Claude 3 Opus)"
                         value={item.name}
                         onChange={(value) => props.onModel(idx(), "name", value)}
                         validationState={item.err.name ? "invalid" : undefined}
@@ -1873,6 +1867,11 @@ function CustomEditor(props: {
                     </div>
                   )}
                 </For>
+              </div>
+              <div>
+                <Button size="small" variant="ghost" icon="plus-small" onClick={props.onAddModel}>
+                  {language.t("config.custom.models.add")}
+                </Button>
               </div>
             </div>
 

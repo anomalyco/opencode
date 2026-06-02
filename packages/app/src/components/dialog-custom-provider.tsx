@@ -255,13 +255,6 @@ export function DialogCustomProvider(props: Props) {
 
           <div class="flex flex-col gap-3">
             <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
-            <FetchProviderModels
-              baseURL={form.baseURL}
-              apiKey={form.apiKey}
-              headers={form.headers}
-              existingModelIDs={new Set(form.models.map((m) => m.id.trim()).filter(Boolean))}
-              onAdd={addFetchedModel}
-            />
             <For each={form.models}>
               {(m, i) => (
                 <div class="flex gap-2 items-start" data-row={m.row}>
@@ -302,6 +295,13 @@ export function DialogCustomProvider(props: Props) {
             <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
               {language.t("provider.custom.models.add")}
             </Button>
+            <FetchProviderModels
+              baseURL={form.baseURL}
+              apiKey={form.apiKey}
+              headers={form.headers}
+              existingModelIDs={new Set(form.models.map((m) => m.id.trim()).filter(Boolean))}
+              onAdd={addFetchedModel}
+            />
           </div>
 
           <div class="flex flex-col gap-3">
@@ -353,6 +353,7 @@ export function DialogCustomProvider(props: Props) {
             type="submit"
             size="large"
             variant="primary"
+            icon="save"
             disabled={saveMutation.isPending}
           >
             {saveMutation.isPending ? language.t("common.saving") : language.t("common.submit")}
