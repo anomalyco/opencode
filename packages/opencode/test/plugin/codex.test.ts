@@ -6,6 +6,7 @@ import {
   extractAccountId,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
+import { TITLE_HEADER } from "../../src/plugin/openai/ws-pool"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -122,21 +123,36 @@ describe("plugin.codex", () => {
     })
   })
 
-  test("installs websocket transport only when experimental websockets are enabled", async () => {
-    const disabled = await CodexAuthPlugin({} as never)
-    const enabled = await CodexAuthPlugin({} as never, { experimentalWebSockets: true })
+  test("installs websocket transport by default unless disabled", async () => {
+    const enabled = await CodexAuthPlugin({} as never)
+    const disabled = await CodexAuthPlugin({} as never, { webSockets: false })
+    const api = await CodexAuthPlugin({} as never)
 
     const disabledOptions = await disabled.auth!.loader!(
-      async () => ({ type: "api", key: "sk-test" }) as never,
+      async () => ({ type: "oauth", access: "access", refresh: "refresh", expires: Date.now() + 60_000 }) as never,
       {} as never,
     )
     const enabledOptions = await enabled.auth!.loader!(
-      async () => ({ type: "api", key: "sk-test" }) as never,
+      async () => ({ type: "oauth", access: "access", refresh: "refresh", expires: Date.now() + 60_000 }) as never,
       {} as never,
     )
+    const apiOptions = await api.auth!.loader!(async () => ({ type: "api", key: "sk-test" }) as never, {} as never)
+    const enabledHeaders: Record<string, string> = {}
+    const disabledHeaders: Record<string, string> = {}
+    await enabled["chat.headers"]?.(
+      { model: { providerID: "openai" }, sessionID: "session", agent: "title" } as never,
+      { headers: enabledHeaders } as never,
+    )
+    await disabled["chat.headers"]?.(
+      { model: { providerID: "openai" }, sessionID: "session", agent: "title" } as never,
+      { headers: disabledHeaders } as never,
+    )
 
-    expect(disabledOptions.fetch).toBeUndefined()
     expect(enabledOptions.fetch).toBeFunction()
+    expect(disabledOptions.fetch).toBeFunction()
+    expect(apiOptions.fetch).toBeUndefined()
+    expect(enabledHeaders[TITLE_HEADER]).toBe("true")
+    expect(disabledHeaders[TITLE_HEADER]).toBeUndefined()
     await enabled.dispose?.()
   })
 
@@ -213,6 +229,7 @@ describe("plugin.codex", () => {
       {
         issuer: server.url.origin,
         codexApiEndpoint: new URL("/backend-api/codex/responses", server.url).toString(),
+        webSockets: false,
       },
     )
     const loaded = await hooks.auth!.loader!(async () => auth as never, {} as never)

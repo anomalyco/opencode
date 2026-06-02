@@ -58,8 +58,8 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalEventSystem).toBe(true)
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
-      expect(flags.experimentalNativeLlm).toBe(false)
-      expect(flags.experimentalWebSockets).toBe(false)
+      expect(flags.nativeLlm).toBe(true)
+      expect(flags.webSockets).toBe(true)
       expect(flags.client).toBe("desktop")
     }),
   )
@@ -78,23 +78,27 @@ describe("RuntimeFlags", () => {
     }),
   )
 
-  it.effect("enables native LLM via dedicated flag only", () =>
+  it.effect("enables native LLM by default and disables via stable opt-out", () =>
     Effect.gen(function* () {
-      const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true" })))
-      const umbrella = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL: "true" })))
+      const defaults = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+      const disabled = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_NATIVE_LLM: "true" })))
+      const legacy = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_NATIVE_LLM: "false" })))
 
-      expect(explicit.experimentalNativeLlm).toBe(true)
-      expect(umbrella.experimentalNativeLlm).toBe(false)
+      expect(defaults.nativeLlm).toBe(true)
+      expect(disabled.nativeLlm).toBe(false)
+      expect(legacy.nativeLlm).toBe(true)
     }),
   )
 
-  it.effect("enables WebSockets via dedicated flag only", () =>
+  it.effect("enables WebSockets by default and disables via stable opt-out", () =>
     Effect.gen(function* () {
-      const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_WEBSOCKETS: "true" })))
-      const umbrella = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL: "true" })))
+      const defaults = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+      const disabled = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_WEBSOCKETS: "true" })))
+      const legacy = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_WEBSOCKETS: "false" })))
 
-      expect(explicit.experimentalWebSockets).toBe(true)
-      expect(umbrella.experimentalWebSockets).toBe(false)
+      expect(defaults.webSockets).toBe(true)
+      expect(disabled.webSockets).toBe(false)
+      expect(legacy.webSockets).toBe(true)
     }),
   )
 
@@ -118,6 +122,8 @@ describe("RuntimeFlags", () => {
       expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBe(1_000)
       expect(flags.enableExperimentalModels).toBe(false)
+      expect(flags.nativeLlm).toBe(true)
+      expect(flags.webSockets).toBe(true)
       expect(flags.client).toBe("cli")
     }),
   )
