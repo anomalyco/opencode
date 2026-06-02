@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 // CLI entry point for `opencode run`.
 //
 // Handles three modes:
@@ -221,7 +222,7 @@ export const RunCommand = effectCmd({
       .option("replay", {
         type: "boolean",
         default: false,
-        describe: "replay visible session history on interactive resume",
+        describe: "replay interactive session history on resume and after resize",
       })
       .option("replay-limit", {
         type: "number",
@@ -367,7 +368,7 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
-      const rules: Permission.Ruleset = args.interactive
+      const rules: PermissionLegacy.Ruleset = args.interactive
         ? []
         : [
             {

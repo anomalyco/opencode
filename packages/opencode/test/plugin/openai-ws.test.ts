@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events"
 import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http"
 import net, { type AddressInfo, type Socket } from "node:net"
 import WebSocket, { WebSocketServer } from "ws"
+import { APICallError } from "ai"
 import { ProviderError } from "../../src/provider/error"
 import { OpenAIWebSocket } from "../../src/plugin/openai/ws"
 import { OpenAIWebSocketPool, TITLE_HEADER } from "../../src/plugin/openai/ws-pool"
@@ -250,6 +251,72 @@ describe("plugin.openai.ws-pool", () => {
     expect(await second.text()).toContain('data: {"type":"response.completed"}')
     expect(connections).toBe(2)
     expect(server.httpRequests).toHaveLength(0)
+    fetch.close()
+  })
+
+  test("returns initial websocket error frames as HTTP-style API errors", async () => {
+    const error = {
+      type: "invalid_request_error",
+      message: "The model is not supported when using Codex with a ChatGPT account.",
+    }
+    const event = {
+      type: "error",
+      status: 400,
+      error,
+      headers: {
+        "x-codex-primary-window-minutes": 15,
+        ignored: { nested: true },
+      },
+    }
+    await using server = await createWebSocketServer((socket) => {
+      socket.once("message", () => {
+        socket.send(JSON.stringify(event))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const response = await fetch(server.url, streamRequest())
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get("content-type")).toContain("application/json")
+    expect(response.headers.get("x-codex-primary-window-minutes")).toBe("15")
+    expect(response.headers.get("ignored")).toBeNull()
+    expect(await response.json()).toEqual(event)
+    fetch.close()
+  })
+
+  test("fails mid-stream wrapped websocket errors as HTTP-style API errors", async () => {
+    const event = {
+      type: "error",
+      status_code: 429,
+      error: {
+        type: "usage_limit_reached",
+        message: "The usage limit has been reached",
+      },
+      headers: {
+        "x-codex-primary-used-percent": "100.0",
+      },
+    }
+    await using server = await createWebSocketServer((socket) => {
+      socket.once("message", () => {
+        socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+        socket.send(JSON.stringify(event))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const response = await fetch(server.url, streamRequest())
+    const error = await readTextError(response.text())
+
+    expect(APICallError.isInstance(error)).toBe(true)
+    if (!APICallError.isInstance(error)) throw new Error("Expected APICallError")
+    expect(error.statusCode).toBe(429)
+    expect(error.responseHeaders).toEqual({ "x-codex-primary-used-percent": "100.0" })
+    expect(error.responseBody).toBe(JSON.stringify(event))
     fetch.close()
   })
 

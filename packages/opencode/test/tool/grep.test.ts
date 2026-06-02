@@ -1,10 +1,11 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
-import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
@@ -42,6 +43,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const it = testEffect(toolLayer())
 const scout = testEffect(toolLayer({ experimentalScout: true }))
+const rooted = testEffect(Layer.mergeAll(toolLayer(), testInstanceStoreLayer))
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -90,7 +92,7 @@ const git = Effect.fn("GrepToolTest.git")(function* (cwd: string, args: string[]
 })
 
 describe("tool.grep", () => {
-  it.live("basic search", () =>
+  rooted.live("basic search", () =>
     Effect.gen(function* () {
       const info = yield* GrepTool
       const grep = yield* info.init()
@@ -185,7 +187,7 @@ describe("tool.grep", () => {
           [path.join(alias, "*")]: "allow",
         },
       })
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
       const next: Tool.Context = {
         ...ctx,
         ask: (req) =>
@@ -233,7 +235,7 @@ describe("tool.grep", () => {
         yield* appfs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
         yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
 
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
         const next: Tool.Context = {
           ...ctx,
           ask: (req) =>
