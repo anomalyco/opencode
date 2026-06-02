@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, Model, tool, type LLMClientShape, type LLMRequest } from "@opencode-ai/llm"
+import { LLMClient, LLMEvent, Model, Tool, type LLMClientShape, type LLMRequest } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -49,7 +49,7 @@ const registry = ToolRegistry.layer({
     authorize: (input) => Effect.sync(() => {
       authorizations.push(input)
     }),
-    tool: tool({
+    tool: Tool.make({
       description: "Echo text",
       parameters: Schema.Struct({ text: Schema.String }),
       success: Schema.Struct({ text: Schema.String }),
@@ -106,8 +106,8 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }) })
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
 
       requests.length = 0
       responses = undefined
@@ -131,7 +131,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use tools" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use tools" }), resume: false })
 
       requests.length = 0
       responses = undefined
@@ -223,7 +223,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Echo this" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Echo this" }), resume: false })
 
       requests.length = 0
       authorizations.length = 0
@@ -276,7 +276,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run once" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run once" }), resume: false })
 
       requests.length = 0
       responses = undefined
@@ -315,7 +315,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Call missing" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Call missing" }), resume: false })
 
       requests.length = 0
       responses = [
@@ -361,7 +361,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Loop forever" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Loop forever" }), resume: false })
 
       requests.length = 0
       authorizations.length = 0
@@ -387,7 +387,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail durably" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail durably" }), resume: false })
 
       requests.length = 0
       responses = undefined
@@ -409,7 +409,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Two blocks" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Two blocks" }), resume: false })
 
       responses = undefined
       streamGate = undefined

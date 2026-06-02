@@ -114,6 +114,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
         id: SessionMessage.ID.pipe(Schema.optional),
         prompt: Prompt,
         delivery: SessionV2.Delivery.pipe(Schema.optional),
+        resume: Schema.Boolean.pipe(Schema.optional),
       }),
       success: SessionMessage.Message,
       error: [ConflictError, SessionNotFoundError],
@@ -121,7 +122,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       OpenApi.annotations({
         identifier: "v2.session.prompt",
         summary: "Send v2 message",
-        description: "Durably admit a v2 session message for later agent-loop execution.",
+        description: "Durably admit a v2 session message and start agent-loop execution unless resume is false.",
       }),
     ),
   )

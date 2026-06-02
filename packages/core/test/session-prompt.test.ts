@@ -107,6 +107,7 @@ describe("SessionV2.prompt", () => {
       const message = yield* session.prompt({
         sessionID,
         prompt: new Prompt({ text: "Fix the failing tests" }),
+        resume: false,
       })
 
       expect(message.type).toBe("user")
@@ -119,7 +120,7 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fix the failing tests" }) })
+      const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fix the failing tests" }), resume: false })
 
       runnerCalls.length = 0
       yield* session.resume(sessionID)
@@ -133,7 +134,7 @@ describe("SessionV2.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
-      const input = { sessionID, prompt: new Prompt({ text: "Fix the failing tests" }) }
+      const input = { sessionID, prompt: new Prompt({ text: "Fix the failing tests" }), resume: false }
 
       const first = yield* session.prompt(input)
       const second = yield* session.prompt(input)
@@ -151,6 +152,7 @@ describe("SessionV2.prompt", () => {
         sessionID,
         id: messageID,
         prompt: new Prompt({ text: "Fix the failing tests" }),
+        resume: false,
       }
 
       const first = yield* session.prompt(input)
@@ -176,6 +178,7 @@ describe("SessionV2.prompt", () => {
           sessionID,
           id: messageID,
           prompt: new Prompt({ text: "Delete the failing tests" }),
+          resume: false,
         })
         .pipe(Effect.flip)
 
@@ -192,6 +195,7 @@ describe("SessionV2.prompt", () => {
         sessionID,
         id: messageID,
         prompt: new Prompt({ text: "Fix the failing tests" }),
+        resume: false,
       }
 
       const admitted = yield* Effect.all([session.prompt(input), session.prompt(input)], { concurrency: "unbounded" })
@@ -215,10 +219,46 @@ describe("SessionV2.prompt", () => {
         .pipe(Effect.orDie)
       const prompt = new Prompt({ text: "Fix the failing tests" })
 
-      yield* session.prompt({ id: messageID, sessionID, prompt })
-      const failure = yield* session.prompt({ id: messageID, sessionID: other, prompt }).pipe(Effect.flip)
+      yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
+      const failure = yield* session.prompt({ id: messageID, sessionID: other, prompt, resume: false }).pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
+    }),
+  )
+
+  it.effect("starts execution by default after admitting the prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      runnerCalls.length = 0
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run by default" }) })
+
+      expect(runnerCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("starts execution when resume is explicitly true", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      runnerCalls.length = 0
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run explicitly" }), resume: true })
+
+      expect(runnerCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("only admits the prompt when resume is false", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      runnerCalls.length = 0
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not run" }), resume: false })
+
+      expect(runnerCalls).toEqual([])
     }),
   )
 })

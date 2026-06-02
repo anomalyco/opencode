@@ -8113,6 +8113,7 @@ export type V2SessionPromptData = {
     prompt: Prompt
     idempotencyKey?: string
     delivery?: SessionDelivery
+    resume?: boolean
   }
   path: {
     sessionID: string

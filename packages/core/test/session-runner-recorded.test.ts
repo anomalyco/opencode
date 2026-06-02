@@ -69,7 +69,7 @@ describe("SessionRunnerLLM recorded", () => {
         .run()
         .pipe(Effect.orDie)
       const session = yield* SessionV2.Service
-      const prompt = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Say hello in one short sentence." }) })
+      const prompt = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Say hello in one short sentence." }), resume: false })
 
       yield* session.resume(sessionID)
 

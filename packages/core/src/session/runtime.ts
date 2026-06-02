@@ -51,8 +51,24 @@ export const localLayer = Layer.effect(
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
     const runner = yield* SessionRunner.Service
+    const scope = yield* Effect.scope
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const decodeUserMessage = Schema.decodeUnknownEffect(SessionMessage.User)
+
+    const resume = (sessionID: SessionSchema.ID) => runner.run(sessionID)
+
+    const enqueueResume = (sessionID: SessionSchema.ID) =>
+      resume(sessionID).pipe(
+        Effect.tapCause((cause) =>
+          Effect.logError("Failed to resume Session").pipe(
+            Effect.annotateLogs("sessionID", sessionID),
+            Effect.annotateLogs("cause", cause),
+          ),
+        ),
+        Effect.ignore,
+        Effect.forkIn(scope, { startImmediately: true }),
+        Effect.asVoid,
+      )
 
     const getUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
       const row = yield* db
@@ -117,11 +133,11 @@ export const localLayer = Layer.effect(
             }),
           )
         if (raced) return raced
-        // TODO: Enqueue Session execution after admission without making prompt wait for the model loop.
+        if (input.resume !== false) yield* enqueueResume(input.sessionID)
         return yield* getUserMessage(messageID)
       }),
       resume: Effect.fn("SessionRuntime.resume")(function* (sessionID) {
-        yield* runner.run(sessionID)
+        yield* resume(sessionID)
       }),
     })
   }),
