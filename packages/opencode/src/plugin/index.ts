@@ -25,6 +25,7 @@ import { UntrustedContentWrapperPlugin } from "@/securecode/plugins/untrusted-co
 import { QwenQuestionNormalizePlugin } from "@/securecode/plugins/qwen-question-normalize"
 import { QwenThinkingDefaultPlugin } from "@/securecode/plugins/qwen-thinking-default"
 import { PermissionPolicyPlugin } from "@/securecode/plugins/permission-policy"
+import { DefensiveSystemPromptPlugin } from "@/securecode/plugins/defensive-system-prompt"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -80,6 +81,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   QwenQuestionNormalizePlugin,
   QwenThinkingDefaultPlugin,
   PermissionPolicyPlugin,
+  DefensiveSystemPromptPlugin,
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {
