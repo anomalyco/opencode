@@ -2264,6 +2264,116 @@
   color: var(--stats-muted);
 }
 
+[data-page="stats"] [data-slot="cache-ratio-heading"] {
+  display: grid;
+  grid-template-columns: 56px minmax(96px, 180px) minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: 18px;
+  padding: 0 12px;
+  color: var(--stats-faint);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-slot="cache-ratio-heading"] b {
+  justify-self: end;
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-slot="cache-ratio-rows"] {
+  display: grid;
+  gap: 8px;
+}
+
+[data-page="stats"] button[data-component="cache-ratio-row"] {
+  display: grid;
+  grid-template-columns: 56px minmax(96px, 180px) minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--stats-text);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: left;
+}
+
+[data-page="stats"] button[data-component="cache-ratio-row"][data-active="true"] {
+  background: #0000000a;
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"][data-active="true"] strong {
+  color: var(--stats-accent-text);
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"] > span {
+  overflow: hidden;
+  color: var(--stats-muted);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="cache-ratio-marker"] {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 7px;
+  overflow: visible;
+  background:
+    linear-gradient(
+      90deg,
+      transparent calc(20% - 0.5px),
+      var(--stats-line) calc(20% - 0.5px) calc(20% + 0.5px),
+      transparent calc(20% + 0.5px) calc(40% - 0.5px),
+      var(--stats-line) calc(40% - 0.5px) calc(40% + 0.5px),
+      transparent calc(40% + 0.5px) calc(60% - 0.5px),
+      var(--stats-line) calc(60% - 0.5px) calc(60% + 0.5px),
+      transparent calc(60% + 0.5px) calc(80% - 0.5px),
+      var(--stats-line) calc(80% - 0.5px) calc(80% + 0.5px),
+      transparent calc(80% + 0.5px)
+    ),
+    linear-gradient(90deg, var(--stats-line) 0 1px, transparent 1px calc(100% - 1px), var(--stats-line) calc(100% - 1px)),
+    var(--stats-layer-2);
+  font-style: normal;
+}
+
+[data-page="stats"] [data-component="cache-ratio-marker"] em {
+  position: absolute;
+  top: 50%;
+  left: var(--cache-ratio-fill);
+  display: block;
+  width: 7px;
+  height: 13px;
+  transform: translate(-50%, -50%);
+  background: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"][data-active="true"] [data-component="cache-ratio-marker"] {
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"][data-active="true"] [data-component="cache-ratio-marker"] em {
+  background: var(--stats-accent);
+}
+
+[data-page="stats"] [data-component="token-tooltip"][data-variant="cache-ratio"] {
+  left: 30%;
+}
+
 [data-page="stats"] [data-slot="token-footer"] {
   display: flex;
   align-items: center;
@@ -2405,6 +2515,13 @@
   [data-slot="leader-watermark"] {
   color: var(--stats-line-strong);
   opacity: 0.78;
+}
+
+[data-page="stats"][data-theme="dark"] button[data-component="cache-ratio-row"][data-active="true"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  button[data-component="cache-ratio-row"][data-active="true"] {
+  background: #ffffff0d;
 }
 
 [data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"],
@@ -2754,6 +2871,12 @@
   [data-page="stats"] [data-slot="section-title"] {
     margin-bottom: 32px;
     font-size: 16px;
+  }
+
+  [data-page="stats"] [data-slot="cache-ratio-heading"],
+  [data-page="stats"] button[data-component="cache-ratio-row"] {
+    grid-template-columns: 44px minmax(72px, 1fr) minmax(86px, 1.2fr);
+    gap: 8px;
   }
 
   [data-page="stats"] [data-slot="top-models-mobile-controls"] {
