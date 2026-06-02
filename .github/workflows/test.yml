@@ -4,7 +4,21 @@ on:
   push:
     branches:
       - dev
+    paths:
+      - "packages/**"
+      - "turbo.json"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/test.yml"
+      - ".github/actions/setup-bun/**"
   pull_request:
+    paths:
+      - "packages/**"
+      - "turbo.json"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/test.yml"
+      - ".github/actions/setup-bun/**"
   workflow_dispatch:
 
 concurrency:
