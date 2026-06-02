@@ -146,6 +146,7 @@
     "virtua@0.49.1": "patches/virtua@0.49.1.patch",
     "@ai-sdk/xai@3.0.82": "patches/@ai-sdk%2Fxai@3.0.82.patch",
     "gcp-metadata@8.1.2": "patches/gcp-metadata@8.1.2.patch",
-    "pacote@21.5.0": "patches/pacote@21.5.0.patch"
+    "pacote@21.5.0": "patches/pacote@21.5.0.patch",
+    "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch"
   }
 }
