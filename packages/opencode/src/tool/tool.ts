@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { Effect, Schema } from "effect"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import type { JSONSchema7 } from "@ai-sdk/provider"
@@ -41,7 +42,7 @@ export type Context<M extends Metadata = Metadata> = {
   extra?: { [key: string]: unknown }
   messages: SessionLegacy.WithParts[]
   metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
-  ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
+  ask(input: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
 }
 
 export interface ExecuteResult<M extends Metadata = Metadata> {

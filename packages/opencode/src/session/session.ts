@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -19,13 +20,14 @@ import { gte } from "drizzle-orm"
 import { isNull } from "drizzle-orm"
 import { desc } from "drizzle-orm"
 import { like } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import * as Log from "@opencode-ai/core/util/log"
+import { Log } from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
@@ -47,10 +49,6 @@ const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
-
-function createDefaultTitle(isChild = false) {
-  return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
-}
 
 export function isDefaultTitle(title: string) {
   return new RegExp(
@@ -236,7 +234,7 @@ export const Info = Schema.Struct({
   version: Schema.String,
   metadata: optionalOmitUndefined(Metadata),
   time: Time,
-  permission: optionalOmitUndefined(Permission.Ruleset),
+  permission: optionalOmitUndefined(PermissionLegacy.Ruleset),
   revert: optionalOmitUndefined(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
@@ -261,7 +259,7 @@ export const CreateInput = Schema.optional(
     agent: Schema.optional(Schema.String),
     model: Schema.optional(Model),
     metadata: Schema.optional(Metadata),
-    permission: Schema.optional(Permission.Ruleset),
+    permission: Schema.optional(PermissionLegacy.Ruleset),
     workspaceID: Schema.optional(WorkspaceV2.ID),
   }),
 )
@@ -285,7 +283,7 @@ export const SetMetadataInput = Schema.Struct({
 })
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
-  permission: Permission.Ruleset,
+  permission: PermissionLegacy.Ruleset,
 })
 export const SetRevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -351,7 +349,7 @@ const UpdatedInfo = Schema.Struct({
   version: Schema.optional(Schema.NullOr(Schema.String)),
   metadata: Schema.optional(Schema.NullOr(Metadata)),
   time: Schema.optional(UpdatedTime),
-  permission: Schema.optional(Schema.NullOr(Permission.Ruleset)),
+  permission: Schema.optional(Schema.NullOr(PermissionLegacy.Ruleset)),
   revert: Schema.optional(Schema.NullOr(Revert)),
 })
 
@@ -440,18 +438,22 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
     (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
       : input.model.cost)
+  const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
   return {
-    cost: safe(
-      new Decimal(0)
-        .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-        // TODO: update models.dev to have better pricing model, for now:
-        // charge reasoning tokens at the same rate as output tokens
-        .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
-        .toNumber(),
-    ),
+    cost:
+      typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
+        ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
+        : safe(
+            new Decimal(0)
+              .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+              .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+              .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
+              .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
+              // TODO: update models.dev to have better pricing model, for now:
+              // charge reasoning tokens at the same rate as output tokens
+              .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
+              .toNumber(),
+          ),
     tokens,
   }
 }
@@ -471,7 +473,7 @@ export interface Interface {
     agent?: string
     model?: Schema.Schema.Type<typeof Model>
     metadata?: typeof Metadata.Type
-    permission?: Permission.Ruleset
+    permission?: PermissionLegacy.Ruleset
     workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
@@ -480,7 +482,7 @@ export interface Interface {
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
-  readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
+  readonly setPermission: (input: { sessionID: SessionID; permission: PermissionLegacy.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
     revert: Info["revert"]
@@ -569,7 +571,7 @@ export const layer: Layer.Layer<
       directory: string
       path?: string
       metadata?: typeof Metadata.Type
-      permission?: Permission.Ruleset
+      permission?: PermissionLegacy.Ruleset
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -581,7 +583,7 @@ export const layer: Layer.Layer<
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
-        title: input.title ?? createDefaultTitle(!!input.parentID),
+        title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString(),
         agent: input.agent,
         model: input.model,
         metadata: input.metadata,
@@ -747,7 +749,7 @@ export const layer: Layer.Layer<
       agent?: string
       model?: Schema.Schema.Type<typeof Model>
       metadata?: typeof Metadata.Type
-      permission?: Permission.Ruleset
+      permission?: PermissionLegacy.Ruleset
       workspaceID?: WorkspaceV2.ID
     }) {
       const ctx = yield* InstanceState.context
@@ -841,7 +843,7 @@ export const layer: Layer.Layer<
 
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
       sessionID: SessionID
-      permission: Permission.Ruleset
+      permission: PermissionLegacy.Ruleset
     }) {
       yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } }).pipe(
         Effect.orDie,
@@ -1047,7 +1049,10 @@ function listByProject(
   }
   if (input.path !== undefined) {
     if (input.path) {
-      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
+      const conds = [
+        eq(SessionTable.path, input.path),
+        like(SessionTable.path, sql.param(`${input.path}/%`, SessionTable.path)),
+      ]
 
       conditions.push(
         input.directory
