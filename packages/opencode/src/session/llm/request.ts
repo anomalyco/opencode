@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import type { Auth } from "@/auth"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
@@ -22,7 +23,7 @@ type PrepareInput = {
   readonly parentSessionID?: string
   readonly model: Provider.Model
   readonly agent: Agent.Info
-  readonly permission?: Permission.Ruleset
+  readonly permission?: PermissionLegacy.Ruleset
   readonly system: string[]
   readonly messages: ModelMessage[]
   readonly small?: boolean

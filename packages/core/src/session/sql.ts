@@ -3,7 +3,7 @@ import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
 import type { Snapshot } from "../snapshot"
-import { PermissionV2 } from "../permission"
+import { PermissionLegacy } from "../permission/legacy"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, Info as LegacyMessageInfo, Part as LegacyMessagePart } from "./legacy"
@@ -42,7 +42,7 @@ export const SessionTable = sqliteTable(
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
-    permission: text({ mode: "json" }).$type<PermissionV2.Ruleset>(),
+    permission: text({ mode: "json" }).$type<PermissionLegacy.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
       id: string
@@ -129,11 +129,3 @@ export const SessionMessageTable = sqliteTable(
     index("session_message_time_created_idx").on(table.time_created),
   ],
 )
-
-export const PermissionTable = sqliteTable("permission", {
-  project_id: text()
-    .primaryKey()
-    .references(() => ProjectTable.id, { onDelete: "cascade" }),
-  ...Timestamps,
-  data: text({ mode: "json" }).notNull().$type<PermissionV2.Ruleset>(),
-})

@@ -1,5 +1,5 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -14,8 +14,8 @@ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permiss
     })
 
     const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
-      params: { requestID: PermissionID }
-      payload: Permission.ReplyBody
+      params: { requestID: PermissionLegacy.ID }
+      payload: PermissionLegacy.ReplyBody
     }) {
       yield* svc
         .reply({

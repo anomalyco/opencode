@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
@@ -11,7 +12,6 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
-import { PermissionID } from "../../src/permission/schema"
 
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project/bootstrap-service"
@@ -913,7 +913,7 @@ describe("session HttpApi", () => {
           }),
         ).toMatchObject({ id: session.id })
 
-        const permissionID = String(PermissionID.ascending())
+        const permissionID = String(PermissionLegacy.ID.ascending())
         const permission = yield* request(
           pathFor(SessionPaths.permissions, {
             sessionID: session.id,

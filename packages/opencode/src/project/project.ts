@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -84,10 +84,6 @@ export function fromRow(row: Row): Info {
     sandboxes: row.sandboxes,
     commands: row.commands ?? undefined,
   }
-}
-
-function mergePermissionRules<T extends readonly unknown[]>(oldRules: T, newRules: T): T {
-  return [...new Map([...oldRules, ...newRules].map((rule) => [JSON.stringify(rule), rule])).values()] as unknown as T
 }
 
 export const UpdateInput = Schema.Struct({
@@ -198,36 +194,6 @@ export const layer = Layer.effect(
                     id: newID,
                     time_updated: Date.now(),
                   })
-                  .run()
-              }
-
-              const oldPermission = yield* d
-                .select()
-                .from(PermissionTable)
-                .where(eq(PermissionTable.project_id, oldID))
-                .get()
-              const newPermission = yield* d
-                .select()
-                .from(PermissionTable)
-                .where(eq(PermissionTable.project_id, newID))
-                .get()
-              if (oldPermission && newPermission) {
-                yield* d
-                  .update(PermissionTable)
-                  .set({
-                    data: mergePermissionRules(oldPermission.data, newPermission.data),
-                    time_created: Math.min(oldPermission.time_created, newPermission.time_created),
-                    time_updated: Date.now(),
-                  })
-                  .where(eq(PermissionTable.project_id, newID))
-                  .run()
-                yield* d.delete(PermissionTable).where(eq(PermissionTable.project_id, oldID)).run()
-              }
-              if (oldPermission && !newPermission) {
-                yield* d
-                  .update(PermissionTable)
-                  .set({ project_id: newID })
-                  .where(eq(PermissionTable.project_id, oldID))
                   .run()
               }
 
