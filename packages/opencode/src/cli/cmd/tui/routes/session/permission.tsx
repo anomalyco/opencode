@@ -20,7 +20,7 @@ import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
 
-function filetype(input?: unknown) {
+function filetype(input?: string) {
   if (typeof input !== "string" || !input) return "none"
   const ext = path.extname(input)
   const language = LANGUAGE_EXTENSIONS[ext]

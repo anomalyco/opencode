@@ -4,7 +4,7 @@ import { Global } from "@opencode-ai/core/global"
 
 const context = createContext<{
   path: () => string
-  format: (input?: unknown) => string
+  format: (input?: string) => string
 }>()
 
 export function PathFormatterProvider(props: ParentProps<{ path: string | undefined }>) {
@@ -23,7 +23,7 @@ export function usePathFormatter() {
   return value
 }
 
-function formatPath(input: unknown, base: string | undefined) {
+function formatPath(input: string | undefined, base: string | undefined) {
   if (typeof input !== "string" || !input) return ""
 
   const root = base || process.cwd()

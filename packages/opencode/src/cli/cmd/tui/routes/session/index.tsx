@@ -2531,7 +2531,7 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   )
 }
 
-function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: unknown }) {
+function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
     const normalized = Filesystem.normalizePath(typeof props.filePath === "string" ? props.filePath : "")
@@ -2563,7 +2563,7 @@ function input(input: Record<string, any>, omit?: string[]): string {
   return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
 }
 
-function filetype(input?: unknown) {
+function filetype(input?: string) {
   if (typeof input !== "string" || !input) return "none"
   const ext = path.extname(input)
   const language = LANGUAGE_EXTENSIONS[ext]
