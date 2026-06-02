@@ -8112,18 +8112,11 @@
         "operationId": "v2.session.list",
         "parameters": [
           {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
             "name": "workspace",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^wrk"
             },
             "required": false
           },
@@ -8145,7 +8138,7 @@
             "required": false
           },
           {
-            "name": "path",
+            "name": "search",
             "in": "query",
             "schema": {
               "type": "string"
@@ -8153,31 +8146,23 @@
             "required": false
           },
           {
-            "name": "roots",
+            "name": "directory",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "string",
-                  "enum": ["true", "false"]
-                }
-              ]
+              "type": "string"
             },
             "required": false
           },
           {
-            "name": "start",
+            "name": "project",
             "in": "query",
             "schema": {
-              "type": "number"
+              "type": "string"
             },
             "required": false
           },
           {
-            "name": "search",
+            "name": "subpath",
             "in": "query",
             "schema": {
               "type": "string"
@@ -8189,7 +8174,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order or filters."
+              "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response."
             },
             "required": false
           }
