@@ -342,6 +342,43 @@ function normalizeMessages(
   return msgs
 }
 
+function addAnthropicLeadingUserBoundary(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  if (!["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) return msgs
+
+  const first = msgs.findIndex((msg) => msg.role !== "system")
+  if (first === -1) return msgs
+
+  const msg = msgs[first]
+  if (msg?.role !== "assistant" || !Array.isArray(msg.content)) return msgs
+
+  const toolCallIDs = msg.content
+    .filter((part) => part.type === "tool-call")
+    .map((part) => part.toolCallId)
+  if (toolCallIDs.length === 0) return msgs
+
+  const next = msgs[first + 1]
+  if (next?.role !== "tool" || !Array.isArray(next.content)) return msgs
+
+  const toolResultIDs = new Set(
+    next.content.filter((part) => part.type === "tool-result").map((part) => part.toolCallId),
+  )
+  if (!toolCallIDs.every((id) => toolResultIDs.has(id))) return msgs
+
+  return [
+    ...msgs.slice(0, first),
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Previous user turn was omitted from the compacted conversation; continue from the following tool exchange.",
+        },
+      ],
+    } satisfies ModelMessage,
+    ...msgs.slice(first),
+  ]
+}
+
 function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -434,6 +471,7 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  msgs = addAnthropicLeadingUserBoundary(msgs, model)
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||

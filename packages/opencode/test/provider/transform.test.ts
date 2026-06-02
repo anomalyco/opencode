@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { ModelMessage } from "ai"
 import { ProviderTransform } from "@/provider/transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -1678,6 +1679,121 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
       { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
     ])
+  })
+
+  test("prepends user boundary when anthropic history starts with assistant tool calls", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+          { type: "tool-result", toolCallId: "toolu_2", toolName: "glob", output: { type: "text", value: "[]" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Update the anchored summary below using the conversation history above." }],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(4)
+    expect(result[0]).toMatchObject({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Previous user turn was omitted from the compacted conversation; continue from the following tool exchange.",
+        },
+      ],
+    })
+    expect(result[1]).toMatchObject({ role: "assistant" })
+    expect(result[2]).toMatchObject({ role: "tool" })
+    expect(result[3]).toMatchObject({ role: "user" })
+  })
+
+  test("does not prepend user boundary when anthropic history already starts with user", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Check my home directory for PDFs" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } }],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(3)
+    expect(result.map((msg) => msg.role)).toEqual(["user", "assistant", "tool"])
+  })
+
+  test("does not prepend user boundary when leading anthropic tool calls are incomplete", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result.map((msg) => msg.role)).toEqual(["assistant", "tool"])
+  })
+
+  test("does not prepend user boundary for non-anthropic providers", () => {
+    const openaiModel = {
+      ...anthropicModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-5.1",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } }],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "toolu_1", toolName: "read", output: { type: "text", value: "ok" } },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result.map((msg) => msg.role)).toEqual(["assistant", "tool"])
   })
 
   test("splits vertex anthropic assistant messages when text trails tool calls", () => {
