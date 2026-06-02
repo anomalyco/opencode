@@ -13,6 +13,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRuntime } from "@opencode-ai/core/session/runtime"
 import { SessionCreateAdmissionTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
@@ -27,8 +28,9 @@ const projects = Layer.succeed(
   }),
 )
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(projects))
-const it = testEffect(Layer.mergeAll(database, events, projects, projector, sessions))
+const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database))
+const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(projects), Layer.provide(runtime))
+const it = testEffect(Layer.mergeAll(database, events, projects, projector, runtime, sessions))
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const key = SessionV2.CreateIdempotencyKey.make("discord-thread-123")
 

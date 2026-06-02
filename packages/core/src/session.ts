@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context } from "effect"
+import { Effect, Layer, Schema, Context } from "effect"
 import { and, asc, desc, eq, gt, gte, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -9,12 +9,11 @@ import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import { Prompt } from "./session/prompt"
-import { SessionEvent } from "./session/event"
 import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionCreateAdmissionTable, SessionMessageTable, SessionPromptAdmissionTable, SessionTable } from "./session/sql"
+import { SessionCreateAdmissionTable, SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
@@ -24,6 +23,9 @@ import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
 import path from "path"
 import { fromRow } from "./session/info"
+import { PromptConflictError, SessionRuntime } from "./session/runtime"
+
+export { PromptConflictError } from "./session/runtime"
 
 // get project -> project.locations
 //
@@ -98,11 +100,6 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
   messageID: SessionMessage.ID,
 }) {}
 
-export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
-  sessionID: SessionSchema.ID,
-  idempotencyKey: Prompt.IdempotencyKey,
-}) {}
-
 export class CreateConflictError extends Schema.TaggedErrorClass<CreateConflictError>()("Session.CreateConflictError", {
   idempotencyKey: SessionSchema.CreateIdempotencyKey,
 }) {}
@@ -164,8 +161,8 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
     const projects = yield* ProjectV2.Service
+    const runtime = yield* SessionRuntime.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
-    const decodeUserMessage = Schema.decodeUnknownEffect(SessionMessage.User)
     const decodeSession = Schema.decodeUnknownEffect(SessionSchema.Info)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -178,46 +175,6 @@ export const layer = Layer.effect(
             }),
         ),
       )
-
-    const getUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
-      const row = yield* db
-        .select()
-        .from(SessionMessageTable)
-        .where(eq(SessionMessageTable.id, messageID))
-        .get()
-        .pipe(Effect.orDie)
-      if (!row) return yield* Effect.die("Prompt projection was not stored")
-      const message = yield* decode(row).pipe(Effect.orDie)
-      if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
-      return message
-    })
-
-    const findPromptAdmission = Effect.fnUntraced(function* (input: {
-      sessionID: SessionSchema.ID
-      idempotencyKey: Prompt.IdempotencyKey
-      prompt: Prompt
-    }) {
-      const admitted = yield* db
-        .select()
-        .from(SessionPromptAdmissionTable)
-        .where(
-          and(
-            eq(SessionPromptAdmissionTable.session_id, input.sessionID),
-            eq(SessionPromptAdmissionTable.idempotency_key, input.idempotencyKey),
-          ),
-        )
-        .get()
-        .pipe(Effect.orDie)
-      if (!admitted) return undefined
-      const prompt = yield* Prompt.decodeUnknown(admitted.prompt).pipe(Effect.orDie)
-      if (!Prompt.equivalence(prompt, input.prompt)) {
-        return yield* new PromptConflictError({
-          sessionID: input.sessionID,
-          idempotencyKey: input.idempotencyKey,
-        })
-      }
-      return yield* decodeUserMessage(admitted.message).pipe(Effect.orDie)
-    })
 
     const findCreateAdmission = Effect.fnUntraced(function* (input: {
       idempotencyKey: SessionSchema.CreateIdempotencyKey
@@ -424,39 +381,7 @@ export const layer = Layer.effect(
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
-        const admission = input.idempotencyKey === undefined
-          ? undefined
-          : { sessionID: input.sessionID, idempotencyKey: input.idempotencyKey, prompt: input.prompt }
-        if (admission !== undefined) {
-          const admitted = yield* findPromptAdmission(admission)
-          if (admitted) return admitted
-        }
-        const messageID = input.id ?? EventV2.ID.create()
-        const raced = yield* events
-          .publish(
-            SessionEvent.Prompted,
-            {
-              sessionID: input.sessionID,
-              timestamp: yield* DateTime.now,
-              idempotencyKey: input.idempotencyKey,
-              prompt: input.prompt,
-            },
-            { id: messageID },
-          )
-          .pipe(
-            Effect.as<SessionMessage.User | undefined>(undefined),
-            Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.PromptAdmissionRace) || admission === undefined) {
-                return Effect.die(defect)
-              }
-              return findPromptAdmission(admission).pipe(
-                Effect.flatMap((admitted) => (admitted ? Effect.succeed(admitted) : Effect.die(defect))),
-              )
-            }),
-          )
-        if (raced) return raced
-        // TODO: Enqueue Session execution after admission without making prompt wait for the model loop.
-        return yield* getUserMessage(messageID)
+        return yield* runtime.prompt(input)
       }),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),
@@ -481,8 +406,9 @@ export const layer = Layer.effect(
 const DefaultDatabase = Database.defaultLayer
 const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
 const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
+const DefaultRuntime = SessionRuntime.localLayer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, ProjectV2.defaultLayer)),
+  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, DefaultRuntime, ProjectV2.defaultLayer)),
   Layer.orDie,
 )

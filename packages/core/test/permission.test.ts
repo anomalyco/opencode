@@ -12,6 +12,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionRuntime } from "@opencode-ai/core/session/runtime"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -22,13 +23,15 @@ const current = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
 const events = EventV2.layer.pipe(Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer))
+const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database))
+const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer), Layer.provide(runtime))
 const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(
   Layer.provideMerge(database),
   Layer.provideMerge(events),
   Layer.provideMerge(current),
   Layer.provideMerge(sessions),
+  Layer.provideMerge(runtime),
   Layer.provideMerge(saved),
 )
 const it = testEffect(layer)

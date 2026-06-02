@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { DateTime, Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Project } from "@opencode-ai/core/project"
@@ -7,16 +7,39 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRuntime } from "@opencode-ai/core/session/runtime"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer))
-const it = testEffect(Layer.mergeAll(database, events, projector, sessions))
+const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database))
+const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer), Layer.provide(runtime))
+const it = testEffect(Layer.mergeAll(database, events, projector, runtime, sessions))
 const sessionID = SessionV2.ID.make("ses_prompt_test")
+const runtimeCalls: SessionRuntime.PromptInput[] = []
+const delegatedMessage = new SessionMessage.User({
+  id: SessionMessage.ID.make("msg_delegated"),
+  type: "user",
+  text: "Fix the failing tests",
+  time: { created: DateTime.makeUnsafe(0) },
+})
+const recordingRuntime = Layer.succeed(SessionRuntime.Service, SessionRuntime.Service.of({
+  prompt: (input) => Effect.sync(() => {
+    runtimeCalls.push(input)
+    return delegatedMessage
+  }),
+}))
+const recordingSessions = SessionV2.layer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(recordingRuntime),
+)
+const recordingIt = testEffect(Layer.mergeAll(database, events, projector, recordingRuntime, recordingSessions))
 
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
@@ -42,6 +65,18 @@ const setup = Effect.gen(function* () {
 })
 
 describe("SessionV2.prompt", () => {
+  recordingIt.effect("delegates runtime-bound prompt admission through SessionRuntime", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = { sessionID, prompt: new Prompt({ text: "Fix the failing tests" }) }
+
+      runtimeCalls.length = 0
+      expect(yield* session.prompt(input)).toEqual(delegatedMessage)
+      expect(runtimeCalls).toEqual([input])
+    }),
+  )
+
   it.effect("durably admits one projected user message", () =>
     Effect.gen(function* () {
       yield* setup
