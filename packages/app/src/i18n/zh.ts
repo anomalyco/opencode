@@ -555,6 +555,8 @@ export const dict = {
   "session.header.open.ariaLabel": "在 {{app}} 中打开",
   "session.header.open.menu": "打开选项",
   "session.header.open.copyPath": "复制路径",
+  "session.header.agent.label": "代理",
+  "session.header.agent.active": "当前代理：@{{agent}}",
 
   "status.popover.trigger": "状态",
   "status.popover.ariaLabel": "服务器配置",

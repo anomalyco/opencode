@@ -554,6 +554,8 @@ export const dict = {
   "session.header.open.ariaLabel": "Otvori u {{app}}",
   "session.header.open.menu": "Opcije otvaranja",
   "session.header.open.copyPath": "Kopiraj putanju",
+  "session.header.agent.label": "Agent",
+  "session.header.agent.active": "Aktivni agent: @{{agent}}",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Konfiguracije servera",
