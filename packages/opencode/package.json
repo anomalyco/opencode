@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.15.10",
+  "version": "1.15.13",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -15,8 +15,7 @@
     "build": "bun run script/build.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "db": "bun drizzle-kit"
+    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -62,7 +61,6 @@
     "@types/which": "3.0.4",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
-    "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "prettier": "3.6.2",
     "typescript": "catalog:",
@@ -81,8 +79,8 @@
     "@ai-sdk/cohere": "3.0.27",
     "@ai-sdk/deepinfra": "2.0.41",
     "@ai-sdk/gateway": "3.0.104",
-    "@ai-sdk/google": "3.0.75",
-    "@ai-sdk/google-vertex": "4.0.131",
+    "@ai-sdk/google": "3.0.73",
+    "@ai-sdk/google-vertex": "4.0.128",
     "@ai-sdk/groq": "3.0.31",
     "@ai-sdk/mistral": "3.0.27",
     "@ai-sdk/openai": "3.0.53",
@@ -122,6 +120,7 @@
     "@solid-primitives/event-bus": "1.1.2",
     "@solid-primitives/scheduled": "1.5.2",
     "@standard-schema/spec": "1.0.0",
+    "@types/ws": "8.18.1",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "ai-gateway-provider": "3.1.2",
@@ -135,7 +134,7 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.7.0",
+    "gitlab-ai-provider": "6.8.0",
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
@@ -163,6 +162,7 @@
     "vscode-jsonrpc": "8.2.1",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
+    "ws": "8.21.0",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
     "zod": "catalog:"

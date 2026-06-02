@@ -1,4 +1,6 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import type { Auth } from "@/auth"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceState } from "@/effect/instance-state"
 import { Permission } from "@/permission"
@@ -16,12 +18,12 @@ import { mergeDeep } from "remeda"
 const USER_AGENT = `opencode/${InstallationVersion}`
 
 type PrepareInput = {
-  readonly user: MessageV2.User
+  readonly user: SessionLegacy.User
   readonly sessionID: string
   readonly parentSessionID?: string
   readonly model: Provider.Model
   readonly agent: Agent.Info
-  readonly permission?: Permission.Ruleset
+  readonly permission?: PermissionLegacy.Ruleset
   readonly system: string[]
   readonly messages: ModelMessage[]
   readonly small?: boolean

@@ -1,6 +1,9 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { LocationFileSystem } from "@opencode-ai/core/location-filesystem"
+import { PermissionV2 } from "@opencode-ai/core/permission"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
@@ -33,14 +36,16 @@ export const locationQueryOpenApi = OpenApi.annotations({
 export class V2LocationMiddleware extends HttpApiMiddleware.Service<
   V2LocationMiddleware,
   {
-    provides: Catalog.Service | PluginBoot.Service
+    provides: Catalog.Service | PluginBoot.Service | PermissionV2.Service | LocationFileSystem.Service
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   return {
-    directory: query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    directory: AbsolutePath.make(
+      query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    ),
     workspaceID: query.get("location[workspace]") || request.headers["x-opencode-workspace"],
   }
 }
@@ -56,4 +61,4 @@ export const layer = Layer.effect(
       }),
     )
   }),
-).pipe(Layer.provide(LocationServiceMap.layer))
+)
