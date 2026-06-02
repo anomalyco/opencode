@@ -117,7 +117,7 @@ describe("FileSystem", () => {
         const service = yield* FileSystem.Service
 
         expect((yield* service.find({ query: "index", type: "file" })).map((item) => item.path)).toEqual([
-          RelativePath.make("src/index.ts"),
+          RelativePath.make(path.join("src", "index.ts")),
         ])
         expect((yield* service.find({ query: "src", type: "directory" })).map((item) => item.path)).toEqual([
           RelativePath.make("src"),
