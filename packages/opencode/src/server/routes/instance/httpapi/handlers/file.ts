@@ -2,6 +2,7 @@ import * as InstanceState from "@/effect/instance-state"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Layer } from "effect"
 import path from "path"
@@ -63,12 +64,16 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     })
 
     const content = Effect.fn("FileHttpApi.content")(function* (ctx: { query: { path: string } }) {
+      const directory = (yield* InstanceState.context).directory
+      const file = path.resolve(directory, ctx.query.path)
+      if (!FSUtil.contains(directory, file)) return yield* Effect.die(new Error("Path escapes the location"))
+      if (!(yield* FSUtil.Service.use((fs) => fs.existsSafe(file)))) return { type: "text" as const, content: "" }
       return yield* filesystem(
         FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
       ).pipe(
         Effect.map((item) => ({
           type: item.type,
-          content: item.content,
+          content: item.type === "text" ? item.content.trim() : item.content,
           ...(item.type === "binary" ? { encoding: item.encoding, mimeType: item.mime } : {}),
         })),
       )
