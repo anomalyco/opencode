@@ -10,7 +10,7 @@ import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable, MessageTable, PartTable, TodoTable } from "@opencode-ai/core/session/sql"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -574,7 +574,7 @@ describe("JSON to SQLite migration", () => {
     expect(todos[2].position).toBe(2)
   })
 
-  test("migrates permissions", async () => {
+  test("does not migrate legacy permissions", async () => {
     await writeProject(storageDir, {
       id: "proj_test123abc",
       worktree: "/",
@@ -592,12 +592,7 @@ describe("JSON to SQLite migration", () => {
 
     const stats = await JsonMigration.run(db)
 
-    expect(stats?.permissions).toBe(1)
-
-    const permissions = db.select().from(PermissionTable).all()
-    expect(permissions.length).toBe(1)
-    expect(permissions[0].project_id).toBe("proj_test123abc")
-    expect(permissions[0].data).toEqual(permissionData)
+    expect(stats?.permissions).toBe(0)
   })
 
   test("migrates session shares", async () => {
@@ -694,7 +689,7 @@ describe("JSON to SQLite migration", () => {
     expect(todos[1].position).toBe(2)
   })
 
-  test("skips orphaned todos, permissions, and shares", async () => {
+  test("skips orphaned todos and shares", async () => {
     await writeProject(storageDir, {
       id: "proj_test123abc",
       worktree: "/",
@@ -733,11 +728,10 @@ describe("JSON to SQLite migration", () => {
     const stats = await JsonMigration.run(db)
 
     expect(stats.todos).toBe(1)
-    expect(stats.permissions).toBe(1)
+    expect(stats.permissions).toBe(0)
     expect(stats.shares).toBe(1)
 
     expect(db.select().from(TodoTable).all().length).toBe(1)
-    expect(db.select().from(PermissionTable).all().length).toBe(1)
     expect(db.select().from(SessionShareTable).all().length).toBe(1)
   })
 
@@ -848,7 +842,7 @@ describe("JSON to SQLite migration", () => {
     expect(stats.messages).toBe(1)
     expect(stats.parts).toBe(1)
     expect(stats.todos).toBe(1)
-    expect(stats.permissions).toBe(1)
+    expect(stats.permissions).toBe(0)
     expect(stats.shares).toBe(1)
     expect(stats.errors.length).toBeGreaterThanOrEqual(6)
 
@@ -857,7 +851,6 @@ describe("JSON to SQLite migration", () => {
     expect(db.select().from(MessageTable).all().length).toBe(1)
     expect(db.select().from(PartTable).all().length).toBe(1)
     expect(db.select().from(TodoTable).all().length).toBe(1)
-    expect(db.select().from(PermissionTable).all().length).toBe(1)
     expect(db.select().from(SessionShareTable).all().length).toBe(1)
   })
 })

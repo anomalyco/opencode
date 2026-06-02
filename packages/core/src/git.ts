@@ -4,7 +4,7 @@ import path from "path"
 import { Context, Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath } from "./schema"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { AppProcess } from "./process"
 
 export interface Repo {
@@ -30,6 +30,21 @@ export interface Interface {
   readonly find: (input: AbsolutePath) => Effect.Effect<Repo | undefined>
   readonly remote: (repo: Repo, name?: string) => Effect.Effect<string | undefined>
   readonly roots: (repo: Repo) => Effect.Effect<string[]>
+  readonly origin: (directory: string) => Effect.Effect<string | undefined>
+  readonly head: (directory: string) => Effect.Effect<string | undefined>
+  readonly dir: (directory: string) => Effect.Effect<string | undefined>
+  readonly branch: (directory: string) => Effect.Effect<string | undefined>
+  readonly remoteHead: (directory: string) => Effect.Effect<string | undefined>
+  readonly clone: (input: {
+    remote: string
+    target: string
+    branch?: string
+    depth?: number
+  }) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly fetch: (directory: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly fetchBranch: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly checkout: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly reset: (directory: string, target: string) => Effect.Effect<Result, AppProcess.AppProcessError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/GitV2") {}
@@ -37,7 +52,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Gi
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const proc = yield* AppProcess.Service
 
     const find = Effect.fn("Git.find")(function* (input: AbsolutePath) {
@@ -75,21 +90,97 @@ export const layer = Layer.effect(
         .toSorted()
     })
 
-    return Service.of({ find, remote, roots })
+    const origin = Effect.fn("Git.origin")(function* (directory: string) {
+      const result = yield* run(directory, proc)(["config", "--get", "remote.origin.url"])
+      if (result.exitCode !== 0) return undefined
+      return result.text.trim() || undefined
+    })
+
+    const head = Effect.fn("Git.head")(function* (directory: string) {
+      const result = yield* run(directory, proc)(["rev-parse", "HEAD"])
+      if (result.exitCode !== 0) return undefined
+      return result.text.trim() || undefined
+    })
+
+    const dir = Effect.fn("Git.dir")(function* (directory: string) {
+      const result = yield* run(directory, proc)(["rev-parse", "--git-dir"])
+      if (result.exitCode !== 0) return undefined
+      return AbsolutePath.make(resolvePath(directory, result.text))
+    })
+
+    const branch = Effect.fn("Git.branch")(function* (directory: string) {
+      const result = yield* run(directory, proc)(["symbolic-ref", "--quiet", "--short", "HEAD"])
+      if (result.exitCode !== 0) return undefined
+      return result.text.trim() || undefined
+    })
+
+    const remoteHead = Effect.fn("Git.remoteHead")(function* (directory: string) {
+      const result = yield* run(directory, proc)(["symbolic-ref", "refs/remotes/origin/HEAD"])
+      if (result.exitCode !== 0) return undefined
+      return result.text.trim().replace(/^refs\/remotes\//, "") || undefined
+    })
+
+    const clone = Effect.fn("Git.clone")((input: { remote: string; target: string; branch?: string; depth?: number }) =>
+      execute(
+        path.dirname(input.target),
+        proc,
+      )([
+        "clone",
+        "--depth",
+        String(input.depth ?? 100),
+        ...(input.branch ? ["--branch", input.branch] : []),
+        "--",
+        input.remote,
+        input.target,
+      ]),
+    )
+
+    const fetch = Effect.fn("Git.fetch")((directory: string) => execute(directory, proc)(["fetch", "--all", "--prune"]))
+
+    const fetchBranch = Effect.fn("Git.fetchBranch")((directory: string, branch: string) =>
+      execute(directory, proc)(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]),
+    )
+
+    const checkout = Effect.fn("Git.checkout")((directory: string, branch: string) =>
+      execute(directory, proc)(["checkout", "-B", branch, `origin/${branch}`]),
+    )
+
+    const reset = Effect.fn("Git.reset")((directory: string, target: string) =>
+      execute(directory, proc)(["reset", "--hard", target]),
+    )
+
+    return Service.of({
+      find,
+      remote,
+      roots,
+      origin,
+      head,
+      dir,
+      branch,
+      remoteHead,
+      clone,
+      fetch,
+      fetchBranch,
+      checkout,
+      reset,
+    })
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(AppProcess.defaultLayer))
 
-interface Result {
+export interface Result {
   readonly exitCode: number
   readonly text: string
+  readonly stderr: string
 }
 
 function run(cwd: string, proc: AppProcess.Interface) {
+  return (args: string[]) =>
+    execute(cwd, proc)(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
+}
+
+function execute(cwd: string, proc: AppProcess.Interface) {
   return (args: string[]) =>
     proc
       .run(
@@ -100,15 +191,21 @@ function run(cwd: string, proc: AppProcess.Interface) {
         }),
       )
       .pipe(
-        Effect.map((result) => ({ exitCode: result.exitCode, text: result.stdout.toString("utf8") }) satisfies Result),
-        Effect.catch(() => Effect.succeed({ exitCode: 1, text: "" } satisfies Result)),
+        Effect.map(
+          (result) =>
+            ({
+              exitCode: result.exitCode,
+              text: result.stdout.toString("utf8"),
+              stderr: result.stderr.toString("utf8"),
+            }) satisfies Result,
+        ),
       )
 }
 
 function resolvePath(cwd: string, value: string) {
   const trimmed = value.replace(/[\r\n]+$/, "")
   if (!trimmed) return cwd
-  const normalized = AppFileSystem.windowsPath(trimmed)
+  const normalized = FSUtil.windowsPath(trimmed)
   if (path.isAbsolute(normalized)) return path.normalize(normalized)
   return path.resolve(cwd, normalized)
 }

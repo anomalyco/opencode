@@ -4,7 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Location } from "@opencode-ai/core/location"
 import { Policy } from "@opencode-ai/core/policy"
@@ -23,7 +23,7 @@ function testLayer(
   vcs?: Project.Vcs,
 ) {
   return Config.locationLayer.pipe(
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Global.layerWith({ config: globalDirectory })),
     Layer.provide(
       Layer.succeed(
@@ -170,8 +170,8 @@ describe("Config", () => {
                 enterprise: { url: "https://share.example.com" },
                 username: "test-user",
                 permissions: [
-                  { permission: "bash", pattern: "*", action: "ask" },
-                  { permission: "bash", pattern: "git status", action: "allow" },
+                  { action: "bash", resource: "*", effect: "ask" },
+                  { action: "bash", resource: "git status", effect: "allow" },
                 ],
                 agents: {
                   reviewer: {
@@ -188,7 +188,7 @@ describe("Config", () => {
                     color: "warning",
                     steps: 12,
                     disabled: false,
-                    permissions: [{ permission: "edit", pattern: "*", action: "deny" }],
+                    permissions: [{ action: "edit", resource: "*", effect: "deny" }],
                   },
                 },
                 snapshots: false,
@@ -254,8 +254,8 @@ describe("Config", () => {
             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
             expect(documents[0]?.info.username).toBe("test-user")
             expect(documents[0]?.info.permissions).toEqual([
-              { permission: "bash", pattern: "*", action: "ask" },
-              { permission: "bash", pattern: "git status", action: "allow" },
+              { action: "bash", resource: "*", effect: "ask" },
+              { action: "bash", resource: "git status", effect: "allow" },
             ])
             expect(documents[0]?.info.agents?.reviewer).toEqual({
               model: "openrouter/openai/gpt-5",
@@ -271,7 +271,7 @@ describe("Config", () => {
               color: "warning",
               steps: 12,
               disabled: false,
-              permissions: [{ permission: "edit", pattern: "*", action: "deny" }],
+              permissions: [{ action: "edit", resource: "*", effect: "deny" }],
             })
             expect(documents[0]?.info.snapshots).toBe(false)
             expect(documents[0]?.info.watcher).toEqual({ ignore: ["node_modules/**", "dist/**", ".git"] })

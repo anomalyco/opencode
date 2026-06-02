@@ -1,7 +1,7 @@
 import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import { InstanceState } from "@/effect/instance-state"
-import { FileWatcher } from "@/file/watcher"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -328,9 +328,9 @@ export const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Serv
         log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
         const unsubscribe = yield* events.listen((event) => {
-          if (event.type !== FileWatcher.Event.Updated.type || event.location?.directory !== ctx.directory)
+          if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
             return Effect.void
-          const data = event.data as EventV2.Data<typeof FileWatcher.Event.Updated>
+          const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
           if (!data.file.endsWith("HEAD")) return Effect.void
           return Effect.gen(function* () {
             const next = yield* get()

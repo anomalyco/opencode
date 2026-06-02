@@ -1,6 +1,6 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { Permission } from "@/permission"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
-import { PermissionID } from "@/permission/schema"
 
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
@@ -48,7 +48,7 @@ export const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
 export const UpdatePayload = Schema.Struct({
   title: Schema.optional(Schema.String),
   metadata: Schema.optional(Session.Metadata),
-  permission: Schema.optional(Permission.Ruleset),
+  permission: Schema.optional(PermissionLegacy.Ruleset),
   time: Schema.optional(
     Schema.Struct({
       archived: Schema.optional(Session.ArchivedTimestamp),
@@ -71,7 +71,7 @@ export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInp
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
 export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
-  response: Permission.Reply,
+  response: PermissionLegacy.Reply,
 })
 
 export const SessionPaths = {
@@ -392,7 +392,7 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
-          params: { sessionID: SessionID, permissionID: PermissionID },
+          params: { sessionID: SessionID, permissionID: PermissionLegacy.ID },
           query: WorkspaceRoutingQuery,
           payload: PermissionResponsePayload,
           success: described(Schema.Boolean, "Permission processed successfully"),

@@ -576,9 +576,41 @@ const scenarios: Scenario[] = [
   http.protected.get("/api/model", "v2.model.list").json(200, array),
   http.protected.get("/api/provider", "v2.provider.list").json(200, array),
   http.protected
+    .get("/api/fs/read", "v2.fs.read")
+    .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
+    .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
+    .json(200, object),
+  http.protected.get("/api/fs/list", "v2.fs.list").json(200, array),
+  http.protected
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
     .json(404, object, "status"),
+  http.protected.get("/api/permission/request", "v2.permission.request.list").json(200, array),
+  http.protected
+    .get("/api/session/{sessionID}/permission/request", "v2.session.permission.list")
+    .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission/request", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, array),
+  http.protected
+    .post("/api/session/{sessionID}/permission/request/{requestID}/reply", "v2.session.permission.reply")
+    .seeded((ctx) => ctx.session({ title: "Permission owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/permission/request/{requestID}/reply", {
+        sessionID: ctx.state.id,
+        requestID: "per_httpapi_missing",
+      }),
+      headers: ctx.headers(),
+      body: { reply: "once" },
+    }))
+    .json(404, object, "status"),
+  http.protected.get("/api/permission/saved", "v2.permission.saved.list").json(200, array),
+  http.protected
+    .delete("/api/permission/saved/{id}", "v2.permission.saved.remove")
+    .at((ctx) => ({ path: route("/api/permission/saved/{id}", { id: "psv_httpapi_missing" }), headers: ctx.headers() }))
+    .status(204, undefined, "status"),
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))
@@ -619,13 +651,10 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: `/api/session?${new URLSearchParams({
         limit: "2",
-        directory: ctx.directory ?? "",
         cursor: cursor({
-          id: "ses_httpapi_missing",
-          time: 0,
           order: "desc",
-          direction: "next",
           directory: ctx.directory,
+          anchor: { id: "ses_httpapi_missing", time: 0, direction: "next" },
         }),
       })}`,
       headers: ctx.headers(),
@@ -643,8 +672,7 @@ const scenarios: Scenario[] = [
     .get("/api/session", "v2.session.list.cursor.invalid")
     .at((ctx) => ({
       path: `/api/session?${new URLSearchParams({
-        cursor: cursor({ id: "ses_httpapi_missing", time: 0, order: "desc", direction: "next" }),
-        search: "not-allowed-with-cursor",
+        cursor: "invalid",
       })}`,
       headers: ctx.headers(),
     }))

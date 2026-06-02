@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import path from "path"
@@ -332,7 +333,7 @@ describe("session.llm.ai-sdk adapter", () => {
   })
 
   test("preserves tool-error cause", async () => {
-    const error = new Permission.RejectedError()
+    const error = new PermissionLegacy.RejectedError()
     const events = await Effect.runPromise(
       LLMAISDK.toLLMEvents(LLMAISDK.adapterState(), {
         type: "tool-error",
@@ -1899,7 +1900,10 @@ describe("session.llm.stream", () => {
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: [{ type: "reasoning", text: "" }] },
+          ],
           tools: {},
         })
 
@@ -1910,6 +1914,7 @@ describe("session.llm.stream", () => {
           | undefined
 
         expect(capture.url.pathname).toBe(pathSuffix)
+        expect(body.contents).toEqual([{ role: "user", parts: [{ text: "Hello" }] }])
         expect(config?.temperature).toBe(0.3)
         expect(config?.topP).toBe(0.8)
         expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
