@@ -4,7 +4,7 @@ import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -54,7 +54,7 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
@@ -133,11 +133,11 @@ const git = Effect.fn("ReadToolTest.git")(function* (cwd: string, args: string[]
   })
 })
 const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(p, content)
 })
 const load = Effect.fn("ReadToolTest.load")(function* (p: string) {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   return yield* fs.readFileString(p)
 })
 const asks = () => {
@@ -266,7 +266,7 @@ describe("tool.read external_directory permission", () => {
 
   references.live("does not ask for external_directory permission when reading configured references", () =>
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const cache = path.join(Global.Path.repos, "github.com", "opencode-read-reference", "repo")
       yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
       yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
@@ -379,12 +379,12 @@ describe("tool.read truncation", () => {
       const content = `${"x".repeat(80)}\n`.repeat(50_000)
       yield* put(filepath, content)
 
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const counter = { bytes: 0 }
       const result = yield* run({ filePath: filepath }).pipe(
         Effect.provideService(
-          AppFileSystem.Service,
-          AppFileSystem.Service.of({
+          FSUtil.Service,
+          FSUtil.Service.of({
             ...fs,
             stream: (file, options) =>
               fs.stream(file, options).pipe(

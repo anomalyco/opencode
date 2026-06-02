@@ -1,6 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
@@ -10,7 +10,7 @@ import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/f
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(Worktree.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
+  Layer.mergeAll(Worktree.defaultLayer, FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
 )
 const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
 
@@ -265,7 +265,7 @@ describe("Worktree", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          const fs = yield* AppFileSystem.Service
+          const fs = yield* FSUtil.Service
           const svc = yield* Worktree.Service
           const parent = path.join(path.dirname(test.directory), `${path.basename(test.directory)}-parent`)
           const target = path.join(parent, path.basename(test.directory))

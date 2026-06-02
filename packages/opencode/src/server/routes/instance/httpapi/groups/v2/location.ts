@@ -1,7 +1,7 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { LocationFileSystem } from "@opencode-ai/core/location-filesystem"
+import { FileSystem } from "@opencode-ai/core/filesystem"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -42,7 +42,7 @@ export class V2LocationMiddleware extends HttpApiMiddleware.Service<
       | PluginBoot.Service
       | PermissionV2.Service
       | ProjectReference.Service
-      | LocationFileSystem.Service
+      | FileSystem.Service
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 

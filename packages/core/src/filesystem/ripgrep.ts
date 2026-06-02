@@ -1,18 +1,18 @@
 import path from "path"
-import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { serviceUse } from "../effect/service-use"
+import { FSUtil } from "../fs-util"
 import { Cause, Context, Effect, Fiber, Layer, Queue, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
-import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
-import { which } from "@/util/which"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { CrossSpawnSpawner } from "../cross-spawn-spawner"
+import { Global } from "../global"
+import { NonNegativeInt } from "../schema"
+import * as Log from "../util/log"
+import { sanitizedProcessEnv } from "../util/opencode-process"
+import { which } from "../util/which"
 
 const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
@@ -224,11 +224,11 @@ function raceAbort<A, E, R>(effect: Effect.Effect<A, E, R>, signal?: AbortSignal
   return signal ? effect.pipe(Effect.raceFirst(waitForAbort(signal))) : effect
 }
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildProcessSpawner | HttpClient.HttpClient> =
+export const layer: Layer.Layer<Service, never, FSUtil.Service | ChildProcessSpawner | HttpClient.HttpClient> =
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
       const spawner = yield* ChildProcessSpawner
 
@@ -477,7 +477,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
 
 export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
 
