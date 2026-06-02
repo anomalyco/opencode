@@ -2,10 +2,10 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
 export default {
-  id: "20260530232709_lovely_romulus",
+  id: "20260601202201_amazing_prowler",
   up(tx) {
     return Effect.gen(function* () {
-      yield* tx.run(`ALTER TABLE \`session\` ADD \`metadata\` text;`)
+      yield* tx.run(`DROP TABLE \`permission\`;`)
     })
   },
 } satisfies DatabaseMigration.Migration
