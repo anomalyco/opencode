@@ -28,6 +28,7 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -83,25 +84,58 @@ const live: Layer.Layer<
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const routeOutput: { model?: { providerID: string; modelID: string }; reason?: string } = {}
+      const route = yield* plugin.trigger(
+        "chat.model",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent.name,
+          model: {
+            providerID: input.model.providerID,
+            modelID: input.model.id,
+          },
+          message: {
+            id: input.user.id,
+            text: currentUserMessageText(input.messages),
+          },
+        },
+        routeOutput,
+      )
+      const model = route.model
+        ? yield* provider.getModel(
+            ProviderV2.ID.make(route.model.providerID),
+            ProviderV2.ModelID.make(route.model.modelID),
+          )
+        : input.model
+      const user = route.model
+        ? {
+            ...input.user,
+            model: {
+              providerID: model.providerID,
+              modelID: model.id,
+            },
+          }
+        : input.user
       const l = log
         .clone()
-        .tag("providerID", input.model.providerID)
-        .tag("modelID", input.model.id)
+        .tag("providerID", model.providerID)
+        .tag("modelID", model.id)
         .tag("session.id", input.sessionID)
         .tag("small", (input.small ?? false).toString())
         .tag("agent", input.agent.name)
         .tag("mode", input.agent.mode)
       l.info("stream", {
-        modelID: input.model.id,
-        providerID: input.model.providerID,
+        modelID: model.id,
+        providerID: model.providerID,
+        ...(route.model ? { routedFrom: `${input.model.providerID}/${input.model.id}`, reason: route.reason } : {}),
       })
 
       const [language, cfg, item, info] = yield* Effect.all(
         [
-          provider.getLanguage(input.model),
+          provider.getLanguage(model),
           config.get(),
-          provider.getProvider(input.model.providerID),
-          auth.get(input.model.providerID),
+          provider.getProvider(model.providerID),
+          auth.get(model.providerID),
         ],
         { concurrency: "unbounded" },
       )
@@ -109,6 +143,8 @@ const live: Layer.Layer<
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
       const prepared = yield* LLMRequestPrep.prepare({
         ...input,
+        user,
+        model,
         provider: item,
         auth: info,
         plugin,
@@ -229,7 +265,7 @@ const live: Layer.Layer<
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
         const native = LLMNativeRuntime.stream({
-          model: input.model,
+          model,
           provider: item,
           auth: info,
           llmClient,
@@ -248,8 +284,8 @@ const live: Layer.Layer<
           yield* Effect.logInfo("llm runtime selected").pipe(
             Effect.annotateLogs({
               "llm.runtime": "native",
-              "llm.provider": input.model.providerID,
-              "llm.model": input.model.id,
+              "llm.provider": model.providerID,
+              "llm.model": model.id,
             }),
           )
           return {
@@ -260,8 +296,8 @@ const live: Layer.Layer<
         yield* Effect.logInfo("llm runtime selected").pipe(
           Effect.annotateLogs({
             "llm.runtime": "ai-sdk",
-            "llm.provider": input.model.providerID,
-            "llm.model": input.model.id,
+            "llm.provider": model.providerID,
+            "llm.model": model.id,
             "llm.native_unsupported_reason": native.reason,
           }),
         )
@@ -271,8 +307,8 @@ const live: Layer.Layer<
       yield* Effect.logInfo("llm runtime selected").pipe(
         Effect.annotateLogs({
           "llm.runtime": "ai-sdk",
-          "llm.provider": input.model.providerID,
-          "llm.model": input.model.id,
+          "llm.provider": model.providerID,
+          "llm.model": model.id,
         }),
       )
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
@@ -281,7 +317,7 @@ const live: Layer.Layer<
         type: "ai-sdk" as const,
         result: streamText({
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
-          includeRawChunks: input.model.providerID.includes("github-copilot"),
+          includeRawChunks: model.providerID.includes("github-copilot"),
           onError(error) {
             l.error("stream error", {
               error,
@@ -311,7 +347,7 @@ const live: Layer.Layer<
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
-          providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
+          providerOptions: ProviderTransform.providerOptions(model, prepared.params.options),
           activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
           tools: prepared.tools,
           toolChoice: input.toolChoice,
@@ -330,7 +366,7 @@ const live: Layer.Layer<
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(
                       args.params.prompt,
-                      input.model,
+                      model,
                       prepared.messageTransformOptions,
                     )
                   }
@@ -398,5 +434,19 @@ export const defaultLayer = Layer.suspend(() =>
 )
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
+
+function currentUserMessageText(messages: ModelMessage[]) {
+  const message = messages.findLast((message) => message.role === "user")
+  if (!message) return ""
+  if (typeof message.content === "string") return message.content
+  if (!Array.isArray(message.content)) return ""
+  return message.content.map(partText).filter(Boolean).join("\n")
+}
+
+function partText(part: unknown) {
+  if (!part || typeof part !== "object" || !("type" in part)) return ""
+  if (part.type !== "text" || !("text" in part)) return ""
+  return typeof part.text === "string" ? part.text : ""
+}
 
 export * as LLM from "./llm"
