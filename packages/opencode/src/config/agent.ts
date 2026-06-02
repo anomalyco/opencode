@@ -33,6 +33,9 @@ const AgentSchema = Schema.StructWithRest(
     disable: Schema.optional(Schema.Boolean),
     description: Schema.optional(Schema.String).annotate({ description: "Description of when to use the agent" }),
     mode: Schema.optional(Schema.Literals(["subagent", "primary", "all"])),
+    order: Schema.optional(Schema.Int).annotate({
+      description: "Sorting order for agent cycling (Tab). Lower values appear first.",
+    }),
     hidden: Schema.optional(Schema.Boolean).annotate({
       description: "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
     }),
@@ -58,6 +61,7 @@ const KNOWN_KEYS = new Set([
   "temperature",
   "top_p",
   "mode",
+  "order",
   "hidden",
   "color",
   "steps",
