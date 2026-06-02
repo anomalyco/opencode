@@ -37,7 +37,6 @@ const inferenceEventTable = new aws.s3tables.Table(
             { name: "request_length", type: "long", required: false },
             { name: "status", type: "int", required: false },
             { name: "ip", type: "string", required: false },
-            { name: "ip_prefix", type: "string", required: false },
             { name: "is_stream", type: "boolean", required: false },
             { name: "session", type: "string", required: false },
             { name: "request", type: "string", required: false },
