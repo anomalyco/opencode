@@ -794,10 +794,7 @@ describe("session.llm.stream", () => {
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          messages: [
-            { role: "user", content: "Hello" },
-            { role: "assistant", content: [{ type: "reasoning", text: "" }] },
-          ],
+          messages: [{ role: "user", content: "Hello" }],
           tools: {},
         })
 
@@ -1903,7 +1900,10 @@ describe("session.llm.stream", () => {
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: [{ type: "reasoning", text: "" }] },
+          ],
           tools: {},
         })
 
