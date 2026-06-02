@@ -9,23 +9,6 @@ import { Identifier } from "../util/identifier"
 import { V2Schema } from "../v2-schema"
 import { AgentV2 } from "../agent"
 
-export const CreateContract = Schema.Struct({
-  location: Location.Ref,
-  agent: AgentV2.ID.pipe(Schema.optional),
-  model: ModelV2.Ref.pipe(Schema.optional),
-})
-export type CreateContract = typeof CreateContract.Type
-
-export const decodeCreateContract = Schema.decodeUnknownEffect(CreateContract)
-export const createContractEquivalence = Schema.toEquivalence(CreateContract)
-
-export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
-  identifier: "Session.Delivery",
-})
-export type Delivery = Schema.Schema.Type<typeof Delivery>
-
-export const DefaultDelivery = "immediate" satisfies Delivery
-
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),
   withStatics((schema) => {

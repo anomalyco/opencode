@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { Effect, Layer, Schema, Context } from "effect"
+import { DateTime, Effect, Layer, Schema, Context } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -13,7 +13,7 @@ import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionCreateAdmissionTable, SessionMessageTable, SessionTable } from "./session/sql"
+import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
@@ -23,11 +23,11 @@ import { Slug } from "./util/slug"
 import { ProjectTable } from "./project/sql"
 import path from "path"
 import { fromRow } from "./session/info"
-import { PromptConflictError, SessionRuntime } from "./session/runtime"
 import { SessionRunner } from "./session/runner/index"
-import { SessionContext } from "./session/context"
+import { SessionStore } from "./session/store"
+import { SessionExecution } from "./session/execution"
+import { SessionEvent } from "./session/event"
 
-export { PromptConflictError } from "./session/runtime"
 
 // get project -> project.locations
 //
@@ -102,15 +102,16 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
   messageID: SessionMessage.ID,
 }) {}
 
-export class CreateConflictError extends Schema.TaggedErrorClass<CreateConflictError>()("Session.CreateConflictError", {
+export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
 }) {}
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError | CreateConflictError
+export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
-  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, CreateConflictError>
+  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
@@ -132,21 +133,18 @@ export interface Interface {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     prompt: Prompt
-    delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<SessionMessage.User, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
     command: string
-    delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
   readonly skill: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
     skill: string
-    delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
@@ -162,9 +160,23 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
     const projects = yield* ProjectV2.Service
-    const runtime = yield* SessionRuntime.Service
+    const execution = yield* SessionExecution.Service
+    const store = yield* SessionStore.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
-    const decodeSession = Schema.decodeUnknownEffect(SessionSchema.Info)
+    const scope = yield* Effect.scope
+
+    const enqueueResume = (sessionID: SessionSchema.ID) =>
+      execution.resume(sessionID).pipe(
+        Effect.tapCause((cause) =>
+          Effect.logError("Failed to resume Session").pipe(
+            Effect.annotateLogs("sessionID", sessionID),
+            Effect.annotateLogs("cause", cause),
+          ),
+        ),
+        Effect.ignore,
+        Effect.forkIn(scope, { startImmediately: true }),
+        Effect.asVoid,
+      )
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
@@ -177,46 +189,35 @@ export const layer = Layer.effect(
         ),
       )
 
-    const findCreateAdmission = Effect.fnUntraced(function* (input: {
+    const getUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
+      const stored = yield* store.message(messageID)
+      if (!stored) return yield* Effect.die("Prompt projection was not stored")
+      const message = stored.message
+      if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+      return message
+    })
+
+    const findPrompt = Effect.fnUntraced(function* (input: {
       sessionID: SessionSchema.ID
-      contract: SessionSchema.CreateContract
+      messageID: SessionMessage.ID
+      prompt: Prompt
     }) {
-      const admitted = yield* db
-        .select()
-        .from(SessionCreateAdmissionTable)
-        .where(eq(SessionCreateAdmissionTable.session_id, input.sessionID))
-        .get()
-        .pipe(Effect.orDie)
-      if (!admitted) return undefined
-      const contract = yield* SessionSchema.decodeCreateContract(admitted.contract).pipe(Effect.orDie)
-      if (!SessionSchema.createContractEquivalence(contract, input.contract)) {
-        return yield* new CreateConflictError({ sessionID: input.sessionID })
+      const stored = yield* store.message(input.messageID)
+      if (!stored) return undefined
+      const message = stored.message
+      if (message.type !== "user") return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
+      const prompt = Prompt.fromUserMessage(message)
+      if (stored.sessionID !== input.sessionID || !Prompt.equivalence(prompt, input.prompt)) {
+        return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
       }
-      return yield* decodeSession(admitted.session).pipe(Effect.orDie)
+      return message
     })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
-        const contract = SessionSchema.CreateContract.make({
-          location: Location.Ref.make({
-            directory: input.location.directory,
-            ...(input.location.workspaceID === undefined ? {} : { workspaceID: input.location.workspaceID }),
-          }),
-          ...(input.agent === undefined ? {} : { agent: input.agent }),
-          ...(input.model === undefined
-            ? {}
-            : {
-                model: ModelV2.Ref.make({
-                  id: input.model.id,
-                  providerID: input.model.providerID,
-                  ...(input.model.variant === undefined ? {} : { variant: input.model.variant }),
-                }),
-              }),
-        })
         const sessionID = input.id ?? SessionSchema.ID.create()
-        const admission = { sessionID, contract }
-        const admitted = yield* findCreateAdmission(admission)
-        if (admitted) return admitted
+        const recorded = yield* store.get(sessionID)
+        if (recorded) return recorded
         const project = yield* projects.resolve(input.location.directory)
         yield* db
           .insert(ProjectTable)
@@ -249,28 +250,28 @@ export const layer = Layer.effect(
         const raced = yield* events
           .publish(
             SessionLegacy.Event.Created,
-            { sessionID, info, createAdmission: admission },
+            { sessionID, info },
             { location: input.location },
           )
           .pipe(
             Effect.as<SessionSchema.Info | undefined>(undefined),
             Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.CreateAdmissionRace)) {
+              if (!(defect instanceof SessionProjector.CreateProjectionRace)) {
                 return Effect.die(defect)
               }
-              return findCreateAdmission(admission).pipe(
-                Effect.flatMap((admitted) => (admitted ? Effect.succeed(admitted) : Effect.die(defect))),
+              return store.get(sessionID).pipe(
+                Effect.flatMap((recorded) => (recorded ? Effect.succeed(recorded) : Effect.die(defect))),
               )
             }),
           )
         if (raced) return raced
-        // TODO: Restore admitted sessions onto replacement synchronized workspaces in a future API slice.
+        // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {
-        const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
-        if (!row) return yield* new NotFoundError({ sessionID })
-        return fromRow(row)
+        const session = yield* store.get(sessionID)
+        if (!session) return yield* new NotFoundError({ sessionID })
+        return session
       }),
       list: Effect.fn("V2Session.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
@@ -348,11 +349,32 @@ export const layer = Layer.effect(
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
-        return yield* SessionContext.load(db, sessionID)
+        return yield* store.context(sessionID)
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
-        return yield* runtime.prompt(input)
+        const messageID = input.id ?? SessionMessage.ID.create()
+        const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt }
+        const recorded = yield* findPrompt(expected)
+        if (recorded) return recorded
+        const raced = yield* events
+          .publish(
+            SessionEvent.Prompted,
+            { sessionID: input.sessionID, timestamp: yield* DateTime.now, prompt: input.prompt },
+            { id: messageID },
+          )
+          .pipe(
+            Effect.as<SessionMessage.User | undefined>(undefined),
+            Effect.catchDefect((defect) => {
+              if (!(defect instanceof SessionProjector.PromptProjectionRace)) return Effect.die(defect)
+              return findPrompt(expected).pipe(
+                Effect.flatMap((recorded) => (recorded ? Effect.succeed(recorded) : Effect.die(defect))),
+              )
+            }),
+          )
+        if (raced) return raced
+        if (input.resume !== false) yield* enqueueResume(input.sessionID)
+        return yield* getUserMessage(messageID)
       }),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),
@@ -368,7 +390,7 @@ export const layer = Layer.effect(
       }),
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
-        yield* runtime.resume(sessionID)
+        yield* execution.resume(sessionID)
       }),
       move: Effect.fn("V2Session.move")(function* () {}),
     })
@@ -380,13 +402,8 @@ export const layer = Layer.effect(
 const DefaultDatabase = Database.defaultLayer
 const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
 const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
-const DefaultRuntime = SessionRuntime.localLayer.pipe(
-  Layer.provide(DefaultEvents),
-  Layer.provide(DefaultDatabase),
-  Layer.provide(SessionRunner.noopLayer),
-)
-
+const DefaultStore = SessionStore.layer.pipe(Layer.provide(DefaultDatabase))
 export const defaultLayer = layer.pipe(
-  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, DefaultRuntime, ProjectV2.defaultLayer)),
+  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, DefaultStore, SessionExecution.noopLayer, ProjectV2.defaultLayer)),
   Layer.orDie,
 )

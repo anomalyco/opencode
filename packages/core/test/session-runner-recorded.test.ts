@@ -11,11 +11,13 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRuntime } from "@opencode-ai/core/session/runtime"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -25,13 +27,14 @@ import { testEffect } from "./lib/effect"
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
+const store = SessionStore.layer.pipe(Layer.provide(database))
 const cassette = HttpRecorder.cassetteLayer("session-runner/openai-chat-streams-text", {
   directory: path.resolve(import.meta.dir, "fixtures/recordings"),
   mode: process.env.RECORD === "true" ? "record" : "replay",
 }).pipe(Layer.provide(NodeFileSystem.layer))
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
-const registry = ToolRegistry.layer()
+const registry = ToolRegistry.layer
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -39,21 +42,24 @@ const model = OpenAIChat.route
     generation: { maxTokens: 20, temperature: 0 },
   })
   .model({ id: "gpt-4o-mini" })
-const models = SessionRunnerModel.layer(() => Effect.succeed(model))
-const runner = SessionRunnerLLM.layer.pipe(Layer.provide(database), Layer.provide(events), Layer.provide(client), Layer.provide(models))
-  .pipe(Layer.provide(registry))
-const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(runner))
+const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const runner = SessionRunnerLLM.layer.pipe(Layer.provide(store), Layer.provide(events), Layer.provide(client), Layer.provide(registry), Layer.provide(models))
+const execution = Layer.effect(
+  SessionExecution.Service,
+  SessionRunner.Service.pipe(Effect.map((runner) => SessionExecution.Service.of({ resume: runner.run }))),
+).pipe(Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
   Layer.provide(events),
   Layer.provide(database),
+  Layer.provide(store),
   Layer.provide(Project.defaultLayer),
-  Layer.provide(runtime),
+  Layer.provide(execution),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, executor, client, registry, models, runner, runtime, sessions))
+const it = testEffect(Layer.mergeAll(database, events, projector, store, executor, client, registry, models, runner, execution, sessions))
 const sessionID = SessionV2.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
-  it.effect("executes one admitted V2 prompt through the recorded HTTP transport", () =>
+  it.effect("executes one recorded V2 prompt through the recorded HTTP transport", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db

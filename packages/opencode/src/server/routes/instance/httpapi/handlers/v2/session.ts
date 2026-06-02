@@ -63,7 +63,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
               sessionID: ctx.params.sessionID,
               id: ctx.payload.id,
               prompt: ctx.payload.prompt,
-              delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
               resume: ctx.payload.resume,
             })
             .pipe(

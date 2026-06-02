@@ -26,8 +26,6 @@ export const migrations = (
     import("./migration/20260601010001_normalize_storage_paths"),
     import("./migration/20260601202201_amazing_prowler"),
     import("./migration/20260602002951_lowly_union_jack"),
-    import("./migration/20260602171812_session_prompt_admission"),
-    import("./migration/20260602181619_session_create_admission"),
     import("./migration/20260602182828_add_project_directories"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

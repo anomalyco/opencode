@@ -13,9 +13,9 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRuntime } from "@opencode-ai/core/session/runtime"
-import { SessionRunner } from "@opencode-ai/core/session/runner"
-import { SessionCreateAdmissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 
@@ -29,13 +29,9 @@ const projects = Layer.succeed(
   }),
 )
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const runtime = SessionRuntime.localLayer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(SessionRunner.noopLayer),
-)
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(projects), Layer.provide(runtime))
-const it = testEffect(Layer.mergeAll(database, events, projects, projector, runtime, sessions))
+const store = SessionStore.layer.pipe(Layer.provide(database))
+const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(store), Layer.provide(projects), Layer.provide(SessionExecution.noopLayer))
+const it = testEffect(Layer.mergeAll(database, events, projects, projector, store, SessionExecution.noopLayer, sessions))
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
@@ -85,10 +81,10 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("rejects reuse of one ID with a different immutable create contract", () =>
+  it.effect("returns the existing Session when one ID is reused with different create arguments", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      yield* session.create({ id, location })
+      const created = yield* session.create({ id, location })
       const changed = [
         { id, location: Location.Ref.make({ directory: AbsolutePath.make("/other") }) },
         { id, location, agent: AgentV2.ID.make("build") },
@@ -100,37 +96,59 @@ describe("SessionV2.create", () => {
       ]
 
       for (const input of changed) {
-        const failure = yield* session.create(input).pipe(Effect.flip)
-        expect(failure._tag).toBe("Session.CreateConflictError")
+        expect(yield* session.create(input)).toEqual(created)
       }
       expect(yield* session.list()).toHaveLength(1)
     }),
   )
 
-  it.effect("returns one admitted session to concurrent exact retries", () =>
+  it.effect("returns one recorded session to concurrent exact retries", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const input = { id, location }
 
-      const admitted = yield* Effect.all([session.create(input), session.create(input)], { concurrency: "unbounded" })
+      const created = yield* Effect.all([session.create(input), session.create(input)], { concurrency: "unbounded" })
 
-      expect(admitted[1]).toEqual(admitted[0])
-      expect(yield* session.list()).toEqual([admitted[0]])
+      expect(created[1]).toEqual(created[0])
+      expect(yield* session.list()).toEqual([created[0]])
     }),
   )
 
-  it.effect("keeps create admission after the rebuildable projection row is removed", () =>
+  it.effect("returns the current Session projection after updates", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
       const input = { id, location }
-      const admitted = yield* session.create(input)
+      const created = yield* session.create(input)
 
-      yield* db.delete(SessionTable).where(eq(SessionTable.id, admitted.id)).run().pipe(Effect.orDie)
+      yield* db.update(SessionTable).set({ agent: "build" }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
 
-      expect(yield* session.create(input)).toEqual(admitted)
-      expect(yield* db.select().from(SessionCreateAdmissionTable).all().pipe(Effect.orDie)).toHaveLength(1)
-      expect(yield* session.list()).toEqual([])
+      expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "build" })
+    }),
+  )
+
+  it.effect("returns the current Session projection after projected updates", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const input = { id, location }
+      const created = yield* session.create(input)
+
+      yield* events.publish(SessionLegacy.Event.Updated, {
+        sessionID: id,
+        info: SessionLegacy.SessionInfo.make({
+          id,
+          slug: "updated",
+          version: "test",
+          projectID: created.projectID,
+          directory: created.location.directory,
+          title: "updated",
+          agent: "build",
+          time: { created: 0, updated: 1 },
+        }),
+      })
+
+      expect(yield* session.create(input)).toMatchObject({ id, agent: "build" })
     }),
   )
 
@@ -138,28 +156,24 @@ describe("SessionV2.create", () => {
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
-      const admitted = yield* session.create({ location })
+      const created = yield* session.create({ location })
 
       expect(
-        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, admitted.id)).all().pipe(Effect.orDie),
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
       ).toMatchObject([{ type: EventV2.versionedType(SessionLegacy.Event.Created.type, 1) }])
     }),
   )
 
-  it.effect("persists caller-ID creation admission in replayable event data", () =>
+  it.effect("persists caller-ID creation through the existing created event", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service
-      const admitted = yield* session.create({ id, location })
+      const created = yield* session.create({ id, location })
 
       expect(
-        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, admitted.id)).get().pipe(Effect.orDie),
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).get().pipe(Effect.orDie),
       ).toMatchObject({
-        data: {
-          createAdmission: {
-            contract: { location },
-          },
-        },
+        data: { sessionID: id },
       })
     }),
   )

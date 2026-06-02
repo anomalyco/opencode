@@ -178,7 +178,6 @@ import type {
   SessionDeleteMessageErrors,
   SessionDeleteMessageResponses,
   SessionDeleteResponses,
-  SessionDelivery,
   SessionDiffErrors,
   SessionDiffResponses,
   SessionForkErrors,
@@ -4571,7 +4570,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Send v2 message
    *
-   * Durably admit a v2 session message and start agent-loop execution unless resume is false.
+   * Durably record a v2 session message and start agent-loop execution unless resume is false.
    */
   public prompt<ThrowOnError extends boolean = false>(
     parameters: {
@@ -4580,7 +4579,6 @@ export class Session3 extends HeyApiClient {
       workspace?: string
       id?: string
       prompt?: Prompt
-      delivery?: SessionDelivery
       resume?: boolean
     },
     options?: Options<never, ThrowOnError>,
@@ -4595,7 +4593,6 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "id" },
             { in: "body", key: "prompt" },
-            { in: "body", key: "delivery" },
             { in: "body", key: "resume" },
           ],
         },

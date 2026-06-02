@@ -2,7 +2,6 @@ import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
-import type { Prompt } from "./prompt"
 import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
@@ -130,23 +129,3 @@ export const SessionMessageTable = sqliteTable(
     index("session_message_time_created_idx").on(table.time_created),
   ],
 )
-
-export const SessionPromptAdmissionTable = sqliteTable(
-  "session_prompt_admission",
-  {
-    session_id: text()
-      .$type<SessionSchema.ID>()
-      .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
-    message_id: text("idempotency_key").$type<SessionMessage.ID>().notNull(),
-    prompt: text({ mode: "json" }).$type<Prompt>().notNull(),
-    message: text({ mode: "json" }).$type<(typeof SessionMessage.User)["Encoded"]>().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.session_id, table.message_id] })],
-)
-
-export const SessionCreateAdmissionTable = sqliteTable("session_create_admission", {
-  session_id: text("idempotency_key").$type<SessionSchema.ID>().primaryKey(),
-  contract: text({ mode: "json" }).$type<SessionSchema.CreateContract>().notNull(),
-  session: text({ mode: "json" }).$type<(typeof SessionSchema.Info)["Encoded"]>().notNull(),
-})

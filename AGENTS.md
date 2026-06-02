@@ -138,3 +138,14 @@ const table = sqliteTable("session", {
 ## Type Checking
 
 - Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+
+## V2 Session Core
+
+- Keep durable prompt recording separate from model execution. `SessionV2.prompt(...)` projects one user message before scheduling `SessionExecution.resume(sessionID)` unless `resume: false` requests record-only behavior.
+- Use ordinary Session and user-message projections for retry safety. Reusing a Session ID adopts the existing Session; reusing a message ID returns the existing user message only when Session and prompt match. Do not add separate retry tables without a concrete recovery workflow.
+- Keep `SessionExecution` process-global and Session-ID based. It discovers placement through the read-side `SessionStore` and `LocationServiceMap.get(session.location)`; no layer should take a Session ID.
+- Keep `SessionRunner`, model resolution, tool registry, permissions, and filesystem Location-scoped. Omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
+- Preserve one explicit `llm.stream(request)` call per provider turn and reload projected history before durable continuation. Do not bridge through legacy `SessionPrompt.loop(...)` or delegate orchestration to an in-memory tool loop.
+- Keep local run joining process-local until clustering is implemented. Same-Session resumes await one active result, different Sessions may run concurrently, and terminal completion or failure releases local ownership for retry.
+- Do not confuse local run joining with queued steering. A prompt recorded during an already-active run still needs an explicit pending-input continuation rule so it cannot be stranded when that run settles without local-tool continuation.
+- Keep EventV2 replay owner claims separate from clustered Session execution ownership.

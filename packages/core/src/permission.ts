@@ -5,6 +5,7 @@ import { EventV2 } from "./event"
 import { Location } from "./location"
 import { AgentV2 } from "./agent"
 import { SessionV2 } from "./session"
+import { SessionStore } from "./session/store"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 import { Wildcard } from "./util/wildcard"
@@ -135,7 +136,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2.Service
     const location = yield* Location.Service
     const agents = yield* AgentV2.Service
-    const sessions = yield* SessionV2.Service
+    const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const pending = new Map<ID, Pending>()
 
@@ -159,6 +160,7 @@ export const layer = Layer.effect(
 
     const configured = EffectRuntime.fn("PermissionV2.configured")(function* (sessionID: SessionV2.ID) {
       const session = yield* sessions.get(sessionID)
+      if (!session) return yield* new SessionV2.NotFoundError({ sessionID })
       if (!session.agent) return []
       return (yield* agents.get(AgentV2.ID.make(session.agent)))?.permissions ?? []
     })

@@ -51,7 +51,7 @@ const permission = Layer.succeed(PermissionV2.Service, PermissionV2.Service.of({
   forSession: () => Effect.die("unused"),
   list: () => Effect.die("unused"),
 }))
-const registry = ToolRegistry.layer()
+const registry = ToolRegistry.layer
 const read = ReadTool.layer.pipe(Layer.provide(registry), Layer.provide(filesystem), Layer.provide(permission))
 const it = testEffect(Layer.mergeAll(registry, filesystem, permission, read))
 const sessionID = SessionV2.ID.make("ses_read_tool_test")

@@ -12,24 +12,18 @@ import { SessionMessageUpdater } from "./message-updater"
 import {
   MessageTable,
   PartTable,
-  SessionCreateAdmissionTable,
   SessionMessageTable,
-  SessionPromptAdmissionTable,
   SessionTable,
 } from "./sql"
 import type { DeepMutable } from "../schema"
-import { SessionSchema } from "./schema"
-import { fromRow } from "./info"
 
 type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
-const encodeUserMessage = Schema.encodeSync(SessionMessage.User)
-const encodeSession = Schema.encodeSync(SessionSchema.Info)
 
-export class PromptAdmissionRace extends Error {}
-export class CreateAdmissionRace extends Error {}
+export class PromptProjectionRace extends Error {}
+export class CreateProjectionRace extends Error {}
 
 type Usage = {
   cost: number
@@ -291,7 +285,7 @@ export const layer = Layer.effectDiscard(
           .returning({ sessionID: SessionTable.id })
           .get()
           .pipe(Effect.orDie)
-        if (!stored) return yield* Effect.die(new CreateAdmissionRace())
+        if (!stored) return yield* Effect.die(new CreateProjectionRace())
         if (event.data.info.workspaceID) {
           yield* db
             .update(WorkspaceTable)
@@ -300,22 +294,6 @@ export const layer = Layer.effectDiscard(
             .run()
             .pipe(Effect.orDie)
         }
-        const admission = event.data.createAdmission
-        if (admission === undefined) return
-        const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).get().pipe(Effect.orDie)
-        if (!row) return yield* Effect.die("Session projection was not stored")
-        const admitted = yield* db
-          .insert(SessionCreateAdmissionTable)
-          .values({
-            session_id: event.data.sessionID,
-            contract: admission.contract,
-            session: encodeSession(fromRow(row)),
-          })
-          .onConflictDoNothing()
-          .returning({ sessionID: SessionCreateAdmissionTable.session_id })
-          .get()
-          .pipe(Effect.orDie)
-        if (!admitted) return yield* Effect.die(new CreateAdmissionRace())
       }),
     )
     yield* events.project(SessionV1.Event.Updated, (event) =>
@@ -401,6 +379,13 @@ export const layer = Layer.effectDiscard(
     // Agent/model switches, synthetic messages, shells, retries, and compaction remain future slices.
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
+        const existing = yield* db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, event.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (existing) return yield* Effect.die(new PromptProjectionRace())
         yield* run(db, event)
         const row = yield* db
           .select()
@@ -411,19 +396,6 @@ export const layer = Layer.effectDiscard(
         if (!row) return yield* Effect.die("Prompt projection was not stored")
         const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
         if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
-        const admitted = yield* db
-          .insert(SessionPromptAdmissionTable)
-          .values({
-            session_id: event.data.sessionID,
-            message_id: event.id,
-            prompt: event.data.prompt,
-            message: encodeUserMessage(message),
-          })
-          .onConflictDoNothing()
-          .returning({ messageID: SessionPromptAdmissionTable.message_id })
-          .get()
-          .pipe(Effect.orDie)
-        if (!admitted) return yield* Effect.die(new PromptAdmissionRace())
       }),
     )
     // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))

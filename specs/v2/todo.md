@@ -15,8 +15,32 @@ and shell commands.
 
 ## Rework agent loop - Kit?
 
-I think this needs to be done so we can take advantage of the simpler data
-model. It can stop doing all the
+The first Effect-native local runner slice is implemented without bridging
+through legacy `SessionPrompt.loop(...)`:
+
+- process-global `SessionExecution.resume(sessionID)` discovers Location from
+  the Session read model
+- cached Location-scoped `SessionRunner` resolves one supported catalog model
+  and issues one explicit `llm.stream(request)` provider turn at a time
+- durable V2 projections record text, reasoning, provider failures, tool calls,
+  tool results, and assistant output
+- a scoped `ToolRegistry` advertises definitions and the first permission-checked
+  `read` built-in
+- local continuation reloads projected history and stops after 25 model steps
+- concurrent resumes for one Session join one process-local run while different
+  Sessions remain concurrent
+
+Joining is not queued steering. Add an explicit pending-input continuation rule
+before relying on prompts recorded during an already-active run.
+
+Next reviewed slices:
+
+- settle recorded local tool calls with bounded concurrency after consuming one
+  provider turn
+- batch streamed deltas and add covering context indexes
+- add replayable Session event cursors
+- add compaction, queued steering, interruption, retries, and stale-owner fencing
+  only as their slices become concrete
 
 ## Rework compaction - Aiden?
 
@@ -53,8 +77,16 @@ want / config. They should register models into model database
 
 ## Event - Kit
 
-I have this v2/event.ts but it needs to be self contained instead of using the
-old bus system
+The self-contained durable `EventV2` core service is implemented. It owns
+sync-versioned persistence, transactional sequencing, pub/sub, replay, and
+replay-owner claims without relying on the old bus system.
+
+Remaining slices:
+
+- expose a consumer-facing Session cursor API that replays durable history and
+  tails live events without a race
+- keep replay-owner claims distinct from future clustered Session execution
+  ownership and stale-runtime fencing
 
 ## Everything is hotreloadable - ???
 

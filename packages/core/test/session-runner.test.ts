@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, Model, Tool, type LLMClientShape, type LLMRequest } from "@opencode-ai/llm"
+import { LLMClient, LLMError, LLMEvent, Model, Tool, TransportReason, type LLMClientShape, type LLMRequest } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -9,28 +9,33 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionRuntime } from "@opencode-ai/core/session/runtime"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
+const store = SessionStore.layer.pipe(Layer.provide(database))
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
 let streamGate: Deferred.Deferred<void> | undefined
 let streamStarted: Deferred.Deferred<void> | undefined
+let streamFailure: LLMError | undefined
 const client = Layer.succeed(LLMClient.Service, LLMClient.Service.of({
   prepare: () => Effect.die("unused"),
   stream: ((request: LLMRequest) => {
     requests.push(request)
-    const events = Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
+    const events = streamFailure
+      ? Stream.fail(streamFailure)
+      : Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
     if (!streamGate) return events
     return Stream.unwrap(
       (streamStarted ? Deferred.succeed(streamStarted, undefined) : Effect.void).pipe(
@@ -44,64 +49,99 @@ const client = Layer.succeed(LLMClient.Service, LLMClient.Service.of({
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const authorizations: ToolRegistry.AuthorizeInput[] = []
 const executions: string[] = []
-const registry = ToolRegistry.layer({
-  echo: {
-    authorize: (input) => Effect.sync(() => {
-      authorizations.push(input)
-    }),
-    tool: Tool.make({
-      description: "Echo text",
-      parameters: Schema.Struct({ text: Schema.String }),
-      success: Schema.Struct({ text: Schema.String }),
-      execute: ({ text }) => Effect.sync(() => {
-        executions.push(text)
-        return { text }
+const registry = ToolRegistry.layer
+const echo = Layer.effectDiscard(
+  ToolRegistry.Service.use((registry) =>
+    registry.contribute((editor) =>
+      editor.set("echo", {
+        authorize: (input) => Effect.sync(() => {
+          authorizations.push(input)
+        }),
+        tool: Tool.make({
+          description: "Echo text",
+          parameters: Schema.Struct({ text: Schema.String }),
+          success: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.sync(() => {
+            executions.push(text)
+            return { text }
+          }),
+        }),
       }),
-    }),
-  },
-})
-const models = SessionRunnerModel.layer(() => Effect.succeed(model))
+    ),
+  ),
+).pipe(Layer.provide(registry))
+const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
+  Layer.provide(store),
   Layer.provide(events),
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
 )
-const runtime = SessionRuntime.localLayer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(runner))
+const execution = Layer.effect(
+  SessionExecution.Service,
+  SessionRunner.Service.pipe(Effect.map((runner) => SessionExecution.Service.of({ resume: runner.run }))),
+).pipe(Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
   Layer.provide(events),
   Layer.provide(database),
+  Layer.provide(store),
   Layer.provide(Project.defaultLayer),
-  Layer.provide(runtime),
+  Layer.provide(execution),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, client, registry, models, runner, runtime, sessions))
+const it = testEffect(Layer.mergeAll(database, events, projector, store, client, registry, echo, models, runner, execution, sessions))
 const sessionID = SessionV2.ID.make("ses_runner_test")
+const otherSessionID = SessionV2.ID.make("ses_runner_other")
+
+const insertSession = (id: SessionV2.ID) =>
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(SessionTable)
+      .values({
+        id,
+        project_id: Project.ID.global,
+        slug: id,
+        directory: "/project",
+        title: "test",
+        version: "test",
+      })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
+  })
 
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
+  streamFailure = undefined
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
-  yield* db
-    .insert(SessionTable)
-    .values({
-      id: sessionID,
-      project_id: Project.ID.global,
-      slug: "test",
-      directory: "/project",
-      title: "test",
-      version: "test",
-    })
-    .onConflictDoNothing()
-    .run()
-    .pipe(Effect.orDie)
+  yield* insertSession(sessionID)
 })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("starts a real runner turn after default prompt recording", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      requests.length = 0
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = []
+
+      const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run automatically" }) })
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.messages({ sessionID })).toEqual([message])
+    }),
+  )
+
   it.effect("streams one request with registry definitions from chronological V2 user history", () =>
     Effect.gen(function* () {
       yield* setup
@@ -308,6 +348,69 @@ describe("SessionRunnerLLM", () => {
         { type: "user", text: "Run once" },
         { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-once", text: "Once" }] },
       ])
+    }),
+  )
+
+  it.effect("runs different sessions concurrently", () =>
+    Effect.gen(function* () {
+      yield* setup
+      yield* insertSession(otherSessionID)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run first" }), resume: false })
+      yield* session.prompt({ sessionID: otherSessionID, prompt: new Prompt({ text: "Run second" }), resume: false })
+
+      requests.length = 0
+      responses = undefined
+      response = []
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      const second = yield* session.resume(otherSessionID).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+
+      expect(requests).toHaveLength(2)
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(first)
+      yield* Fiber.join(second)
+      streamGate = undefined
+      streamStarted = undefined
+    }),
+  )
+
+  it.effect("fans out one failed run and allows a later retry", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Retry after failure" }), resume: false })
+
+      requests.length = 0
+      responses = undefined
+      response = []
+      streamFailure = new LLMError({
+        module: "test",
+        method: "stream",
+        reason: new TransportReason({ message: "Provider unavailable" }),
+      })
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      const second = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+
+      expect(requests).toHaveLength(1)
+      yield* Deferred.succeed(streamGate, undefined)
+      const [firstExit, secondExit] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
+      expect(secondExit).toEqual(firstExit)
+
+      streamFailure = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      yield* session.resume(sessionID)
+      expect(requests).toHaveLength(2)
     }),
   )
 

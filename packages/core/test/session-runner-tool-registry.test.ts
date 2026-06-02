@@ -5,7 +5,7 @@ import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(ToolRegistry.layer())
+const it = testEffect(ToolRegistry.layer)
 
 const echo = Tool.make({
   description: "Echo text",

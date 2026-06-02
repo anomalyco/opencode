@@ -570,9 +570,6 @@ export const Event = {
     schema: {
       sessionID: SessionSchema.ID,
       info: SessionInfo,
-      createAdmission: Schema.Struct({
-        contract: SessionSchema.CreateContract,
-      }).pipe(Schema.optional),
     },
   }),
   Updated: EventV2.define({

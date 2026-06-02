@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { OpenCode } from "@opencode-ai/core/opencode"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(OpenCode.layer())
+const it = testEffect(OpenCode.layer)
 
 describe("OpenCode.layer", () => {
   it.effect("exposes Sessions through the public embedded API", () =>

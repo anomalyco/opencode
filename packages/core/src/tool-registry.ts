@@ -43,12 +43,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 enableMapSet()
 
-export const layer = (initial: Readonly<Record<string, Entry>> = {}) =>
-  Layer.effect(
+export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const state = State.create<Data, Editor>({
-        initial: () => ({ entries: new Map(Object.entries(initial)) }),
+        initial: () => ({ entries: new Map() }),
         editor: (draft) => ({
           list: () => Array.from(draft.entries.entries()) as Array<[string, Entry]>,
           get: (name) => draft.entries.get(name) as Entry | undefined,

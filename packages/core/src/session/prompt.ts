@@ -47,6 +47,14 @@ export class Prompt extends Schema.Class<Prompt>("Prompt")({
   agents: Schema.Array(AgentAttachment).pipe(Schema.optional),
   references: Schema.Array(ReferenceAttachment).pipe(Schema.optional),
 }) {
-  static readonly decodeUnknown = Schema.decodeUnknownEffect(Prompt)
   static readonly equivalence = Schema.toEquivalence(Prompt)
+
+  static fromUserMessage(input: Pick<Prompt, "text" | "files" | "agents" | "references">) {
+    return new Prompt({
+      text: input.text,
+      ...(input.files === undefined ? {} : { files: input.files }),
+      ...(input.agents === undefined ? {} : { agents: input.agents }),
+      ...(input.references === undefined ? {} : { references: input.references }),
+    })
+  }
 }

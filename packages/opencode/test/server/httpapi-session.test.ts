@@ -544,20 +544,20 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
-    "durably admits one v2 prompt for exact message-ID retries",
+    "durably records one v2 prompt for exact message-ID retries",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
-        const session = yield* createSession({ title: "v2 prompt admission" })
+        const session = yield* createSession({ title: "v2 prompt recording" })
 
-        const admit = () => request(`/api/session/${session.id}/prompt`, {
+        const recordPrompt = () => request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
           body: JSON.stringify({ id: "evt_http_prompt", prompt: { text: "hello" } }),
         })
-        const first = yield* admit()
-        const retried = yield* admit()
+        const first = yield* recordPrompt()
+        const retried = yield* recordPrompt()
         type PromptBody = { id: string; type: string; text: string }
         const firstBody = yield* json<PromptBody>(first)
         const retriedBody = yield* json<PromptBody>(retried)
