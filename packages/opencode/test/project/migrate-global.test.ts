@@ -118,6 +118,26 @@ describe("migrateFromGlobal", () => {
     }),
   )
 
+  it.live("migrates global sessions when non-git directories get local project IDs", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const id = legacySessionID()
+      yield* ensureGlobal()
+      yield* seed({ id, dir: tmp, project: ProjectV2.ID.global })
+
+      const projects = yield* Project.Service
+      const { project } = yield* projects.fromDirectory(tmp)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
+      expect(project.vcs).toBeUndefined()
+
+      const row = yield* Database.Service.use(({ db }) =>
+        db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie),
+      )
+      expect(row).toBeDefined()
+      expect(row!.project_id).toBe(project.id)
+    }),
+  )
+
   it.live("does not claim sessions with empty directory", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ git: true })

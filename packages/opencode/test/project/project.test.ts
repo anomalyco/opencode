@@ -40,6 +40,10 @@ function localProjectID(store: string) {
   return ProjectV2.ID.make(Hash.fast(`git-local:${store}`))
 }
 
+function localDirectoryProjectID(directory: string) {
+  return ProjectV2.ID.make(Hash.fast(`local-directory:${path.resolve(directory)}`))
+}
+
 function realLocalProjectID(store: string) {
   return Effect.promise(() => fs.realpath(store)).pipe(Effect.map(localProjectID))
 }
@@ -156,12 +160,31 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  it.live("returns global for non-git directory", () =>
+  it.live("returns stable local project for non-git directory", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped()
       const result = yield* project.fromDirectory(tmp)
+      const next = yield* project.fromDirectory(tmp)
+
+      expect(result.project.id).toBe(localDirectoryProjectID(tmp))
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.vcs).toBeUndefined()
+      expect(result.project.worktree).toBe(tmp)
+      expect(next.project.id).toBe(result.project.id)
+      expect(next.project.worktree).toBe(tmp)
+    }),
+  )
+
+  it.live("keeps filesystem root as global project", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const root = path.parse(process.cwd()).root
+      const result = yield* project.fromDirectory(root)
+
       expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.vcs).toBeUndefined()
+      expect(result.project.worktree).toBe(root)
     }),
   )
 

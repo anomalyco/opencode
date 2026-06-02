@@ -190,6 +190,7 @@ const scenarios: Scenario[] = [
   }),
   http.protected
     .post("/ui/project-view/open-projects", "ui.projectView.openProjects.open")
+    .inProject({ git: false })
     .mutating()
     .seeded((ctx) => ctx.project())
     .at((ctx) => ({
@@ -202,6 +203,7 @@ const scenarios: Scenario[] = [
       (body, ctx) => {
         const { entry, project } = onlyProjectViewEntry(body)
         check(project.id === ctx.state.id, "open project should resolve the directory to the current project")
+        check(project.worktree === ctx.directory, "open project should keep the selected non-git directory worktree")
         check(entry.position === 0, "opened project should be first")
         check(entry.expanded === true, "opened project should default to expanded")
       },
