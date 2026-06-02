@@ -52,9 +52,9 @@ const log = Log.create({ service: "config" })
 // can still override any of these fields. Endpoint/model/key are env-overridable.
 function imecodeDefaults(): Info {
   const env = process.env
-  const baseURL = env["IMECODE_VLLM_BASE_URL"] || "http://100.115.10.41:8000/v1"
-  const modelID = env["IMECODE_VLLM_MODEL"] || "default"
-  const apiKey = env["IMECODE_VLLM_API_KEY"] || env["OPENAI_API_KEY"] || "sk-no-auth"
+  const baseURL = env["IMECODE_VLLM_BASE_URL"] || "http://100.105.126.86:30090/v1"
+  const modelID = env["IMECODE_VLLM_MODEL"] || "qwen3-6-35b"
+  const apiKey = env["IMECODE_VLLM_API_KEY"] || env["OPENAI_API_KEY"] || ""
   const name = env["IMECODE_VLLM_NAME"] || "Internal vLLM"
   const context = Number(env["IMECODE_VLLM_CONTEXT"]) || 32768
   const output = Number(env["IMECODE_VLLM_MAX_OUTPUT"]) || 8192
@@ -72,7 +72,7 @@ function imecodeDefaults(): Info {
             id: modelID,
             name: modelID,
             tool_call: true,
-            reasoning: false,
+            reasoning: true,
             attachment: false,
             temperature: true,
             limit: { context, output },

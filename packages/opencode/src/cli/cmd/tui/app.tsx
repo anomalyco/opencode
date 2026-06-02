@@ -540,13 +540,86 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
   })
 
+  // IMECODE: is the internal vLLM endpoint usable (an API key supplied via env,
+  // the /endpoint menu, or imecode.json)? The api key is never baked into the
+  // binary — it must be provided at runtime.
+  const isEndpointConfigured = () => {
+    const key = sync.data.config?.provider?.["vllm"]?.options?.apiKey
+    return typeof key === "string" && key.trim() !== "" && key !== "sk-no-auth"
+  }
+
+  // Shared endpoint setup flow used by the /endpoint command and first-run onboarding.
+  const configureEndpoint = async (firstRun = false) => {
+    const opts = sync.data.config?.provider?.["vllm"]?.options ?? {}
+    const currentURL = typeof opts.baseURL === "string" ? opts.baseURL : ""
+    const currentKey = typeof opts.apiKey === "string" && opts.apiKey !== "sk-no-auth" ? opts.apiKey : ""
+    const currentModel = (sync.data.config?.model ?? "").replace(/^vllm\//, "")
+
+    const baseURL = await DialogPrompt.show(dialog, firstRun ? "Welcome to IMECODE — vLLM endpoint URL" : "vLLM endpoint URL", {
+      value: currentURL,
+      placeholder: "http://host:8000/v1",
+    })
+    if (baseURL === null) return
+    const model = await DialogPrompt.show(dialog, "Model (served-model-name)", {
+      value: currentModel,
+      placeholder: "e.g. qwen3-6-35b",
+    })
+    if (model === null) return
+    const apiKey = await DialogPrompt.show(dialog, "API key (Bearer token; leave blank if none)", {
+      value: currentKey,
+      placeholder: "sk-...",
+    })
+    if (apiKey === null) return
+
+    const url = baseURL.trim()
+    const id = model.trim()
+    if (!url || !id) {
+      toast.show({ variant: "error", message: "Endpoint URL and model name are required" })
+      return
+    }
+    try {
+      await sdk.client.config.update(
+        {
+          workspace: project.workspace.current() ?? undefined,
+          config: {
+            model: `vllm/${id}`,
+            small_model: `vllm/${id}`,
+            provider: {
+              vllm: {
+                options: { baseURL: url, apiKey: apiKey.trim() || "sk-no-auth" },
+                models: {
+                  [id]: {
+                    id,
+                    name: id,
+                    tool_call: true,
+                    reasoning: true,
+                    attachment: false,
+                    temperature: true,
+                    limit: { context: 32768, output: 8192 },
+                    cost: { input: 0, output: 0 },
+                  },
+                },
+              },
+            },
+          },
+        },
+        { throwOnError: true },
+      )
+      toast.show({ variant: "success", message: `vLLM endpoint saved: ${url} (${id})` })
+      dialog.clear()
+    } catch {
+      toast.show({ variant: "error", message: "Failed to save vLLM endpoint config" })
+    }
+  }
+
+  // First-run onboarding: if no API key is configured yet, prompt for the
+  // endpoint + key as soon as the initial sync completes.
   createEffect(
     on(
-      () => sync.status === "complete" && sync.data.provider.length === 0,
-      (isEmpty, wasEmpty) => {
-        // only trigger when we transition into an empty-provider state
-        if (!isEmpty || wasEmpty) return
-        dialog.replace(() => <DialogProviderList />)
+      () => sync.status === "complete" && !isEndpointConfigured(),
+      (needsSetup, prev) => {
+        if (!needsSetup || prev) return
+        void configureEndpoint(true)
       },
     ),
   )
@@ -735,68 +808,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashName: "endpoint",
         slashAliases: ["connect", "vllm"],
         category: "Provider",
-        run: async () => {
-          const opts = sync.data.config?.provider?.["vllm"]?.options ?? {}
-          const currentURL = typeof opts.baseURL === "string" ? opts.baseURL : ""
-          const currentKey = typeof opts.apiKey === "string" && opts.apiKey !== "sk-no-auth" ? opts.apiKey : ""
-          const currentModel = (sync.data.config?.model ?? "").replace(/^vllm\//, "")
-
-          const baseURL = await DialogPrompt.show(dialog, "vLLM endpoint URL", {
-            value: currentURL,
-            placeholder: "http://host:8000/v1",
-          })
-          if (baseURL === null) return
-          const model = await DialogPrompt.show(dialog, "Model (served-model-name)", {
-            value: currentModel,
-            placeholder: "e.g. Qwen2.5-Coder-32B-Instruct",
-          })
-          if (model === null) return
-          const apiKey = await DialogPrompt.show(dialog, "API key (leave blank if none)", {
-            value: currentKey,
-            placeholder: "optional",
-          })
-          if (apiKey === null) return
-
-          const url = baseURL.trim()
-          const id = model.trim()
-          if (!url || !id) {
-            toast.show({ variant: "error", message: "Endpoint URL and model name are required" })
-            return
-          }
-          try {
-            await sdk.client.config.update(
-              {
-                workspace: project.workspace.current() ?? undefined,
-                config: {
-                  model: `vllm/${id}`,
-                  small_model: `vllm/${id}`,
-                  provider: {
-                    vllm: {
-                      options: { baseURL: url, apiKey: apiKey.trim() || "sk-no-auth" },
-                      models: {
-                        [id]: {
-                          id,
-                          name: id,
-                          tool_call: true,
-                          reasoning: false,
-                          attachment: false,
-                          temperature: true,
-                          limit: { context: 32768, output: 8192 },
-                          cost: { input: 0, output: 0 },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              { throwOnError: true },
-            )
-            toast.show({ variant: "success", message: `vLLM endpoint saved: ${url} (${id})` })
-            dialog.clear()
-          } catch {
-            toast.show({ variant: "error", message: "Failed to save vLLM endpoint config" })
-          }
-        },
+        run: () => configureEndpoint(),
       },
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
