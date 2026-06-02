@@ -23,6 +23,7 @@ import { Skill } from "../skill"
 import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { type DeepMutable } from "@opencode-ai/core/schema"
@@ -93,6 +94,7 @@ export const layer = Layer.effect(
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
+        yield* plugin.init()
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
         const whitelistedDirs = [
@@ -457,7 +459,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Plugin.defaultLayer),
+  Layer.provide(Plugin.layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer))),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Config.defaultLayer),
