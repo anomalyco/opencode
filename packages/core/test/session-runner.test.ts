@@ -311,6 +311,52 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("durably settles local tool failures before continuing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Call missing" }) })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-missing", name: "missing", input: {} }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-after-error" }),
+          LLMEvent.textDelta({ id: "text-after-error", text: "Recovered" }),
+          LLMEvent.textEnd({ id: "text-after-error" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      streamGate = undefined
+      streamStarted = undefined
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Call missing" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-missing",
+              state: { status: "error", error: { message: "Unknown tool: missing" } },
+            },
+          ],
+        },
+        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-after-error", text: "Recovered" }] },
+      ])
+    }),
+  )
+
   it.effect("fails after the bounded number of local tool continuation steps", () =>
     Effect.gen(function* () {
       yield* setup

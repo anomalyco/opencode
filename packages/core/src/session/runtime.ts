@@ -1,6 +1,6 @@
 export * as SessionRuntime from "./runtime"
 
-import { and, eq } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -75,17 +75,12 @@ export const localLayer = Layer.effect(
       const admitted = yield* db
         .select()
         .from(SessionPromptAdmissionTable)
-        .where(
-          and(
-            eq(SessionPromptAdmissionTable.session_id, input.sessionID),
-            eq(SessionPromptAdmissionTable.message_id, input.messageID),
-          ),
-        )
+        .where(eq(SessionPromptAdmissionTable.message_id, input.messageID))
         .get()
         .pipe(Effect.orDie)
       if (!admitted) return undefined
       const prompt = yield* Prompt.decodeUnknown(admitted.prompt).pipe(Effect.orDie)
-      if (!Prompt.equivalence(prompt, input.prompt)) {
+      if (admitted.session_id !== input.sessionID || !Prompt.equivalence(prompt, input.prompt)) {
         return yield* new PromptConflictError({
           sessionID: input.sessionID,
           messageID: input.messageID,

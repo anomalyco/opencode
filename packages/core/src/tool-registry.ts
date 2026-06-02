@@ -17,7 +17,8 @@ export type AuthorizeInput = ExecuteInput & {
 
 export type Entry = {
   readonly tool: AnyTool
-  readonly authorize: (input: AuthorizeInput) => Effect.Effect<void, ToolFailure>
+  readonly authorize?: (input: AuthorizeInput) => Effect.Effect<void, ToolFailure>
+  readonly execute?: (input: AuthorizeInput) => Effect.Effect<unknown, ToolFailure>
 }
 
 type Data = {
@@ -33,12 +34,12 @@ export type Editor = {
 
 export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
-  readonly update: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
+  readonly contribute: (update: State.Transform<Editor>) => Effect.Effect<void, never, Scope.Scope>
   readonly definitions: () => Effect.Effect<ReadonlyArray<ReturnType<typeof Tool.toDefinitions>[number]>>
   readonly execute: (input: ExecuteInput) => Effect.Effect<ToolResultValue>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
 enableMapSet()
 
@@ -67,14 +68,21 @@ export const layer = (initial: Readonly<Record<string, Entry>> = {}) =>
       const execute = Effect.fn("ToolRegistry.execute")(function* (input: ExecuteInput) {
         const entry = state.get().entries.get(input.call.name)
         if (!entry) return { type: "error" as const, value: `Unknown tool: ${input.call.name}` }
-        if (!entry.tool.execute) return { type: "error" as const, value: `Tool has no execute handler: ${input.call.name}` }
+        if (!entry.execute && !entry.tool.execute)
+          return { type: "error" as const, value: `Tool has no execute handler: ${input.call.name}` }
 
         return yield* entry.tool._decode(input.call.input).pipe(
           Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
           Effect.flatMap((parameters) =>
-            entry.authorize({ ...input, parameters }).pipe(
-              Effect.andThen(entry.tool.execute!(parameters, { id: input.call.id, name: input.call.name })),
-            ),
+            entry.authorize === undefined
+              ? entry.execute?.({ ...input, parameters }) ??
+                  entry.tool.execute!(parameters, { id: input.call.id, name: input.call.name })
+              : entry.authorize({ ...input, parameters }).pipe(
+                  Effect.andThen(
+                    entry.execute?.({ ...input, parameters }) ??
+                      entry.tool.execute!(parameters, { id: input.call.id, name: input.call.name }),
+                  ),
+                ),
           ),
           Effect.flatMap((value) =>
             entry.tool._encode(value).pipe(
@@ -95,7 +103,7 @@ export const layer = (initial: Readonly<Record<string, Entry>> = {}) =>
 
       return Service.of({
         transform: state.transform,
-        update: Effect.fn("ToolRegistry.update")(function* (update) {
+        contribute: Effect.fn("ToolRegistry.contribute")(function* (update) {
           const transform = yield* state.transform()
           yield* transform(update)
         }),

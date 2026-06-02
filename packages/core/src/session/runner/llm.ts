@@ -22,7 +22,8 @@ import { SessionRunnerModel } from "./model"
  * `SessionPrompt` monolith. Implement the unchecked items in small reviewed slices:
  *
  * - Session ownership and controls
- *   - [ ] Acquire one active run for the Session; concurrent resume calls join or observe it.
+ *   - [x] Acquire one local active run for the Session; concurrent resume calls join it.
+ *   - [ ] Replace local ownership with durable multi-node ownership when clustered.
  *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
  *   - [x] Bound model steps.

@@ -200,4 +200,25 @@ describe("SessionV2.prompt", () => {
       expect(yield* session.messages({ sessionID })).toEqual([admitted[0]])
     }),
   )
+
+  it.effect("rejects reuse of one globally unique message ID across sessions", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* SessionV2.Service
+      const other = SessionV2.ID.make("ses_prompt_other")
+      yield* db
+        .insert(SessionTable)
+        .values({ id: other, project_id: Project.ID.global, slug: "other", directory: "/project", title: "other", version: "test" })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const prompt = new Prompt({ text: "Fix the failing tests" })
+
+      yield* session.prompt({ id: messageID, sessionID, prompt })
+      const failure = yield* session.prompt({ id: messageID, sessionID: other, prompt }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
+    }),
+  )
 })

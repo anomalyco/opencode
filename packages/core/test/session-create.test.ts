@@ -146,7 +146,7 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("persists keyed creation admission in replayable event data", () =>
+  it.effect("persists caller-ID creation admission in replayable event data", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
       const { db } = yield* Database.Service

@@ -36,6 +36,12 @@ export class BinaryContent extends Schema.Class<BinaryContent>("LocationFileSyst
 export const Content = Schema.Union([TextContent, BinaryContent]).pipe(Schema.toTaggedUnion("type"))
 export type Content = typeof Content.Type
 
+export class ReadTarget extends Schema.Class<ReadTarget>("LocationFileSystem.ReadTarget")({
+  real: Schema.String,
+  resource: Schema.String,
+  size: NonNegativeInt,
+}) {}
+
 export const ListInput = Schema.Struct({
   path: RelativePath.pipe(Schema.optional),
   reference: Schema.String.pipe(Schema.optional),
@@ -88,6 +94,8 @@ export const Event = {
 
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<Content>
+  readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
+  readonly readResolved: (target: ReadTarget) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   readonly grep: (input: GrepInput) => Effect.Effect<GrepMatch[]>
@@ -183,26 +191,40 @@ export const layer = Layer.effect(
       return [...files, ...dirs]
     })
 
+    const resolveRead = Effect.fn("FileSystem.resolveRead")(function* (input: ReadInput) {
+      const file = yield* resolve(input.path, input.reference)
+      const info = yield* fs.stat(file.real).pipe(Effect.orDie)
+      if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+      const relative = path.relative(file.root, file.real).replaceAll("\\", "/")
+      return new ReadTarget({
+        real: file.real,
+        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
+        size: Number(info.size),
+      })
+    })
+    const readResolved = Effect.fn("FileSystem.readResolved")(function* (target: ReadTarget) {
+      const bytes = yield* fs.readFile(target.real).pipe(Effect.orDie)
+      const mime = FSUtil.mimeType(target.real)
+      if (!bytes.includes(0)) {
+        const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
+          Effect.option,
+        )
+        if (content._tag === "Some") return new TextContent({ type: "text", content: content.value, mime })
+      }
+      return new BinaryContent({
+        type: "binary",
+        content: Buffer.from(bytes).toString("base64"),
+        encoding: "base64",
+        mime,
+      })
+    })
+
     return Service.of({
       read: Effect.fn("FileSystem.read")(function* (input) {
-        const file = yield* resolve(input.path, input.reference)
-        const info = yield* fs.stat(file.real).pipe(Effect.orDie)
-        if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-        const bytes = yield* fs.readFile(file.real).pipe(Effect.orDie)
-        const mime = FSUtil.mimeType(file.real)
-        if (!bytes.includes(0)) {
-          const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
-            Effect.option,
-          )
-          if (content._tag === "Some") return new TextContent({ type: "text", content: content.value, mime })
-        }
-        return new BinaryContent({
-          type: "binary",
-          content: Buffer.from(bytes).toString("base64"),
-          encoding: "base64",
-          mime,
-        })
+        return yield* readResolved(yield* resolveRead(input))
       }),
+      resolveRead,
+      readResolved,
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const directory = yield* resolve(input.path, input.reference)
         const info = yield* fs.stat(directory.real).pipe(Effect.orDie)

@@ -398,74 +398,7 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    // session.next.* projectors are disabled while the v2 message projection is stabilized.
-    // The events still publish through EventV2 and fan out through the opencode bridge.
-    // yield* events.project(SessionEvent.AgentSwitched, (event) =>
-    //   Effect.gen(function* () {
-    //     const message = Schema.encodeSync(SessionMessage.AgentSwitched)(
-    //       new SessionMessage.AgentSwitched({
-    //         id: event.id,
-    //         type: "agent-switched",
-    //         metadata: event.metadata,
-    //         agent: event.data.agent,
-    //         time: { created: event.data.timestamp },
-    //       }),
-    //     )
-    //     const data = { metadata: message.metadata, agent: message.agent, time: message.time }
-    //     yield* db
-    //       .update(SessionTable)
-    //       .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-    //       .where(eq(SessionTable.id, event.data.sessionID))
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //     yield* db
-    //       .insert(SessionMessageTable)
-    //       .values([
-    //         {
-    //           id: SessionMessage.ID.make(event.id),
-    //           session_id: event.data.sessionID,
-    //           type: "agent-switched",
-    //           time_created: DateTime.toEpochMillis(event.data.timestamp),
-    //           data,
-    //         },
-    //       ])
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //   }),
-    // )
-    // yield* events.project(SessionEvent.ModelSwitched, (event) =>
-    //   Effect.gen(function* () {
-    //     const message = Schema.encodeSync(SessionMessage.ModelSwitched)(
-    //       new SessionMessage.ModelSwitched({
-    //         id: event.id,
-    //         type: "model-switched",
-    //         metadata: event.metadata,
-    //         model: event.data.model,
-    //         time: { created: event.data.timestamp },
-    //       }),
-    //     )
-    //     const data = { metadata: message.metadata, model: message.model, time: message.time }
-    //     yield* db
-    //       .update(SessionTable)
-    //       .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
-    //       .where(eq(SessionTable.id, event.data.sessionID))
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //     yield* db
-    //       .insert(SessionMessageTable)
-    //       .values([
-    //         {
-    //           id: SessionMessage.ID.make(event.id),
-    //           session_id: event.data.sessionID,
-    //           type: "model-switched",
-    //           time_created: DateTime.toEpochMillis(event.data.timestamp),
-    //           data,
-    //         },
-    //       ])
-    //       .run()
-    //       .pipe(Effect.orDie)
-    //   }),
-    // )
+    // Agent/model switches, synthetic messages, shells, retries, and compaction remain future slices.
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
