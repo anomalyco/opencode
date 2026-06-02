@@ -109,7 +109,6 @@ const cli = yargs(args)
       process_role: processMetadata.processRole,
       run_id: processMetadata.runID,
     })
-
   })
   .usage("")
   .completion("completion", "generate shell completion script")

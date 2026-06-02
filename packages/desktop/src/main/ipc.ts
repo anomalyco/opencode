@@ -3,13 +3,7 @@ import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } f
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
-import type {
-  FatalRendererError,
-  ServerReadyData,
-  TitlebarTheme,
-  WindowConfig,
-  WslConfig,
-} from "../preload/types"
+import type { FatalRendererError, ServerReadyData, TitlebarTheme, WindowConfig, WslConfig } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
