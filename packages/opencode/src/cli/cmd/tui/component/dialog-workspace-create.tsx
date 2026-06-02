@@ -61,15 +61,17 @@ async function loadWorkspaceAdapters(input: {
   const dir = input.sync.path.directory || input.sdk.directory
   const url = new URL("/experimental/workspace/adapter", input.sdk.url)
   if (dir) url.searchParams.set("directory", dir)
-  const res = await input.sdk
-    .fetch(url)
-    .then((x) => x.json() as Promise<Adapter[]>)
-    .catch(() => undefined)
-  if (res) return res
-  input.toast.show({
-    message: "Failed to load workspace adapters",
-    variant: "error",
-  })
+  try {
+    const response = await input.sdk.fetch(url)
+    return (await response.json()) as Adapter[]
+  } catch (err) {
+    input.toast.show({
+      title: "Failed to load workspace adapters",
+      message: errorMessage(err),
+      variant: "error",
+    })
+    return undefined
+  }
 }
 
 export async function openWorkspaceSelect(input: {
@@ -100,13 +102,21 @@ export async function warpWorkspaceSession(input: {
   copyChanges: boolean
   done?: () => void
 }): Promise<boolean> {
-  const result = await input.sdk.client.experimental.workspace
-    .warp({
+  let result
+  try {
+    result = await input.sdk.client.experimental.workspace.warp({
       id: input.workspaceID,
       sessionID: input.sessionID,
       copyChanges: input.copyChanges,
     })
-    .catch(() => undefined)
+  } catch (err) {
+    input.toast.show({
+      title: "Failed to warp session",
+      message: errorMessage(err),
+      variant: "error",
+    })
+    return false
+  }
   if (!result?.data) {
     if (result?.error && "name" in result.error && result.error.name === "VcsApplyError") {
       await DialogAlert.show(
@@ -118,7 +128,8 @@ export async function warpWorkspaceSession(input: {
     }
 
     input.toast.show({
-      message: `Failed to warp session: ${errorMessage(result?.error ?? "no response")}`,
+      title: "Failed to warp session",
+      message: errorMessage(result?.error ?? "no response"),
       variant: "error",
     })
     return false

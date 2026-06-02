@@ -1,13 +1,13 @@
 // Prompt textarea component and its state machine for direct interactive mode.
 //
-// createPromptState() wires keybinds, history navigation, leader-key sequences,
-// and `@` autocomplete for files, subagents, and MCP resources.
+// createPromptState() wires keymap command layers, history navigation, and
+// `@` autocomplete for files, subagents, and MCP resources.
 // It produces a PromptState that RunPromptBody renders as an OpenTUI textarea,
 // while the footer view renders the current menu state below it.
 /** @jsxImportSource @opentui/solid */
 import { pathToFileURL } from "bun"
-import { StyledText, bg, fg, type KeyBinding, type KeyEvent, type TextareaRenderable } from "@opentui/core"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { StyledText, bg, fg, type KeyEvent, type TextareaRenderable } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
@@ -20,15 +20,12 @@ import {
   mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
-  promptCycle,
-  promptHit,
-  promptInfo,
-  promptKeys,
   pushPromptHistory,
 } from "./prompt.shared"
+import { OPENCODE_BASE_MODE, useBindings } from "@/cli/cmd/tui/keymap"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterKeybinds, FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunResource } from "./types"
+import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunResource, RunTuiConfig } from "./types"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -66,10 +63,9 @@ type PromptInput = {
   directory: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
-  subagents: Accessor<number>
   resources: Accessor<RunResource[]>
   commands: Accessor<RunCommand[] | undefined>
-  keybinds: FooterKeybinds
+  tuiConfig: RunTuiConfig
   state: Accessor<FooterState>
   view: Accessor<string>
   prompt: Accessor<boolean>
@@ -82,14 +78,12 @@ type PromptInput = {
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
-  onSubagentMenu?: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
 }
 
 export type PromptState = {
   placeholder: Accessor<StyledText | string>
-  bindings: Accessor<KeyBinding[]>
   shell: Accessor<boolean>
   visible: Accessor<boolean>
   options: Accessor<PromptOption[]>
@@ -102,6 +96,7 @@ export type PromptState = {
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
   replaceDraft: (text: string) => void
+  replacePrompt: (prompt: RunPrompt) => void
   bind: (area?: TextareaRenderable) => void
 }
 
@@ -199,7 +194,6 @@ export function hintFlags(width: number) {
 export function RunPromptBody(props: {
   theme: () => RunFooterTheme
   placeholder: () => StyledText | string
-  bindings: () => KeyBinding[]
   onSubmit: () => void
   onKeyDown: (event: KeyEvent) => void
   onContentChange: () => void
@@ -263,7 +257,6 @@ export function RunPromptBody(props: {
           backgroundColor={props.theme().surface}
           focusedBackgroundColor={props.theme().surface}
           cursorColor={props.theme().text}
-          keyBindings={props.bindings()}
           onSubmit={props.onSubmit}
           onKeyDown={props.onKeyDown}
           onPaste={() => {
@@ -280,8 +273,6 @@ export function RunPromptBody(props: {
 }
 
 export function createPromptState(input: PromptInput): PromptState {
-  const keys = createMemo(() => promptKeys(input.keybinds))
-  const bindings = createMemo(() => keys().bindings)
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
@@ -301,8 +292,6 @@ export function createPromptState(input: PromptInput): PromptState {
   let draft: RunPrompt = { text: "", parts: [] }
   let stash: RunPrompt = { text: "", parts: [] }
   let area: TextareaRenderable | undefined
-  let leader = false
-  let timeout: NodeJS.Timeout | undefined
   let tick = false
   let prev = input.view()
   let type = 0
@@ -460,24 +449,6 @@ export function createPromptState(input: PromptInput): PromptState {
   const popup = createMemo(() => {
     return visible() ? menu.rows() - 1 + AUTOCOMPLETE_BOTTOM_ROWS : 0
   })
-
-  const clear = () => {
-    leader = false
-    if (!timeout) {
-      return
-    }
-
-    clearTimeout(timeout)
-    timeout = undefined
-  }
-
-  const arm = () => {
-    clear()
-    leader = true
-    timeout = setTimeout(() => {
-      clear()
-    }, input.keybinds.leaderTimeout)
-  }
 
   const hide = () => {
     setMode(false)
@@ -742,7 +713,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
   const move = (dir: -1 | 1, event: KeyEvent) => {
     if (!area || area.isDestroyed) {
-      return
+      return false
     }
 
     if (history.index === null && dir === -1) {
@@ -751,7 +722,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const next = movePromptHistory(history, dir, area.plainText, area.cursorOffset)
     if (!next.apply || next.text === undefined || next.cursor === undefined) {
-      return
+      return false
     }
 
     history = next.state
@@ -759,28 +730,27 @@ export function createPromptState(input: PromptInput): PromptState {
       next.state.index === null ? stash : (next.state.items[next.state.index] ?? { text: next.text, parts: [] })
     restore(value, next.cursor)
     event.preventDefault()
+    return true
   }
 
-  const cycle = (event: KeyEvent): boolean => {
-    const next = promptCycle(leader, promptInfo(event), keys().leaders, keys().cycles)
-    if (!next.consume) {
-      return false
+  const historyCommand = (dir: -1 | 1, event: KeyEvent) => {
+    if (move(dir, event)) return
+    if (!area || area.isDestroyed) return false
+
+    const endOffset = Bun.stringWidth(area.plainText)
+    if (dir === -1 && area.visualCursor.visualRow === 0) {
+      area.cursorOffset = 0
     }
 
-    if (next.clear) {
-      clear()
+    const end =
+      typeof area.height === "number" && Number.isFinite(area.height) && area.height > 0
+        ? area.height - 1
+        : Math.max(0, (area.virtualLineCount ?? 1) - 1)
+    if (dir === 1 && area.visualCursor.visualRow === end) {
+      area.cursorOffset = endOffset
     }
 
-    if (next.arm) {
-      arm()
-    }
-
-    if (next.cycle) {
-      input.onCycle()
-    }
-
-    event.preventDefault()
-    return true
+    return false
   }
 
   const requestExit = () => {
@@ -820,12 +790,20 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (next.kind === "slash") {
-      const text = `/${next.name} `
       const cursor = area.cursorOffset
+      const head = slashHead(area.plainText)
+      const local = !shell() && (next.name === "new" || next.name === "exit")
+      const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
+      const text = `/${next.name}${separator}`
 
       area.cursorOffset = 0
       const start = area.logicalCursor
-      area.cursorOffset = cursor
+      area.cursorOffset =
+        shell() || !head
+          ? cursor
+          : local
+            ? Bun.stringWidth(area.plainText)
+            : Bun.stringWidth(area.plainText.slice(0, head.end))
       const end = area.logicalCursor
 
       area.deleteRange(start.row, start.col, end.row, end.col)
@@ -833,6 +811,11 @@ export function createPromptState(input: PromptInput): PromptState {
       area.cursorOffset = Bun.stringWidth(text)
       hide()
       syncDraft()
+      if (!shell()) {
+        submitPrompt(clonePrompt(draft))
+        return
+      }
+
       scheduleRows()
       area.focus()
       return
@@ -912,178 +895,180 @@ export function createPromptState(input: PromptInput): PromptState {
     refresh()
   }
 
-  const onKeyDown = (event: KeyEvent) => {
-    const key = promptInfo(event)
-    if (visible()) {
-      const name = event.name.toLowerCase()
-      const ctrl = event.ctrl && !event.meta && !event.shift
-      if (name === "up" || (ctrl && name === "p")) {
-        event.preventDefault()
-        if (options().length > 0) {
-          menu.move(-1)
-        }
-        return
-      }
-
-      if (name === "down" || (ctrl && name === "n")) {
-        event.preventDefault()
-        if (options().length > 0) {
-          menu.move(1)
-        }
-        return
-      }
-
-      if (name === "escape") {
-        event.preventDefault()
-        cancelAutocomplete()
-        return
-      }
-
-      if (name === "return") {
-        if (mode() === "slash" && options().length === 0) {
-          hide()
-          return
-        }
-
-        event.preventDefault()
-        select()
-        return
-      }
-
-      if (name === "tab") {
-        if (mode() === "slash" && options().length === 0) {
-          hide()
-          return
-        }
-
-        event.preventDefault()
-        const item = options()[menu.selected()]
-        if (item?.kind === "mention" && item.directory) {
-          expand()
-          return
-        }
-
-        select()
-        return
-      }
-    }
-
-    if (
-      key.name === "!" &&
-      !shell() &&
-      !event.ctrl &&
-      !event.meta &&
-      !event.super &&
-      area &&
-      !area.isDestroyed &&
-      area.cursorOffset === 0
-    ) {
-      event.preventDefault()
-      setShellMode(true)
-      return
-    }
-
-    if (shell() && !visible()) {
-      if (key.name === "escape") {
-        event.preventDefault()
-        setShellMode(false)
-        return
-      }
-
-      if (key.name === "backspace" && area && !area.isDestroyed && area.cursorOffset === 0) {
-        event.preventDefault()
-        setShellMode(false)
-        return
-      }
-    }
-
-    if (
-      key.name === "down" &&
-      !visible() &&
-      !event.ctrl &&
-      !event.meta &&
-      !event.shift &&
-      !event.super &&
-      area &&
-      !area.isDestroyed &&
-      area.plainText.length === 0 &&
-      input.subagents() > 0
-    ) {
-      event.preventDefault()
-      input.onSubagentMenu?.()
-      return
-    }
-
-    if (promptHit(keys().clear, key)) {
-      const handled = requestExit()
-      if (handled) {
-        event.preventDefault()
-      }
-      return
-    }
-
-    if (promptHit(keys().interrupts, key)) {
-      if (input.onInterrupt()) {
-        event.preventDefault()
-        return
-      }
-    }
-
-    if (cycle(event)) {
-      return
-    }
-
-    const up = promptHit(keys().previous, key)
-    const down = promptHit(keys().next, key)
-    if (!up && !down) {
-      return
-    }
-
-    if (!area || area.isDestroyed) {
-      return
-    }
-
-    const dir = up ? -1 : 1
-    const endOffset = Bun.stringWidth(area.plainText)
-    if ((dir === -1 && area.cursorOffset === 0) || (dir === 1 && area.cursorOffset === endOffset)) {
-      move(dir, event)
-      return
-    }
-
-    if (dir === -1 && area.visualCursor.visualRow === 0) {
-      area.cursorOffset = 0
-    }
-
-    const end =
-      typeof area.height === "number" && Number.isFinite(area.height) && area.height > 0
-        ? area.height - 1
-        : Math.max(0, (area.virtualLineCount ?? 1) - 1)
-    if (dir === 1 && area.visualCursor.visualRow === end) {
-      area.cursorOffset = endOffset
-    }
+  const baseBindingsEnabled = () => {
+    const current = input.view()
+    if (current === "command") return false
+    if (current === "model") return false
+    if (current === "variant") return false
+    if (current === "queued-menu") return false
+    if (current === "subagent-menu") return false
+    return true
   }
 
-  useKeyboard((event) => {
-    if (input.prompt()) {
-      return
-    }
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: baseBindingsEnabled(),
+    commands: [
+      {
+        name: "prompt.clear",
+        title: "Clear prompt or exit",
+        category: "Prompt",
+        run() {
+          if (requestExit()) return
+          return false
+        },
+      },
+    ],
+    bindings: input.tuiConfig.keybinds.get("prompt.clear"),
+  }))
 
-    if (
-      input.view() === "command" ||
-      input.view() === "model" ||
-      input.view() === "variant" ||
-      input.view() === "subagent-menu"
-    ) {
-      return
-    }
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt(),
+    commands: [
+      {
+        name: "session.interrupt",
+        title: "Interrupt session",
+        category: "Session",
+        run() {
+          if (input.onInterrupt()) return
+          return false
+        },
+      },
+    ],
+    bindings: input.tuiConfig.keybinds.get("session.interrupt"),
+  }))
 
-    if (promptHit(keys().clear, promptInfo(event))) {
-      const handled = requestExit()
-      if (handled) {
-        event.preventDefault()
-      }
-    }
-  })
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt() && !visible(),
+    commands: [
+      {
+        name: "prompt.history.previous",
+        title: "Previous prompt history",
+        category: "Prompt",
+        run(ctx: { event: KeyEvent }) {
+          return historyCommand(-1, ctx.event)
+        },
+      },
+      {
+        name: "prompt.history.next",
+        title: "Next prompt history",
+        category: "Prompt",
+        run(ctx: { event: KeyEvent }) {
+          return historyCommand(1, ctx.event)
+        },
+      },
+    ],
+    bindings: [
+      ...input.tuiConfig.keybinds.get("prompt.history.previous"),
+      ...input.tuiConfig.keybinds.get("prompt.history.next"),
+    ],
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt() && !visible(),
+    bindings: [
+      {
+        key: "!",
+        desc: "Shell mode",
+        group: "Prompt",
+        cmd() {
+          if (shell()) return false
+          if (!area || area.isDestroyed) return false
+          if (area.cursorOffset !== 0) return false
+          setShellMode(true)
+        },
+      },
+    ],
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt() && shell() && !visible(),
+    bindings: [
+      {
+        key: "escape",
+        desc: "Exit shell mode",
+        group: "Prompt",
+        cmd: () => setShellMode(false),
+      },
+      {
+        key: "backspace",
+        desc: "Exit shell mode",
+        group: "Prompt",
+        cmd() {
+          if (!area || area.isDestroyed) return false
+          if (area.cursorOffset !== 0) return false
+          setShellMode(false)
+        },
+      },
+    ],
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt() && visible(),
+    commands: [
+      {
+        name: "prompt.autocomplete.prev",
+        title: "Previous autocomplete item",
+        category: "Autocomplete",
+        run: () => menu.move(-1),
+      },
+      {
+        name: "prompt.autocomplete.next",
+        title: "Next autocomplete item",
+        category: "Autocomplete",
+        run: () => menu.move(1),
+      },
+      {
+        name: "prompt.autocomplete.hide",
+        title: "Hide autocomplete",
+        category: "Autocomplete",
+        run: cancelAutocomplete,
+      },
+      {
+        name: "prompt.autocomplete.select",
+        title: "Select autocomplete item",
+        category: "Autocomplete",
+        run() {
+          if (mode() === "slash" && options().length === 0) {
+            hide()
+            return
+          }
+          select()
+        },
+      },
+      {
+        name: "prompt.autocomplete.complete",
+        title: "Complete autocomplete item",
+        category: "Autocomplete",
+        run() {
+          if (mode() === "slash" && options().length === 0) {
+            hide()
+            return
+          }
+          const item = options()[menu.selected()]
+          if (item?.kind === "mention" && item.directory) {
+            expand()
+            return
+          }
+          select()
+        },
+      },
+    ],
+    bindings: input.tuiConfig.keybinds.gather("run.prompt.autocomplete", [
+      "prompt.autocomplete.prev",
+      "prompt.autocomplete.next",
+      "prompt.autocomplete.hide",
+      "prompt.autocomplete.select",
+      "prompt.autocomplete.complete",
+    ]),
+  }))
+
+  const onKeyDown = (_event: KeyEvent) => {}
 
   const submitPrompt = (next: RunPrompt) => {
     if (!area || area.isDestroyed) {
@@ -1144,7 +1129,6 @@ export function createPromptState(input: PromptInput): PromptState {
   }
 
   onCleanup(() => {
-    clear()
     if (area && !area.isDestroyed) {
       area.off("line-info-change", scheduleRows)
     }
@@ -1188,7 +1172,6 @@ export function createPromptState(input: PromptInput): PromptState {
       syncDraft()
     }
 
-    clear()
     hide()
     prev = kind
     if (kind !== "prompt") {
@@ -1202,7 +1185,6 @@ export function createPromptState(input: PromptInput): PromptState {
 
   return {
     placeholder,
-    bindings,
     shell,
     visible,
     options,
@@ -1219,6 +1201,7 @@ export function createPromptState(input: PromptInput): PromptState {
       scheduleRows()
     },
     replaceDraft,
+    replacePrompt: restore,
     bind,
   }
 }

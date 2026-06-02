@@ -3,18 +3,20 @@ import type { Model } from "@opencode-ai/sdk/v2"
 import * as Log from "@opencode-ai/core/util/log"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { createServer } from "http"
+import open from "open"
 
 const log = Log.create({ service: "plugin.digitalocean" })
 
 const DO_OAUTH_CLIENT_ID = "b1a6c5158156caac821fd1b30253ca8acb52454a48fa744420e41889cb589f82"
 const DO_AUTHORIZE_URL = "https://cloud.digitalocean.com/v1/oauth/authorize"
 const DO_API_BASE = "https://api.digitalocean.com"
+const DO_GENAI_API = `${DO_API_BASE}/v2/gen-ai`
 const DO_INFERENCE_BASE = "https://inference.do-ai.run/v1"
 const OAUTH_PORT = 1456
 const OAUTH_REDIRECT_PATH = "/auth/callback"
 const OAUTH_TOKEN_PATH = "/auth/token"
 const ROUTER_REFRESH_INTERVAL_MS = 5 * 60 * 1000
-const MAK_NAME_PREFIX = "opencode-oauth"
+const OAUTH_SCOPES = "genai:read inference:query"
 
 interface ImplicitTokenPayload {
   access_token: string
@@ -26,12 +28,6 @@ interface PendingOAuth {
   state: string
   resolve: (tokens: ImplicitTokenPayload) => void
   reject: (error: Error) => void
-}
-
-interface ApiKeyInfo {
-  uuid: string
-  name: string
-  secret_key: string
 }
 
 interface RouterEntry {
@@ -59,7 +55,7 @@ function buildAuthorizeUrl(state: string): string {
     response_type: "token",
     client_id: DO_OAUTH_CLIENT_ID,
     redirect_uri: redirectUri(),
-    scope: "genai:create genai:read",
+    scope: OAUTH_SCOPES,
     state,
   })
   return `${DO_AUTHORIZE_URL}?${params.toString()}`
@@ -91,15 +87,20 @@ const HTML_CALLBACK = `<!doctype html>
         const errorDescription = params.get("error_description") || search.get("error_description")
         const titleEl = document.getElementById("title")
         const msgEl = document.getElementById("msg")
+        const tokenUrl = new URL(${JSON.stringify(OAUTH_TOKEN_PATH)}, window.location.origin).href
         try {
           const body = error
             ? { error, error_description: errorDescription || "" }
             : { access_token: params.get("access_token") || "", expires_in: params.get("expires_in") || "0", state: params.get("state") || "" }
-          await fetch(${JSON.stringify(OAUTH_TOKEN_PATH)}, {
+          const res = await fetch(tokenUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           })
+          if (!res.ok) {
+            const detail = await res.text().catch(function () { return "" })
+            throw new Error(detail || ("callback failed (" + res.status + ")"))
+          }
           if (error) {
             titleEl.textContent = "Authorization Failed"
             msgEl.textContent = errorDescription || error
@@ -225,31 +226,10 @@ function waitForOAuthCallback(state: string): Promise<ImplicitTokenPayload> {
   })
 }
 
-async function createModelAccessKey(bearer: string): Promise<ApiKeyInfo> {
-  // Suffix-on-collision strategy keeps re-`/connect` non-destructive.
-  const name = `${MAK_NAME_PREFIX}-${Math.floor(Date.now() / 1000)}`
-  const res = await fetch(`${DO_API_BASE}/v2/gen-ai/models/api_keys`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${bearer}`,
-      "Content-Type": "application/json",
-      "User-Agent": `opencode/${InstallationVersion}`,
-    },
-    body: JSON.stringify({ name }),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new Error(`Failed to create Model Access Key (${res.status}): ${body}`)
-  }
-  const data = (await res.json()) as { api_key_info?: ApiKeyInfo }
-  if (!data.api_key_info?.secret_key) throw new Error("Model Access Key response missing secret_key")
-  return data.api_key_info
-}
-
 async function listRouters(
   bearer: string,
 ): Promise<{ ok: true; routers: RouterEntry[] } | { ok: false; status: number }> {
-  const res = await fetch(`${DO_API_BASE}/v2/gen-ai/models/routers`, {
+  const res = await fetch(`${DO_GENAI_API}/models/routers`, {
     headers: {
       Authorization: `Bearer ${bearer}`,
       Accept: "application/json",
@@ -362,15 +342,16 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
             await startOAuthServer()
             const state = generateState()
             const callbackPromise = waitForOAuthCallback(state)
+            const url = buildAuthorizeUrl(state)
+            await open(url).catch(() => undefined)
             return {
-              url: buildAuthorizeUrl(state),
+              url,
               instructions:
-                "Sign in to DigitalOcean in your browser. OpenCode will create a Model Access Key named opencode-oauth-* and load your Inference Routers. Re-run /connect to refresh routers later.",
+                "Sign in to DigitalOcean in your browser. OpenCode will use your DigitalOcean API token directly for inference and load your Inference Routers. Re-run /connect to refresh routers later.",
               method: "auto" as const,
               async callback() {
                 try {
                   const tokens = await callbackPromise
-                  const apiKeyInfo = await createModelAccessKey(tokens.access_token)
                   const routerResult = await listRouters(tokens.access_token)
                   const routers = routerResult.ok ? routerResult.routers : []
                   if (!routerResult.ok) {
@@ -379,12 +360,11 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
                   return {
                     type: "success" as const,
                     provider: "digitalocean",
-                    key: apiKeyInfo.secret_key,
+                    key: tokens.access_token,
                     metadata: {
-                      mak_uuid: apiKeyInfo.uuid,
-                      mak_name: apiKeyInfo.name,
                       oauth_access: tokens.access_token,
                       oauth_expires: String(Date.now() + tokens.expires_in * 1000),
+                      oauth_scopes: OAUTH_SCOPES,
                       routers: JSON.stringify(
                         routers.map((r) => ({ name: r.name, uuid: r.uuid, description: r.description })),
                       ),

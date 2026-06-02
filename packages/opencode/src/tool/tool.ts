@@ -1,4 +1,6 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { Effect, Schema } from "effect"
+import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { MessageV2 } from "../session/message-v2"
 import type { Permission } from "../permission"
@@ -38,16 +40,16 @@ export type Context<M extends Metadata = Metadata> = {
   abort: AbortSignal
   callID?: string
   extra?: { [key: string]: unknown }
-  messages: MessageV2.WithParts[]
+  messages: SessionLegacy.WithParts[]
   metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
-  ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
+  ask(input: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
 }
 
 export interface ExecuteResult<M extends Metadata = Metadata> {
   title: string
   metadata: M
   output: string
-  attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
+  attachments?: Omit<SessionLegacy.FilePart, "id" | "sessionID" | "messageID">[]
 }
 
 export interface Def<

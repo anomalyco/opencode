@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach, beforeEach } from "bun:test"
+import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
@@ -28,9 +28,10 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
+import os from "os"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
-import { ProjectID } from "../../src/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { AccountTest } from "../fake/account"
@@ -274,7 +275,7 @@ async function check(map: (dir: string) => string) {
         const cfg = await load(ctx)
         expect(cfg.snapshot).toBe(true)
         expect(ctx.directory).toBe(Filesystem.resolve(tmp.path))
-        expect(ctx.project.id).not.toBe(ProjectID.global)
+        expect(ctx.project.id).not.toBe(ProjectV2.ID.global)
       },
     })
   } finally {
@@ -288,6 +289,20 @@ it.instance("loads config with defaults when no files exist", () =>
   Effect.gen(function* () {
     const config = yield* Config.use.get()
     expect(config.username).toBeDefined()
+  }),
+)
+
+it.instance("falls back to generic username when system user info is unavailable", () =>
+  Effect.gen(function* () {
+    const userInfo = spyOn(os, "userInfo").mockImplementation(() => {
+      throw Object.assign(new Error("missing passwd entry"), { code: "ENOENT" })
+    })
+    try {
+      const config = yield* Config.use.get()
+      expect(config.username).toBe("user")
+    } finally {
+      userInfo.mockRestore()
+    }
   }),
 )
 
@@ -1485,15 +1500,18 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
     ).pipe(
       Effect.scoped,
       Effect.provide(
-        Config.layer.pipe(
-          Layer.provide(testFlock),
-          Layer.provide(AppFileSystem.defaultLayer),
-          Layer.provide(Env.defaultLayer),
-          Layer.provide(wellKnownAuth(server.url.origin)),
-          Layer.provide(AccountTest.empty),
-          Layer.provideMerge(infra),
-          Layer.provide(NpmTest.noop),
-          Layer.provide(FetchHttpClient.layer),
+        Layer.mergeAll(
+          Config.layer.pipe(
+            Layer.provide(testFlock),
+            Layer.provide(AppFileSystem.defaultLayer),
+            Layer.provide(Env.defaultLayer),
+            Layer.provide(wellKnownAuth(server.url.origin)),
+            Layer.provide(AccountTest.empty),
+            Layer.provideMerge(infra),
+            Layer.provide(NpmTest.noop),
+            Layer.provide(FetchHttpClient.layer),
+          ),
+          testInstanceStoreLayer,
         ),
       ),
       Effect.runPromise,

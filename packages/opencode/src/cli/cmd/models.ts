@@ -1,10 +1,11 @@
 import { EOL } from "os"
 import { Effect } from "effect"
 import { Provider } from "@/provider/provider"
-import { ProviderID } from "../../provider/schema"
+
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 export const ModelsCommand = effectCmd({
   command: "models [provider]",
@@ -33,7 +34,7 @@ export const ModelsCommand = effectCmd({
     const provider = yield* Provider.Service
     const providers = yield* provider.list()
 
-    const print = (providerID: ProviderID, verbose?: boolean) => {
+    const print = (providerID: ProviderV2.ID, verbose?: boolean) => {
       const p = providers[providerID]
       const sorted = Object.entries(p.models).sort(([a], [b]) => a.localeCompare(b))
       for (const [modelID, model] of sorted) {
@@ -47,7 +48,7 @@ export const ModelsCommand = effectCmd({
     }
 
     if (args.provider) {
-      const providerID = ProviderID.make(args.provider)
+      const providerID = ProviderV2.ID.make(args.provider)
       if (!providers[providerID]) return yield* fail(`Provider not found: ${args.provider}`)
       print(providerID, args.verbose)
       return
@@ -61,6 +62,6 @@ export const ModelsCommand = effectCmd({
       return a.localeCompare(b)
     })
 
-    for (const providerID of ids) print(ProviderID.make(providerID), args.verbose)
+    for (const providerID of ids) print(ProviderV2.ID.make(providerID), args.verbose)
   }),
 })
