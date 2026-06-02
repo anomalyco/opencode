@@ -112,6 +112,7 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       }),
   handler: async (args) => {
+    const { TuiConfig } = await import("./config/tui")
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
@@ -186,7 +187,7 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await import("./config/tui").then((mod) => mod.TuiConfig.get())
+      const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
       const external =

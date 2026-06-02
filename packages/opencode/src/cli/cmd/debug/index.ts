@@ -50,9 +50,9 @@ const InfoCommand = effectCmd({
   command: "info",
   describe: "show debug information",
   handler: Effect.fn("Cli.debug.info")(function* () {
-    const configModule = yield* Effect.promise(() => import("@/config/config"))
-    const configPlugin = yield* Effect.promise(() => import("@/config/plugin"))
-    const config = yield* configModule.Config.Service.use((cfg) => cfg.get())
+    const { Config } = yield* Effect.promise(() => import("@/config/config"))
+    const { ConfigPlugin } = yield* Effect.promise(() => import("@/config/plugin"))
+    const config = yield* Config.Service.use((cfg) => cfg.get())
     const termProgram = process.env.TERM_PROGRAM
       ? `${process.env.TERM_PROGRAM}${process.env.TERM_PROGRAM_VERSION ? ` ${process.env.TERM_PROGRAM_VERSION}` : ""}`
       : undefined
@@ -71,7 +71,7 @@ const InfoCommand = effectCmd({
       return
     }
     for (const plugin of config.plugin_origins) {
-      console.log(`- ${configPlugin.ConfigPlugin.pluginSpecifier(plugin.spec)}`)
+      console.log(`- ${ConfigPlugin.pluginSpecifier(plugin.spec)}`)
     }
   }),
 })

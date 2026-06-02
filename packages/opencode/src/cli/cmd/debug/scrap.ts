@@ -7,9 +7,9 @@ export const ScrapCommand = cmd({
   describe: "list all known projects",
   builder: (yargs) => yargs,
   async handler() {
-    const project = await import("@/project/project")
+    const { Project } = await import("@/project/project")
     const { makeRuntime } = await import("@opencode-ai/core/effect/runtime")
-    const runtime = makeRuntime(project.Project.Service, project.Project.defaultLayer)
+    const runtime = makeRuntime(Project.Service, Project.defaultLayer)
     const timer = Log.Default.time("scrap")
     const list = await runtime.runPromise((project) => project.list())
     process.stdout.write(JSON.stringify(list, null, 2) + EOL)

@@ -7,7 +7,11 @@ export { extractResponseText, formatPromptTooLargeError, parseGitHubRemote } fro
 export const GithubInstallCommand = effectCmd({
   command: "install",
   describe: "install the GitHub agent",
-  handler: () => Effect.promise(() => import("./github.handler")).pipe(Effect.flatMap((mod) => mod.githubInstall())),
+  handler: () =>
+    Effect.gen(function* () {
+      const { githubInstall } = yield* Effect.promise(() => import("./github.handler"))
+      return yield* githubInstall()
+    }),
 })
 
 export const GithubRunCommand = effectCmd({
@@ -23,7 +27,11 @@ export const GithubRunCommand = effectCmd({
         type: "string",
         describe: "GitHub personal access token (github_pat_********)",
       }),
-  handler: (args) => Effect.promise(() => import("./github.handler")).pipe(Effect.flatMap((mod) => mod.githubRun(args))),
+  handler: (args) =>
+    Effect.gen(function* () {
+      const { githubRun } = yield* Effect.promise(() => import("./github.handler"))
+      return yield* githubRun(args)
+    }),
 })
 
 export const GithubCommand = cmd({

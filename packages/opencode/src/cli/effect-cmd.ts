@@ -73,26 +73,24 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
     describe: opts.describe,
     builder: opts.builder as never,
     async handler(rawArgs) {
-      const runtime = await import("@/effect/app-runtime")
+      const { AppRuntime } = await import("@/effect/app-runtime")
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as WithDoubleDash<Args>
       const useInstance = typeof opts.instance === "function" ? opts.instance(args) : opts.instance !== false
       if (!useInstance) {
-        await runtime.AppRuntime.runPromise(opts.handler(args))
+        await AppRuntime.runPromise(opts.handler(args))
         return
       }
-      const instanceStore = await import("@/project/instance-store")
-      const instanceRef = await import("@/effect/instance-ref")
+      const { InstanceStore } = await import("@/project/instance-store")
+      const { InstanceRef } = await import("@/effect/instance-ref")
       const directory = opts.directory?.(args) ?? process.cwd()
-      const { store, ctx } = await runtime.AppRuntime.runPromise(
-        instanceStore.InstanceStore.Service.use((store) =>
-          store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx }))),
-        ),
+      const { store, ctx } = await AppRuntime.runPromise(
+        InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
       )
       try {
-        await runtime.AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(instanceRef.InstanceRef, ctx)))
+        await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
       } finally {
-        await runtime.AppRuntime.runPromise(store.dispose(ctx))
+        await AppRuntime.runPromise(store.dispose(ctx))
       }
     },
   })

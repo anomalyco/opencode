@@ -44,6 +44,7 @@ export const AttachCommand = cmd({
         describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
       }),
   handler: async (args) => {
+    const { TuiConfig } = await import("@/cli/cmd/tui/config/tui")
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()
@@ -65,7 +66,7 @@ export const AttachCommand = cmd({
         }
       })()
       const headers = ServerAuth.headers({ password: args.password, username: args.username })
-      const config = await import("@/cli/cmd/tui/config/tui").then((mod) => mod.TuiConfig.get())
+      const config = await TuiConfig.get()
 
       try {
         await validateSession({

@@ -239,12 +239,13 @@ export const RunCommand = effectCmd({
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
-    const agent = yield* Effect.promise(() => import("@/agent/agent"))
-    const runtimeFlags = yield* Effect.promise(() => import("@/effect/runtime-flags"))
-    const instanceRef = yield* Effect.promise(() => import("@/effect/instance-ref"))
-    const agentSvc = yield* agent.Agent.Service
-    const flags = yield* runtimeFlags.RuntimeFlags.Service
-    const localInstance = yield* instanceRef.InstanceRef
+    const { Agent } = yield* Effect.promise(() => import("@/agent/agent"))
+    const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
+    const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
+    const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
+    const agentSvc = yield* Agent.Service
+    const flags = yield* RuntimeFlags.Service
+    const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -319,7 +320,7 @@ export const RunCommand = effectCmd({
         }
       })()
       const attachHeaders = args.attach
-        ? (await import("@/server/auth")).ServerAuth.headers({ password: args.password, username: args.username })
+        ? ServerAuth.headers({ password: args.password, username: args.username })
         : undefined
       const attachSDK = (dir?: string) => {
         return createOpencodeClient({
@@ -535,7 +536,7 @@ export const RunCommand = effectCmd({
         const name = args.agent
 
         const entry = await Effect.runPromise(
-          agentSvc.get(name).pipe(Effect.provideService(instanceRef.InstanceRef, localInstance)),
+          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
         )
         if (!entry) {
           UI.println(
