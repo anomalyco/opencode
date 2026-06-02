@@ -47,6 +47,12 @@ obj.b
 const { a, b } = obj
 ```
 
+### Imports
+
+- Never alias imports. Do not use `import { foo as bar } from "..."` or renamed imports like `resolve as pathResolve`.
+- Never use star imports. Do not use `import * as Foo from "..."` or `import type * as Foo from "..."`.
+- If a namespace-style value is needed, import the module's own exported namespace by name, for example `import { Project } from "@opencode-ai/core/project"`, then reference `Project.ID`.
+
 ### Variables
 
 Prefer `const` over `let`. Use ternaries or early returns instead of reassignment.

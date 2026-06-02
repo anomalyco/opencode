@@ -1,8 +1,11 @@
 import { SessionID } from "@/session/schema"
-import { SessionMessage } from "@opencode-ai/core/session-message"
-import { Prompt } from "@opencode-ai/core/session-prompt"
-import { SessionV2 } from "@/v2/session"
-import { Schema } from "effect"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { Prompt } from "@opencode-ai/core/session/prompt"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath, PositiveInt, RelativePath, withStatics } from "@opencode-ai/core/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   InvalidCursorError,
@@ -12,29 +15,73 @@ import {
   UnknownError,
 } from "../../errors"
 import { V2Authorization } from "../../middleware/authorization"
-import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
-import { QueryBoolean } from "../query"
+import { WorkspaceRoutingQuery } from "../../middleware/workspace-routing"
 
-export const SessionsQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
-  limit: Schema.optional(
-    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
-  ).annotate({
+const SessionsQueryFields = {
+  workspace: WorkspaceV2.ID.pipe(Schema.optional),
+  limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
   }),
   order: Schema.optional(Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")])).annotate({
     description: "Session order for the first page. Use desc for newest first or asc for oldest first.",
   }),
-  path: Schema.optional(Schema.String),
-  roots: Schema.optional(QueryBoolean),
-  start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
-  cursor: Schema.optional(
-    Schema.String.annotate({
-      description:
-        "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order or filters.",
-    }),
-  ),
+}
+
+const SessionsDirectoryQuery = Schema.Struct({
+  ...SessionsQueryFields,
+  directory: AbsolutePath,
+})
+
+const SessionsProjectQuery = Schema.Struct({
+  ...SessionsQueryFields,
+  project: ProjectV2.ID,
+  subpath: RelativePath.pipe(Schema.optional),
+})
+
+const SessionsAllQuery = Schema.Struct(SessionsQueryFields)
+
+const withCursor = <Fields extends Schema.Struct.Fields>(schema: Schema.Struct<Fields>) =>
+  schema.mapFields((fields) => ({
+    ...Struct.omit(fields, ["limit"]),
+    anchor: SessionV2.ListAnchor,
+  }))
+
+const SessionsCursorInput = Schema.Union([
+  withCursor(SessionsDirectoryQuery),
+  withCursor(SessionsProjectQuery),
+  withCursor(SessionsAllQuery),
+])
+const SessionsCursorJson = Schema.fromJsonString(SessionsCursorInput)
+const encodeSessionsCursor = Schema.encodeSync(SessionsCursorJson)
+const decodeSessionsCursor = Schema.decodeUnknownEffect(SessionsCursorJson)
+
+export const SessionsCursor = Schema.String.pipe(
+  Schema.brand("V2SessionsCursor"),
+  withStatics((schema) => {
+    const make = schema.make
+    return {
+      make: (input: typeof SessionsCursorInput.Type) =>
+        make(Buffer.from(encodeSessionsCursor(input)).toString("base64url")),
+      parse: (input: string) => decodeSessionsCursor(Buffer.from(input, "base64url").toString("utf8")),
+    }
+  }),
+)
+export type SessionsCursor = typeof SessionsCursor.Type
+
+const SessionsCursorQuery = Schema.Struct({
+  cursor: SessionsCursor.annotate({
+    description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
+  }),
+  limit: SessionsQueryFields.limit,
+})
+
+export const SessionsQuery = Schema.Struct({
+  ...SessionsQueryFields,
+  directory: AbsolutePath.pipe(Schema.optional),
+  project: ProjectV2.ID.pipe(Schema.optional),
+  subpath: RelativePath.pipe(Schema.optional),
+  cursor: SessionsCursorQuery.fields.cursor.pipe(Schema.optional),
 }).annotate({ identifier: "V2SessionsQuery" })
 
 export const SessionGroup = HttpApiGroup.make("v2.session")
@@ -44,8 +91,8 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       success: Schema.Struct({
         items: Schema.Array(SessionV2.Info),
         cursor: Schema.Struct({
-          previous: Schema.String.pipe(Schema.optional),
-          next: Schema.String.pipe(Schema.optional),
+          previous: SessionsCursor.pipe(Schema.optional),
+          next: SessionsCursor.pipe(Schema.optional),
         }),
       }).annotate({ identifier: "V2SessionsResponse" }),
       error: [InvalidCursorError, InvalidRequestError],

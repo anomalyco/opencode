@@ -14,7 +14,6 @@
   height: 28px;
   border-radius: var(--avatar-radius);
   border: 0.5px solid var(--v2-border-border-base);
-  font-family: var(--v2-font-family-sans);
   font-weight: 530;
   font-size: var(--avatar-font-size);
   line-height: 1;
