@@ -215,8 +215,8 @@ export const RunCommand = effectCmd({
       })
       .option("replay", {
         type: "boolean",
-        default: false,
-        describe: "replay interactive session history on resume and after resize",
+        default: true,
+        describe: "replay interactive session history on resume and after resize (use --no-replay to disable)",
       })
       .option("replay-limit", {
         type: "number",
@@ -275,10 +275,6 @@ export const RunCommand = effectCmd({
 
       if (args.interactive && args.format === "json") {
         die("--interactive cannot be used with --format json")
-      }
-
-      if (args.replay && !args.interactive) {
-        die("--replay requires --interactive")
       }
 
       if (args["replay-limit"] !== undefined && !args.interactive) {

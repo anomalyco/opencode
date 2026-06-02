@@ -104,7 +104,7 @@ Options:
                                       max, minimal)                                         [string]
       --thinking                      show thinking blocks                                 [boolean]
       --replay                        replay interactive session history on resume and after resize
-                                                                          [boolean] [default: false]
+                                      (use --no-replay to disable)         [boolean] [default: true]
       --replay-limit                  cap visible interactive replay to the newest N messages
                                                                                             [number]
   -i, --interactive                   run in direct interactive split-footer mode
