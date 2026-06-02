@@ -1,4 +1,5 @@
 ---
+name: securecode-report
 description: Write a Japanese SecureCode benchmark report from an existing run directory
 ---
 

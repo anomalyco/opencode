@@ -1,4 +1,5 @@
 ---
+name: securecode-benchmark
 description: Run a SecureCode benchmark and verify the generated artifacts
 ---
 
