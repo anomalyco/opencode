@@ -1408,7 +1408,7 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
-describe("ProviderTransform.message - anthropic empty content filtering", () => {
+describe("ProviderTransform.message - empty content filtering", () => {
   const anthropicModel = {
     id: "anthropic/claude-3-5-sonnet",
     providerID: "anthropic",
@@ -1440,6 +1440,26 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     options: {},
     headers: {},
   } as any
+  const vertexModel = {
+    ...anthropicModel,
+    id: "google-vertex/gemini-3.1-pro-preview-customtools",
+    providerID: "google-vertex",
+    api: {
+      id: "gemini-3.1-pro-preview-customtools",
+      url: "https://aiplatform.googleapis.com",
+      npm: "@ai-sdk/google-vertex",
+    },
+  }
+  const googleModel = {
+    ...vertexModel,
+    id: "google/gemini-3.1-pro-preview-customtools",
+    providerID: "google",
+    api: {
+      ...vertexModel.api,
+      url: "https://generativelanguage.googleapis.com",
+      npm: "@ai-sdk/google",
+    },
+  }
 
   test("filters out messages with empty string content", () => {
     const msgs = [
@@ -1588,7 +1608,22 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("filters empty reasoning-only messages for google providers", () => {
+    const msgs = [
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+      { role: "assistant", content: [{ type: "reasoning", text: "" }] },
+      { role: "user", content: [{ type: "text", text: "Continue" }] },
+    ] as any[]
+
+    ;[googleModel, vertexModel].forEach((model) => {
+      const result = ProviderTransform.message(msgs, model, {})
+
+      expect(result).toHaveLength(2)
+      expect(result).toMatchObject([msgs[0], msgs[2]])
+    })
+  })
+
+  test("does not filter for openai provider", () => {
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",

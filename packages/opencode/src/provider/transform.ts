@@ -184,6 +184,19 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
+  // Gemini rejects contents entries without parts. Empty reasoning-only blocks
+  // can survive UI message conversion after step-start splitting.
+  if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
+    msgs = msgs.filter((msg) => {
+      if (msg.content === "") return false
+      if (!Array.isArray(msg.content)) return true
+      return msg.content.some((part) => {
+        if (part.type !== "text" && part.type !== "reasoning") return true
+        return part.text !== ""
+      })
+    })
+  }
+
   if (model.api.id.includes("claude")) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
     msgs = msgs.map((msg) => {
