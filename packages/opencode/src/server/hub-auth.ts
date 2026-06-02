@@ -237,7 +237,12 @@ export namespace HubAuth {
         // 3. 브라우저 요청 -> Hub OAuth 리다이렉트
         const csrf = crypto.randomUUID()
         const stateId = crypto.randomUUID()
-        oauthStates.set(stateId, { csrf, next: c.req.path })
+        // AIDEV-NOTE: server.handleRequest 가 basePath 를 strip 한 후의 path 가 c.req.path 이다.
+        // 그대로 next 로 저장해 callback 후 c.redirect(next) 하면 prefix 가 빠진 절대 경로로
+        // 가서 hub 가 unknown path 로 처리해 404 가 난다. JUPYTERHUB_SERVICE_PREFIX 를 다시
+        // prefix 해 hub 가 user-server 로 라우팅할 수 있는 절대 경로로 저장한다.
+        const servicePrefix = Flag.JUPYTERHUB_SERVICE_PREFIX?.replace(/\/+$/, "") ?? ""
+        oauthStates.set(stateId, { csrf, next: `${servicePrefix}${c.req.path}` })
         setCookie(c, STATE_COOKIE, csrf, {
           path: "/",
           httpOnly: true,

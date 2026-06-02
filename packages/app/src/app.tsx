@@ -136,6 +136,20 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   )
 }
 
+// SPA 가 `/{basePath}/...` prefix 아래에서 serve 될 때 (예: JupyterHub
+// singleuser server 의 `/user/{username}/`) HTML `<head>` 의 `<base href>`
+// 를 읽어 SolidJS Router 의 base 로 넘긴다. 그렇지 않으면 router 가
+// prefix 까지 포함한 path 를 매칭해 `/:dir` 이 의도와 다른 segment 를
+// 캡처한다. `<base href>` 는 server.basePath 가 "/" 이외일 때만
+// `Server` 가 HTML 에 주입한다 (server/instance.ts 참조).
+function resolveRouterBase(): string | undefined {
+  if (typeof document === "undefined") return undefined
+  const href = document.querySelector("base")?.getAttribute("href")
+  if (!href) return undefined
+  const normalized = href.replace(/\/+$/, "")
+  return normalized || undefined
+}
+
 export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   return (
     <MetaProvider>
@@ -302,6 +316,7 @@ export function AppInterface(props: {
             <GlobalSyncProvider>
               <Dynamic
                 component={props.router ?? Router}
+                base={resolveRouterBase()}
                 root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
               >
                 <Route path="/" component={HomeRoute} />
