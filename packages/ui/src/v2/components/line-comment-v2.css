@@ -6,7 +6,6 @@
 
 [data-component="line-comment-v2"] {
   box-sizing: border-box;
-  font-family: var(--v2-font-family-sans), var(--sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   min-width: 0;
   width: 100%;
@@ -155,7 +154,6 @@
   border: 1px solid var(--border-border-base);
   border-radius: 6px;
   background: linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
-  font-family: inherit;
   font-size: 13px;
   font-style: normal;
   font-weight: 440;

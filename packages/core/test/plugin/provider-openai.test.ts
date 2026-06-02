@@ -77,8 +77,8 @@ describe("OpenAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(OpenAIPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         const item = provider("openai", { endpoint: { type: "aisdk", package: "@ai-sdk/openai" } })
         catalog.provider.update(item.id, (draft) => {
           draft.endpoint = item.endpoint
@@ -96,8 +96,8 @@ describe("OpenAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(OpenAIPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         const item = provider("custom-openai")
         catalog.provider.update(item.id, () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})

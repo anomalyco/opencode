@@ -152,8 +152,8 @@ describe("GithubCopilotPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(GithubCopilotPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         catalog.provider.update(ProviderV2.ID.make("github-copilot"), () => {})
         catalog.model.update(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
@@ -168,8 +168,8 @@ describe("GithubCopilotPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(GithubCopilotPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         catalog.provider.update(ProviderV2.ID.make("custom-copilot"), () => {})
         catalog.model.update(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })

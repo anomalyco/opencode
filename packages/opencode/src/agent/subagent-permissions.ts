@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import type { Permission } from "../permission"
 import type { Agent } from "./agent"
 
@@ -15,10 +16,10 @@ import type { Agent } from "./agent"
  *    doesn't already permit them.
  */
 export function deriveSubagentSessionPermission(input: {
-  parentSessionPermission: Permission.Ruleset
+  parentSessionPermission: PermissionLegacy.Ruleset
   parentAgent: Agent.Info | undefined
   subagent: Agent.Info
-}): Permission.Ruleset {
+}): PermissionLegacy.Ruleset {
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
   const parentAgentDenies =
