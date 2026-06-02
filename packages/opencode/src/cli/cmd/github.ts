@@ -2,12 +2,12 @@ import { Effect } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
 
-export { extractResponseText, formatPromptTooLargeError, parseGitHubRemote } from "./github-util"
+export { extractResponseText, formatPromptTooLargeError, parseGitHubRemote } from "./github.shared"
 
 export const GithubInstallCommand = effectCmd({
   command: "install",
   describe: "install the GitHub agent",
-  handler: () => Effect.promise(() => import("./github-impl")).pipe(Effect.flatMap((mod) => mod.githubInstall())),
+  handler: () => Effect.promise(() => import("./github.handler")).pipe(Effect.flatMap((mod) => mod.githubInstall())),
 })
 
 export const GithubRunCommand = effectCmd({
@@ -23,7 +23,7 @@ export const GithubRunCommand = effectCmd({
         type: "string",
         describe: "GitHub personal access token (github_pat_********)",
       }),
-  handler: (args) => Effect.promise(() => import("./github-impl")).pipe(Effect.flatMap((mod) => mod.githubRun(args))),
+  handler: (args) => Effect.promise(() => import("./github.handler")).pipe(Effect.flatMap((mod) => mod.githubRun(args))),
 })
 
 export const GithubCommand = cmd({

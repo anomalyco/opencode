@@ -19,5 +19,5 @@ export const AgentCommand = effectCmd({
         type: "string",
         description: "Tool params as JSON or a JS object literal",
       }),
-  handler: (args) => Effect.promise(() => import("./agent-impl")).pipe(Effect.flatMap((mod) => mod.debugAgent(args))),
+  handler: (args) => Effect.promise(() => import("./agent.handler")).pipe(Effect.flatMap((mod) => mod.debugAgent(args))),
 })
