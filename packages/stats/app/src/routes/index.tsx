@@ -38,7 +38,6 @@ const statsHomeFallbackUrl = "https://stats.opencode.ai"
 const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
-  { href: "#leaderboard", label: "Leaderboard" },
   { href: "#session-cost", label: "Session Cost" },
   { href: "#token-cost", label: "Token Cost" },
   { href: "#cache-ratio", label: "Cache Ratio" },
@@ -1465,7 +1464,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
 
   return (
     <section id="session-cost" data-section="session-cost">
-      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
+      <SectionBridge label="TOP MODELS" href="#top-models" />
       <SectionTitle title="Session Cost" description="Average cost per session." />
       <Show
         when={visible().length > 0}
@@ -1721,7 +1720,6 @@ function Footer(props: {
   const [subscribeOpen, setSubscribeOpen] = createSignal(false)
   const modelStats = [
     { href: "#top-models", label: "Top Models" },
-    { href: "#leaderboard", label: "Leaderboard" },
     { href: "#session-cost", label: "Session Cost" },
     { href: "#token-cost", label: "Token Cost" },
     { href: "#cache-ratio", label: "Cache Ratio" },
