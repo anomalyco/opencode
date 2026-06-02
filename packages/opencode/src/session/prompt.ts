@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import path from "path"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import os from "os"
@@ -1220,7 +1221,7 @@ export const layer = Layer.effect(
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
-      const permissions: Permission.Rule[] = []
+      const permissions: PermissionLegacy.Rule[] = []
       for (const [t, enabled] of Object.entries(input.tools ?? {})) {
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
       }
