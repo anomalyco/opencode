@@ -310,8 +310,11 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.language.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-language"
             options={languageOptions()}
+            placement="bottom-end"
+            gutter={6}
             current={languageOptions().find((o) => o.value === language.locale())}
             value={(o) => o.value}
             label={(o) => o.label}
@@ -333,9 +336,12 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.shell.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-shell"
             options={shellOptions()}
             current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
+            placement="bottom-end"
+            gutter={6}
             value={(o) => o.id}
             label={(o) => o.label}
             onSelect={(option) => {
@@ -505,9 +511,12 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.row.colorScheme.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-color-scheme"
             options={colorSchemeOptions()}
             current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
+            placement="bottom-end"
+            gutter={6}
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => option && theme.setColorScheme(option.value)}
@@ -531,9 +540,12 @@ export const SettingsGeneralV2: Component = () => {
           }
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-theme"
             options={themeOptions()}
             current={themeOptions().find((o) => o.id === theme.themeId())}
+            placement="bottom-end"
+            gutter={6}
             value={(o) => o.id}
             label={(o) => o.name}
             onSelect={(option) => {
@@ -671,6 +683,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.sounds.agent.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-sounds-agent"
             {...soundSelectProps(
               () => settings.sounds.agentEnabled(),
@@ -678,6 +691,8 @@ export const SettingsGeneralV2: Component = () => {
               (value) => settings.sounds.setAgentEnabled(value),
               (id) => settings.sounds.setAgent(id),
             )}
+            placement="bottom-end"
+            gutter={6}
           />
         </SettingsRowV2>
 
@@ -686,6 +701,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.sounds.permissions.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-sounds-permissions"
             {...soundSelectProps(
               () => settings.sounds.permissionsEnabled(),
@@ -693,6 +709,8 @@ export const SettingsGeneralV2: Component = () => {
               (value) => settings.sounds.setPermissionsEnabled(value),
               (id) => settings.sounds.setPermissions(id),
             )}
+            placement="bottom-end"
+            gutter={6}
           />
         </SettingsRowV2>
 
@@ -701,6 +719,7 @@ export const SettingsGeneralV2: Component = () => {
           description={language.t("settings.general.sounds.errors.description")}
         >
           <SelectV2
+            appearance="inline"
             data-action="settings-sounds-errors"
             {...soundSelectProps(
               () => settings.sounds.errorsEnabled(),
@@ -708,6 +727,8 @@ export const SettingsGeneralV2: Component = () => {
               (value) => settings.sounds.setErrorsEnabled(value),
               (id) => settings.sounds.setErrors(id),
             )}
+            placement="bottom-end"
+            gutter={6}
           />
         </SettingsRowV2>
       </SettingsListV2>

@@ -2,6 +2,16 @@ import { Select as Kobalte } from "@kobalte/core/select"
 import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import "./select-v2.css"
 
+function selectPortalMount() {
+  if (typeof document === "undefined") return undefined
+  return document.querySelector('[data-component="dialog-stack"]') ?? document.body
+}
+
+function syncSelectContentSurface(el: HTMLElement) {
+  const scheme = document.documentElement.getAttribute("data-color-scheme")
+  if (scheme) el.setAttribute("data-color-scheme", scheme)
+}
+
 function groupOptions<T>(options: T[], groupBy?: (x: T) => string): { category: string; options: T[] }[] {
   if (!groupBy) {
     return [{ category: "", options }]
@@ -53,8 +63,8 @@ export type SelectV2Props<T> = Omit<
   groupBy?: (x: T) => string
   onSelect?: (value: T | null) => void
   onHighlight?: (value: T | undefined) => void | (() => void)
-  /** Match TextInput v2 height. */
-  appearance?: "base" | "large"
+  /** `base` / `large` match text-input-v2; `inline` is a compact settings-row trigger. */
+  appearance?: "base" | "large" | "inline"
   invalid?: boolean
   numeric?: boolean
   children?: (item: T) => JSX.Element
@@ -80,7 +90,15 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
     "numeric",
     "disabled",
     "valueClass",
+    "placement",
+    "gutter",
+    "sameWidth",
+    "flip",
+    "slide",
+    "fitViewport",
   ])
+
+  const inline = () => (local.appearance ?? "base") === "inline"
 
   const state: { key?: string; cleanup?: void | (() => void) } = {}
 
@@ -115,8 +133,12 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
       multiple={false}
       disabled={local.disabled}
       data-component="select-v2-root"
-      gutter={6}
-      placement="bottom-start"
+      placement={local.placement ?? (inline() ? "bottom-end" : "bottom-start")}
+      gutter={local.gutter ?? 4}
+      sameWidth={local.sameWidth ?? !inline()}
+      flip={local.flip ?? true}
+      slide={local.slide ?? true}
+      fitViewport={local.fitViewport ?? false}
       value={local.current}
       options={grouped()}
       optionValue={(x) => (local.value ? local.value(x) : String(x as string))}
@@ -186,8 +208,12 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
           <ChevronDown />
         </span>
       </Kobalte.Trigger>
-      <Kobalte.Portal>
-        <Kobalte.Content data-component="menu-v2-content" data-slot="select-v2-content">
+      <Kobalte.Portal mount={selectPortalMount()}>
+        <Kobalte.Content
+          ref={syncSelectContentSurface}
+          data-component="menu-v2-content"
+          data-slot="select-v2-content"
+        >
           <Kobalte.Listbox data-slot="select-v2-listbox" />
         </Kobalte.Content>
       </Kobalte.Portal>
