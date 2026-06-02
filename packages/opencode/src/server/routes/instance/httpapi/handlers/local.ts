@@ -190,7 +190,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       providers[key] = {
         npm: "@ai-sdk/openai-compatible",
         name,
-        options: { baseURL, apiKey: "ollama" },
+        options: { baseURL, apiKey: "skein" },
         discoverModels: true,
       }
       yield* configSvc.updateGlobal({ ...global, provider: providers })

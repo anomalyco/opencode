@@ -91,7 +91,7 @@ const syncLocalProviders = Effect.gen(function* () {
       providers[slug] = {
         npm: "@ai-sdk/openai-compatible",
         name,
-        options: { baseURL: svc.baseURL, apiKey: "ollama" },
+        options: { baseURL: svc.baseURL, apiKey: "skein" },
         discoverModels: true,
       }
       log.info("added provider", { slug, baseURL: svc.baseURL })
