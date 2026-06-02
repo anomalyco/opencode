@@ -71,6 +71,7 @@ export type PromptProps = {
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
+  showTps?: boolean
   showPlaceholder?: boolean
   placeholders?: {
     normal?: string[]
@@ -360,6 +361,53 @@ export function Prompt(props: PromptProps) {
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
+    }
+  })
+
+  const [tpsTick, setTpsTick] = createSignal(Date.now())
+  createEffect(() => {
+    if (!props.showTps) return
+    setTpsTick(Date.now())
+    const timer = setInterval(() => setTpsTick(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const tps = createMemo(() => {
+    if (!props.showTps) return
+    if (!props.sessionID) return
+    const msg = sync.data.message[props.sessionID] ?? []
+    const current = msg.findLast((item): item is AssistantMessage => item.role === "assistant")
+    if (!current) return
+
+    const parts = sync.data.part[current.id] ?? []
+    const counted = current.tokens.output + current.tokens.reasoning
+    const estimated = counted <= 0
+    const generated = estimated
+      ? Math.round(
+          parts.reduce((total, part) => {
+            if (part.type === "text" || part.type === "reasoning") return total + part.text.length
+            return total
+          }, 0) / 4,
+        )
+      : counted
+    if (generated <= 0) return
+
+    const completed = current.time.completed
+    const start =
+      parts
+        .flatMap((part) => {
+          if ((part.type === "text" || part.type === "reasoning") && part.time?.start) return [part.time.start]
+          return []
+        })
+        .toSorted((a, b) => a - b)[0] ?? current.time.created
+    const end = completed ?? tpsTick()
+    const elapsed = Math.max(1, (end - start) / 1000)
+    const value = generated / elapsed
+    if (!Number.isFinite(value) || value <= 0) return
+
+    return {
+      estimated,
+      value: value >= 10 ? Math.round(value).toString() : value.toFixed(1),
     }
   })
 
@@ -1765,6 +1813,14 @@ export function Prompt(props: PromptProps) {
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>
+                )}
+              </Show>
+              <Show when={tps()}>
+                {(item) => (
+                  <text fg={theme.textMuted} wrapMode="none">
+                    {item().estimated ? "~" : ""}
+                    {item().value} tps
+                  </text>
                 )}
               </Show>
               <Switch>
