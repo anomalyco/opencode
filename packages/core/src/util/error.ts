@@ -40,7 +40,13 @@ export abstract class NamedError extends Error {
         public readonly data: Data,
         options?: ErrorOptions,
       ) {
-        super(name, options)
+        // Error.message is the human detail only; the tag lives on `.name`, and renderers
+        // (Cause.pretty, Error.toString) compose "${name}: ${message}".
+        const message =
+          typeof data === "object" && data !== null && "message" in data && typeof data.message === "string"
+            ? data.message
+            : ""
+        super(message, options)
         this.name = name
       }
 
