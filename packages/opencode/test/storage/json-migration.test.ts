@@ -9,7 +9,8 @@ import { JsonMigration } from "@/storage/json-migration"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionTable, MessageTable, PartTable, TodoTable } from "@opencode-ai/core/session/sql"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -128,9 +129,39 @@ describe("JSON to SQLite migration", () => {
     const projects = db.select().from(ProjectTable).all()
     expect(projects.length).toBe(1)
     expect(projects[0].id).toBe(ProjectV2.ID.make("proj_test123abc"))
-    expect(projects[0].worktree).toBe("/test/path")
+    expect(projects[0].worktree).toBe(AbsolutePath.make("/test/path"))
     expect(projects[0].name).toBe("Test Project")
-    expect(projects[0].sandboxes).toEqual(["/test/sandbox"])
+    expect(projects[0].sandboxes).toEqual([AbsolutePath.make("/test/sandbox")])
+  })
+
+  test("stores imported Windows project and session paths in storage form", async () => {
+    if (process.platform !== "win32") return
+
+    await writeProject(storageDir, {
+      id: "proj_test123abc",
+      worktree: "C:\\Repo\\Thing",
+      vcs: "git",
+      sandboxes: ["C:\\Repo\\Thing\\sandbox"],
+    })
+    await writeSession(storageDir, "proj_test123abc", {
+      id: "ses_test456def",
+      slug: "storage-path",
+      directory: "C:\\Repo\\Thing\\packages\\api",
+      path: "packages\\api",
+      title: "Storage Path",
+      version: "test",
+    })
+
+    await JsonMigration.run(db)
+
+    expect(sqlite.query("SELECT worktree, sandboxes FROM project WHERE id = ?").get("proj_test123abc")).toEqual({
+      worktree: "C:/Repo/Thing",
+      sandboxes: JSON.stringify(["C:/Repo/Thing/sandbox"]),
+    })
+    expect(sqlite.query("SELECT directory, path FROM session WHERE id = ?").get("ses_test456def")).toEqual({
+      directory: "C:/Repo/Thing/packages/api",
+      path: "packages/api",
+    })
   })
 
   test("uses filename for project id when JSON has different value", async () => {
@@ -543,7 +574,7 @@ describe("JSON to SQLite migration", () => {
     expect(todos[2].position).toBe(2)
   })
 
-  test("migrates permissions", async () => {
+  test("does not migrate legacy permissions", async () => {
     await writeProject(storageDir, {
       id: "proj_test123abc",
       worktree: "/",
@@ -561,12 +592,7 @@ describe("JSON to SQLite migration", () => {
 
     const stats = await JsonMigration.run(db)
 
-    expect(stats?.permissions).toBe(1)
-
-    const permissions = db.select().from(PermissionTable).all()
-    expect(permissions.length).toBe(1)
-    expect(permissions[0].project_id).toBe("proj_test123abc")
-    expect(permissions[0].data).toEqual(permissionData)
+    expect(stats?.permissions).toBe(0)
   })
 
   test("migrates session shares", async () => {
@@ -663,7 +689,7 @@ describe("JSON to SQLite migration", () => {
     expect(todos[1].position).toBe(2)
   })
 
-  test("skips orphaned todos, permissions, and shares", async () => {
+  test("skips orphaned todos and shares", async () => {
     await writeProject(storageDir, {
       id: "proj_test123abc",
       worktree: "/",
@@ -702,11 +728,10 @@ describe("JSON to SQLite migration", () => {
     const stats = await JsonMigration.run(db)
 
     expect(stats.todos).toBe(1)
-    expect(stats.permissions).toBe(1)
+    expect(stats.permissions).toBe(0)
     expect(stats.shares).toBe(1)
 
     expect(db.select().from(TodoTable).all().length).toBe(1)
-    expect(db.select().from(PermissionTable).all().length).toBe(1)
     expect(db.select().from(SessionShareTable).all().length).toBe(1)
   })
 
@@ -817,7 +842,7 @@ describe("JSON to SQLite migration", () => {
     expect(stats.messages).toBe(1)
     expect(stats.parts).toBe(1)
     expect(stats.todos).toBe(1)
-    expect(stats.permissions).toBe(1)
+    expect(stats.permissions).toBe(0)
     expect(stats.shares).toBe(1)
     expect(stats.errors.length).toBeGreaterThanOrEqual(6)
 
@@ -826,7 +851,6 @@ describe("JSON to SQLite migration", () => {
     expect(db.select().from(MessageTable).all().length).toBe(1)
     expect(db.select().from(PartTable).all().length).toBe(1)
     expect(db.select().from(TodoTable).all().length).toBe(1)
-    expect(db.select().from(PermissionTable).all().length).toBe(1)
     expect(db.select().from(SessionShareTable).all().length).toBe(1)
   })
 })

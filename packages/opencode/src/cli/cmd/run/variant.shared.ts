@@ -39,7 +39,7 @@ function variantKey(model: NonNullable<RunInput["model"]>): string {
   return modelKey(model.providerID, model.modelID)
 }
 
-function modelInfo(providers: RunProvider[] | undefined, model: NonNullable<RunInput["model"]>) {
+export function modelInfo(providers: RunProvider[] | undefined, model: NonNullable<RunInput["model"]>) {
   const provider = providers?.find((item) => item.id === model.providerID)
   return {
     provider: provider?.name ?? model.providerID,

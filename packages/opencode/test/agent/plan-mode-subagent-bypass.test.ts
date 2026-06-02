@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 /**
  * Reproducer for opencode issue #26514:
  *
@@ -60,7 +61,7 @@ it.instance("[#26514] subagent spawned from plan mode inherits read-only restric
     // session's `permission` field is empty (Plan Mode lives on the agent
     // ruleset, not the session). So we pass [] through as the parent
     // session permission, exactly like the actual code path.
-    const parentSessionPermission: Permission.Ruleset = []
+    const parentSessionPermission: PermissionLegacy.Ruleset = []
 
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
@@ -88,7 +89,7 @@ it.instance("[#26514] explore subagent launched from plan mode also stays read-o
     expect(planAgent).toBeDefined()
     expect(explore).toBeDefined()
 
-    const parentSessionPermission: Permission.Ruleset = []
+    const parentSessionPermission: PermissionLegacy.Ruleset = []
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
       parentAgent: planAgent,
@@ -113,7 +114,7 @@ it.instance(
       expect(planAgent).toBeDefined()
       expect(my).toBeDefined()
 
-      const parentSessionPermission: Permission.Ruleset = []
+      const parentSessionPermission: PermissionLegacy.Ruleset = []
       const subagentSessionPermission = deriveSubagentSessionPermission({
         parentSessionPermission,
         parentAgent: planAgent,

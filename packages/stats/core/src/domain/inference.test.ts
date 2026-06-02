@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { toModelAggregate } from "./inference"
-import { modelAuthor, normalizeInferenceModel } from "./model-normalization"
+import { toModelAggregate, toProviderAggregate } from "./inference"
+import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
@@ -12,7 +12,7 @@ describe("inference stat normalization", () => {
   })
 
   test("maps normalized model ids to public authors", () => {
-    expect(modelAuthor("big-pickle")).toBe("opencode")
+    expect(modelAuthor("big-pickle")).toBe("unknown")
     expect(modelAuthor("claude-sonnet-4-5")).toBe("anthropic")
     expect(modelAuthor("deepseek-v4-pro")).toBe("deepseek")
     expect(modelAuthor("gemini-3.5-flash")).toBe("google")
@@ -28,7 +28,15 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
   })
 
-  test("model aggregates ignore datalake provider and use normalized author/model", () => {
+  test("uses provider.model to resolve opencode route providers", () => {
+    expect(statModel("big-pickle", "claude-sonnet-4-5")).toBe("claude-sonnet-4-5")
+    expect(statModel("big-pickle", "gpt-5-free")).toBe("gpt-5")
+    expect(statProvider("big-pickle", "claude-sonnet-4-5", "opencode")).toBe("anthropic")
+    expect(statProvider("big-pickle", "gpt-5", "opencode")).toBe("openai")
+    expect(statProvider("big-pickle", "", "opencode")).toBe("unknown")
+  })
+
+  test("model aggregates prefer provider.model and use normalized model", () => {
     expect(toModelAggregate(aggregate("alpha-gpt-next", "openai"))).toEqual([])
 
     expect(toModelAggregate(aggregate("deepseek-v4-flash-free", "not-public-provider"))).toMatchObject([
@@ -38,6 +46,23 @@ describe("inference stat normalization", () => {
         model: "deepseek-v4-flash",
       },
     ])
+
+    expect(
+      toModelAggregate({ ...aggregate("big-pickle", "opencode"), provider_model: "claude-sonnet-4-5" }),
+    ).toMatchObject([
+      {
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+        provider_model: "claude-sonnet-4-5",
+      },
+    ])
+  })
+
+  test("provider aggregates never keep opencode as the provider", () => {
+    expect(toProviderAggregate({ ...aggregate("big-pickle", "opencode"), provider_model: "gpt-5" })).toMatchObject([
+      { provider: "openai" },
+    ])
+    expect(toProviderAggregate(aggregate("big-pickle", "opencode"))).toMatchObject([{ provider: "unknown" }])
   })
 
   test("model aggregates use ISO week period keys", () => {
