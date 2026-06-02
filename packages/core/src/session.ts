@@ -150,7 +150,7 @@ export interface Interface {
   }) => Effect.Effect<void, never>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -395,7 +395,10 @@ export const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* new OperationUnavailableError({ operation: "wait" })
       }),
-      resume: Effect.fn("V2Session.resume")(function* () {}),
+      resume: Effect.fn("V2Session.resume")(function* (sessionID) {
+        yield* result.get(sessionID)
+        yield* runtime.resume(sessionID)
+      }),
       move: Effect.fn("V2Session.move")(function* () {}),
     })
 

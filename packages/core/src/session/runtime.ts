@@ -28,6 +28,8 @@ export type PromptInput = {
 export interface Interface {
   /** Durably admit input at the runtime that owns the Session's Location. */
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionMessage.User, PromptConflictError>
+  /** Continue execution through an already-admitted message without appending another prompt. */
+  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 /**
@@ -127,6 +129,9 @@ export const localLayer = Layer.effect(
         // TODO: Enqueue Session execution after admission without making prompt wait for the model loop.
         return yield* getUserMessage(messageID)
       }),
+      // TODO: Bridge this local continuation to the existing model loop without creating
+      // another user message. The routed implementation will proxy the same contract.
+      resume: Effect.fn("SessionRuntime.resume")(function* () {}),
     })
   }),
 )

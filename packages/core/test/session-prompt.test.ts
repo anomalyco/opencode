@@ -21,6 +21,7 @@ const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(datab
 const it = testEffect(Layer.mergeAll(database, events, projector, runtime, sessions))
 const sessionID = SessionV2.ID.make("ses_prompt_test")
 const runtimeCalls: SessionRuntime.PromptInput[] = []
+const resumeCalls: SessionV2.ID[] = []
 const delegatedMessage = new SessionMessage.User({
   id: SessionMessage.ID.make("msg_delegated"),
   type: "user",
@@ -31,6 +32,9 @@ const recordingRuntime = Layer.succeed(SessionRuntime.Service, SessionRuntime.Se
   prompt: (input) => Effect.sync(() => {
     runtimeCalls.push(input)
     return delegatedMessage
+  }),
+  resume: (input) => Effect.sync(() => {
+    resumeCalls.push(input)
   }),
 }))
 const recordingSessions = SessionV2.layer.pipe(
@@ -77,6 +81,16 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
+  recordingIt.effect("delegates execution continuation through SessionRuntime", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      resumeCalls.length = 0
+      yield* session.resume(sessionID)
+      expect(resumeCalls).toEqual([sessionID])
+    }),
+  )
+
   it.effect("durably admits one projected user message", () =>
     Effect.gen(function* () {
       yield* setup
@@ -90,6 +104,18 @@ describe("SessionV2.prompt", () => {
       expect(message.type).toBe("user")
       expect(message.text).toBe("Fix the failing tests")
       expect(yield* session.messages({ sessionID })).toContainEqual(message)
+    }),
+  )
+
+  it.effect("resumes through an admitted message without appending another prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fix the failing tests" }) })
+
+      yield* session.resume(sessionID)
+
+      expect(yield* session.messages({ sessionID })).toEqual([message])
     }),
   )
 
