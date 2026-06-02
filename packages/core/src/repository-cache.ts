@@ -197,18 +197,16 @@ export const layer: Layer.Layer<
                     })
                   }
 
-                  const checkout = yield* git
-                    .checkout(localPath, requestedBranch)
-                    .pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new CheckoutFailedError({
-                            repository,
-                            branch: requestedBranch,
-                            message: errorMessage(error),
-                          }),
-                      ),
-                    )
+                  const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new CheckoutFailedError({
+                          repository,
+                          branch: requestedBranch,
+                          message: errorMessage(error),
+                        }),
+                    ),
+                  )
                   if (checkout.exitCode !== 0) {
                     return yield* new CheckoutFailedError({
                       repository,
