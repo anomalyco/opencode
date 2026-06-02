@@ -1,4 +1,3 @@
-import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
 
@@ -17,14 +16,12 @@ type StartCommand = {
   port: number
   password: string
   userDataPath: string
-  needsMigration: boolean
 }
 
 type StopCommand = { type: "stop" }
 type SidecarCommand = StartCommand | StopCommand
 
 type SidecarMessage =
-  | { type: "sqlite"; progress: { type: "InProgress"; value: number } | { type: "Done" } }
   | { type: "ready" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
@@ -57,23 +54,8 @@ async function start(command: StartCommand) {
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
-    const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
+    const { Log, Server } = await import("virtual:opencode-server")
     await Log.init({ level: "WARN" })
-
-    if (command.needsMigration) {
-      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
-        progress: (event: { current: number; total: number }) => {
-          parentPort.postMessage({
-            type: "sqlite",
-            progress: {
-              type: "InProgress",
-              value: event.total === 0 ? 100 : Math.round((event.current / event.total) * 100),
-            },
-          })
-        },
-      })
-      parentPort.postMessage({ type: "sqlite", progress: { type: "Done" } })
-    }
 
     listener = await Server.listen({
       port: command.port,
@@ -155,14 +137,12 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
   if (typeof command.port !== "number") return
   if (typeof command.password !== "string") return
   if (typeof command.userDataPath !== "string") return
-  if (typeof command.needsMigration !== "boolean") return
   return {
     type: "start",
     hostname: command.hostname,
     port: command.port,
     password: command.password,
     userDataPath: command.userDataPath,
-    needsMigration: command.needsMigration,
   }
 }
 
