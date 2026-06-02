@@ -189,7 +189,7 @@ export const layer = Layer.effect(
         ),
       )
 
-    const getUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
+    const getProjectedUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
       const stored = yield* store.message(messageID)
       if (!stored) return yield* Effect.die("Prompt projection was not stored")
       const message = stored.message
@@ -197,7 +197,7 @@ export const layer = Layer.effect(
       return message
     })
 
-    const findPrompt = Effect.fnUntraced(function* (input: {
+    const findExistingPrompt = Effect.fnUntraced(function* (input: {
       sessionID: SessionSchema.ID
       messageID: SessionMessage.ID
       prompt: Prompt
@@ -247,24 +247,27 @@ export const layer = Layer.effect(
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: now, updated: now },
         })
-        const raced = yield* events
+        const projected = yield* events
           .publish(
             SessionLegacy.Event.Created,
             { sessionID, info },
             { location: input.location },
           )
           .pipe(
-            Effect.as<SessionSchema.Info | undefined>(undefined),
+            Effect.as({ type: "created" } as const),
             Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.CreateProjectionRace)) {
+              if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
                 return Effect.die(defect)
               }
+              // Concurrent creation lost the projection race. The existing Session identity wins.
               return store.get(sessionID).pipe(
-                Effect.flatMap((recorded) => (recorded ? Effect.succeed(recorded) : Effect.die(defect))),
+                Effect.flatMap((session) =>
+                  session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
+                ),
               )
             }),
           )
-        if (raced) return raced
+        if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -355,26 +358,30 @@ export const layer = Layer.effect(
         yield* result.get(input.sessionID)
         const messageID = input.id ?? SessionMessage.ID.create()
         const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt }
-        const recorded = yield* findPrompt(expected)
-        if (recorded) return recorded
-        const raced = yield* events
+        const existing = yield* findExistingPrompt(expected)
+        if (existing) return existing
+        const projected = yield* events
           .publish(
             SessionEvent.Prompted,
             { sessionID: input.sessionID, timestamp: yield* DateTime.now, prompt: input.prompt },
             { id: messageID },
           )
           .pipe(
-            Effect.as<SessionMessage.User | undefined>(undefined),
+            Effect.as({ type: "created" } as const),
             Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.PromptProjectionRace)) return Effect.die(defect)
-              return findPrompt(expected).pipe(
-                Effect.flatMap((recorded) => (recorded ? Effect.succeed(recorded) : Effect.die(defect))),
+              if (!(defect instanceof SessionProjector.PromptAlreadyProjected)) return Effect.die(defect)
+              // Another caller projected this ID first. Re-read at the Session boundary so
+              // an exact retry returns the existing message while conflicting reuse still fails.
+              return findExistingPrompt(expected).pipe(
+                Effect.flatMap((message) =>
+                  message ? Effect.succeed({ type: "existing", message } as const) : Effect.die(defect),
+                ),
               )
             }),
           )
-        if (raced) return raced
+        if (projected.type === "existing") return projected.message
         if (input.resume !== false) yield* enqueueResume(input.sessionID)
-        return yield* getUserMessage(messageID)
+        return yield* getProjectedUserMessage(messageID)
       }),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),

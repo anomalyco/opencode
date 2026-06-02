@@ -22,8 +22,8 @@ type DatabaseService = Database.Interface["db"]
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
-export class PromptProjectionRace extends Error {}
-export class CreateProjectionRace extends Error {}
+export class PromptAlreadyProjected extends Error {}
+export class SessionAlreadyProjected extends Error {}
 
 type Usage = {
   cost: number
@@ -285,7 +285,7 @@ export const layer = Layer.effectDiscard(
           .returning({ sessionID: SessionTable.id })
           .get()
           .pipe(Effect.orDie)
-        if (!stored) return yield* Effect.die(new CreateProjectionRace())
+        if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
         if (event.data.info.workspaceID) {
           yield* db
             .update(WorkspaceTable)
@@ -385,7 +385,7 @@ export const layer = Layer.effectDiscard(
           .where(eq(SessionMessageTable.id, event.id))
           .get()
           .pipe(Effect.orDie)
-        if (existing) return yield* Effect.die(new PromptProjectionRace())
+        if (existing) return yield* Effect.die(new PromptAlreadyProjected())
         yield* run(db, event)
         const row = yield* db
           .select()
