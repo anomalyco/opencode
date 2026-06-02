@@ -297,7 +297,7 @@ export const layer = Layer.effect(
         .insert(ProjectTable)
         .values({
           id: result.id,
-          worktree: result.worktree,
+          worktree: AbsolutePath.make(result.worktree),
           vcs: result.vcs ?? null,
           name: result.name,
           icon_url: result.icon?.url,
@@ -306,13 +306,13 @@ export const layer = Layer.effect(
           time_created: result.time.created,
           time_updated: result.time.updated,
           time_initialized: result.time.initialized,
-          sandboxes: result.sandboxes,
+          sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
           commands: result.commands,
         })
         .onConflictDoUpdate({
           target: ProjectTable.id,
           set: {
-            worktree: result.worktree,
+            worktree: AbsolutePath.make(result.worktree),
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
@@ -320,7 +320,7 @@ export const layer = Layer.effect(
             icon_color: result.icon?.color,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes,
+            sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
             commands: result.commands,
           },
         })
@@ -451,8 +451,9 @@ export const layer = Layer.effect(
     const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectV2.ID, directory: string) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
+      const sandbox = AbsolutePath.make(directory)
       const sboxes = [...row.sandboxes]
-      if (!sboxes.includes(directory)) sboxes.push(directory)
+      if (!sboxes.includes(sandbox)) sboxes.push(sandbox)
       const result = yield* db
         .update(ProjectTable)
         .set({ sandboxes: sboxes, time_updated: Date.now() })
@@ -467,7 +468,8 @@ export const layer = Layer.effect(
     const removeSandbox = Effect.fn("Project.removeSandbox")(function* (id: ProjectV2.ID, directory: string) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sboxes = row.sandboxes.filter((s) => s !== directory)
+      const sandbox = AbsolutePath.make(directory)
+      const sboxes = row.sandboxes.filter((s) => s !== sandbox)
       const result = yield* db
         .update(ProjectTable)
         .set({ sandboxes: sboxes, time_updated: Date.now() })

@@ -19,6 +19,7 @@ import { gte } from "drizzle-orm"
 import { isNull } from "drizzle-orm"
 import { desc } from "drizzle-orm"
 import { like } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
@@ -1047,7 +1048,10 @@ function listByProject(
   }
   if (input.path !== undefined) {
     if (input.path) {
-      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
+      const conds = [
+        eq(SessionTable.path, input.path),
+        like(SessionTable.path, sql.param(`${input.path}/%`, SessionTable.path)),
+      ]
 
       conditions.push(
         input.directory
