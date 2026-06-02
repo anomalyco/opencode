@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { pathToFileURL } from "url"
+import { fileURLToPath } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -72,20 +72,26 @@ describe("LocationFileSystem", () => {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
         const service = yield* LocationFileSystem.Service
 
-        expect(yield* service.list()).toEqual([
+        const entries = yield* service.list()
+        expect(entries.map(({ uri: _uri, ...entry }) => entry)).toEqual([
           {
             path: RelativePath.make("src"),
-            uri: pathToFileURL(yield* Effect.promise(() => fs.realpath(path.join(directory, "src")))).href,
             type: "directory",
             mime: "application/x-directory",
           },
           {
             path: RelativePath.make("README.md"),
-            uri: pathToFileURL(yield* Effect.promise(() => fs.realpath(path.join(directory, "README.md")))).href,
             type: "file",
             mime: "text/markdown",
           },
         ])
+        expect(
+          yield* Effect.promise(() => Promise.all(entries.map((entry) => fs.realpath(fileURLToPath(entry.uri))))),
+        ).toEqual(
+          yield* Effect.promise(() =>
+            Promise.all([fs.realpath(path.join(directory, "src")), fs.realpath(path.join(directory, "README.md"))]),
+          ),
+        )
       }).pipe(provide(directory)),
     ),
   )
