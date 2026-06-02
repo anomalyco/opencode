@@ -42,6 +42,7 @@ import type {
   FooterEvent,
   FooterPatch,
   FooterPromptRoute,
+  FooterQueuedPrompt,
   FooterState,
   FooterSubagentState,
   FooterView,
@@ -164,11 +165,13 @@ export class RunFooter implements FooterApi {
   private closed = false
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
+  private queuedRemoves = new Set<(messageID: string) => boolean | Promise<boolean>>()
   private closes = new Set<() => void>()
   // Microtask-coalesced commit queue. Flushed on next microtask or on close/destroy.
   private queue: StreamCommit[] = []
   private pending = false
   private flushing: Promise<void> = Promise.resolve()
+  private flushError: unknown
   // Fixed portion of footer height above the textarea.
   private base: number
   private rows = TEXTAREA_MIN_ROWS
@@ -192,6 +195,8 @@ export class RunFooter implements FooterApi {
   private setView: Setter<FooterView>
   private subagent: Accessor<FooterSubagentState>
   private setSubagent: (next: FooterSubagentState) => void
+  private queuedPrompts: Accessor<FooterQueuedPrompt[]>
+  private setQueuedPrompts: Setter<FooterQueuedPrompt[]>
   private promptRoute: FooterPromptRoute = { type: "composer" }
   private subagentMenuRows = SUBAGENT_ROWS
   private autocomplete = false
@@ -199,6 +204,15 @@ export class RunFooter implements FooterApi {
   private exitTimeout: NodeJS.Timeout | undefined
   private requestExitHandler: (() => boolean) | undefined
   private scrollback: RunScrollbackStream
+
+  private createScrollback(wrote: boolean): RunScrollbackStream {
+    return new RunScrollbackStream(this.renderer, this.options.theme, {
+      diffStyle: this.options.diffStyle,
+      wrote,
+      sessionID: this.options.sessionID,
+      treeSitterClient: this.options.treeSitterClient,
+    })
+  }
 
   constructor(
     private renderer: CliRenderer,
@@ -249,13 +263,11 @@ export class RunFooter implements FooterApi {
       setSubagent("permissions", reconcile(next.permissions, { key: "id" }))
       setSubagent("questions", reconcile(next.questions, { key: "id" }))
     }
+    const [queuedPrompts, setQueuedPrompts] = createSignal<FooterQueuedPrompt[]>([])
+    this.queuedPrompts = queuedPrompts
+    this.setQueuedPrompts = setQueuedPrompts
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
-    this.scrollback = new RunScrollbackStream(renderer, options.theme, {
-      diffStyle: options.diffStyle,
-      wrote: options.wrote,
-      sessionID: options.sessionID,
-      treeSitterClient: options.treeSitterClient,
-    })
+    this.scrollback = this.createScrollback(options.wrote ?? false)
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
 
@@ -270,6 +282,7 @@ export class RunFooter implements FooterApi {
               state: footer.state,
               view: footer.view,
               subagent: footer.subagent,
+              queuedPrompts: footer.queuedPrompts,
               findFiles: options.findFiles,
               agents: footer.agents,
               resources: footer.resources,
@@ -299,6 +312,7 @@ export class RunFooter implements FooterApi {
               onLayout: footer.syncLayout,
               onStatus: footer.setStatus,
               onSubagentSelect: options.onSubagentSelect,
+              onQueuedRemove: footer.handleQueuedRemove,
             })
           },
         }),
@@ -322,6 +336,13 @@ export class RunFooter implements FooterApi {
     this.prompts.add(fn)
     return () => {
       this.prompts.delete(fn)
+    }
+  }
+
+  public onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void {
+    this.queuedRemoves.add(fn)
+    return () => {
+      this.queuedRemoves.delete(fn)
     }
   }
 
@@ -367,6 +388,15 @@ export class RunFooter implements FooterApi {
 
       this.setVariants(next.variants)
       this.setCurrentVariant(next.current)
+      return
+    }
+
+    if (next.type === "queued.prompts") {
+      if (this.isGone) {
+        return
+      }
+
+      this.setQueuedPrompts(next.prompts)
       return
     }
 
@@ -440,7 +470,9 @@ export class RunFooter implements FooterApi {
           },
         ),
       )
-      .catch(() => {})
+      .catch((error) => {
+        this.flushError = error
+      })
   }
 
   private present(view: FooterView): void {
@@ -498,6 +530,12 @@ export class RunFooter implements FooterApi {
     }
 
     return this.flushing.then(async () => {
+      if (this.flushError !== undefined) {
+        const error = this.flushError
+        this.flushError = undefined
+        throw error
+      }
+
       if (this.isGone) {
         return
       }
@@ -508,6 +546,15 @@ export class RunFooter implements FooterApi {
 
       await this.renderer.idle().catch(() => {})
     })
+  }
+
+  public resetForReplay(wrote: boolean): void {
+    if (this.isGone) {
+      return
+    }
+
+    this.scrollback.destroy()
+    this.scrollback = this.createScrollback(wrote)
   }
 
   public close(): void {
@@ -546,6 +593,11 @@ export class RunFooter implements FooterApi {
     this.requestExitHandler = fn
   }
 
+  private handleQueuedRemove = async (messageID: string): Promise<boolean> => {
+    const fn = [...this.queuedRemoves][0]
+    return fn ? await fn(messageID) : false
+  }
+
   private handleInputClear = (): void => {
     this.clearInterruptTimer()
     this.clearExitTimer()
@@ -573,11 +625,13 @@ export class RunFooter implements FooterApi {
               ? 1 + MODEL_ROWS
               : this.promptRoute.type === "variant"
                 ? 1 + VARIANT_ROWS
-                : this.promptRoute.type === "subagent-menu"
+                : this.promptRoute.type === "queued-menu"
                   ? 1 + this.subagentMenuRows
-                  : this.promptRoute.type === "subagent"
-                    ? this.base + SUBAGENT_INSPECTOR_ROWS
-                    : Math.max(base + TEXTAREA_MIN_ROWS, Math.min(base + PROMPT_MAX_ROWS, base + this.rows))
+                  : this.promptRoute.type === "subagent-menu"
+                    ? 1 + this.subagentMenuRows
+                    : this.promptRoute.type === "subagent"
+                      ? this.base + SUBAGENT_INSPECTOR_ROWS
+                      : Math.max(base + TEXTAREA_MIN_ROWS, Math.min(base + PROMPT_MAX_ROWS, base + this.rows))
 
     if (height !== this.renderer.footerHeight) {
       this.renderer.footerHeight = height
@@ -685,7 +739,11 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    const previous = this.currentModel()
     this.setCurrentModel(model)
+    if (!previous || previous.providerID !== model.providerID || previous.modelID !== model.modelID) {
+      this.setCurrentVariant(undefined)
+    }
     void Promise.resolve()
       .then(() => this.options.onModelSelect?.(model))
       .then((result) => {
@@ -872,6 +930,7 @@ export class RunFooter implements FooterApi {
     this.clearExitTimer()
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
     this.prompts.clear()
+    this.queuedRemoves.clear()
     this.closes.clear()
     this.scrollback.destroy()
   }
@@ -903,6 +962,8 @@ export class RunFooter implements FooterApi {
           },
         ),
       )
-      .catch(() => {})
+      .catch((error) => {
+        this.flushError = error
+      })
   }
 }

@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import path from "path"
@@ -332,7 +333,7 @@ describe("session.llm.ai-sdk adapter", () => {
   })
 
   test("preserves tool-error cause", async () => {
-    const error = new Permission.RejectedError()
+    const error = new PermissionLegacy.RejectedError()
     const events = await Effect.runPromise(
       LLMAISDK.toLLMEvents(LLMAISDK.adapterState(), {
         type: "tool-error",
@@ -499,6 +500,57 @@ describe("session.llm.ai-sdk adapter", () => {
     })
     expect(result.tokens.cache.write).toBe(300)
     expect(result.tokens.cache.read).toBe(200)
+  })
+
+  test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({
+        type: "raw",
+        rawValue: {
+          type: "message_delta",
+          copilot_usage: { total_nano_aiu: 4_473_525_000 },
+        },
+      }),
+      {
+        type: "finish-step",
+        response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
+        finishReason: "stop",
+        rawFinishReason: "end_turn",
+        usage: {
+          inputTokens: 11_774,
+          outputTokens: 39,
+          totalTokens: 11_813,
+          inputTokenDetails: { noCacheTokens: 3, cacheReadTokens: 0, cacheWriteTokens: 11_771 },
+          outputTokenDetails: { textTokens: 39, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: { cacheCreationInputTokens: 11_771 } },
+      },
+      {
+        type: "finish-step",
+        response: { id: "msg_follow_up", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
+        finishReason: "stop",
+        rawFinishReason: "end_turn",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          inputTokenDetails: { noCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          outputTokenDetails: { textTokens: 1, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: {} },
+      },
+    ])
+
+    expect(events[0]).toMatchObject({
+      type: "step-finish",
+      providerMetadata: {
+        anthropic: { cacheCreationInputTokens: 11_771 },
+        copilot: { totalNanoAiu: 4_473_525_000 },
+      },
+    })
+    expect(events[1]).toMatchObject({ type: "step-finish", providerMetadata: { anthropic: {} } })
+    if (events[1].type !== "step-finish") throw new Error("expected step-finish")
+    expect(events[1].providerMetadata?.copilot).toBeUndefined()
   })
 })
 
@@ -1848,7 +1900,10 @@ describe("session.llm.stream", () => {
           model: resolved,
           agent,
           system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: [{ type: "reasoning", text: "" }] },
+          ],
           tools: {},
         })
 
@@ -1859,6 +1914,7 @@ describe("session.llm.stream", () => {
           | undefined
 
         expect(capture.url.pathname).toBe(pathSuffix)
+        expect(body.contents).toEqual([{ role: "user", parts: [{ text: "Hello" }] }])
         expect(config?.temperature).toBe(0.3)
         expect(config?.topP).toBe(0.8)
         expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))

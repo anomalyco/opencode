@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
@@ -38,7 +39,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const it = testEffect(toolLayer())
-const scout = testEffect(toolLayer({ experimentalScout: true }))
+const references = testEffect(toolLayer({ experimentalReferences: true }))
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -52,12 +53,12 @@ const ctx = {
 }
 
 const asks = () => {
-  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),
@@ -142,7 +143,7 @@ describe("tool.glob", () => {
     }),
   )
 
-  scout.instance(
+  references.instance(
     "does not ask for external_directory permission inside configured git references",
     () =>
       Effect.gen(function* () {

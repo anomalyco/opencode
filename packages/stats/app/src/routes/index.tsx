@@ -9,6 +9,7 @@ import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import statsUnfurlRankings from "../asset/unfurl-rankings.png?url"
 import {
   getStatsHomeData,
+  type CacheRatioEntry,
   type LeaderboardEntry,
   type MarketDay,
   type StatsHomeData,
@@ -37,9 +38,9 @@ const statsHomeFallbackUrl = "https://stats.opencode.ai"
 const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
-  { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#token-cost", label: "Token Cost" },
   { href: "#session-cost", label: "Session Cost" },
+  { href: "#token-cost", label: "Token Cost" },
+  { href: "#cache-ratio", label: "Cache Ratio" },
   { href: "#market-share", label: "Market Share" },
 ] as const
 const githubLink = {
@@ -160,8 +161,9 @@ export default function StatsHome() {
               <>
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
-                <TokenCostSection data={stats().tokenCost} />
                 <SessionCostSection data={stats().sessionCost} />
+                <TokenCostSection data={stats().tokenCost} />
+                <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
               </>
             )}
@@ -368,7 +370,7 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
 }
 
 function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: StatsHomeData["leaderboard"] }) {
-  const [product, setProduct] = createSignal<UsageProduct>("All Users")
+  const [product, setProduct] = createSignal<UsageProduct>("Go")
   const [range, setRange] = createSignal<UsageRange>("2M")
   const [sheet, setSheet] = createSignal<"product" | "range">()
   const [activeModel, setActiveModel] = createSignal<string>()
@@ -396,7 +398,7 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
   return (
     <section id="top-models" data-section="top-models">
       <h2 data-slot="top-models-title">
-        <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
+        <strong>Top models.</strong> <span>Usage of models across OpenCode Go.</span>
       </h2>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
@@ -409,7 +411,6 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
           onActiveModelChange={setActiveModel}
         />
       </Show>
-      <div id="leaderboard" data-slot="leaderboard-pattern" aria-hidden="true" />
       <Show
         when={leaderboard().length > 0}
         fallback={
@@ -418,7 +419,7 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
       >
         <Leaderboard data={leaderboard()} activeModel={activeModel()} onActiveModelChange={setActiveModel} />
       </Show>
-      <div data-slot="chart-footer">
+      <div data-slot="chart-footer" hidden>
         <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
         <div data-slot="top-models-mobile-controls">
           <MobileFilterButton
@@ -613,6 +614,11 @@ function TopModelsChart(props: {
       role="img"
       aria-label="Stacked top model usage chart"
       style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveIndex(undefined)
+        props.onActiveModelChange(undefined)
+      }}
     >
       <div data-slot="top-models-axis" aria-hidden="true">
         <For each={props.data}>
@@ -633,7 +639,14 @@ function TopModelsChart(props: {
           )}
         </For>
       </div>
-      <div data-slot="top-models-bars">
+      <div
+        data-slot="top-models-bars"
+        onPointerLeave={(event) => {
+          if (event.pointerType === "touch") return
+          setActiveIndex(undefined)
+          props.onActiveModelChange(undefined)
+        }}
+      >
         <For each={props.data}>
           {(day, dayIndex) => (
             <div
@@ -649,14 +662,14 @@ function TopModelsChart(props: {
                 setActiveIndex(dayIndex())
                 props.onActiveModelChange(undefined)
               }}
-              onPointerEnter={() => {
+              onPointerEnter={(event) => {
                 setActiveIndex(dayIndex())
-                props.onActiveModelChange(undefined)
+                if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
               }}
-              onPointerLeave={(event) => {
+              onPointerMove={(event) => {
                 if (event.pointerType === "touch") return
-                setActiveIndex(undefined)
-                props.onActiveModelChange(undefined)
+                setActiveIndex(dayIndex())
+                if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
               }}
               onClick={() => {
                 setActiveIndex(dayIndex())
@@ -757,6 +770,12 @@ function TopModelsChart(props: {
   )
 }
 
+function isTopModelsBlankHover(bar: HTMLElement, clientY: number) {
+  const stack = bar.querySelector<HTMLElement>('[data-slot="top-models-stack"]')
+  if (!stack) return true
+  return clientY < stack.getBoundingClientRect().top - 6
+}
+
 function getTopModelsBarHeight(total: number, max: number) {
   if (total <= 0) return 0
   return Math.max(2, Math.min(100, (total / max) * 100))
@@ -848,13 +867,50 @@ function Leaderboard(props: {
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
 }) {
+  const featured = createMemo(() => props.data.slice(0, 3))
+  const columns = createMemo(() =>
+    [0, 1, 2].map((index) => props.data.slice(3 + index * 5, 8 + index * 5)).filter((column) => column.length > 0),
+  )
+
   return (
-    <div data-component="leaderboard" role="list" aria-label="Model token leaderboard">
-      <div data-slot="leaderboard-scroll" aria-label="Scrollable model token leaderboard">
+    <div id="leaderboard" data-component="leaderboard" role="list" aria-label="Model token leaderboard">
+      <div data-slot="leaderboard-featured">
+        <For each={featured()}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              size="featured"
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
+          )}
+        </For>
+      </div>
+      <div data-slot="leaderboard-pattern" aria-hidden="true" />
+      <div data-slot="leaderboard-compact">
+        <For each={columns()}>
+          {(column) => (
+            <div data-slot="leaderboard-column">
+              <For each={column}>
+                {(entry) => (
+                  <LeaderboardCard
+                    entry={entry}
+                    size="compact"
+                    active={props.activeModel === entry.model}
+                    onActiveModelChange={props.onActiveModelChange}
+                  />
+                )}
+              </For>
+            </div>
+          )}
+        </For>
+      </div>
+      <div data-slot="leaderboard-mobile" aria-label="Scrollable model token leaderboard">
         <For each={props.data}>
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
             />
@@ -867,13 +923,14 @@ function Leaderboard(props: {
 
 function LeaderboardCard(props: {
   entry: LeaderboardEntry
+  size: "featured" | "compact"
   active: boolean
   onActiveModelChange: (model: string | undefined) => void
 }) {
   return (
     <article
       data-component="leader-card"
-      data-size="featured"
+      data-size={props.size}
       data-active={props.active ? "true" : undefined}
       role="listitem"
       tabIndex={0}
@@ -945,7 +1002,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         setInspecting(false)
       }}
     >
-      <SectionBridge label="SESSION COST" href="#session-cost" />
+      <SectionBridge label="CACHE RATIO" href="#cache-ratio" />
       <SectionTitle title="Market Share" description="Compare token share by model author." />
       <Show
         when={activeDay()}
@@ -986,17 +1043,19 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
           <span>[*]</span>
           <strong>{inspecting() ? formatMarketDate(activeDay()) : formatMarketRange(data())}</strong>
         </p>
-        <FilterPills
-          items={ranges}
-          selected={range()}
-          label="Date range"
-          variant="range"
-          onSelect={(item) => {
-            setRange(item)
-            setActiveAuthor(undefined)
-            setInspecting(false)
-          }}
-        />
+        <div hidden>
+          <FilterPills
+            items={ranges}
+            selected={range()}
+            label="Date range"
+            variant="range"
+            onSelect={(item) => {
+              setRange(item)
+              setActiveAuthor(undefined)
+              setInspecting(false)
+            }}
+          />
+        </div>
       </div>
     </section>
   )
@@ -1215,7 +1274,7 @@ function marketDateParts(label: string) {
 }
 
 function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
-  const [product, setProduct] = createSignal<TokenProduct>("Zen")
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => props.data[product()])
   const visible = createMemo(() => data().slice(0, 13))
@@ -1223,7 +1282,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
 
   return (
     <section id="token-cost" data-section="token-cost">
-      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
+      <SectionBridge label="SESSION COST" href="#session-cost" />
       <SectionTitle title="Token Cost" description="Price per 1M tokens." />
       <Show
         when={visible().length > 0}
@@ -1233,7 +1292,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
       >
         <TokenCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer">
+      <div data-slot="token-footer" hidden>
         <FilterPills
           items={tokenProducts}
           selected={product()}
@@ -1294,6 +1353,113 @@ function TokenCostChart(props: {
   )
 }
 
+function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
+  const [activeIndex, setActiveIndex] = createSignal(2)
+  const data = createMemo(() => props.data[product()])
+  const visible = createMemo(() => data().slice(0, 16))
+  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
+
+  return (
+    <section id="cache-ratio" data-section="cache-ratio">
+      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionTitle title="Cache Ratio" description="Share of input tokens served from cache." />
+      <Show
+        when={visible().length > 0}
+        fallback={
+          <EmptyState title="No cache ratio data" description="No input-token model_stat rows matched this product." />
+        }
+      >
+        <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
+      </Show>
+      <div data-slot="token-footer" hidden>
+        <FilterPills
+          items={tokenProducts}
+          selected={product()}
+          label="Product filter"
+          variant="product"
+          onSelect={setProduct}
+        />
+        <LiveIndicator />
+      </div>
+    </section>
+  )
+}
+
+function CacheRatioChart(props: {
+  data: CacheRatioEntry[]
+  activeIndex: number
+  onActiveIndexChange: (index: number) => void
+}) {
+  const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
+
+  return (
+    <div data-component="cache-ratio" data-variant="marker">
+      <div data-slot="cache-ratio-heading" aria-hidden="true">
+        <strong>Ratio</strong>
+        <span>Model</span>
+        <b>0-100%</b>
+      </div>
+      <div data-slot="cache-ratio-rows">
+        <For each={props.data}>
+          {(item, index) => (
+            <button
+              type="button"
+              data-component="cache-ratio-row"
+              data-active={props.activeIndex === index() ? "true" : undefined}
+              onClick={() => props.onActiveIndexChange(index())}
+              onPointerEnter={() => props.onActiveIndexChange(index())}
+            >
+              <strong>{formatRatio(item.ratio)}</strong>
+              <span>{item.model}</span>
+              <CacheRatioMarker ratio={item.ratio} active={props.activeIndex === index()} />
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={active()}>
+        {(item) => (
+          <div
+            data-component="token-tooltip"
+            data-variant="cache-ratio"
+            style={{ top: `${props.activeIndex * 36 + 28}px` }}
+          >
+            <p>
+              <span>Cache Ratio</span>
+              <strong>{formatRatio(item().ratio)}</strong>
+            </p>
+            <p>
+              <span>Cached</span>
+              <strong>{formatBillions(item().cached)}</strong>
+            </p>
+            <p>
+              <span>Uncached</span>
+              <strong>{formatBillions(item().uncached)}</strong>
+            </p>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+function CacheRatioMarker(props: { ratio: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(100, Math.max(0, props.ratio)))
+  return (
+    <i
+      data-component="cache-ratio-marker"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--cache-ratio-fill": `${fill()}%` } as JSX.CSSProperties}
+    >
+      <em />
+    </i>
+  )
+}
+
+function formatRatio(value: number) {
+  return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
+}
+
 function formatDollars(value: number) {
   return `$${value.toFixed(2)}`
 }
@@ -1313,7 +1479,7 @@ function MetricBar(props: { value: number; max: number; active: boolean }) {
 }
 
 function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
-  const [product, setProduct] = createSignal<TokenProduct>("Zen")
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const data = createMemo(() => props.data[product()])
   const visible = createMemo(() => data().slice(0, 16))
@@ -1321,7 +1487,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
 
   return (
     <section id="session-cost" data-section="session-cost">
-      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionBridge label="TOP MODELS" href="#top-models" />
       <SectionTitle title="Session Cost" description="Average cost per session." />
       <Show
         when={visible().length > 0}
@@ -1334,7 +1500,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
       >
         <SessionCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer">
+      <div data-slot="token-footer" hidden>
         <FilterPills
           items={tokenProducts}
           selected={product()}
@@ -1577,9 +1743,9 @@ function Footer(props: {
   const [subscribeOpen, setSubscribeOpen] = createSignal(false)
   const modelStats = [
     { href: "#top-models", label: "Top Models" },
-    { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#token-cost", label: "Token Cost" },
     { href: "#session-cost", label: "Session Cost" },
+    { href: "#token-cost", label: "Token Cost" },
+    { href: "#cache-ratio", label: "Cache Ratio" },
     { href: "#market-share", label: "Market Share" },
   ]
   const legal = [

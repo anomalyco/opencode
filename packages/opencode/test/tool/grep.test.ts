@@ -1,3 +1,4 @@
+import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -41,7 +42,7 @@ const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const it = testEffect(toolLayer())
-const scout = testEffect(toolLayer({ experimentalScout: true }))
+const references = testEffect(toolLayer({ experimentalReferences: true }))
 const rooted = testEffect(Layer.mergeAll(toolLayer(), testInstanceStoreLayer))
 
 const ctx = {
@@ -186,7 +187,7 @@ describe("tool.grep", () => {
           [path.join(alias, "*")]: "allow",
         },
       })
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
       const next: Tool.Context = {
         ...ctx,
         ask: (req) =>
@@ -214,7 +215,7 @@ describe("tool.grep", () => {
     }),
   )
 
-  scout.instance(
+  references.instance(
     "does not ask for external_directory permission inside configured git references",
     () =>
       Effect.gen(function* () {
@@ -234,7 +235,7 @@ describe("tool.grep", () => {
         yield* appfs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
         yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
 
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
         const next: Tool.Context = {
           ...ctx,
           ask: (req) =>
