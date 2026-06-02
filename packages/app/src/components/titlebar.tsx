@@ -24,7 +24,6 @@ import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { StatusPopoverV2 } from "@/components/status-popover"
 import {
   readSessionTabsRemovedDetail,
   SESSION_TABS_REMOVED_EVENT,
@@ -53,7 +52,7 @@ const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
 const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
 const legacyTitlebarHeight = 40
-const v2TitlebarHeight = 44
+const v2TitlebarHeight = 36
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 
@@ -134,8 +133,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   })
   const v2RightState = createMemo<TitlebarV2RightState>(() => ({
     update: updateState(),
-    statusVisible: !params.dir && settings.general.showStatus(),
-    statusLabel: language.t("status.popover.trigger"),
   }))
 
   const back = () => {
@@ -223,7 +220,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     <header
       classList={{
         "shrink-0 relative overflow-hidden flex flex-row": true,
-        "h-11 bg-v2-background-bg-deep": useV2Titlebar(),
+        "h-9 bg-v2-background-bg-deep": useV2Titlebar(),
         "h-10 bg-background-base": !useV2Titlebar(),
       }}
       style={{
@@ -463,7 +460,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
 
             return (
               <div
-                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 py-2"
+                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 pt-2"
                 classList={{
                   "pl-2": mac(),
                   "pl-4": !mac(),
@@ -704,19 +701,12 @@ type TitlebarUpdatePillState = {
 
 type TitlebarV2RightState = {
   update: TitlebarUpdatePillState
-  statusVisible: boolean
-  statusLabel: string
 }
 
 function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
   return (
     <div class="flex shrink-0 items-center justify-end gap-0">
       <TitlebarUpdatePill state={props.state.update} />
-      <Show when={props.state.statusVisible}>
-        <Tooltip placement="bottom" value={props.state.statusLabel}>
-          <StatusPopoverV2 scope="server" />
-        </Tooltip>
-      </Show>
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>
   )
