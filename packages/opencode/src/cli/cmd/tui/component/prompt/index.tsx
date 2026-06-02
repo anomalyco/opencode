@@ -319,7 +319,8 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
   const event = useEvent()
 
-  event.on(TuiEvent.PromptAppend.type, (evt) => {
+  event.on(TuiEvent.PromptAppend.type, (evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
     if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {

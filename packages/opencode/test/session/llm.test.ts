@@ -500,6 +500,57 @@ describe("session.llm.ai-sdk adapter", () => {
     expect(result.tokens.cache.write).toBe(300)
     expect(result.tokens.cache.read).toBe(200)
   })
+
+  test("captures Copilot billed usage from raw Anthropic message deltas per step", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({
+        type: "raw",
+        rawValue: {
+          type: "message_delta",
+          copilot_usage: { total_nano_aiu: 4_473_525_000 },
+        },
+      }),
+      {
+        type: "finish-step",
+        response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
+        finishReason: "stop",
+        rawFinishReason: "end_turn",
+        usage: {
+          inputTokens: 11_774,
+          outputTokens: 39,
+          totalTokens: 11_813,
+          inputTokenDetails: { noCacheTokens: 3, cacheReadTokens: 0, cacheWriteTokens: 11_771 },
+          outputTokenDetails: { textTokens: 39, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: { cacheCreationInputTokens: 11_771 } },
+      },
+      {
+        type: "finish-step",
+        response: { id: "msg_follow_up", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
+        finishReason: "stop",
+        rawFinishReason: "end_turn",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          inputTokenDetails: { noCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          outputTokenDetails: { textTokens: 1, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: {} },
+      },
+    ])
+
+    expect(events[0]).toMatchObject({
+      type: "step-finish",
+      providerMetadata: {
+        anthropic: { cacheCreationInputTokens: 11_771 },
+        copilot: { totalNanoAiu: 4_473_525_000 },
+      },
+    })
+    expect(events[1]).toMatchObject({ type: "step-finish", providerMetadata: { anthropic: {} } })
+    if (events[1].type !== "step-finish") throw new Error("expected step-finish")
+    expect(events[1].providerMetadata?.copilot).toBeUndefined()
+  })
 })
 
 type Capture = {
