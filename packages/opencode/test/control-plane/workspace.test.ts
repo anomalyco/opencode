@@ -7,12 +7,13 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Log from "@opencode-ai/core/util/log"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -54,7 +55,7 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
     Layer.provide(Database.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
     Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
   )
@@ -304,7 +305,7 @@ function insertProject(id: ProjectV2.ID, worktree: string) {
       .insert(ProjectTable)
       .values({
         id,
-        worktree,
+        worktree: AbsolutePath.make(worktree),
         vcs: null,
         name: null,
         time_created: Date.now(),

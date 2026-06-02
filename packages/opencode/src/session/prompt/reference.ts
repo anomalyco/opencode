@@ -63,9 +63,7 @@ export function referenceTextPart(input: {
       ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
       ...(metadata.problem
         ? [`Problem: ${metadata.problem}`]
-        : [
-            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
-          ]),
+        : ["Inspect the configured reference with Read, Glob, and Grep when useful."]),
     ].join("\n"),
     metadata: { reference: metadata },
   }

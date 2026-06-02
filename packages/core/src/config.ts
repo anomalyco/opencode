@@ -3,7 +3,7 @@ export * as Config from "./config"
 import path from "path"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
 import { PermissionV2 } from "./permission"
@@ -127,7 +127,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
