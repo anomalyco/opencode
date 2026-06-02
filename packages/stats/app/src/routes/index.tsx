@@ -399,7 +399,7 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
   return (
     <section id="top-models" data-section="top-models">
       <h2 data-slot="top-models-title">
-        <strong>Top models.</strong> <span>Usage of models across OpenCode.</span>
+        <strong>Top models.</strong> <span>Usage of models across OpenCode Go.</span>
       </h2>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
