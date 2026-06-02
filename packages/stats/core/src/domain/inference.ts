@@ -2,13 +2,7 @@ import { Resource } from "sst/resource"
 import type { AthenaData } from "../athena"
 import type { GeoStatAggregate } from "./geo"
 import type { ModelStatAggregate } from "./model"
-import {
-  EXCLUDED_MODELS,
-  MODEL_AUTHOR_OVERRIDES,
-  MODEL_AUTHOR_RULES,
-  modelAuthor,
-  normalizeInferenceModel,
-} from "./model-normalization"
+import { EXCLUDED_MODELS, MODEL_AUTHOR_RULES, statModel, statProvider } from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
 import { normalizeCountry, normalizeTier, type StatBaseAggregate } from "./stat"
 
@@ -64,7 +58,7 @@ WITH normalized AS (
   SELECT
     from_iso8601_timestamp(event_timestamp) AS event_time,
     model AS raw_model,
-    COALESCE(NULLIF(regexp_replace(model, '(-free|:global)+$', ''), ''), 'unknown') AS model,
+    ${statModelSql("model", "provider_model")} AS model,
     COALESCE(NULLIF(provider_model, ''), '') AS provider_model,
     UPPER(COALESCE(NULLIF(cf_country, ''), 'ZZ')) AS country,
     COALESCE(NULLIF(cf_continent, ''), '') AS continent,
@@ -98,10 +92,10 @@ WITH normalized AS (
     event_time,
     CASE
       WHEN source = 'lite' THEN 'Go'
-      WHEN model IN ('gpt-5-nano', 'grok-code', 'big-pickle') OR regexp_like(raw_model, '-free(:global)?$') THEN 'Free'
+      WHEN raw_model IN ('gpt-5-nano', 'grok-code', 'big-pickle') OR regexp_like(raw_model, '-free(:global)?$') THEN 'Free'
       ELSE 'Paid'
     END AS tier,
-    ${modelAuthorSql("model")} AS provider,
+    ${statProviderSql("model", "provider_model")} AS provider,
     provider_model,
     model,
     country,
@@ -157,25 +151,27 @@ ORDER BY grain, period_key, total_tokens DESC
 }
 
 export function toModelAggregate(data: AthenaData): ModelStatAggregate[] {
-  const model = normalizeInferenceModel(data.model)
-  const author = modelAuthor(model)
-  if (!author) return []
+  const model = statModel(data.model, data.provider_model)
+  const provider = statProvider(model, data.provider_model, data.provider)
+  if (!provider) return []
 
   return toStatBaseAggregate(data).flatMap((base) => [
-    { ...base, provider: author, model, provider_model: data.provider_model || "" },
+    { ...base, provider, model, provider_model: data.provider_model || "" },
   ])
 }
 
 export function toProviderAggregate(data: AthenaData): ProviderStatAggregate[] {
-  return toStatBaseAggregate(data).flatMap((base) => [{ ...base, provider: data.provider || "unknown" }])
+  return toStatBaseAggregate(data).flatMap((base) => [
+    { ...base, provider: statProvider(data.model, data.provider_model, data.provider) || "unknown" },
+  ])
 }
 
 export function toGeoAggregate(data: AthenaData): GeoStatAggregate[] {
   return toStatBaseAggregate(data).flatMap((base) => [
     {
       ...base,
-      provider: data.provider || "all",
-      model: normalizeInferenceModel(data.model || "all"),
+      provider: statProvider(data.model, data.provider_model, data.provider) || "all",
+      model: statModel(data.model || "all", data.provider_model),
       country: normalizeCountry(data.country),
       continent: data.continent || "",
     },
@@ -243,9 +239,16 @@ function sqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`
 }
 
-function modelAuthorSql(model: string) {
+function statModelSql(model: string, providerModel: string) {
+  return `COALESCE(NULLIF(regexp_replace(CASE
+      WHEN ${model} = 'big-pickle' THEN COALESCE(NULLIF(${providerModel}, ''), ${model})
+      ELSE ${model}
+    END, '(-free|:global)+$', ''), ''), 'unknown')`
+}
+
+function statProviderSql(model: string, providerModel: string) {
   return `CASE
-${MODEL_AUTHOR_OVERRIDES.map((item) => `      WHEN lower(${model}) = ${sqlString(item.model)} THEN ${sqlString(item.author)}`).join("\n")}
+${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${providerModel}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
 ${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${model}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
       ELSE 'unknown'
     END`

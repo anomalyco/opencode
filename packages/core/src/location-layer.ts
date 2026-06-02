@@ -13,6 +13,10 @@ import { Npm } from "./npm"
 import { ModelsDev } from "./models-dev"
 import { AppFileSystem } from "./filesystem"
 import { Global } from "./global"
+import { Database } from "./database/database"
+import { PermissionV2 } from "./permission"
+import { PermissionSaved } from "./permission/saved"
+import { SessionV2 } from "./session"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -25,6 +29,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Catalog.locationLayer,
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
+      PermissionV2.locationLayer,
     ).pipe(Layer.provideMerge(location), Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
@@ -36,5 +41,8 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     ModelsDev.defaultLayer,
     AppFileSystem.defaultLayer,
     Global.defaultLayer,
+    Database.defaultLayer,
+    SessionV2.defaultLayer,
+    PermissionSaved.defaultLayer,
   ],
 }) {}
