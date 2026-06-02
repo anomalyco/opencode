@@ -1886,7 +1886,24 @@ QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool 
 :::
 
 :::tip
-Local tool-calling quality is bounded by the model. Q4-quantized 4B/8B Instruct models can hold a conversation but won't reliably invoke tools; reliable local agent use generally needs ≥14B parameters with coder/agent post-training. See the [QVAC provider README](https://www.npmjs.com/package/@qvac/ai-sdk-provider) for the full agent setup notes.
+The Qwen3 models above are a fast, low-footprint starting point, but small Instruct models won't reliably **invoke tools**. For real agent workflows use a larger, agent-tuned model — `gpt-oss-20b` (OpenAI's open-weight model, ~12&nbsp;GB download, ~16&nbsp;GB RAM) is the recommended local backend, and QVAC parses its tool calls natively. Add it as a third model and point `model` at it:
+
+```json title="qvac.config.json"
+"gpt-oss-20b": {
+  "model": "GPT_OSS_20B_INST_Q4_K_M",
+  "preload": true,
+  "config": { "ctx_size": 32768 }
+}
+```
+
+```json title="opencode.json"
+"gpt-oss-20b": {
+  "name": "GPT-OSS 20B (local)",
+  "limit": { "context": 32768, "output": 8192 }
+}
+```
+
+Then set `"model": "qvac/gpt-oss-20b"` and keep a small Qwen3 model as `small_model` for fast title generation. See the [QVAC provider README](https://www.npmjs.com/package/@qvac/ai-sdk-provider) for the full agent setup notes.
 :::
 
 ---
