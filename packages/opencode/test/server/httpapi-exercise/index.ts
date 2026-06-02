@@ -579,20 +579,20 @@ const scenarios: Scenario[] = [
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
     .json(404, object, "status"),
-  http.protected.get("/api/permission", "v2.permission.list").json(200, array),
+  http.protected.get("/api/permission/request", "v2.permission.request.list").json(200, array),
   http.protected
-    .get("/api/session/{sessionID}/permission", "v2.permission.forSession")
+    .get("/api/session/{sessionID}/permission/request", "v2.session.permission.list")
     .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/permission", { sessionID: ctx.state.id }),
+      path: route("/api/session/{sessionID}/permission/request", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
     }))
     .json(200, array),
   http.protected
-    .post("/api/session/{sessionID}/permission/{requestID}/reply", "v2.permission.reply")
+    .post("/api/session/{sessionID}/permission/request/{requestID}/reply", "v2.session.permission.reply")
     .seeded((ctx) => ctx.session({ title: "Permission owner" }))
     .at((ctx) => ({
-      path: route("/api/session/{sessionID}/permission/{requestID}/reply", {
+      path: route("/api/session/{sessionID}/permission/request/{requestID}/reply", {
         sessionID: ctx.state.id,
         requestID: "per_httpapi_missing",
       }),
@@ -600,6 +600,11 @@ const scenarios: Scenario[] = [
       body: { reply: "once" },
     }))
     .json(404, object, "status"),
+  http.protected.get("/api/permission/saved", "v2.permission.saved.list").json(200, array),
+  http.protected
+    .delete("/api/permission/saved/{id}", "v2.permission.saved.remove")
+    .at((ctx) => ({ path: route("/api/permission/saved/{id}", { id: "psv_httpapi_missing" }), headers: ctx.headers() }))
+    .status(204, undefined, "status"),
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))

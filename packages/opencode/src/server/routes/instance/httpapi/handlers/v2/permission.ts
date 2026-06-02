@@ -1,6 +1,7 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
@@ -16,7 +17,7 @@ function missingRequest(id: PermissionV2.ID) {
 export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.permission", (handlers) =>
   Effect.gen(function* () {
     return handlers.handle(
-      "permissions",
+      "permissionRequests",
       Effect.fn(function* () {
         return yield* (yield* PermissionV2.Service).list()
       }),
@@ -57,7 +58,7 @@ export const sessionPermissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "
 
     return handlers
       .handle(
-        "sessionPermissions",
+        "sessionPermissionRequests",
         Effect.fn(function* (ctx) {
           return yield* withSessionPermission(ctx.params.sessionID, (permission) =>
             permission.forSession(ctx.params.sessionID),
@@ -65,7 +66,7 @@ export const sessionPermissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "
         }),
       )
       .handle(
-        "permissionReply",
+        "permissionRequestReply",
         Effect.fn(function* (ctx) {
           yield* withSessionPermission(ctx.params.sessionID, (permission) =>
             Effect.gen(function* () {
@@ -77,6 +78,26 @@ export const sessionPermissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "
                 .pipe(Effect.catchTag("PermissionV2.NotFoundError", () => missingRequest(ctx.params.requestID)))
             }),
           )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+  }),
+)
+
+export const savedPermissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.permission.saved", (handlers) =>
+  Effect.gen(function* () {
+    const saved = yield* PermissionSaved.Service
+    return handlers
+      .handle(
+        "savedPermissions",
+        Effect.fn(function* (ctx) {
+          return yield* saved.list({ projectID: ctx.query.projectID })
+        }),
+      )
+      .handle(
+        "removeSavedPermission",
+        Effect.fn(function* (ctx) {
+          yield* saved.remove(ctx.params.id)
           return HttpApiSchema.NoContent.make()
         }),
       )

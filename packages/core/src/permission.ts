@@ -1,8 +1,6 @@
 export * as PermissionV2 from "./permission"
 
 import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
-import { eq } from "drizzle-orm"
-import { Database } from "./database/database"
 import { EventV2 } from "./event"
 import { Location } from "./location"
 import { AgentV2 } from "./agent"
@@ -10,8 +8,8 @@ import { SessionV2 } from "./session"
 import { withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 import { Wildcard } from "./util/wildcard"
-import { PermissionTable } from "./permission/sql"
 import { PermissionSchema } from "./permission/schema"
+import { PermissionSaved } from "./permission/saved"
 
 export { Effect, Rule, Ruleset } from "./permission/schema"
 type Effect = PermissionSchema.Effect
@@ -38,7 +36,7 @@ export const Request = Schema.Struct({
   sessionID: SessionV2.ID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
-  remember: Schema.Array(Schema.String).pipe(Schema.optional),
+  save: Schema.Array(Schema.String).pipe(Schema.optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   source: Source.pipe(Schema.optional),
 }).annotate({ identifier: "PermissionV2.Request" })
@@ -52,7 +50,7 @@ export const AssertInput = Schema.Struct({
   sessionID: SessionV2.ID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
-  remember: Schema.Array(Schema.String).pipe(Schema.optional),
+  save: Schema.Array(Schema.String).pipe(Schema.optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   source: Source.pipe(Schema.optional),
 }).annotate({ identifier: "PermissionV2.AssertInput" })
@@ -134,11 +132,11 @@ interface Pending {
 export const layer = Layer.effect(
   Service,
   EffectRuntime.gen(function* () {
-    const { db } = yield* Database.Service
     const events = yield* EventV2.Service
     const location = yield* Location.Service
     const agents = yield* AgentV2.Service
     const sessions = yield* SessionV2.Service
+    const saved = yield* PermissionSaved.Service
     const pending = new Map<ID, Pending>()
 
     yield* EffectRuntime.addFinalizer(() =>
@@ -153,14 +151,10 @@ export const layer = Layer.effect(
       ),
     )
 
-    const remembered = EffectRuntime.fn("PermissionV2.remembered")(function* () {
-      const rows = yield* db
-        .select()
-        .from(PermissionTable)
-        .where(eq(PermissionTable.project_id, location.project.id))
-        .all()
-        .pipe(EffectRuntime.orDie)
-      return rows.map((row): Rule => ({ action: row.action, resource: row.resource, effect: "allow" }))
+    const savedRules = EffectRuntime.fnUntraced(function* () {
+      return (yield* saved.list({ projectID: location.project.id })).map(
+        (item): Rule => ({ action: item.action, resource: item.resource, effect: "allow" }),
+      )
     })
 
     const configured = EffectRuntime.fn("PermissionV2.configured")(function* (sessionID: SessionV2.ID) {
@@ -180,7 +174,7 @@ export const layer = Layer.effect(
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const all = [...rules, ...(yield* remembered())]
+      const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
       return { effect, rules: all }
@@ -192,7 +186,7 @@ export const layer = Layer.effect(
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        remember: input.remember,
+        save: input.save,
         metadata: input.metadata,
         source: input.source,
       }
@@ -259,24 +253,13 @@ export const layer = Layer.effect(
         return
       }
 
-      if (input.reply === "always" && existing.request.remember?.length) {
-        yield* db
-          .insert(PermissionTable)
-          .values(
-            existing.request.remember.map((resource) => ({
-              project_id: location.project.id,
-              action: existing.request.action,
-              resource,
-            })),
-          )
-          .onConflictDoNothing()
-          .run()
-          .pipe(EffectRuntime.orDie)
+      if (input.reply === "always" && existing.request.save?.length) {
+        yield* saved.add({ projectID: location.project.id, action: existing.request.action, resources: existing.request.save })
       }
       yield* Deferred.succeed(existing.deferred, undefined)
-      if (input.reply !== "always" || !existing.request.remember?.length) return
+      if (input.reply !== "always" || !existing.request.save?.length) return
 
-      const rememberedRules = yield* remembered()
+      const rememberedRules = yield* savedRules()
       for (const [id, item] of pending) {
         const input = { ...item.request }
         const rules = yield* configured(item.request.sessionID).pipe(

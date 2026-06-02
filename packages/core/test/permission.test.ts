@@ -6,6 +6,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionTable } from "@opencode-ai/core/permission/sql"
+import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -22,11 +23,13 @@ const current = Layer.succeed(
 )
 const events = EventV2.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(Layer.provide(database))
+const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(
   Layer.provideMerge(database),
   Layer.provideMerge(events),
   Layer.provideMerge(current),
   Layer.provideMerge(sessions),
+  Layer.provideMerge(saved),
 )
 const it = testEffect(layer)
 
@@ -139,7 +142,7 @@ describe("PermissionV2", () => {
     }),
   )
 
-  it.effect("stores remembered resources for the location project", () =>
+  it.effect("stores and removes saved resources for a project", () =>
     Effect.gen(function* () {
       yield* setup()
       const service = yield* PermissionV2.Service
@@ -151,7 +154,7 @@ describe("PermissionV2", () => {
           : Effect.void,
       )
       yield* Effect.addFinalizer(() => unsubscribe)
-      const fiber = yield* service.assert(assertion({ remember: ["src/*"] })).pipe(Effect.forkScoped)
+      const fiber = yield* service.assert(assertion({ save: ["src/*"] })).pipe(Effect.forkScoped)
       const request = yield* Deferred.await(asked)
       yield* service.reply({ requestID: request.id, reply: "always" })
       yield* Fiber.join(fiber)
@@ -160,7 +163,14 @@ describe("PermissionV2", () => {
       expect(yield* db.select().from(PermissionTable).where(eq(PermissionTable.project_id, Project.ID.global)).all()).toMatchObject([
         { action: "read", resource: "src/*" },
       ])
+      const saved = yield* PermissionSaved.Service
+      const id = (yield* saved.list())[0]!.id
+      expect(yield* saved.list()).toEqual([
+        { id, projectID: Project.ID.global, action: "read", resource: "src/*" },
+      ])
       yield* service.assert(assertion({ id: PermissionV2.ID.create("per_next"), resources: ["src/next.ts"] }))
+      yield* saved.remove(id)
+      expect(yield* saved.list()).toEqual([])
     }),
   )
 })

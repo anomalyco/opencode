@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "58b9e35c-30bf-449a-ab64-f2bceda08db5",
+  "id": "80d6efb8-93fd-4ce5-b320-45a05aaebdd7",
   "prevIds": [
     "226375f1-a19f-4c7b-8aa2-ccc5513d3b0d"
   ],
@@ -435,6 +435,16 @@
       "name": "data",
       "entityType": "columns",
       "table": "event"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "permission"
     },
     {
       "type": "text",
@@ -1358,17 +1368,6 @@
     },
     {
       "columns": [
-        "project_id",
-        "action",
-        "resource"
-      ],
-      "nameExplicit": false,
-      "name": "permission_pk",
-      "entityType": "pks",
-      "table": "permission"
-    },
-    {
-      "columns": [
         "session_id",
         "position"
       ],
@@ -1436,6 +1435,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "permission_pk",
+      "table": "permission",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "project_pk",
       "table": "project",
       "entityType": "pks"
@@ -1484,6 +1492,28 @@
       "name": "session_share_pk",
       "table": "session_share",
       "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "action",
+          "isExpression": false
+        },
+        {
+          "value": "resource",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "permission_project_action_resource_idx",
+      "entityType": "indexes",
+      "table": "permission"
     },
     {
       "columns": [

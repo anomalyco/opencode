@@ -1425,7 +1425,7 @@ export type GlobalEvent = {
           sessionID: string
           action: string
           resources: Array<string>
-          remember?: Array<string>
+          save?: Array<string>
           metadata?: {
             [key: string]: unknown
           }
@@ -3676,11 +3676,18 @@ export type PermissionV2Request = {
   sessionID: string
   action: string
   resources: Array<string>
-  remember?: Array<string>
+  save?: Array<string>
   metadata?: {
     [key: string]: unknown
   }
   source?: PermissionV2Source
+}
+
+export type PermissionSavedInfo = {
+  id: string
+  projectID: string
+  action: string
+  resource: string
 }
 
 export type EventModelsDevRefreshed = {
@@ -4527,7 +4534,7 @@ export type EventPermissionV2Asked = {
     sessionID: string
     action: string
     resources: Array<string>
-    remember?: Array<string>
+    save?: Array<string>
     metadata?: {
       [key: string]: unknown
     }
@@ -8334,7 +8341,7 @@ export type V2ProviderGetResponses = {
 
 export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
 
-export type V2PermissionListData = {
+export type V2PermissionRequestListData = {
   body?: never
   path?: never
   query?: {
@@ -8343,10 +8350,10 @@ export type V2PermissionListData = {
       workspace?: string
     }
   }
-  url: "/api/permission"
+  url: "/api/permission/request"
 }
 
-export type V2PermissionListErrors = {
+export type V2PermissionRequestListErrors = {
   /**
    * InvalidRequestError
    */
@@ -8357,27 +8364,27 @@ export type V2PermissionListErrors = {
   401: UnauthorizedError
 }
 
-export type V2PermissionListError = V2PermissionListErrors[keyof V2PermissionListErrors]
+export type V2PermissionRequestListError = V2PermissionRequestListErrors[keyof V2PermissionRequestListErrors]
 
-export type V2PermissionListResponses = {
+export type V2PermissionRequestListResponses = {
   /**
    * Success
    */
   200: Array<PermissionV2Request>
 }
 
-export type V2PermissionListResponse = V2PermissionListResponses[keyof V2PermissionListResponses]
+export type V2PermissionRequestListResponse = V2PermissionRequestListResponses[keyof V2PermissionRequestListResponses]
 
-export type V2PermissionForSessionData = {
+export type V2SessionPermissionListData = {
   body?: never
   path: {
     sessionID: string
   }
   query?: never
-  url: "/api/session/{sessionID}/permission"
+  url: "/api/session/{sessionID}/permission/request"
 }
 
-export type V2PermissionForSessionErrors = {
+export type V2SessionPermissionListErrors = {
   /**
    * InvalidRequestError
    */
@@ -8392,18 +8399,18 @@ export type V2PermissionForSessionErrors = {
   404: SessionNotFoundError
 }
 
-export type V2PermissionForSessionError = V2PermissionForSessionErrors[keyof V2PermissionForSessionErrors]
+export type V2SessionPermissionListError = V2SessionPermissionListErrors[keyof V2SessionPermissionListErrors]
 
-export type V2PermissionForSessionResponses = {
+export type V2SessionPermissionListResponses = {
   /**
    * Success
    */
   200: Array<PermissionV2Request>
 }
 
-export type V2PermissionForSessionResponse = V2PermissionForSessionResponses[keyof V2PermissionForSessionResponses]
+export type V2SessionPermissionListResponse = V2SessionPermissionListResponses[keyof V2SessionPermissionListResponses]
 
-export type V2PermissionReplyData = {
+export type V2SessionPermissionReplyData = {
   body?: {
     reply: PermissionV2Reply
     message?: string
@@ -8413,10 +8420,10 @@ export type V2PermissionReplyData = {
     requestID: string
   }
   query?: never
-  url: "/api/session/{sessionID}/permission/{requestID}/reply"
+  url: "/api/session/{sessionID}/permission/request/{requestID}/reply"
 }
 
-export type V2PermissionReplyErrors = {
+export type V2SessionPermissionReplyErrors = {
   /**
    * InvalidRequestError
    */
@@ -8431,16 +8438,79 @@ export type V2PermissionReplyErrors = {
   404: SessionNotFoundError | PermissionNotFoundError
 }
 
-export type V2PermissionReplyError = V2PermissionReplyErrors[keyof V2PermissionReplyErrors]
+export type V2SessionPermissionReplyError = V2SessionPermissionReplyErrors[keyof V2SessionPermissionReplyErrors]
 
-export type V2PermissionReplyResponses = {
+export type V2SessionPermissionReplyResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2PermissionReplyResponse = V2PermissionReplyResponses[keyof V2PermissionReplyResponses]
+export type V2SessionPermissionReplyResponse =
+  V2SessionPermissionReplyResponses[keyof V2SessionPermissionReplyResponses]
+
+export type V2PermissionSavedListData = {
+  body?: never
+  path?: never
+  query?: {
+    projectID?: string
+  }
+  url: "/api/permission/saved"
+}
+
+export type V2PermissionSavedListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2PermissionSavedListError = V2PermissionSavedListErrors[keyof V2PermissionSavedListErrors]
+
+export type V2PermissionSavedListResponses = {
+  /**
+   * Success
+   */
+  200: Array<PermissionSavedInfo>
+}
+
+export type V2PermissionSavedListResponse = V2PermissionSavedListResponses[keyof V2PermissionSavedListResponses]
+
+export type V2PermissionSavedRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/permission/saved/{id}"
+}
+
+export type V2PermissionSavedRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2PermissionSavedRemoveError = V2PermissionSavedRemoveErrors[keyof V2PermissionSavedRemoveErrors]
+
+export type V2PermissionSavedRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2PermissionSavedRemoveResponse = V2PermissionSavedRemoveResponses[keyof V2PermissionSavedRemoveResponses]
 
 export type TuiAppendPromptData = {
   body?: {
