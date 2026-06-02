@@ -3695,6 +3695,26 @@ export type PermissionSavedInfo = {
   resource: string
 }
 
+export type LocationFileSystemTextContent = {
+  type: "text"
+  content: string
+  mime: string
+}
+
+export type LocationFileSystemBinaryContent = {
+  type: "binary"
+  content: string
+  encoding: "base64"
+  mime: string
+}
+
+export type LocationFileSystemEntry = {
+  path: string
+  uri: string
+  type: "file" | "directory"
+  mime: string
+}
+
 export type EventModelsDevRefreshed = {
   id: string
   type: "models-dev.refreshed"
@@ -8515,6 +8535,76 @@ export type V2PermissionSavedRemoveResponses = {
 }
 
 export type V2PermissionSavedRemoveResponse = V2PermissionSavedRemoveResponses[keyof V2PermissionSavedRemoveResponses]
+
+export type V2FsReadData = {
+  body?: never
+  path?: never
+  query: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    path: string
+  }
+  url: "/api/fs/read"
+}
+
+export type V2FsReadErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2FsReadError = V2FsReadErrors[keyof V2FsReadErrors]
+
+export type V2FsReadResponses = {
+  /**
+   * Success
+   */
+  200: LocationFileSystemTextContent | LocationFileSystemBinaryContent
+}
+
+export type V2FsReadResponse = V2FsReadResponses[keyof V2FsReadResponses]
+
+export type V2FsListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    path?: string
+  }
+  url: "/api/fs/list"
+}
+
+export type V2FsListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2FsListError = V2FsListErrors[keyof V2FsListErrors]
+
+export type V2FsListResponses = {
+  /**
+   * Success
+   */
+  200: Array<LocationFileSystemEntry>
+}
+
+export type V2FsListResponse = V2FsListResponses[keyof V2FsListResponses]
 
 export type TuiAppendPromptData = {
   body?: {

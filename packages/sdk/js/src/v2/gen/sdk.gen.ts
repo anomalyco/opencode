@@ -247,6 +247,10 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptErrors,
   TuiSubmitPromptResponses,
+  V2FsListErrors,
+  V2FsListResponses,
+  V2FsReadErrors,
+  V2FsReadResponses,
   V2ModelListErrors,
   V2ModelListResponses,
   V2PermissionRequestListErrors,
@@ -4727,6 +4731,74 @@ export class Permission3 extends HeyApiClient {
   }
 }
 
+export class Fs extends HeyApiClient {
+  /**
+   * Read file
+   *
+   * Read one file relative to the requested location.
+   */
+  public read<ThrowOnError extends boolean = false>(
+    parameters: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2FsReadResponses, V2FsReadErrors, ThrowOnError>({
+      url: "/api/fs/read",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List directory
+   *
+   * List direct children of one directory relative to the requested location.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2FsListResponses, V2FsListErrors, ThrowOnError>({
+      url: "/api/fs/list",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _session?: Session3
   get session(): Session3 {
@@ -4746,6 +4818,11 @@ export class V2 extends HeyApiClient {
   private _permission?: Permission3
   get permission(): Permission3 {
     return (this._permission ??= new Permission3({ client: this.client }))
+  }
+
+  private _fs?: Fs
+  get fs(): Fs {
+    return (this._fs ??= new Fs({ client: this.client }))
   }
 }
 

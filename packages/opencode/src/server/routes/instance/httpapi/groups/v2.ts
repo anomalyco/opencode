@@ -4,6 +4,7 @@ import { ModelGroup } from "./v2/model"
 import { ProviderGroup } from "./v2/provider"
 import { SessionGroup } from "./v2/session"
 import { PermissionGroup, PermissionSavedGroup, SessionPermissionGroup } from "./v2/permission"
+import { FileSystemGroup } from "./v2/fs"
 
 export const V2Api = HttpApi.make("v2")
   .add(SessionGroup)
@@ -13,6 +14,7 @@ export const V2Api = HttpApi.make("v2")
   .add(PermissionGroup)
   .add(SessionPermissionGroup)
   .add(PermissionSavedGroup)
+  .add(FileSystemGroup)
   .annotateMerge(
     OpenApi.annotations({
       title: "opencode experimental HttpApi",

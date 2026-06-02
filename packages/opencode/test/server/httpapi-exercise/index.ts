@@ -576,6 +576,12 @@ const scenarios: Scenario[] = [
   http.protected.get("/api/model", "v2.model.list").json(200, array),
   http.protected.get("/api/provider", "v2.provider.list").json(200, array),
   http.protected
+    .get("/api/fs/read", "v2.fs.read")
+    .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
+    .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
+    .json(200, object),
+  http.protected.get("/api/fs/list", "v2.fs.list").json(200, array),
+  http.protected
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
     .json(404, object, "status"),
@@ -645,13 +651,10 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: `/api/session?${new URLSearchParams({
         limit: "2",
-        directory: ctx.directory ?? "",
         cursor: cursor({
-          id: "ses_httpapi_missing",
-          time: 0,
           order: "desc",
-          direction: "next",
           directory: ctx.directory,
+          anchor: { id: "ses_httpapi_missing", time: 0, direction: "next" },
         }),
       })}`,
       headers: ctx.headers(),
@@ -669,8 +672,7 @@ const scenarios: Scenario[] = [
     .get("/api/session", "v2.session.list.cursor.invalid")
     .at((ctx) => ({
       path: `/api/session?${new URLSearchParams({
-        cursor: cursor({ id: "ses_httpapi_missing", time: 0, order: "desc", direction: "next" }),
-        search: "not-allowed-with-cursor",
+        cursor: "invalid",
       })}`,
       headers: ctx.headers(),
     }))
