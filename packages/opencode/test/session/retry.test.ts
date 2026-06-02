@@ -127,6 +127,89 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Provider is overloaded" })
   })
 
+  test("retries streamed upstream stream_read_error json envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 0,
+        error: {
+          type: "upstream_error",
+          code: "stream_read_error",
+          message: "stream_read_error",
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "stream_read_error" })
+  })
+
+  test("retries streamed server_is_overloaded json envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 2,
+        error: {
+          type: "service_unavailable_error",
+          code: "server_is_overloaded",
+          message: "Our servers are currently overloaded. Please try again later.",
+          param: null,
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Provider is overloaded" })
+  })
+
+  test("retries streamed server_error json envelopes with empty messages", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 2,
+        error: {
+          type: "server_error",
+          code: "server_error",
+          message: "",
+          param: null,
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Provider is overloaded" })
+  })
+
+  test("retries streamed upstream_error json envelopes with other codes", () => {
+    const message = "Upstream temporarily unavailable"
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 1,
+        error: {
+          type: "upstream_error",
+          code: "temporary_upstream_failure",
+          message,
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message })
+  })
+
+  test("retries streamed rate_limit_error json envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        sequence_number: 1,
+        error: {
+          type: "rate_limit_error",
+          code: "rate_limit_error",
+          message: "concurrency limit exceeded for account, please retry later",
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Rate Limited" })
+  })
+
   test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
@@ -435,5 +518,79 @@ describe("session.message-v2.fromError", () => {
     expect(SessionRetry.retryable(result, retryProvider)).toEqual({
       message: "An error occurred while processing your request.",
     })
+  })
+
+  test("converts OpenAI stream_read_error chunks to retryable APIError", () => {
+    const body = {
+      type: "error",
+      sequence_number: 0,
+      error: {
+        type: "upstream_error",
+        code: "stream_read_error",
+        message: "stream_read_error",
+      },
+    }
+    const result = MessageV2.fromError({ message: JSON.stringify(body) }, { providerID: ProviderV2.ID.make("openai") })
+
+    expect(SessionLegacy.APIError.isInstance(result)).toBe(true)
+    if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "stream_read_error" })
+  })
+
+  test("converts OpenAI server_is_overloaded stream chunks to retryable APIError", () => {
+    const body = {
+      type: "error",
+      sequence_number: 2,
+      error: {
+        type: "service_unavailable_error",
+        code: "server_is_overloaded",
+        message: "Our servers are currently overloaded. Please try again later.",
+        param: null,
+      },
+    }
+    const result = MessageV2.fromError({ message: JSON.stringify(body) }, { providerID: ProviderV2.ID.make("openai") })
+
+    expect(SessionLegacy.APIError.isInstance(result)).toBe(true)
+    if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: body.error.message })
+  })
+
+  test("converts wrapped OpenAI stream errors from Error.message to retryable APIError", () => {
+    const body = {
+      type: "error",
+      sequence_number: 0,
+      error: {
+        type: "upstream_error",
+        code: "stream_read_error",
+        message: "stream_read_error",
+      },
+    }
+    const result = MessageV2.fromError(new Error(JSON.stringify(body)), { providerID: ProviderV2.ID.make("openai") })
+
+    expect(SessionLegacy.APIError.isInstance(result)).toBe(true)
+    if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "stream_read_error" })
+  })
+
+  test("extracts embedded OpenAI stream errors from validation wrapper text", () => {
+    const body = {
+      type: "error",
+      sequence_number: 1,
+      error: {
+        type: "rate_limit_error",
+        code: "rate_limit_error",
+        message: "concurrency limit exceeded for account, please retry later",
+      },
+    }
+    const wrapped = `Type validation failed: Value: ${JSON.stringify(body)}`
+    const result = MessageV2.fromError(new Error(wrapped), { providerID: ProviderV2.ID.make("openai") })
+
+    expect(SessionLegacy.APIError.isInstance(result)).toBe(true)
+    if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "Rate Limited" })
   })
 })

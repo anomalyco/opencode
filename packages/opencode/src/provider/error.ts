@@ -131,15 +131,94 @@ export type ParsedStreamError =
       responseBody: string
     }
 
-export function parseStreamError(input: unknown): ParsedStreamError | undefined {
+type StreamErrorRecord = Record<string, unknown>
+
+function streamEnvelopeMessage(body: StreamErrorRecord): string {
+  const nested = body.error
+  if (!nested || typeof nested !== "object") return "Provider is overloaded"
+  const record = nested as StreamErrorRecord
+  if (typeof record.message === "string" && record.message.trim() !== "") return record.message
+  if (typeof record.code === "string" && record.code.trim() !== "") return record.code
+  if (typeof record.type === "string" && record.type.trim() !== "") return record.type
+  return "Provider is overloaded"
+}
+
+function streamEnvelopeFields(body: StreamErrorRecord) {
+  const nested = body.error
+  if (!nested || typeof nested !== "object") {
+    return { code: "", type: "" }
+  }
+  const record = nested as StreamErrorRecord
+  return {
+    code: typeof record.code === "string" ? record.code : "",
+    type: typeof record.type === "string" ? record.type : "",
+  }
+}
+
+function extractStreamEnvelope(value: string): StreamErrorRecord | undefined {
+  const direct = json(value)
+  if (direct?.type === "error") return direct as StreamErrorRecord
+
+  const marker = value.indexOf('"type":"error"')
+  const markerSpaced = value.indexOf('"type": "error"')
+  const start = marker === -1 ? markerSpaced : marker
+  if (start === -1) return undefined
+
+  const open = value.lastIndexOf("{", start)
+  if (open === -1) return undefined
+
+  const slice = value.slice(open)
+  const parsed = json(slice)
+  if (parsed?.type === "error") return parsed as StreamErrorRecord
+  return undefined
+}
+
+function normalizeStreamEnvelope(input: unknown): StreamErrorRecord | undefined {
+  if (typeof input === "string") {
+    return (json(input) as StreamErrorRecord | undefined) ?? extractStreamEnvelope(input)
+  }
+
   const raw = json(input)
-  const body = typeof raw?.message === "string" ? (json(raw.message) ?? raw) : raw
+  if (!raw) return undefined
+  if (raw.type === "error") return raw as StreamErrorRecord
+  if (typeof raw.message === "string") {
+    return (json(raw.message) as StreamErrorRecord | undefined) ?? extractStreamEnvelope(raw.message)
+  }
+  return undefined
+}
+
+function isTransientOpenAIStreamEnvelope(body: StreamErrorRecord): boolean {
+  const { code, type } = streamEnvelopeFields(body)
+  if (
+    code === "server_error" ||
+    code === "server_is_overloaded" ||
+    code === "stream_read_error" ||
+    code === "rate_limit_error"
+  ) {
+    return true
+  }
+  if (
+    type === "server_error" ||
+    type === "upstream_error" ||
+    type === "service_unavailable_error" ||
+    type === "rate_limit_error"
+  ) {
+    return true
+  }
+  if (code.includes("rate_limit") || code.includes("overloaded") || code.includes("unavailable")) {
+    return true
+  }
+  return false
+}
+
+export function parseStreamError(input: unknown): ParsedStreamError | undefined {
+  const body = normalizeStreamEnvelope(input)
   if (!body) return
 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
 
-  switch (body?.error?.code) {
+  switch (streamEnvelopeFields(body).code) {
     case "context_length_exceeded":
       return {
         type: "context_overflow",
@@ -163,18 +242,29 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
     case "invalid_prompt":
       return {
         type: "api_error",
-        message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
+        message: streamEnvelopeMessage(body) === "Provider is overloaded" ? "Invalid prompt." : streamEnvelopeMessage(body),
         isRetryable: false,
         responseBody,
       }
     case "server_is_overloaded":
     case "server_error":
+    case "stream_read_error":
+    case "rate_limit_error":
       return {
         type: "api_error",
-        message: typeof body?.error?.message === "string" ? body?.error?.message : "Server error.",
+        message: streamEnvelopeMessage(body),
         isRetryable: true,
         responseBody,
       }
+  }
+
+  if (!isTransientOpenAIStreamEnvelope(body)) return undefined
+
+  return {
+    type: "api_error",
+    message: streamEnvelopeMessage(body),
+    isRetryable: true,
+    responseBody,
   }
 }
 

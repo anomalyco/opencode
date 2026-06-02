@@ -137,16 +137,35 @@ export function retryable(error: Err, provider: string) {
 
   const json = parseJSON(msg)
   if (!json || typeof json !== "object") return undefined
+  const nestedError =
+    "error" in json && typeof json.error === "object" && json.error !== null
+      ? (json.error as Record<string, unknown>)
+      : undefined
   const code = typeof json.code === "string" ? json.code : ""
+  const nestedCode = typeof nestedError?.code === "string" ? nestedError.code : ""
+  const nestedType = typeof nestedError?.type === "string" ? nestedError.type : ""
+  const nestedMessage = typeof nestedError?.message === "string" ? nestedError.message : undefined
+  const codes = [code, nestedCode, nestedType]
 
-  if (json.type === "error" && json.error?.type === "too_many_requests") {
+  if (json.type === "error" && nestedType === "too_many_requests") {
     return { message: "Too Many Requests" }
   }
-  if (code.includes("exhausted") || code.includes("unavailable")) {
+  if (codes.some((value) => value.includes("exhausted") || value.includes("unavailable") || value.includes("overloaded"))) {
     return { message: "Provider is overloaded" }
   }
-  if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
+  if (json.type === "error" && codes.some((value) => value.includes("rate_limit") || value.includes("too_many_requests"))) {
     return { message: "Rate Limited" }
+  }
+  if (
+    json.type === "error" &&
+    (nestedType === "server_error" ||
+      nestedCode === "server_error" ||
+      nestedType === "upstream_error" ||
+      nestedCode === "stream_read_error" ||
+      nestedType === "service_unavailable_error" ||
+      nestedCode === "server_is_overloaded")
+  ) {
+    return { message: nestedMessage?.trim() ? nestedMessage : "Provider is overloaded" }
   }
   return undefined
 }

@@ -1442,6 +1442,51 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("serializes OpenAI response stream_read_error stream chunks as retryable APIError", () => {
+    const body = {
+      type: "error",
+      sequence_number: 0,
+      error: {
+        type: "upstream_error",
+        code: "stream_read_error",
+        message: "stream_read_error",
+      },
+    }
+    const result = MessageV2.fromError({ message: JSON.stringify(body) }, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: body.error.message,
+        isRetryable: true,
+        responseBody: JSON.stringify(body),
+      },
+    })
+  })
+
+  test("serializes OpenAI response server_is_overloaded stream chunks as retryable APIError", () => {
+    const body = {
+      type: "error",
+      sequence_number: 2,
+      error: {
+        type: "service_unavailable_error",
+        code: "server_is_overloaded",
+        message: "Our servers are currently overloaded. Please try again later.",
+        param: null,
+      },
+    }
+    const result = MessageV2.fromError({ message: JSON.stringify(body) }, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: body.error.message,
+        isRetryable: true,
+        responseBody: JSON.stringify(body),
+      },
+    })
+  })
+
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",
