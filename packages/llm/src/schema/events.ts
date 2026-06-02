@@ -184,6 +184,10 @@ export const StepFinish = Schema.Struct({
   reason: FinishReason,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
+  // HTTP response headers from the LLM provider. Used by plugins (e.g. LiteLLM
+  // proxy) to read routing metadata such as x-litellm-model-api-base that
+  // identifies the actual model selected by an auto-router behind the proxy.
+  responseHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 

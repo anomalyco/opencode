@@ -104,6 +104,10 @@ export function toLLMEvents(
             reason: finishReason(event.finishReason),
             usage: usage(event.usage),
             providerMetadata: metadata,
+            // Capture HTTP response headers so plugins can read provider-specific
+            // routing metadata (e.g. x-litellm-model-api-base from a LiteLLM
+            // auto-router) that is only available in the response headers.
+            responseHeaders: event.response?.headers as Record<string, string> | undefined,
           }),
         ]
       })

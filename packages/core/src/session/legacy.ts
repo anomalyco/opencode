@@ -477,6 +477,10 @@ export const Assistant = Schema.Struct({
   structured: Schema.optional(Schema.Any),
   variant: Schema.optional(Schema.String),
   finish: Schema.optional(Schema.String),
+  // HTTP response headers from the LLM provider. Used by plugins (e.g. LiteLLM
+  // proxy) to read routing metadata such as x-litellm-model-api-base that
+  // identifies the actual model selected by an auto-router behind the proxy.
+  responseHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }).annotate({ identifier: "AssistantMessage" })
 export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
   error?: AssistantError
