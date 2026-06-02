@@ -13,6 +13,7 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
+import { mergeByID } from "@/utils/sorted-list"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -39,12 +40,6 @@ const isNotFound = (error: unknown) =>
   typeof error.cause === "object" &&
   error.cause !== null &&
   (error.cause as { status?: unknown }).status === 404
-
-function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
-  const map = new Map(a.map((item) => [item.id, item] as const))
-  for (const item of b) map.set(item.id, item)
-  return [...map.values()].sort((x, y) => cmp(x.id, y.id))
-}
 
 type OptimisticStore = {
   message: Record<string, Message[] | undefined>
@@ -334,7 +329,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         }
         const [store] = serverSync.child(input.directory, { bootstrap: false })
         const cached = input.mode === "prepend" ? (store.message[input.sessionID] ?? []) : []
-        const message = input.mode === "prepend" ? merge(cached, next.session) : next.session
+        const message = input.mode === "prepend" ? mergeByID(cached, next.session) : next.session
         batch(() => {
           input.setStore("message", input.sessionID, reconcile(message, { key: "id" }))
           for (const p of next.part) {

@@ -1,6 +1,5 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
+import type { ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
 import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -8,186 +7,37 @@ import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast } from "@/utils/toast"
-import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createEffect, createMemo, Match, onMount, Switch } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Link } from "@/components/link"
-import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useConnectProvider } from "./use-connect-provider"
 import { useLanguage } from "@/context/language"
-import { useProviders } from "@/hooks/use-providers"
 
 export function DialogConnectProvider(props: { provider: string }) {
-  const dialog = useDialog()
-  const serverSync = useServerSync()
-  const serverSDK = useServerSDK()
   const language = useLanguage()
-  const providers = useProviders()
-
-  const all = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
-  }
-
-  const alive = { value: true }
-  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
-
-  onCleanup(() => {
-    alive.value = false
-    if (timer.current === undefined) return
-    clearTimeout(timer.current)
-    timer.current = undefined
+  const flow = useConnectProvider(props.provider)
+  const provider = flow.provider
+  const screen = flow.screen
+  const selectedMethod = createMemo(() => {
+    const value = screen()
+    if (!("method" in value)) return
+    return value.method
   })
-
-  const provider = createMemo(
-    () => providers.all().get(props.provider) ?? serverSync.data.provider.all.get(props.provider)!,
-  )
-  const fallback = createMemo<ProviderAuthMethod[]>(() => [
-    {
-      type: "api" as const,
-      label: language.t("provider.connect.method.apiKey"),
-    },
-  ])
-  const [auth] = createResource(
-    () => props.provider,
-    async () => {
-      const cached = serverSync.data.provider_auth[props.provider]
-      if (cached) return cached
-      const res = await serverSDK.client.provider.auth()
-      if (!alive.value) return fallback()
-      serverSync.set("provider_auth", res.data ?? {})
-      return res.data?.[props.provider] ?? fallback()
-    },
-  )
-  const loading = createMemo(() => auth.loading && !serverSync.data.provider_auth[props.provider])
-  const methods = createMemo(() => auth.latest ?? serverSync.data.provider_auth[props.provider] ?? fallback())
-  const [store, setStore] = createStore({
-    methodIndex: undefined as undefined | number,
-    authorization: undefined as undefined | ProviderAuthAuthorization,
-    state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
-    error: undefined as string | undefined,
+  const methods = createMemo(() => {
+    const value = screen()
+    if (value.type !== "select") return []
+    return value.methods
   })
-
-  type Action =
-    | { type: "method.select"; index: number }
-    | { type: "method.reset" }
-    | { type: "auth.prompt" }
-    | { type: "auth.pending" }
-    | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
-    | { type: "auth.error"; error: string }
-
-  function dispatch(action: Action) {
-    setStore(
-      produce((draft) => {
-        if (action.type === "method.select") {
-          draft.methodIndex = action.index
-          draft.authorization = undefined
-          draft.state = undefined
-          draft.error = undefined
-          return
-        }
-        if (action.type === "method.reset") {
-          draft.methodIndex = undefined
-          draft.authorization = undefined
-          draft.state = undefined
-          draft.error = undefined
-          return
-        }
-        if (action.type === "auth.prompt") {
-          draft.state = "prompt"
-          draft.error = undefined
-          return
-        }
-        if (action.type === "auth.pending") {
-          draft.state = "pending"
-          draft.error = undefined
-          return
-        }
-        if (action.type === "auth.complete") {
-          draft.state = "complete"
-          draft.authorization = action.authorization
-          draft.error = undefined
-          return
-        }
-        draft.state = "error"
-        draft.error = action.error
-      }),
-    )
-  }
-
-  const method = createMemo(() => (store.methodIndex !== undefined ? methods().at(store.methodIndex!) : undefined))
+  const errorMessage = createMemo(() => {
+    const value = screen()
+    if (value.type !== "error") return ""
+    return value.message
+  })
 
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""
     if (value.type === "api") return language.t("provider.connect.method.apiKey")
     return value.label ?? ""
-  }
-
-  function formatError(value: unknown, fallback: string): string {
-    if (value && typeof value === "object" && "data" in value) {
-      const data = (value as { data?: { message?: unknown } }).data
-      if (typeof data?.message === "string" && data.message) return data.message
-    }
-    if (value && typeof value === "object" && "error" in value) {
-      const nested = formatError((value as { error?: unknown }).error, "")
-      if (nested) return nested
-    }
-    if (value && typeof value === "object" && "message" in value) {
-      const message = (value as { message?: unknown }).message
-      if (typeof message === "string" && message) return message
-    }
-    if (value instanceof Error && value.message) return value.message
-    if (typeof value === "string" && value) return value
-    return fallback
-  }
-
-  async function selectMethod(index: number, inputs?: Record<string, string>) {
-    if (timer.current !== undefined) {
-      clearTimeout(timer.current)
-      timer.current = undefined
-    }
-
-    const method = methods()[index]
-    dispatch({ type: "method.select", index })
-
-    if (method.type === "oauth") {
-      if (method.prompts?.length && !inputs) {
-        dispatch({ type: "auth.prompt" })
-        return
-      }
-      dispatch({ type: "auth.pending" })
-      const start = Date.now()
-      await serverSDK.client.provider.oauth
-        .authorize(
-          {
-            providerID: props.provider,
-            method: index,
-            inputs,
-          },
-          { throwOnError: true },
-        )
-        .then((x) => {
-          if (!alive.value) return
-          const elapsed = Date.now() - start
-          const delay = 1000 - elapsed
-
-          if (delay > 0) {
-            if (timer.current !== undefined) clearTimeout(timer.current)
-            timer.current = setTimeout(() => {
-              timer.current = undefined
-              if (!alive.value) return
-              dispatch({ type: "auth.complete", authorization: x.data! })
-            }, delay)
-            return
-          }
-          dispatch({ type: "auth.complete", authorization: x.data! })
-        })
-        .catch((e) => {
-          if (!alive.value) return
-          dispatch({ type: "auth.error", error: formatError(e, language.t("common.requestFailed")) })
-        })
-    }
   }
 
   function OAuthPromptsView() {
@@ -197,9 +47,9 @@ export function DialogConnectProvider(props: { provider: string }) {
     })
 
     const prompts = createMemo<NonNullable<ProviderAuthMethod["prompts"]>>(() => {
-      const value = method()
-      if (value?.type !== "oauth") return []
-      return value.prompts ?? []
+      const value = screen()
+      if (value.type !== "prompts") return []
+      return value.prompts
     })
     const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
       if (!prompt.when) return true
@@ -224,13 +74,12 @@ export function DialogConnectProvider(props: { provider: string }) {
     })
 
     async function next(index: number, value: Record<string, string>) {
-      if (store.methodIndex === undefined) return
       const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
       if (next !== -1) {
         setFormStore("index", next)
         return
       }
-      await selectMethod(store.methodIndex, value)
+      await flow.submitPrompts(value)
     }
 
     async function handleSubmit(e: SubmitEvent) {
@@ -322,39 +171,12 @@ export function DialogConnectProvider(props: { provider: string }) {
   let auto = false
   createEffect(() => {
     if (auto) return
-    if (loading()) return
-    if (methods().length === 1) {
+    const value = screen()
+    if (value.type === "select" && value.methods.length === 1) {
       auto = true
-      void selectMethod(0)
+      void flow.chooseMethod(0)
     }
   })
-
-  async function complete() {
-    await serverSDK.client.global.dispose()
-    dialog.close()
-    showToast({
-      variant: "success",
-      icon: "circle-check",
-      title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-      description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
-    })
-  }
-
-  function goBack() {
-    if (methods().length === 1) {
-      all()
-      return
-    }
-    if (store.authorization) {
-      dispatch({ type: "method.reset" })
-      return
-    }
-    if (store.methodIndex !== undefined) {
-      dispatch({ type: "method.reset" })
-      return
-    }
-    all()
-  }
 
   function MethodSelection() {
     return (
@@ -371,7 +193,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             key={(m) => m?.label}
             onSelect={async (selected, index) => {
               if (!selected) return
-              void selectMethod(index)
+              void flow.chooseMethod(index)
             }}
           >
             {(i) => (
@@ -407,14 +229,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      await serverSDK.client.auth.set({
-        providerID: props.provider,
-        auth: {
-          type: "api",
-          key: apiKey,
-        },
-      })
-      await complete()
+      await flow.submitApiKey(apiKey)
     }
 
     return (
@@ -464,6 +279,11 @@ export function DialogConnectProvider(props: { provider: string }) {
       value: "",
       error: undefined as string | undefined,
     })
+    const oauth = createMemo(() => {
+      const value = screen()
+      if (value.type !== "oauthCode") return
+      return value
+    })
 
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
@@ -478,33 +298,24 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      const result = await serverSDK.client.provider.oauth
-        .callback({
-          providerID: props.provider,
-          method: store.methodIndex,
-          code,
-        })
-        .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
-        .catch((error) => ({ ok: false as const, error }))
-      if (result.ok) {
-        await complete()
-        return
-      }
-      setFormStore("error", formatError(result.error, language.t("provider.connect.oauth.code.invalid")))
+      await flow.completeOAuth(code, {
+        fallback: language.t("provider.connect.oauth.code.invalid"),
+        onError: (error) => setFormStore("error", error),
+      })
     }
 
     return (
       <div class="flex flex-col gap-6">
         <div class="text-14-regular text-text-base">
           {language.t("provider.connect.oauth.code.visit.prefix")}
-          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.code.visit.link")}</Link>
+          <Link href={oauth()?.authorization.url ?? ""}>{language.t("provider.connect.oauth.code.visit.link")}</Link>
           {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
         </div>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
           <TextField
             autofocus
             type="text"
-            label={language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
+            label={language.t("provider.connect.oauth.code.label", { method: oauth()?.method.label ?? "" })}
             placeholder={language.t("provider.connect.oauth.code.placeholder")}
             name="code"
             value={formStore.value}
@@ -521,47 +332,27 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   function OAuthAutoView() {
-    const code = createMemo(() => {
-      const instructions = store.authorization?.instructions
-      if (instructions?.includes(":")) {
-        return instructions.split(":").pop()?.trim()
-      }
-      return instructions
+    const oauth = createMemo(() => {
+      const value = screen()
+      if (value.type !== "oauthAuto") return
+      return value
     })
 
     onMount(() => {
-      void (async () => {
-        const result = await serverSDK.client.provider.oauth
-          .callback({
-            providerID: props.provider,
-            method: store.methodIndex,
-          })
-          .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
-          .catch((error) => ({ ok: false as const, error }))
-
-        if (!alive.value) return
-
-        if (!result.ok) {
-          const message = formatError(result.error, language.t("common.requestFailed"))
-          dispatch({ type: "auth.error", error: message })
-          return
-        }
-
-        await complete()
-      })()
+      void flow.completeOAuth()
     })
 
     return (
       <div class="flex flex-col gap-6">
         <div class="text-14-regular text-text-base">
           {language.t("provider.connect.oauth.auto.visit.prefix")}
-          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
+          <Link href={oauth()?.authorization.url ?? ""}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
           {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
         </div>
         <TextField
           label={language.t("provider.connect.oauth.auto.confirmationCode")}
           class="font-mono"
-          value={code()}
+          value={oauth()?.code}
           readOnly
           copyable
         />
@@ -580,7 +371,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           tabIndex={-1}
           icon="arrow-left"
           variant="ghost"
-          onClick={goBack}
+          onClick={flow.goBack}
           aria-label={language.t("common.goBack")}
         />
       }
@@ -590,7 +381,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
           <div class="text-16-medium text-text-strong">
             <Switch>
-              <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
+              <Match when={props.provider === "anthropic" && selectedMethod()?.label?.toLowerCase().includes("max")}>
                 {language.t("provider.connect.title.anthropicProMax")}
               </Match>
               <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
@@ -598,9 +389,9 @@ export function DialogConnectProvider(props: { provider: string }) {
           </div>
         </div>
         <div class="px-2.5 pb-10 flex flex-col gap-6">
-          <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
+          <div onKeyDown={handleKey} tabIndex={0} autofocus={screen().type === "select" ? true : undefined}>
             <Switch>
-              <Match when={loading()}>
+              <Match when={screen().type === "loading"}>
                 <div class="text-14-regular text-text-base">
                   <div class="flex items-center gap-x-2">
                     <Spinner />
@@ -608,10 +399,10 @@ export function DialogConnectProvider(props: { provider: string }) {
                   </div>
                 </div>
               </Match>
-              <Match when={store.methodIndex === undefined}>
+              <Match when={screen().type === "select"}>
                 <MethodSelection />
               </Match>
-              <Match when={store.state === "pending"}>
+              <Match when={screen().type === "pending"}>
                 <div class="text-14-regular text-text-base">
                   <div class="flex items-center gap-x-2">
                     <Spinner />
@@ -619,29 +410,25 @@ export function DialogConnectProvider(props: { provider: string }) {
                   </div>
                 </div>
               </Match>
-              <Match when={store.state === "prompt"}>
+              <Match when={screen().type === "prompts"}>
                 <OAuthPromptsView />
               </Match>
-              <Match when={store.state === "error"}>
+              <Match when={screen().type === "error"}>
                 <div class="text-14-regular text-text-base">
                   <div class="flex items-center gap-x-2">
                     <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                    <span>{language.t("provider.connect.status.failed", { error: store.error ?? "" })}</span>
+                    <span>{language.t("provider.connect.status.failed", { error: errorMessage() })}</span>
                   </div>
                 </div>
               </Match>
-              <Match when={method()?.type === "api"}>
+              <Match when={screen().type === "api"}>
                 <ApiAuthView />
               </Match>
-              <Match when={method()?.type === "oauth"}>
-                <Switch>
-                  <Match when={store.authorization?.method === "code"}>
-                    <OAuthCodeView />
-                  </Match>
-                  <Match when={store.authorization?.method === "auto"}>
-                    <OAuthAutoView />
-                  </Match>
-                </Switch>
+              <Match when={screen().type === "oauthCode"}>
+                <OAuthCodeView />
+              </Match>
+              <Match when={screen().type === "oauthAuto"}>
+                <OAuthAutoView />
               </Match>
             </Switch>
           </div>
