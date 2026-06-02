@@ -9,7 +9,12 @@ type OpenApiResponse = {
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
-  readonly parameters?: ReadonlyArray<{ readonly name: string; readonly in: string }>
+  readonly parameters?: ReadonlyArray<{
+    readonly name: string
+    readonly in: string
+    readonly required?: boolean
+    readonly schema?: { readonly type?: string }
+  }>
   readonly responses?: Record<string, OpenApiResponse>
   readonly security?: unknown
 }
@@ -50,6 +55,19 @@ describe("PublicApi OpenAPI v2 errors", () => {
     for (const route of v2Operations(spec)) {
       expect(route.operation.responses?.["401"], `${route.method.toUpperCase()} ${route.path}`).toBeDefined()
       expect(route.operation.security, `${route.method.toUpperCase()} ${route.path}`).toEqual([])
+    }
+  })
+
+  test("documents optional project reference aliases for filesystem reads and lists", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of ["/api/fs/read", "/api/fs/list"]) {
+      expect(spec.paths[path]?.get?.parameters, path).toContainEqual({
+        in: "query",
+        name: "reference",
+        required: false,
+        schema: { type: "string" },
+      })
     }
   })
 

@@ -8,11 +8,13 @@ import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./loc
 const ReadQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: RelativePath,
+  reference: Schema.String.pipe(Schema.optional),
 })
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: RelativePath.pipe(Schema.optional),
+  reference: Schema.String.pipe(Schema.optional),
 })
 
 export const FileSystemGroup = HttpApiGroup.make("v2.fs")
