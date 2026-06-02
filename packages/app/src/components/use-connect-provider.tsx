@@ -1,5 +1,5 @@
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
-import { createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { showToast } from "@/utils/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
@@ -26,7 +26,7 @@ type ConnectScreen =
   | { type: "oauthAuto"; method: ProviderAuthMethod; authorization: ProviderAuthAuthorization; code?: string }
   | { type: "error"; method?: ProviderAuthMethod; message: string }
 
-export function useConnectProvider(providerID: string) {
+export function useConnectProvider(providerID: string, options?: { back?: "providers" | "settings" | "settings-v2" }) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
@@ -65,7 +65,11 @@ export function useConnectProvider(providerID: string) {
     if (loading()) return { type: "loading" }
 
     const current = state()
-    if (current.type === "select") return { type: "select", methods: methods() }
+    if (current.type === "select") {
+      const available = methods()
+      if (available.length !== 1) return { type: "select", methods: available }
+      return screenForMethod(available[0])
+    }
     if (current.type === "error") {
       return {
         type: "error",
@@ -76,9 +80,9 @@ export function useConnectProvider(providerID: string) {
 
     const selected = methods().at(current.methodIndex)
     if (!selected) return { type: "select", methods: methods() }
-    if (current.type === "api") return { type: "api", method: selected }
-    if (current.type === "pending") return { type: "pending", method: selected }
-    if (current.type === "prompt") return { type: "prompts", method: selected, prompts: selected.prompts ?? [] }
+    if (current.type === "api" || current.type === "pending" || current.type === "prompt") {
+      return screenForMethod(selected, current.type)
+    }
     if (current.type === "authorized") {
       if (current.authorization.method === "code") {
         return { type: "oauthCode", method: selected, authorization: current.authorization }
@@ -99,10 +103,26 @@ export function useConnectProvider(providerID: string) {
     timer.current = undefined
   }
 
-  const all = () => {
+  const showProviders = () => {
     void import("./dialog-select-provider").then((x) => {
       dialog.show(() => <x.DialogSelectProvider />)
     })
+  }
+
+  const goBackTarget = () => {
+    if (options?.back === "settings") {
+      void import("./dialog-settings").then((x) => {
+        dialog.show(() => <x.DialogSettings defaultTab="providers" />)
+      })
+      return
+    }
+    if (options?.back === "settings-v2") {
+      void import("./settings-v2/dialog-settings-v2").then((x) => {
+        dialog.show(() => <x.DialogSettings defaultTab="providers" />)
+      })
+      return
+    }
+    showProviders()
   }
 
   const complete = async () => {
@@ -130,6 +150,19 @@ export function useConnectProvider(providerID: string) {
     clearTimer()
   })
 
+  let auto = false
+  createEffect(() => {
+    if (auto || loading()) return
+    const current = state()
+    if (current.type !== "select") return
+    const available = methods()
+    if (available.length !== 1) return
+    const selected = available[0]
+    if (selected.type !== "oauth" || selected.prompts?.length) return
+    auto = true
+    void authorize(0)
+  })
+
   async function chooseMethod(index: number) {
     clearTimer()
 
@@ -152,13 +185,14 @@ export function useConnectProvider(providerID: string) {
 
   async function submitPrompts(inputs: Record<string, string>) {
     const current = state()
-    if (current.type !== "prompt") return false
-    const selected = methods().at(current.methodIndex)
+    const index = current.type === "prompt" ? current.methodIndex : current.type === "select" && methods().length === 1 ? 0 : undefined
+    if (index === undefined) return false
+    const selected = methods().at(index)
     if (selected?.type !== "oauth") {
-      setState({ type: "api", methodIndex: current.methodIndex, metadata: inputs })
+      setState({ type: "api", methodIndex: index, metadata: inputs })
       return true
     }
-    await authorize(current.methodIndex, inputs)
+    await authorize(index, inputs)
     return true
   }
 
@@ -262,15 +296,11 @@ export function useConnectProvider(providerID: string) {
   }
 
   function goBack() {
-    if (methods().length === 1) {
-      all()
-      return
-    }
-    if (methodIndex() !== undefined) {
+    if (methodIndex() !== undefined && methods().length > 1) {
       resetMethod()
       return
     }
-    all()
+    goBackTarget()
   }
 
   return {
@@ -287,4 +317,13 @@ export function useConnectProvider(providerID: string) {
 function parseConfirmationCode(instructions: string) {
   if (instructions.includes(":")) return instructions.split(":").pop()?.trim()
   return instructions
+}
+
+function screenForMethod(method: ProviderAuthMethod, state?: "api" | "pending" | "prompt"): ConnectScreen {
+  if (state === "pending") return { type: "pending", method }
+  if (state === "prompt") return { type: "prompts", method, prompts: method.prompts ?? [] }
+  if (state === "api") return { type: "api", method }
+  if (method.prompts?.length) return { type: "prompts", method, prompts: method.prompts }
+  if (method.type === "api") return { type: "api", method }
+  return { type: "pending", method }
 }

@@ -209,7 +209,7 @@ export const SettingsProvidersV2: Component = () => {
                     variant="neutral"
                     icon="plus"
                     onClick={() => {
-                      dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                      dialog.show(() => <DialogConnectProvider provider={item.id} back="settings-v2" />)
                     }}
                   >
                     {language.t("common.connect")}

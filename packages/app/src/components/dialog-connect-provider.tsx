@@ -7,15 +7,15 @@ import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { createEffect, createMemo, Match, onMount, Switch } from "solid-js"
+import { createMemo, Match, onMount, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useConnectProvider } from "./use-connect-provider"
 import { useLanguage } from "@/context/language"
 
-export function DialogConnectProvider(props: { provider: string }) {
+export function DialogConnectProvider(props: { provider: string; back?: "providers" | "settings" | "settings-v2" }) {
   const language = useLanguage()
-  const flow = useConnectProvider(props.provider)
+  const flow = useConnectProvider(props.provider, { back: props.back })
   const provider = flow.provider
   const screen = flow.screen
   const selectedMethod = createMemo(() => {
@@ -167,16 +167,6 @@ export function DialogConnectProvider(props: { provider: string }) {
     if (e.key === "Escape") return
     listRef?.onKeyDown(e)
   }
-
-  let auto = false
-  createEffect(() => {
-    if (auto) return
-    const value = screen()
-    if (value.type === "select" && value.methods.length === 1) {
-      auto = true
-      void flow.chooseMethod(0)
-    }
-  })
 
   function MethodSelection() {
     return (
@@ -366,6 +356,8 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   return (
     <Dialog
+      fit
+      class="connect-provider-dialog"
       title={
         <IconButton
           tabIndex={-1}
@@ -388,7 +380,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             </Switch>
           </div>
         </div>
-        <div class="px-2.5 pb-10 flex flex-col gap-6">
+        <div class="px-2.5 pb-4 flex flex-col gap-6">
           <div onKeyDown={handleKey} tabIndex={0} autofocus={screen().type === "select" ? true : undefined}>
             <Switch>
               <Match when={screen().type === "loading"}>

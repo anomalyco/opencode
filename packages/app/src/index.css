@@ -126,6 +126,16 @@
     width: 100%;
   }
 
+  .connect-provider-dialog {
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+
+  .connect-provider-dialog [data-slot="dialog-body"] {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
   @container getting-started (min-width: 17rem) {
     [data-component="getting-started-actions"] {
       flex-direction: row;

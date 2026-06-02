@@ -10,7 +10,9 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
 
-export const DialogSettings: Component = () => {
+type SettingsTab = "general" | "shortcuts" | "providers" | "models"
+
+export const DialogSettings: Component<{ defaultTab?: SettingsTab }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
@@ -19,7 +21,7 @@ export const DialogSettings: Component = () => {
       <TabsV2
         orientation="vertical"
         variant="settings"
-        defaultValue="general"
+        defaultValue={props.defaultTab ?? "general"}
         class="settings-v2"
         data-component="settings-v2"
       >
