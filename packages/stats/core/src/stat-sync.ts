@@ -56,6 +56,14 @@ export const syncStats: () => Effect.Effect<
     concurrency: "unbounded",
     discard: true,
   })
+  yield* Effect.all(
+    [
+      modelStats.deleteRetiredDimensions(modelRows),
+      providerStats.deleteRetiredDimensions(providerRows),
+      geoStats.deleteRetiredDimensions(geoRows),
+    ],
+    { concurrency: "unbounded", discard: true },
+  )
 
   yield* Effect.logInfo(
     `stats sync complete ${JSON.stringify({
