@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "../../src/config/config"
@@ -25,11 +25,11 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const it = testEffect(
-  Layer.mergeAll(AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer, referenceLayer()),
+  Layer.mergeAll(FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer, referenceLayer()),
 )
 const references = testEffect(
   Layer.mergeAll(
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Git.defaultLayer,
     referenceLayer({ experimentalReferences: true }),
@@ -69,11 +69,11 @@ const git = Effect.fn("ReferenceTest.git")(function* (cwd: string, args: string[
 })
 
 const waitForContent = (
-  fs: AppFileSystem.Interface,
+  fs: FSUtil.Interface,
   file: string,
   content: string,
   attempts = 50,
-): Effect.Effect<void, AppFileSystem.Error> =>
+): Effect.Effect<void, FSUtil.Error> =>
   Effect.gen(function* () {
     if ((yield* fs.readFileStringSafe(file)) === content) return
     if (attempts <= 0) throw new Error(`timed out waiting for ${file}`)
@@ -201,7 +201,7 @@ describe("reference", () => {
     provideTmpdirInstance(
       (_dir) =>
         Effect.gen(function* () {
-          const fs = yield* AppFileSystem.Service
+          const fs = yield* FSUtil.Service
           const cache = path.join(Global.Path.repos, "github.com", "opencode-reference-test", "repo")
           yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
           yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
@@ -245,7 +245,7 @@ describe("reference", () => {
 
   references.live("refreshes configured git references on new instance init", () =>
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const cache = path.join(Global.Path.repos, "github.com", "opencode-reference-refresh", "repo")
       yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
       yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))

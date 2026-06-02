@@ -3,9 +3,10 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
-import { LocationFileSystem } from "@opencode-ai/core/location-filesystem"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
 import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { Repository } from "@opencode-ai/core/repository"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
@@ -23,10 +24,11 @@ const inertReferences = ProjectReference.Service.of({
 
 function provide(directory: string, references = inertReferences) {
   return Effect.provide(
-    LocationFileSystem.layer.pipe(
+    FileSystem.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
-          AppFileSystem.defaultLayer,
+          FSUtil.defaultLayer,
+          Ripgrep.defaultLayer,
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
           Layer.succeed(ProjectReference.Service, references),
         ),
@@ -42,13 +44,13 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
   ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 }
 
-describe("LocationFileSystem", () => {
+describe("FileSystem", () => {
   it.live("reads text and binary files", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "hello.txt"), "hello"))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2])))
-        const service = yield* LocationFileSystem.Service
+        const service = yield* FileSystem.Service
 
         expect(yield* service.read({ path: RelativePath.make("hello.txt") })).toEqual({
           type: "text",
@@ -70,7 +72,7 @@ describe("LocationFileSystem", () => {
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "README.md"), "# Test"))
-        const service = yield* LocationFileSystem.Service
+        const service = yield* FileSystem.Service
 
         const entries = yield* service.list()
         expect(entries.map(({ uri: _uri, ...entry }) => entry)).toEqual([
@@ -99,10 +101,46 @@ describe("LocationFileSystem", () => {
   it.live("rejects paths outside the location", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
-        const service = yield* LocationFileSystem.Service
+        const service = yield* FileSystem.Service
         expect(
           Exit.isFailure(yield* service.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)),
         ).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("finds files and directories", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "src")))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "src", "index.ts"), "const needle = true\n"))
+        const service = yield* FileSystem.Service
+
+        expect((yield* service.find({ query: "index", type: "file" })).map((item) => item.path)).toEqual([
+          RelativePath.make(path.join("src", "index.ts")),
+        ])
+        expect((yield* service.find({ query: "src", type: "directory" })).map((item) => item.path)).toEqual([
+          RelativePath.make("src"),
+        ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("greps file contents", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "index.ts"), "const needle = true\n"))
+        const service = yield* FileSystem.Service
+
+        expect(yield* service.grep({ pattern: "needle" })).toEqual([
+          {
+            path: RelativePath.make("index.ts"),
+            lines: "const needle = true\n",
+            line: 1,
+            offset: 0,
+            submatches: [{ text: "needle", start: 6, end: 12 }],
+          },
+        ])
       }).pipe(provide(directory)),
     ),
   )
@@ -115,7 +153,7 @@ describe("LocationFileSystem", () => {
           await fs.mkdir(docs)
           await fs.writeFile(path.join(docs, "README.md"), "docs")
         })
-        const service = yield* LocationFileSystem.Service
+        const service = yield* FileSystem.Service
 
         expect(yield* service.read({ reference: "docs", path: RelativePath.make("README.md") })).toMatchObject({
           type: "text",
@@ -136,7 +174,7 @@ describe("LocationFileSystem", () => {
           await fs.writeFile(path.join(docs, "README.md"), "docs")
         })
         expect(
-          yield* (yield* LocationFileSystem.Service).read({ reference: "sdk", path: RelativePath.make("README.md") }),
+          yield* (yield* FileSystem.Service).read({ reference: "sdk", path: RelativePath.make("README.md") }),
         ).toMatchObject({ content: "docs" })
         expect(ensured).toEqual([docs])
       }).pipe(
@@ -164,7 +202,7 @@ describe("LocationFileSystem", () => {
       const docs = path.join(directory, "docs")
       return Effect.gen(function* () {
         yield* Effect.promise(() => fs.mkdir(docs))
-        const service = yield* LocationFileSystem.Service
+        const service = yield* FileSystem.Service
         expect(Exit.isFailure(yield* service.list({ reference: "unknown" }).pipe(Effect.exit))).toBe(true)
         expect(Exit.isFailure(yield* service.list({ reference: "invalid" }).pipe(Effect.exit))).toBe(true)
         expect(
@@ -188,7 +226,7 @@ describe("LocationFileSystem", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         expect(
-          Exit.isFailure(yield* (yield* LocationFileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit)),
+          Exit.isFailure(yield* (yield* FileSystem.Service).list({ reference: "docs" }).pipe(Effect.exit)),
         ).toBe(true)
       }).pipe(provide(directory)),
     ),
@@ -207,7 +245,7 @@ describe("LocationFileSystem", () => {
         })
         expect(
           Exit.isFailure(
-            yield* (yield* LocationFileSystem.Service)
+            yield* (yield* FileSystem.Service)
               .read({ reference: "docs", path: RelativePath.make("link.txt") })
               .pipe(Effect.exit),
           ),

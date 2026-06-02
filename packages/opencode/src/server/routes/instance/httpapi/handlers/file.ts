@@ -1,14 +1,24 @@
 import * as InstanceState from "@/effect/instance-state"
-import { File } from "@/file"
-import { Ripgrep } from "@/file/ripgrep"
-import { Effect } from "effect"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
+import { Effect, Layer } from "effect"
+import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 
 export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handlers) =>
   Effect.gen(function* () {
-    const svc = yield* File.Service
     const ripgrep = yield* Ripgrep.Service
+    const locations = yield* LocationServiceMap
+
+    const filesystem = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+      return yield* effect.pipe(
+        Effect.provide(locations.get({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+      )
+    })
 
     const findText = Effect.fn("FileHttpApi.findText")(function* (ctx: { query: { pattern: string } }) {
       return (yield* ripgrep
@@ -19,12 +29,15 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
       query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
     }) {
-      return yield* svc.search({
-        query: ctx.query.query,
-        limit: ctx.query.limit ?? 10,
-        dirs: ctx.query.dirs !== "false",
-        type: ctx.query.type,
-      })
+      return (yield* filesystem(
+        FileSystem.Service.use((fs) =>
+          fs.find({
+            query: ctx.query.query,
+            limit: ctx.query.limit ?? 10,
+            type: ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined),
+          }),
+        ),
+      )).map((item) => item.path)
     })
 
     const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
@@ -32,15 +45,42 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     })
 
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
-      return yield* svc.list(ctx.query.path)
+      const directory = (yield* InstanceState.context).directory
+      return yield* filesystem(
+        FileSystem.Service.use((fs) =>
+          fs.list({ path: RelativePath.make(ctx.query.path) }).pipe(
+            Effect.map((items) =>
+              items.map((item) => ({
+                name: path.basename(item.path),
+                path: item.path,
+                absolute: path.join(directory, item.path),
+                type: item.type,
+                ignored: fs.isIgnored(item.path, item.type),
+              })),
+            ),
+          ),
+        ),
+      )
     })
 
     const content = Effect.fn("FileHttpApi.content")(function* (ctx: { query: { path: string } }) {
-      return yield* svc.read(ctx.query.path)
+      const directory = (yield* InstanceState.context).directory
+      const file = path.resolve(directory, ctx.query.path)
+      if (!FSUtil.contains(directory, file)) return yield* Effect.die(new Error("Path escapes the location"))
+      if (!(yield* FSUtil.Service.use((fs) => fs.existsSafe(file)))) return { type: "text" as const, content: "" }
+      return yield* filesystem(
+        FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
+      ).pipe(
+        Effect.map((item) => ({
+          type: item.type,
+          content: item.type === "text" ? item.content.trim() : item.content,
+          ...(item.type === "binary" ? { encoding: item.encoding, mimeType: item.mime } : {}),
+        })),
+      )
     })
 
     const status = Effect.fn("FileHttpApi.status")(function* () {
-      return yield* svc.status()
+      return []
     })
 
     return handlers
@@ -51,4 +91,4 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("content", content)
       .handle("status", status)
   }),
-)
+).pipe(Layer.provide(LocationServiceMap.layer))

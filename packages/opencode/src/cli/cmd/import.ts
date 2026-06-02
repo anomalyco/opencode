@@ -9,7 +9,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 
@@ -98,7 +98,7 @@ export const ImportCommand = effectCmd({
 
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
   const share = yield* ShareNext.Service
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   const { db } = yield* Database.Service
 
   let exportData: ExportData | undefined

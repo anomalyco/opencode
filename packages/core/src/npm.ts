@@ -4,7 +4,7 @@ import path from "path"
 import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
 import { makeRuntime } from "./effect/runtime"
@@ -70,7 +70,7 @@ interface ArboristTree {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const afs = yield* AppFileSystem.Service
+    const afs = yield* FSUtil.Service
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
@@ -246,7 +246,7 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(
   Layer.provide(EffectFlock.layer),
-  Layer.provide(AppFileSystem.layer),
+  Layer.provide(FSUtil.layer),
   Layer.provide(Global.layer),
   Layer.provide(NodeFileSystem.layer),
 )

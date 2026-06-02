@@ -11,7 +11,7 @@ import { Auth } from "@/auth"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Log from "@opencode-ai/core/util/log"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -177,7 +177,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const vcs = yield* Vcs.Service
     const flags = yield* RuntimeFlags.Service
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const { db } = yield* Database.Service
     const connections = new Map<WorkspaceV2.ID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceV2.ID, void, SyncLoopError>()
@@ -1005,7 +1005,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SessionPrompt.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(Vcs.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(FetchHttpClient.layer),

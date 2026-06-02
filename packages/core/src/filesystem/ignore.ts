@@ -1,4 +1,4 @@
-import { Glob } from "@opencode-ai/core/util/glob"
+import { Glob } from "../util/glob"
 
 const FOLDERS = new Set([
   "node_modules",
@@ -34,48 +34,34 @@ const FOLDERS = new Set([
 const FILES = [
   "**/*.swp",
   "**/*.swo",
-
   "**/*.pyc",
-
-  // OS
   "**/.DS_Store",
   "**/Thumbs.db",
-
-  // Logs & temp
   "**/logs/**",
   "**/tmp/**",
   "**/temp/**",
   "**/*.log",
-
-  // Coverage/test outputs
   "**/coverage/**",
   "**/.nyc_output/**",
 ]
 
 export const PATTERNS = [...FILES, ...FOLDERS]
 
-export function match(
-  filepath: string,
-  opts?: {
-    extra?: string[]
-    whitelist?: string[]
-  },
-) {
+export function match(filepath: string, opts?: { extra?: string[]; whitelist?: string[] }) {
   for (const pattern of opts?.whitelist || []) {
     if (Glob.match(pattern, filepath)) return false
   }
 
   const parts = filepath.split(/[/\\]/)
-  for (let i = 0; i < parts.length; i++) {
-    if (FOLDERS.has(parts[i])) return true
+  for (const part of parts) {
+    if (FOLDERS.has(part)) return true
   }
 
-  const extra = opts?.extra || []
-  for (const pattern of [...FILES, ...extra]) {
+  for (const pattern of [...FILES, ...(opts?.extra || [])]) {
     if (Glob.match(pattern, filepath)) return true
   }
 
   return false
 }
 
-export * as FileIgnore from "./ignore"
+export * as Ignore from "./ignore"

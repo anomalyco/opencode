@@ -90,9 +90,9 @@ Within each file, migrate git paths first where applicable.
 
 Migrate git-centric call sites to `Process.git*` helpers:
 
-- `src/file/index.ts`
+- `../core/src/filesystem.ts`
 - `src/project/vcs.ts`
-- `src/file/watcher.ts`
+- `../core/src/filesystem/watcher.ts`
 - `src/storage/storage.ts`
 - `src/cli/cmd/pr.ts`
 
@@ -102,7 +102,7 @@ Migrate residual non-git usages:
 
 - `src/cli/cmd/tui/util/clipboard.ts`
 - `src/util/archive.ts`
-- `src/file/ripgrep.ts`
+- `../core/src/filesystem/ripgrep.ts`
 - `src/tool/bash.ts`
 - `src/cli/cmd/uninstall.ts`
 

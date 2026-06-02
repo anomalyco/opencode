@@ -9,7 +9,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { AppFileSystem } from "../src/filesystem"
+import { FSUtil } from "../src/fs-util"
 import { Auth } from "../src/auth"
 import { EventV2 } from "../src/event"
 import { Global } from "../src/global"
@@ -27,7 +27,7 @@ const it = testEffect(
         Auth.defaultLayer,
         Npm.defaultLayer,
         ModelsDev.defaultLayer,
-        AppFileSystem.defaultLayer,
+        FSUtil.defaultLayer,
         Global.defaultLayer,
       ),
     ),

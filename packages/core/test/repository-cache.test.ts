@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@opencode-ai/core/git"
 import { Global } from "@opencode-ai/core/global"
 import { Repository } from "@opencode-ai/core/repository"
@@ -91,7 +91,7 @@ describe("RepositoryCache", () => {
 function cacheLayer(root: string) {
   const dependencies = Layer.mergeAll(
     Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") }),
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
   )
   return RepositoryCache.layer.pipe(
     Layer.provide(EffectFlock.layer.pipe(Layer.provide(dependencies))),

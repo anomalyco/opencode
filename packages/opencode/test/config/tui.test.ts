@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { ConfigPlugin } from "@/config/plugin"
@@ -11,7 +11,7 @@ import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Config.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(Layer.mergeAll(Config.defaultLayer, FSUtil.defaultLayer))
 const winIt = process.platform === "win32" ? it.instance : it.instance.skip
 
 const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.jsonc"].map((file) =>
@@ -19,7 +19,7 @@ const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.j
 )
 
 const cleanState = Effect.gen(function* () {
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
   yield* Effect.forEach(globalConfigFiles, (file) => fs.remove(file, { force: true }).pipe(Effect.ignore), {
@@ -75,7 +75,7 @@ const getTuiConfig = (directory: string) =>
 it.instance("keeps server and tui plugin merge semantics aligned", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const local = path.join(test.directory, ".opencode")
       yield* fs.makeDirectory(local, { recursive: true })
@@ -114,7 +114,7 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
 it.instance("loads tui config with the same precedence order as server config paths", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { theme: "global" })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { theme: "project" })
@@ -133,7 +133,7 @@ it.instance("loads tui config with the same precedence order as server config pa
 it.instance("resolves attention config defaults and overrides", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
 
       expect((yield* getTuiConfig(test.directory)).attention).toEqual({
@@ -181,7 +181,7 @@ it.instance("resolves attention config defaults and overrides", () =>
 it.instance("migrates tui-specific keys from opencode.json when tui.json does not exist", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const source = path.join(test.directory, "opencode.json")
       yield* fs.writeJson(source, {
@@ -211,7 +211,7 @@ it.instance("migrates tui-specific keys from opencode.json when tui.json does no
 it.instance("migrates project legacy tui keys even when global tui.json already exists", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { theme: "global" })
       yield* fs.writeJson(path.join(test.directory, "opencode.json"), {
@@ -234,7 +234,7 @@ it.instance("migrates project legacy tui keys even when global tui.json already 
 it.instance("drops unknown legacy tui keys during migration", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "opencode.json"), {
         theme: "migrated-theme",
@@ -255,7 +255,7 @@ it.instance("drops unknown legacy tui keys during migration", () =>
 it.instance("skips migration when opencode.jsonc is syntactically invalid", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(
         path.join(test.directory, "opencode.jsonc"),
@@ -281,7 +281,7 @@ it.instance("skips migration when opencode.jsonc is syntactically invalid", () =
 it.instance("skips migration when tui.json already exists", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "opencode.json"), { theme: "legacy" })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { diff_style: "stacked" })
@@ -300,7 +300,7 @@ it.instance("skips migration when tui.json already exists", () =>
 it.instance("continues loading tui config when legacy source cannot be stripped", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const source = path.join(test.directory, "opencode.json")
       yield* fs.writeJson(source, { theme: "readonly-theme" })
@@ -325,7 +325,7 @@ it.instance("continues loading tui config when legacy source cannot be stripped"
 it.instance("migration backup preserves JSONC comments", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(
         path.join(test.directory, "opencode.jsonc"),
@@ -352,7 +352,7 @@ it.instance("migration backup preserves JSONC comments", () =>
 it.instance("migrates legacy tui keys across multiple opencode.json levels", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const nested = path.join(test.directory, "apps", "client")
       yield* fs.makeDirectory(nested, { recursive: true })
@@ -370,7 +370,7 @@ it.instance("migrates legacy tui keys across multiple opencode.json levels", () 
 it.instance("flattens nested tui key inside tui.json", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), {
         theme: "outer",
@@ -388,7 +388,7 @@ it.instance("flattens nested tui key inside tui.json", () =>
 it.instance("top-level keys in tui.json take precedence over nested tui key", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), {
         diff_style: "auto",
@@ -405,7 +405,7 @@ it.instance("top-level keys in tui.json take precedence over nested tui key", ()
 it.instance("project config takes precedence over OPENCODE_TUI_CONFIG (matches OPENCODE_CONFIG)", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const custom = path.join(test.directory, "custom-tui.json")
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { theme: "project", diff_style: "auto" })
@@ -427,7 +427,7 @@ it.instance("project config takes precedence over OPENCODE_TUI_CONFIG (matches O
 it.instance("merges keybind overrides across precedence layers", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { keybinds: { app_exit: "ctrl+q" } })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { keybinds: { theme_list: "ctrl+k" } })
@@ -442,7 +442,7 @@ it.instance("merges keybind overrides across precedence layers", () =>
 it.instance("ignores unknown keybind names without dropping valid overrides from the same file", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), {
         keybinds: {
@@ -461,7 +461,7 @@ it.instance("ignores unknown keybind names without dropping valid overrides from
 it.instance("resolves keybind lookup from canonical keybinds", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), {
         keybinds: {
@@ -506,7 +506,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
 it.instance("keybinds accept OpenTUI binding specs", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), {
         keybinds: {
@@ -546,7 +546,7 @@ winIt("defaults Ctrl+Z to input undo on Windows", () =>
 winIt("keeps explicit input undo overrides on Windows", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { keybinds: { input_undo: "ctrl+y" } })
 
@@ -560,7 +560,7 @@ winIt("keeps explicit input undo overrides on Windows", () =>
 winIt("ignores terminal suspend bindings on Windows", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { keybinds: { terminal_suspend: "alt+z" } })
 
@@ -590,7 +590,7 @@ it.instance("ignores explicit keybind terminal suspend binding on Windows", () =
     withPlatform(
       "win32",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const test = yield* TestInstance
         yield* fs.writeJson(path.join(test.directory, "tui.json"), {
           keybinds: {
@@ -610,7 +610,7 @@ it.instance("keeps explicit configured keybind input undo on Windows", () =>
     withPlatform(
       "win32",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const test = yield* TestInstance
         yield* fs.writeJson(path.join(test.directory, "tui.json"), {
           keybinds: {
@@ -628,7 +628,7 @@ it.instance("keeps explicit configured keybind input undo on Windows", () =>
 it.instance("OPENCODE_TUI_CONFIG provides settings when no project config exists", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const custom = path.join(test.directory, "custom-tui.json")
       yield* fs.writeJson(custom, { theme: "from-env", diff_style: "stacked" })
@@ -649,7 +649,7 @@ it.instance("OPENCODE_TUI_CONFIG provides settings when no project config exists
 it.instance("does not derive tui path from OPENCODE_CONFIG", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const customDir = path.join(test.directory, "custom")
       yield* fs.makeDirectory(customDir, { recursive: true })
@@ -674,7 +674,7 @@ it.instance("applies env and file substitutions in tui.json", () =>
       "TUI_THEME_TEST",
       "env-theme",
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const test = yield* TestInstance
         yield* fs.writeFileString(path.join(test.directory, "keybind.txt"), "ctrl+q")
         yield* fs.writeJson(path.join(test.directory, "tui.json"), {
@@ -693,7 +693,7 @@ it.instance("applies env and file substitutions in tui.json", () =>
 it.instance("applies file substitutions when first identical token is in a commented line", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(path.join(test.directory, "theme.txt"), "resolved-theme")
       yield* fs.writeFileString(
@@ -713,7 +713,7 @@ it.instance("applies file substitutions when first identical token is in a comme
 it.instance("loads .opencode/tui.json", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeWithDirs(
         path.join(test.directory, ".opencode", "tui.json"),
@@ -729,7 +729,7 @@ it.instance("loads .opencode/tui.json", () =>
 it.instance("supports tuple plugin specs with options in tui.json", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(test.directory, "tui.json"), {
         plugin: [["acme-plugin@1.2.3", { enabled: true, label: "demo" }]],
@@ -751,7 +751,7 @@ it.instance("supports tuple plugin specs with options in tui.json", () =>
 it.instance("deduplicates tuple plugin specs by name with higher precedence winning", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), {
         plugin: [["acme-plugin@1.0.0", { source: "global" }]],
@@ -787,7 +787,7 @@ it.instance("deduplicates tuple plugin specs by name with higher precedence winn
 it.instance("tracks global and local plugin metadata in merged tui config", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { plugin: ["global-plugin@1.0.0"] })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { plugin: ["local-plugin@2.0.0"] })
@@ -813,7 +813,7 @@ it.instance("tracks global and local plugin metadata in merged tui config", () =
 it.instance("merges plugin_enabled flags across config layers", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), {
         plugin_enabled: {
@@ -841,7 +841,7 @@ it.instance("merges plugin_enabled flags across config layers", () =>
 it.instance("silently skips malformed tui.json - load failures degrade to {}", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(path.join(test.directory, "tui.json"), '{ "theme": "broken",')
       yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
@@ -855,7 +855,7 @@ it.instance("silently skips malformed tui.json - load failures degrade to {}", (
 it.instance("silently skips non-ENOENT read failures (e.g. tui.json is a directory) - fallback layer still loads", () =>
   withCleanState(
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.makeDirectory(path.join(test.directory, "tui.json"), { recursive: true })
       yield* fs.writeWithDirs(path.join(test.directory, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))

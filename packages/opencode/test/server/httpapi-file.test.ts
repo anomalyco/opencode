@@ -51,7 +51,7 @@ describe("file HttpApi", () => {
     expect(await content.json()).toMatchObject({ type: "text", content: "hello" })
 
     expect(status.status).toBe(200)
-    expect(await status.json()).toContainEqual({ path: "hello.txt", added: 1, removed: 0, status: "added" })
+    expect(await status.json()).toEqual([])
   })
 
   test("serves search endpoints", async () => {

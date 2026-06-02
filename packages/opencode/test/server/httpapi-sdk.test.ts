@@ -4,7 +4,7 @@ import { Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpServer } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
@@ -30,7 +30,7 @@ import { httpApiLayer } from "./httpapi-layer"
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
   Layer.mergeAll(
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
     Database.defaultLayer,
@@ -50,7 +50,7 @@ type Captured = { status: number; data?: unknown; error?: unknown }
 type ProjectFixture = { sdk: Sdk; directory: string }
 type LlmProjectFixture = ProjectFixture & { llm: TestLLMServer["Service"] }
 type TestServices =
-  | AppFileSystem.Service
+  | FSUtil.Service
   | ChildProcessSpawner.ChildProcessSpawner
   | InstanceStore.Service
   | HttpServer.HttpServer
@@ -262,7 +262,7 @@ function withFakeLlmProject<A, E>(
 }
 
 function writeStandardFiles(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     Effect.all([
       fs.writeWithDirs(path.join(dir, "hello.txt"), "hello"),
       fs.writeWithDirs(path.join(dir, "needle.ts"), "export const needle = 'sdk-parity'\n"),
@@ -271,7 +271,7 @@ function writeStandardFiles(dir: string) {
 }
 
 function writeProjectSkill(dir: string) {
-  return AppFileSystem.Service.use((fs) =>
+  return FSUtil.Service.use((fs) =>
     fs.writeWithDirs(
       path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
       `---

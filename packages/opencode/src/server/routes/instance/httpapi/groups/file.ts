@@ -1,5 +1,6 @@
-import { File } from "@/file"
-import { Ripgrep } from "@/file/ripgrep"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { LSP } from "@/lsp/lsp"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -36,6 +37,47 @@ export const FindSymbolQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   query: Schema.String,
 })
+
+export const LegacyEntry = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  absolute: Schema.String,
+  type: Schema.Literals(["file", "directory"]),
+  ignored: Schema.Boolean,
+}).annotate({ identifier: "FileNode" })
+
+export const LegacyContent = Schema.Struct({
+  type: Schema.Literals(["text", "binary"]),
+  content: Schema.String,
+  diff: Schema.optional(Schema.String),
+  patch: Schema.optional(
+    Schema.Struct({
+      oldFileName: Schema.String,
+      newFileName: Schema.String,
+      oldHeader: Schema.optional(Schema.String),
+      newHeader: Schema.optional(Schema.String),
+      hunks: Schema.Array(
+        Schema.Struct({
+          oldStart: NonNegativeInt,
+          oldLines: NonNegativeInt,
+          newStart: NonNegativeInt,
+          newLines: NonNegativeInt,
+          lines: Schema.Array(Schema.String),
+        }),
+      ),
+      index: Schema.optional(Schema.String),
+    }),
+  ),
+  encoding: Schema.optional(Schema.Literal("base64")),
+  mimeType: Schema.optional(Schema.String),
+}).annotate({ identifier: "FileContent" })
+
+export const LegacyStatus = Schema.Struct({
+  path: Schema.String,
+  added: NonNegativeInt,
+  removed: NonNegativeInt,
+  status: Schema.Literals(["added", "deleted", "modified"]),
+}).annotate({ identifier: "File" })
 
 export const FilePaths = {
   findText: "/find",
@@ -82,7 +124,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("list", FilePaths.list, {
           query: FileQuery,
-          success: described(Schema.Array(File.Node), "Files and directories"),
+          success: described(Schema.Array(LegacyEntry), "Files and directories"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.list",
@@ -92,7 +134,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("content", FilePaths.content, {
           query: FileQuery,
-          success: described(File.Content, "File content"),
+          success: described(LegacyContent, "File content"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.read",
@@ -102,7 +144,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("status", FilePaths.status, {
           query: WorkspaceRoutingQuery,
-          success: described(Schema.Array(File.Info), "File status"),
+          success: described(Schema.Array(LegacyStatus), "File status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.status",

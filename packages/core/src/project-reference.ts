@@ -4,7 +4,7 @@ import path from "path"
 import { Context, Effect, Layer } from "effect"
 import { Config } from "./config"
 import { ConfigReference } from "./config/reference"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { Location } from "./location"
@@ -65,7 +65,7 @@ export const layer = Layer.effect(
     if (!Flag.OPENCODE_EXPERIMENTAL_REFERENCES) return Service.of(inert)
 
     const config = yield* Config.Service
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const cache = yield* RepositoryCache.Service
@@ -137,7 +137,7 @@ export const layer = Layer.effect(
         if (!target) return { name, kind: "reference", reference, path: reference.path }
 
         const resolved = path.resolve(reference.path, target)
-        if (!AppFileSystem.contains(reference.path, resolved))
+        if (!FSUtil.contains(reference.path, resolved))
           return { name, kind: "invalid", target, message: "Reference target escapes its root" }
         if (!(yield* fs.existsSafe(resolved)))
           return { name, kind: "missing", target, path: resolved, message: "Reference target does not exist" }
@@ -228,9 +228,9 @@ function uniqueGitReferences(references: Resolved[]) {
 
 function normalizePath(target?: string) {
   if (!target) return
-  return process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
+  return process.platform === "win32" ? FSUtil.normalizePath(target) : target
 }
 
 function contains(parent: string, child: string) {
-  return AppFileSystem.contains(normalizePath(parent) ?? parent, normalizePath(child) ?? child)
+  return FSUtil.contains(normalizePath(parent) ?? parent, normalizePath(child) ?? child)
 }

@@ -6,12 +6,12 @@ import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
-import { which } from "../util/which"
+import { which } from "@opencode-ai/core/util/which"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -135,7 +135,7 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
@@ -326,7 +326,7 @@ export const layer = Layer.effect(
 
       const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
       const base64 = Buffer.from(buffer).toString("base64")
-      const mime = AppFileSystem.mimeType(shortest)
+      const mime = FSUtil.mimeType(shortest)
       const url = `data:${mime};base64,${base64}`
       yield* update({ projectID: input.id, icon: { url } }).pipe(
         Effect.catchTag("Project.NotFoundError", () => Effect.void),
@@ -468,7 +468,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(ProjectV2.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )

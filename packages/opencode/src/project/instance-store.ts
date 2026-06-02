@@ -3,7 +3,7 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -104,7 +104,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     })
 
     const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = AppFileSystem.resolve(input.directory)
+      const directory = FSUtil.resolve(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
@@ -122,7 +122,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     }
 
     const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = AppFileSystem.resolve(input.directory)
+      const directory = FSUtil.resolve(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const previous = cache.get(directory)
@@ -153,7 +153,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     })
 
     const disposeDirectory = Effect.fn("InstanceStore.disposeDirectory")(function* (input: string) {
-      const directory = AppFileSystem.resolve(input)
+      const directory = FSUtil.resolve(input)
       const entry = cache.get(directory)
       if (!entry) return
       const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
