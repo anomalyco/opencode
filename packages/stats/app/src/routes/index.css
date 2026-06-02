@@ -2346,7 +2346,12 @@
       var(--stats-line) calc(80% - 0.5px) calc(80% + 0.5px),
       transparent calc(80% + 0.5px)
     ),
-    linear-gradient(90deg, var(--stats-line) 0 1px, transparent 1px calc(100% - 1px), var(--stats-line) calc(100% - 1px)),
+    linear-gradient(
+      90deg,
+      var(--stats-line) 0 1px,
+      transparent 1px calc(100% - 1px),
+      var(--stats-line) calc(100% - 1px)
+    ),
     var(--stats-layer-2);
   font-style: normal;
 }
