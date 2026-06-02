@@ -1,4 +1,3 @@
-import { Server } from "../../server/server"
 import type { CommandModule } from "yargs"
 
 type Args = {}
@@ -7,7 +6,9 @@ export const GenerateCommand = {
   command: "generate",
   builder: (yargs) => yargs,
   handler: async () => {
-    const specs = (await Server.openapi()) as { paths: Record<string, Record<string, any>> }
+    const specs = (await import("../../server/server").then((mod) => mod.Server.openapi())) as {
+      paths: Record<string, Record<string, any>>
+    }
     for (const item of Object.values(specs.paths)) {
       for (const method of ["get", "post", "put", "delete", "patch"] as const) {
         const operation = item[method]

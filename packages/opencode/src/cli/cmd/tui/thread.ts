@@ -13,7 +13,6 @@ import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { writeHeapSnapshot } from "v8"
-import { TuiConfig } from "./config/tui"
 import {
   OPENCODE_PROCESS_ROLE,
   OPENCODE_RUN_ID,
@@ -187,7 +186,7 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
+      const config = await import("./config/tui").then((mod) => mod.TuiConfig.get())
 
       const network = resolveNetworkOptionsNoConfig(args)
       const external =

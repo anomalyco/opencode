@@ -2,8 +2,6 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
-import { ACP } from "@/acp/agent"
-import { Server } from "@/server/server"
 import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
@@ -22,10 +20,14 @@ export const AcpCommand = effectCmd({
     })
   },
   handler: Effect.fn("Cli.acp")(function* (args) {
+    const serverModule = yield* Effect.promise(() => import("@/server/server"))
+    const acp = yield* Effect.promise(() => import("@/acp/agent"))
     ACPProfile.mark("cli.acp.handler")
     process.env.OPENCODE_CLIENT = "acp"
     const opts = yield* resolveNetworkOptions(args)
-    const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
+    const server = yield* Effect.promise(() =>
+      ACPProfile.measure("cli.acp.server.listen", () => serverModule.Server.listen(opts)),
+    )
 
     const sdk = createOpencodeClient({
       baseUrl: `http://${server.hostname}:${server.port}`,
@@ -56,7 +58,7 @@ export const AcpCommand = effectCmd({
     })
 
     const stream = ndJsonStream(input, output)
-    const agent = ACP.init({ sdk })
+    const agent = acp.ACP.init({ sdk })
 
     new AgentSideConnection((conn) => {
       ACPProfile.mark("cli.acp.connection.create")

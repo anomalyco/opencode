@@ -1,6 +1,5 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { Config } from "@/config/config"
 import { effectCmd } from "../../effect-cmd"
 
 export const ConfigCommand = effectCmd({
@@ -8,7 +7,8 @@ export const ConfigCommand = effectCmd({
   describe: "show resolved configuration",
   builder: (yargs) => yargs,
   handler: Effect.fn("Cli.debug.config")(function* () {
-    const config = yield* Config.Service.use((cfg) => cfg.get())
+    const configModule = yield* Effect.promise(() => import("@/config/config"))
+    const config = yield* configModule.Config.Service.use((cfg) => cfg.get())
     process.stdout.write(JSON.stringify(config, null, 2) + EOL)
   }),
 })

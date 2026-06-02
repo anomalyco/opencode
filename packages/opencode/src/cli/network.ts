@@ -1,5 +1,5 @@
 import type { Argv, InferredOptionTypes } from "yargs"
-import { Config } from "@/config/config"
+import type { Config } from "@/config/config"
 import { Effect } from "effect"
 
 const options = {
@@ -37,7 +37,8 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {
-  const config = yield* Config.Service.use((cfg) => cfg.getGlobal())
+  const configModule = yield* Effect.promise(() => import("@/config/config"))
+  const config = yield* configModule.Config.Service.use((cfg) => cfg.getGlobal())
   return resolveNetworkOptionsNoConfig(args, config)
 })
 

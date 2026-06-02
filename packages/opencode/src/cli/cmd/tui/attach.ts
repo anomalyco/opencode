@@ -1,7 +1,6 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
 import { ServerAuth } from "@/server/auth"
@@ -66,7 +65,7 @@ export const AttachCommand = cmd({
         }
       })()
       const headers = ServerAuth.headers({ password: args.password, username: args.username })
-      const config = await TuiConfig.get()
+      const config = await import("@/cli/cmd/tui/config/tui").then((mod) => mod.TuiConfig.get())
 
       try {
         await validateSession({

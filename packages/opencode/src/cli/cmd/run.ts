@@ -1,4 +1,4 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import type { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 // CLI entry point for `opencode run`.
 //
 // Handles three modes:
@@ -18,18 +18,12 @@ import { pathToFileURL } from "url"
 import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
-import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
-import { Agent } from "@/agent/agent"
-import { Permission } from "@/permission"
-import { RuntimeFlags } from "@/effect/runtime-flags"
-import { InstanceRef } from "@/effect/instance-ref"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
-const runtimeTask = import("./run/runtime")
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
 function pick(value: string | undefined): ModelInput | undefined {
@@ -245,9 +239,12 @@ export const RunCommand = effectCmd({
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
-    const agentSvc = yield* Agent.Service
-    const flags = yield* RuntimeFlags.Service
-    const localInstance = yield* InstanceRef
+    const agent = yield* Effect.promise(() => import("@/agent/agent"))
+    const runtimeFlags = yield* Effect.promise(() => import("@/effect/runtime-flags"))
+    const instanceRef = yield* Effect.promise(() => import("@/effect/instance-ref"))
+    const agentSvc = yield* agent.Agent.Service
+    const flags = yield* runtimeFlags.RuntimeFlags.Service
+    const localInstance = yield* instanceRef.InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -322,7 +319,7 @@ export const RunCommand = effectCmd({
         }
       })()
       const attachHeaders = args.attach
-        ? ServerAuth.headers({ password: args.password, username: args.username })
+        ? (await import("@/server/auth")).ServerAuth.headers({ password: args.password, username: args.username })
         : undefined
       const attachSDK = (dir?: string) => {
         return createOpencodeClient({
@@ -538,7 +535,7 @@ export const RunCommand = effectCmd({
         const name = args.agent
 
         const entry = await Effect.runPromise(
-          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
+          agentSvc.get(name).pipe(Effect.provideService(instanceRef.InstanceRef, localInstance)),
         )
         if (!entry) {
           UI.println(
@@ -805,7 +802,7 @@ export const RunCommand = effectCmd({
         }
 
         const model = pick(args.model)
-        const { runInteractiveMode } = await runtimeTask
+        const { runInteractiveMode } = await import("./run/runtime")
         try {
           await runInteractiveMode({
             sdk: client,
@@ -832,7 +829,7 @@ export const RunCommand = effectCmd({
 
       if (args.interactive && !args.attach && !args.session && !args.continue) {
         const model = pick(args.model)
-        const { runInteractiveLocalMode } = await runtimeTask
+        const { runInteractiveLocalMode } = await import("./run/runtime")
         const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
           const { Server } = await import("@/server/server")
           const request = new Request(input, init)
