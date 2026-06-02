@@ -70,7 +70,7 @@ mutable `Flag` or late `process.env` reads.
 Tests should vary behavior with explicit layer variants:
 
 ```ts
-const it = testEffect(MyService.defaultLayer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalScout: true }))))
+const it = testEffect(MyService.defaultLayer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalReferences: true }))))
 ```
 
 Do not mutate `process.env` or `Flag` after services/layers are built.

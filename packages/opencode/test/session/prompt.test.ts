@@ -2009,7 +2009,7 @@ noLLMServer.instance(
 
       expect(reference?.metadata?.reference).toMatchObject({ name: "docs", kind: "local", path: docs })
       expect(synthetic.some((part) => part.text.includes(`Reference root: ${docs}`))).toBe(true)
-      expect(synthetic.some((part) => part.text.includes("subagent scout"))).toBe(true)
+      expect(synthetic.some((part) => part.text.includes("Inspect the configured reference"))).toBe(true)
 
       yield* sessions.remove(session.id)
     }),

@@ -15865,12 +15865,6 @@
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
-              "repo_clone": {
-                "$ref": "#/components/schemas/PermissionRuleConfig"
-              },
-              "repo_overview": {
-                "$ref": "#/components/schemas/PermissionRuleConfig"
-              },
               "lsp": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
               },
@@ -16505,9 +16499,6 @@
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "explore": {
-                "$ref": "#/components/schemas/AgentConfig"
-              },
-              "scout": {
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "title": {
