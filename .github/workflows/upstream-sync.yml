@@ -79,9 +79,14 @@ jobs:
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
         run: git push origin "$SYNC_BRANCH" --force-with-lease
 
-      - name: Push sync branch for conflict review
+      - name: Create sync branch from upstream (for conflict PR)
         if: steps.merge.outputs.result == 'conflict'
-        run: git push origin "$SYNC_BRANCH" --force-with-lease
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}"
+          git push origin "$SYNC_BRANCH" --force-with-lease
 
       - name: Run typecheck
         id: typecheck
@@ -127,12 +132,10 @@ jobs:
           date=$(date +%Y-%m-%d)
           body="Automated upstream sync from \`sst/opencode\` hit merge conflicts on $date.
 
-          The workflow safely aborted the merge before modifying \`$TARGET_BRANCH\`.
+          This PR contains upstream's latest code. Use the **Resolve conflicts** button to pick and choose changes visually.
 
           Conflicted files:
-          \`${{ steps.merge.outputs.conflicted_files }}\`
-
-          This draft PR is opened anyway so the team has a review surface for the sync attempt. See the workflow logs for conflict details."
+          \`${{ steps.merge.outputs.conflicted_files }}\`"
 
           existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
