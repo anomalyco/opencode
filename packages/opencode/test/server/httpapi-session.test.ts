@@ -544,24 +544,56 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "durably admits one v2 prompt for exact application-key retries",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "v2 prompt admission" })
+
+        const admit = () => request(`/api/session/${session.id}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ idempotencyKey: "discord-message-123", prompt: { text: "hello" } }),
+        })
+        const first = yield* admit()
+        const retried = yield* admit()
+        type PromptBody = { id: string; type: string; text: string }
+        const firstBody = yield* json<PromptBody>(first)
+        const retriedBody = yield* json<PromptBody>(retried)
+        expect(first.status).toBe(200)
+        expect(retried.status).toBe(200)
+        expect(retriedBody).toEqual(firstBody)
+        expect(firstBody).toMatchObject({ type: "user", text: "hello" })
+
+        const messages = yield* requestJson<{ items: PromptBody[] }>(`/api/session/${session.id}/message`, {
+          headers,
+        })
+        expect(messages.items).toHaveLength(1)
+        expect(messages.items[0]).toEqual(firstBody)
+
+        const conflict = yield* request(`/api/session/${session.id}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ idempotencyKey: "discord-message-123", prompt: { text: "goodbye" } }),
+        })
+        expect(conflict.status).toBe(409)
+        expect(yield* responseJson(conflict)).toEqual({
+          _tag: "ConflictError",
+          message: "Prompt idempotency key already exists with a different prompt: discord-message-123",
+          resource: "discord-message-123",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public unavailable errors for unfinished session mutations",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
         const session = yield* createSession({ title: "v2 unavailable" })
-
-        const prompt = yield* request(`/api/session/${session.id}/prompt`, {
-          method: "POST",
-          headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ prompt: { text: "hello" } }),
-        })
-        expect(prompt.status).toBe(503)
-        expect(yield* responseJson(prompt)).toEqual({
-          _tag: "ServiceUnavailableError",
-          message: "V2 session prompt is not available yet",
-          service: "v2.session.prompt",
-        })
 
         const compact = yield* request(`/api/session/${session.id}/compact`, { method: "POST", headers })
         expect(compact.status).toBe(503)

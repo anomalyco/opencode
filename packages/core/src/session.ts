@@ -8,13 +8,13 @@ import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
-import type { Prompt } from "./session/prompt"
+import { Prompt } from "./session/prompt"
 import { SessionEvent } from "./session/event"
 import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionTable } from "./session/sql"
+import { SessionMessageTable, SessionPromptAdmissionTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
@@ -92,7 +92,12 @@ export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeErr
   messageID: SessionMessage.ID,
 }) {}
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError
+export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
+  sessionID: SessionSchema.ID,
+  idempotencyKey: Prompt.IdempotencyKey,
+}) {}
+
+export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -117,10 +122,11 @@ export interface Interface {
   readonly prompt: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
+    idempotencyKey?: Prompt.IdempotencyKey
     prompt: Prompt
     delivery?: SessionSchema.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionMessage.User, NotFoundError | OperationUnavailableError>
+  }) => Effect.Effect<SessionMessage.User, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -185,6 +191,7 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
+    const decodeUserMessage = Schema.decodeUnknownEffect(SessionMessage.User)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
@@ -196,6 +203,46 @@ export const layer = Layer.effect(
             }),
         ),
       )
+
+    const getUserMessage = Effect.fnUntraced(function* (messageID: SessionMessage.ID) {
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, messageID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* Effect.die("Prompt projection was not stored")
+      const message = yield* decode(row).pipe(Effect.orDie)
+      if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+      return message
+    })
+
+    const findPromptAdmission = Effect.fnUntraced(function* (input: {
+      sessionID: SessionSchema.ID
+      idempotencyKey: Prompt.IdempotencyKey
+      prompt: Prompt
+    }) {
+      const admitted = yield* db
+        .select()
+        .from(SessionPromptAdmissionTable)
+        .where(
+          and(
+            eq(SessionPromptAdmissionTable.session_id, input.sessionID),
+            eq(SessionPromptAdmissionTable.idempotency_key, input.idempotencyKey),
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
+      if (!admitted) return undefined
+      const prompt = yield* Prompt.decodeUnknown(admitted.prompt).pipe(Effect.orDie)
+      if (!Prompt.equivalence(prompt, input.prompt)) {
+        return yield* new PromptConflictError({
+          sessionID: input.sessionID,
+          idempotencyKey: input.idempotencyKey,
+        })
+      }
+      return yield* decodeUserMessage(admitted.message).pipe(Effect.orDie)
+    })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* () {
@@ -314,24 +361,39 @@ export const layer = Layer.effect(
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
-        // TODO: Accept a Session-scoped application idempotency key. Exact retries must return the original message;
-        // conflicting payload reuse must fail without using the application key as OpenCode's internal event id.
-        const event = yield* events.publish(
-          SessionEvent.Prompted,
-          { sessionID: input.sessionID, timestamp: yield* DateTime.now, prompt: input.prompt },
-          { id: input.id },
-        )
-        const row = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, event.id))
-          .get()
-          .pipe(Effect.orDie)
-        if (!row) return yield* Effect.die("Prompt projection was not stored")
-        const message = yield* decode(row).pipe(Effect.orDie)
-        if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+        const admission = input.idempotencyKey === undefined
+          ? undefined
+          : { sessionID: input.sessionID, idempotencyKey: input.idempotencyKey, prompt: input.prompt }
+        if (admission !== undefined) {
+          const admitted = yield* findPromptAdmission(admission)
+          if (admitted) return admitted
+        }
+        const messageID = input.id ?? EventV2.ID.create()
+        const raced = yield* events
+          .publish(
+            SessionEvent.Prompted,
+            {
+              sessionID: input.sessionID,
+              timestamp: yield* DateTime.now,
+              idempotencyKey: input.idempotencyKey,
+              prompt: input.prompt,
+            },
+            { id: messageID },
+          )
+          .pipe(
+            Effect.as<SessionMessage.User | undefined>(undefined),
+            Effect.catchDefect((defect) => {
+              if (!(defect instanceof SessionProjector.PromptAdmissionRace) || admission === undefined) {
+                return Effect.die(defect)
+              }
+              return findPromptAdmission(admission).pipe(
+                Effect.flatMap((admitted) => (admitted ? Effect.succeed(admitted) : Effect.die(defect))),
+              )
+            }),
+          )
+        if (raced) return raced
         // TODO: Enqueue Session execution after admission without making prompt wait for the model loop.
-        return message
+        return yield* getUserMessage(messageID)
       }),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),

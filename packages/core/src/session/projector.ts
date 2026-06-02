@@ -9,13 +9,16 @@ import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
-import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageTable, PartTable, SessionMessageTable, SessionPromptAdmissionTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
+const encodeUserMessage = Schema.encodeSync(SessionMessage.User)
+
+export class PromptAdmissionRace extends Error {}
 
 type Usage = {
   cost: number
@@ -429,7 +432,34 @@ export const layer = Layer.effectDiscard(
     //       .pipe(Effect.orDie)
     //   }),
     // )
-    yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
+    yield* events.project(SessionEvent.Prompted, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        if (event.data.idempotencyKey === undefined) return
+        const row = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, event.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* Effect.die("Prompt projection was not stored")
+        const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+        if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+        const admitted = yield* db
+          .insert(SessionPromptAdmissionTable)
+          .values({
+            session_id: event.data.sessionID,
+            idempotency_key: event.data.idempotencyKey,
+            prompt: event.data.prompt,
+            message: encodeUserMessage(message),
+          })
+          .onConflictDoNothing()
+          .returning({ idempotencyKey: SessionPromptAdmissionTable.idempotency_key })
+          .get()
+          .pipe(Effect.orDie)
+        if (!admitted) return yield* Effect.die(new PromptAdmissionRace())
+      }),
+    )
     // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     // yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     // yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))

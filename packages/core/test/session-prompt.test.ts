@@ -57,4 +57,76 @@ describe("SessionV2.prompt", () => {
       expect(yield* session.messages({ sessionID })).toContainEqual(message)
     }),
   )
+
+  it.effect("admits distinct messages when the application key is omitted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = { sessionID, prompt: new Prompt({ text: "Fix the failing tests" }) }
+
+      const first = yield* session.prompt(input)
+      const second = yield* session.prompt(input)
+
+      expect(second.id).not.toBe(first.id)
+      expect(yield* session.messages({ sessionID })).toEqual([second, first])
+    }),
+  )
+
+  it.effect("returns the original admitted message when the application key is retried", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = {
+        sessionID,
+        idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+        prompt: new Prompt({ text: "Fix the failing tests" }),
+      }
+
+      const first = yield* session.prompt(input)
+      const retried = yield* session.prompt(input)
+
+      expect(retried).toEqual(first)
+      expect(yield* session.messages({ sessionID })).toEqual([first])
+    }),
+  )
+
+  it.effect("rejects reuse of one application key with a different prompt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+
+      yield* session.prompt({
+        sessionID,
+        idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+        prompt: new Prompt({ text: "Fix the failing tests" }),
+      })
+      const failure = yield* session
+        .prompt({
+          sessionID,
+          idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+          prompt: new Prompt({ text: "Delete the failing tests" }),
+        })
+        .pipe(Effect.flip)
+
+      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(yield* session.messages({ sessionID })).toHaveLength(1)
+    }),
+  )
+
+  it.effect("returns one admitted message to concurrent exact retries", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = {
+        sessionID,
+        idempotencyKey: Prompt.IdempotencyKey.make("discord-message-123"),
+        prompt: new Prompt({ text: "Fix the failing tests" }),
+      }
+
+      const admitted = yield* Effect.all([session.prompt(input), session.prompt(input)], { concurrency: "unbounded" })
+
+      expect(admitted[1]).toEqual(admitted[0])
+      expect(yield* session.messages({ sessionID })).toEqual([admitted[0]])
+    }),
+  )
 })

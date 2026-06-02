@@ -815,6 +815,7 @@ export type GlobalEvent = {
         properties: {
           timestamp: number
           sessionID: string
+          idempotencyKey?: string
           prompt: Prompt
         }
       }
@@ -2516,6 +2517,12 @@ export type UnauthorizedError = {
   message: string
 }
 
+export type ConflictError = {
+  _tag: "ConflictError"
+  message: string
+  resource?: string
+}
+
 export type SessionNotFoundError = {
   _tag: "SessionNotFoundError"
   sessionID: string
@@ -2979,6 +2986,7 @@ export type SyncEventSessionNextPrompted = {
   data: {
     timestamp: number
     sessionID: string
+    idempotencyKey?: string
     prompt: Prompt
   }
 }
@@ -3866,6 +3874,7 @@ export type EventSessionNextPrompted = {
   properties: {
     timestamp: number
     sessionID: string
+    idempotencyKey?: string
     prompt: Prompt
   }
 }
@@ -8102,6 +8111,7 @@ export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListRe
 export type V2SessionPromptData = {
   body?: {
     prompt: Prompt
+    idempotencyKey?: string
     delivery?: SessionDelivery
   }
   path: {
@@ -8128,9 +8138,9 @@ export type V2SessionPromptErrors = {
    */
   404: SessionNotFoundError
   /**
-   * ServiceUnavailableError
+   * ConflictError
    */
-  503: ServiceUnavailableError
+  409: ConflictError
 }
 
 export type V2SessionPromptError = V2SessionPromptErrors[keyof V2SessionPromptErrors]

@@ -8,6 +8,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
+  ConflictError,
   InvalidCursorError,
   InvalidRequestError,
   ServiceUnavailableError,
@@ -111,15 +112,16 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       query: WorkspaceRoutingQuery,
       payload: Schema.Struct({
         prompt: Prompt,
+        idempotencyKey: Prompt.IdempotencyKey.pipe(Schema.optional),
         delivery: SessionV2.Delivery.pipe(Schema.optional),
       }),
       success: SessionMessage.Message,
-      error: [SessionNotFoundError, ServiceUnavailableError],
+      error: [ConflictError, SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.prompt",
         summary: "Send v2 message",
-        description: "Create a v2 session message and queue it for the agent loop.",
+        description: "Durably admit a v2 session message for later agent-loop execution.",
       }),
     ),
   )

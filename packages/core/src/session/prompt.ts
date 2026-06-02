@@ -46,4 +46,14 @@ export class Prompt extends Schema.Class<Prompt>("Prompt")({
   files: Schema.Array(FileAttachment).pipe(Schema.optional),
   agents: Schema.Array(AgentAttachment).pipe(Schema.optional),
   references: Schema.Array(ReferenceAttachment).pipe(Schema.optional),
-}) {}
+}) {
+  static readonly decodeUnknown = Schema.decodeUnknownEffect(Prompt)
+  static readonly equivalence = Schema.toEquivalence(Prompt)
+}
+
+export namespace Prompt {
+  export const IdempotencyKey = Schema.NonEmptyString.check(Schema.isMaxLength(200)).pipe(
+    Schema.brand("Prompt.IdempotencyKey"),
+  )
+  export type IdempotencyKey = typeof IdempotencyKey.Type
+}

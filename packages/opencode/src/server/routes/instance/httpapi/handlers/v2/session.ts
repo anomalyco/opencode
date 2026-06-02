@@ -3,7 +3,7 @@ import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
 import { SessionsCursor } from "../../groups/v2/session"
-import { InvalidCursorError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
+import { ConflictError, InvalidCursorError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -62,6 +62,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
             .prompt({
               sessionID: ctx.params.sessionID,
               prompt: ctx.payload.prompt,
+              idempotencyKey: ctx.payload.idempotencyKey,
               delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
             })
             .pipe(
@@ -73,11 +74,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
                   }),
                 ),
               ),
-              Effect.catchTag("Session.OperationUnavailableError", (error) =>
+              Effect.catchTag("Session.PromptConflictError", (error) =>
                 Effect.fail(
-                  new ServiceUnavailableError({
-                    message: `V2 session ${error.operation} is not available yet`,
-                    service: `v2.session.${error.operation}`,
+                  new ConflictError({
+                    message: `Prompt idempotency key already exists with a different prompt: ${error.idempotencyKey}`,
+                    resource: error.idempotencyKey,
                   }),
                 ),
               ),

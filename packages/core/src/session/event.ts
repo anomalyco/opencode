@@ -63,6 +63,7 @@ export const Prompted = EventV2.define({
   ...options,
   schema: {
     ...Base,
+    idempotencyKey: Prompt.IdempotencyKey.pipe(Schema.optional),
     prompt: Prompt,
   },
 })

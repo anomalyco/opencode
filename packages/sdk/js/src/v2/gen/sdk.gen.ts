@@ -4571,7 +4571,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Send v2 message
    *
-   * Create a v2 session message and queue it for the agent loop.
+   * Durably admit a v2 session message for later agent-loop execution.
    */
   public prompt<ThrowOnError extends boolean = false>(
     parameters: {
@@ -4579,6 +4579,7 @@ export class Session3 extends HeyApiClient {
       directory?: string
       workspace?: string
       prompt?: Prompt
+      idempotencyKey?: string
       delivery?: SessionDelivery
     },
     options?: Options<never, ThrowOnError>,
@@ -4592,6 +4593,7 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "prompt" },
+            { in: "body", key: "idempotencyKey" },
             { in: "body", key: "delivery" },
           ],
         },
