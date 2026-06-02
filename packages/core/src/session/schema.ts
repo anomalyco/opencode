@@ -9,6 +9,21 @@ import { Identifier } from "../util/identifier"
 import { V2Schema } from "../v2-schema"
 import { AgentV2 } from "../agent"
 
+export const CreateIdempotencyKey = Schema.NonEmptyString.check(Schema.isMaxLength(200)).pipe(
+  Schema.brand("Session.CreateIdempotencyKey"),
+)
+export type CreateIdempotencyKey = typeof CreateIdempotencyKey.Type
+
+export const CreateContract = Schema.Struct({
+  location: Location.Ref,
+  agent: AgentV2.ID.pipe(Schema.optional),
+  model: ModelV2.Ref.pipe(Schema.optional),
+})
+export type CreateContract = typeof CreateContract.Type
+
+export const decodeCreateContract = Schema.decodeUnknownEffect(CreateContract)
+export const createContractEquivalence = Schema.toEquivalence(CreateContract)
+
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
 })

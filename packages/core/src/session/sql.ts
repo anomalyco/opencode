@@ -144,3 +144,9 @@ export const SessionPromptAdmissionTable = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.session_id, table.idempotency_key] })],
 )
+
+export const SessionCreateAdmissionTable = sqliteTable("session_create_admission", {
+  idempotency_key: text().$type<SessionSchema.CreateIdempotencyKey>().primaryKey(),
+  contract: text({ mode: "json" }).$type<SessionSchema.CreateContract>().notNull(),
+  session: text({ mode: "json" }).$type<(typeof SessionSchema.Info)["Encoded"]>().notNull(),
+})

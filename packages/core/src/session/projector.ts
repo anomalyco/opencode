@@ -9,16 +9,27 @@ import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
-import { MessageTable, PartTable, SessionMessageTable, SessionPromptAdmissionTable, SessionTable } from "./sql"
+import {
+  MessageTable,
+  PartTable,
+  SessionCreateAdmissionTable,
+  SessionMessageTable,
+  SessionPromptAdmissionTable,
+  SessionTable,
+} from "./sql"
 import type { DeepMutable } from "../schema"
+import { SessionSchema } from "./schema"
+import { fromRow } from "./info"
 
 type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 const encodeUserMessage = Schema.encodeSync(SessionMessage.User)
+const encodeSession = Schema.encodeSync(SessionSchema.Info)
 
 export class PromptAdmissionRace extends Error {}
+export class CreateAdmissionRace extends Error {}
 
 type Usage = {
   cost: number
@@ -282,6 +293,22 @@ export const layer = Layer.effectDiscard(
             .run()
             .pipe(Effect.orDie)
         }
+        const admission = event.data.createAdmission
+        if (admission === undefined) return
+        const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).get().pipe(Effect.orDie)
+        if (!row) return yield* Effect.die("Session projection was not stored")
+        const admitted = yield* db
+          .insert(SessionCreateAdmissionTable)
+          .values({
+            idempotency_key: admission.idempotencyKey,
+            contract: admission.contract,
+            session: encodeSession(fromRow(row)),
+          })
+          .onConflictDoNothing()
+          .returning({ idempotencyKey: SessionCreateAdmissionTable.idempotency_key })
+          .get()
+          .pipe(Effect.orDie)
+        if (!admitted) return yield* Effect.die(new CreateAdmissionRace())
       }),
     )
     yield* events.project(SessionV1.Event.Updated, (event) =>

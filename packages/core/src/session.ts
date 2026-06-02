@@ -14,10 +14,16 @@ import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionPromptAdmissionTable, SessionTable } from "./session/sql"
+import { SessionCreateAdmissionTable, SessionMessageTable, SessionPromptAdmissionTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
+import { SessionLegacy } from "./session/legacy"
+import { InstallationVersion } from "./installation/version"
+import { Slug } from "./util/slug"
+import { ProjectTable } from "./project/sql"
+import path from "path"
+import { fromRow } from "./session/info"
 
 // get project -> project.locations
 //
@@ -60,8 +66,8 @@ export const ListInput = Schema.Union([ListDirectoryInput, ListProjectInput, Lis
 export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
-  id?: SessionSchema.ID
-  agent?: string
+  idempotencyKey?: SessionSchema.CreateIdempotencyKey
+  agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
 }
@@ -97,11 +103,15 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   idempotencyKey: Prompt.IdempotencyKey,
 }) {}
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
+export class CreateConflictError extends Schema.TaggedErrorClass<CreateConflictError>()("Session.CreateConflictError", {
+  idempotencyKey: SessionSchema.CreateIdempotencyKey,
+}) {}
+
+export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError | CreateConflictError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
-  readonly create: (input?: CreateInput) => Effect.Effect<SessionSchema.Info>
+  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, CreateConflictError>
   readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
@@ -148,50 +158,15 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
-function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
-  return SessionSchema.Info.make({
-    id: SessionSchema.ID.make(row.id),
-    projectID: ProjectV2.ID.make(row.project_id),
-    title: row.title,
-    parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
-    agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,
-    model: row.model
-      ? {
-          id: ModelV2.ID.make(row.model.id),
-          providerID: ProviderV2.ID.make(row.model.providerID),
-          variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
-        }
-      : undefined,
-    cost: row.cost,
-    tokens: {
-      input: row.tokens_input,
-      output: row.tokens_output,
-      reasoning: row.tokens_reasoning,
-      cache: {
-        read: row.tokens_cache_read,
-        write: row.tokens_cache_write,
-      },
-    },
-    location: Location.Ref.make({
-      directory: AbsolutePath.make(row.directory),
-      workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
-    }),
-    subpath: row.path ? RelativePath.make(row.path) : undefined,
-    time: {
-      created: DateTime.makeUnsafe(row.time_created),
-      updated: DateTime.makeUnsafe(row.time_updated),
-      archived: row.time_archived ? DateTime.makeUnsafe(row.time_archived) : undefined,
-    },
-  })
-}
-
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const events = yield* EventV2.Service
+    const projects = yield* ProjectV2.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const decodeUserMessage = Schema.decodeUnknownEffect(SessionMessage.User)
+    const decodeSession = Schema.decodeUnknownEffect(SessionSchema.Info)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
@@ -244,9 +219,97 @@ export const layer = Layer.effect(
       return yield* decodeUserMessage(admitted.message).pipe(Effect.orDie)
     })
 
+    const findCreateAdmission = Effect.fnUntraced(function* (input: {
+      idempotencyKey: SessionSchema.CreateIdempotencyKey
+      contract: SessionSchema.CreateContract
+    }) {
+      const admitted = yield* db
+        .select()
+        .from(SessionCreateAdmissionTable)
+        .where(eq(SessionCreateAdmissionTable.idempotency_key, input.idempotencyKey))
+        .get()
+        .pipe(Effect.orDie)
+      if (!admitted) return undefined
+      const contract = yield* SessionSchema.decodeCreateContract(admitted.contract).pipe(Effect.orDie)
+      if (!SessionSchema.createContractEquivalence(contract, input.contract)) {
+        return yield* new CreateConflictError({ idempotencyKey: input.idempotencyKey })
+      }
+      return yield* decodeSession(admitted.session).pipe(Effect.orDie)
+    })
+
     const result = Service.of({
-      create: Effect.fn("V2Session.create")(function* () {
-        return {} as SessionSchema.Info
+      create: Effect.fn("V2Session.create")(function* (input) {
+        const contract = SessionSchema.CreateContract.make({
+          location: Location.Ref.make({
+            directory: input.location.directory,
+            ...(input.location.workspaceID === undefined ? {} : { workspaceID: input.location.workspaceID }),
+          }),
+          ...(input.agent === undefined ? {} : { agent: input.agent }),
+          ...(input.model === undefined
+            ? {}
+            : {
+                model: ModelV2.Ref.make({
+                  id: input.model.id,
+                  providerID: input.model.providerID,
+                  ...(input.model.variant === undefined ? {} : { variant: input.model.variant }),
+                }),
+              }),
+        })
+        const admission = input.idempotencyKey === undefined ? undefined : { idempotencyKey: input.idempotencyKey, contract }
+        if (admission !== undefined) {
+          const admitted = yield* findCreateAdmission(admission)
+          if (admitted) return admitted
+        }
+        const project = yield* projects.resolve(input.location.directory)
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
+          .onConflictDoNothing()
+          .run()
+          .pipe(Effect.orDie)
+        const now = Date.now()
+        const sessionID = SessionSchema.ID.descending()
+        const info = SessionLegacy.SessionInfo.make({
+          id: sessionID,
+          slug: Slug.create(),
+          version: InstallationVersion,
+          projectID: project.id,
+          directory: input.location.directory,
+          path: path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
+          workspaceID: input.location.workspaceID ? WorkspaceV2.ID.make(input.location.workspaceID) : undefined,
+          title: `New session - ${new Date(now).toISOString()}`,
+          agent: input.agent,
+          model: input.model
+            ? {
+                id: ProviderV2.ModelID.make(input.model.id),
+                providerID: input.model.providerID,
+                variant: input.model.variant,
+              }
+            : undefined,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: now, updated: now },
+        })
+        const raced = yield* events
+          .publish(
+            SessionLegacy.Event.Created,
+            { sessionID, info, createAdmission: admission },
+            { location: input.location },
+          )
+          .pipe(
+            Effect.as<SessionSchema.Info | undefined>(undefined),
+            Effect.catchDefect((defect) => {
+              if (!(defect instanceof SessionProjector.CreateAdmissionRace) || admission === undefined) {
+                return Effect.die(defect)
+              }
+              return findCreateAdmission(admission).pipe(
+                Effect.flatMap((admitted) => (admitted ? Effect.succeed(admitted) : Effect.die(defect))),
+              )
+            }),
+          )
+        if (raced) return raced
+        // TODO: Restore admitted sessions onto replacement synchronized workspaces in a future API slice.
+        return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
@@ -420,6 +483,6 @@ const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
 const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector)),
+  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector, ProjectV2.defaultLayer)),
   Layer.orDie,
 )

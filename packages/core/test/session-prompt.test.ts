@@ -14,7 +14,7 @@ import { testEffect } from "./lib/effect"
 const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database))
+const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database), Layer.provide(Project.defaultLayer))
 const it = testEffect(Layer.mergeAll(database, events, projector, sessions))
 const sessionID = SessionV2.ID.make("ses_prompt_test")
 
