@@ -1,6 +1,9 @@
 export * as LocationFileSystem from "./location-filesystem"
 
-import { Context, Effect, Schema } from "effect"
+import path from "path"
+import { pathToFileURL } from "url"
+import { Context, Effect, Layer, Schema } from "effect"
+import { Location } from "./location"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 
 export const ReadInput = Schema.Struct({
@@ -63,3 +66,47 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/LocationFileSystem") {}
+
+export const locationLayer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const location = yield* Location.Service
+    const entries = [
+      new Entry({
+        path: RelativePath.make("README.md"),
+        uri: pathToFileURL(path.join(location.directory, "README.md")).href,
+        type: "file",
+        mime: "text/markdown",
+      }),
+      new Entry({
+        path: RelativePath.make("src"),
+        uri: pathToFileURL(path.join(location.directory, "src")).href,
+        type: "directory",
+        mime: "application/x-directory",
+      }),
+    ]
+
+    return Service.of({
+      read: Effect.fn("LocationFileSystem.read")(function* () {
+        return new Content({ type: "text", content: "# opencode\n", mime: "text/markdown" })
+      }),
+      list: Effect.fn("LocationFileSystem.list")(function* () {
+        return entries
+      }),
+      find: Effect.fn("LocationFileSystem.find")(function* (input) {
+        return entries.filter((entry) => input.type === undefined || entry.type === input.type).slice(0, input.limit)
+      }),
+      grep: Effect.fn("LocationFileSystem.grep")(function* (input) {
+        return [
+          new GrepMatch({
+            path: RelativePath.make("README.md"),
+            lines: "# opencode",
+            line: 1,
+            offset: 0,
+            submatches: [{ text: input.pattern, start: 0, end: input.pattern.length }],
+          }),
+        ].slice(0, input.limit)
+      }),
+    })
+  }),
+)
