@@ -1,6 +1,9 @@
+export * as ConfigProviderV1 from "./provider"
+
 import { Schema } from "effect"
-import { PositiveInt } from "@opencode-ai/core/schema"
-import { ModelStatus } from "@/provider/model-status"
+import { PositiveInt } from "../../schema"
+
+export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "active"])
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -52,9 +55,7 @@ export const Model = Schema.Struct({
   ),
   experimental: Schema.optional(Schema.Boolean),
   status: Schema.optional(ModelStatus),
-  provider: Schema.optional(
-    Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
-  ),
+  provider: Schema.optional(Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) })),
   options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   variants: Schema.optional(
@@ -116,5 +117,3 @@ export const Info = Schema.Struct({
   models: Schema.optional(Schema.Record(Schema.String, Model)),
 }).annotate({ identifier: "ProviderConfig" })
 export type Info = Schema.Schema.Type<typeof Info>
-
-export * as ConfigProvider from "./provider"

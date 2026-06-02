@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
@@ -146,7 +146,7 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
   root: string,
 ) {
   const session = yield* Session.Service
-  const msg: SessionLegacy.Assistant = {
+  const msg: SessionV1.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     sessionID,
@@ -236,7 +236,7 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -309,7 +309,7 @@ it.live("session.processor effect tests preserve text start time", () =>
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -321,7 +321,7 @@ it.live("session.processor effect tests preserve text start time", () =>
 
         yield* waitFor(
           MessageV2.parts(msg.id).pipe(
-            Effect.map((parts) => parts.find((part): part is SessionLegacy.TextPart => part.type === "text")),
+            Effect.map((parts) => parts.find((part): part is SessionV1.TextPart => part.type === "text")),
             Effect.provideService(Database.Service, database),
           ),
           "timed out waiting for text part",
@@ -331,7 +331,7 @@ it.live("session.processor effect tests preserve text start time", () =>
 
         const exit = yield* Fiber.await(run)
         const text = (yield* MessageV2.parts(msg.id)).find(
-          (part): part is SessionLegacy.TextPart => part.type === "text",
+          (part): part is SessionV1.TextPart => part.type === "text",
         )
 
         expect(Exit.isSuccess(exit)).toBe(true)
@@ -373,7 +373,7 @@ it.live("session.processor effect tests stop after token overflow requests compa
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -419,7 +419,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -429,8 +429,8 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const reasoning = parts.find((part): part is SessionLegacy.ReasoningPart => part.type === "reasoning")
-        const text = parts.find((part): part is SessionLegacy.TextPart => part.type === "text")
+        const reasoning = parts.find((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+        const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
@@ -467,7 +467,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -477,7 +477,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const reasoning = parts.filter((part): part is SessionLegacy.ReasoningPart => part.type === "reasoning")
+        const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(2)
@@ -514,7 +514,7 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -558,7 +558,7 @@ it.live("session.processor effect tests retry recognized structured json errors"
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -613,7 +613,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -658,7 +658,7 @@ it.live("session.processor effect tests compact on structured context overflow",
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -701,7 +701,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -721,7 +721,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
@@ -768,7 +768,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -781,7 +781,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         yield* llm.wait(1)
         yield* waitFor(
           MessageV2.parts(msg.id).pipe(
-            Effect.map((parts) => parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")),
+            Effect.map((parts) => parts.find((part): part is SessionV1.ToolPart => part.type === "tool")),
             Effect.provideService(Database.Service, database),
           ),
           "timed out waiting for tool part",
@@ -790,7 +790,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
 
         const exit = yield* Fiber.await(run)
         const parts = yield* MessageV2.parts(msg.id)
-        const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
@@ -847,7 +847,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -910,7 +910,7 @@ it.live("session.processor effect tests mark interruptions aborted without manua
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),

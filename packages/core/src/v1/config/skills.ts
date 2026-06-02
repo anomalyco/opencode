@@ -1,3 +1,5 @@
+export * as ConfigSkillsV1 from "./skills"
+
 import { Schema } from "effect"
 
 export const Info = Schema.Struct({
@@ -8,7 +10,4 @@ export const Info = Schema.Struct({
     description: "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
   }),
 })
-
 export type Info = Schema.Schema.Type<typeof Info>
-
-export * as ConfigSkills from "./skills"

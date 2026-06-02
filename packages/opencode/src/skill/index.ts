@@ -9,6 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
+import { FrontmatterError } from "@opencode-ai/core/v1/config/error"
 import { ConfigMarkdown } from "@/config/markdown"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
@@ -108,7 +109,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   }).pipe(
     Effect.catch(
       Effect.fnUntraced(function* (err) {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+        const message = FrontmatterError.isInstance(err)
           ? err.data.message
           : `Failed to parse skill ${match}`
         const { Session } = yield* Effect.promise(() => import("@/session/session"))
