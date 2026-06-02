@@ -6,8 +6,8 @@ import { execFile } from "child_process"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Git } from "@opencode-ai/core/git"
 import { Global } from "@opencode-ai/core/global"
-import { AppProcess } from "@opencode-ai/core/process"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
@@ -132,10 +132,10 @@ function cacheLayer(root: string) {
   const dependencies = Layer.mergeAll(
     Global.layerWith({ state: path.join(root, "state"), repos: path.join(root, "repos") }),
     AppFileSystem.defaultLayer,
-    AppProcess.defaultLayer,
   )
   return RepositoryCache.layer.pipe(
     Layer.provide(EffectFlock.layer.pipe(Layer.provide(dependencies))),
+    Layer.provide(Git.defaultLayer),
     Layer.provide(dependencies),
   )
 }

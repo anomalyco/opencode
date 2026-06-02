@@ -1,9 +1,8 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { ChildProcess } from "effect/unstable/process"
 import { AppFileSystem } from "./filesystem"
+import { Git } from "./git"
 import { Global } from "./global"
-import { AppProcess } from "./process"
 import { Repository } from "./repository"
 import { EffectFlock } from "./util/effect-flock"
 
@@ -117,12 +116,12 @@ export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(functi
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | AppProcess.Service | EffectFlock.Service | Global.Service
+  AppFileSystem.Service | Git.Service | EffectFlock.Service | Global.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    const proc = yield* AppProcess.Service
+    const git = yield* Git.Service
     const flock = yield* EffectFlock.Service
     const global = yield* Global.Service
 
@@ -141,14 +140,14 @@ export const layer: Layer.Layer<
 
               const exists = yield* fs.existsSafe(localPath)
               const hasGitDir = yield* fs.existsSafe(path.join(localPath, ".git"))
-              const origin = hasGitDir ? yield* gitSafe(proc, localPath, ["config", "--get", "remote.origin.url"]) : undefined
-              const originReference = origin?.exitCode === 0 ? Repository.parse(origin.stdout.trim()) : undefined
+              const origin = hasGitDir ? yield* git.origin(localPath) : undefined
+              const originReference = origin ? Repository.parse(origin) : undefined
               const reuse = hasGitDir && Boolean(originReference && Repository.same(originReference, cloneTarget))
               if (exists && !reuse) {
                 yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
               }
 
-              const currentBranch = reuse ? yield* branch(proc, localPath) : undefined
+              const currentBranch = reuse ? yield* git.branch(localPath) : undefined
               const status = statusForRepository({
                 reuse,
                 refresh: input.refresh,
@@ -156,15 +155,7 @@ export const layer: Layer.Layer<
               })
 
               if (status === "cloned") {
-                const result = yield* git(proc, path.dirname(localPath), [
-                  "clone",
-                  "--depth",
-                  "100",
-                  ...(input.branch ? ["--branch", input.branch] : []),
-                  "--",
-                  input.reference.remote,
-                  localPath,
-                ]).pipe(
+                const result = yield* git.clone({ remote: input.reference.remote, target: localPath, branch: input.branch }).pipe(
                   Effect.mapError((error) => new CloneFailedError({ repository, message: errorMessage(error) })),
                 )
                 if (result.exitCode !== 0) {
@@ -173,7 +164,7 @@ export const layer: Layer.Layer<
               }
 
               if (status === "refreshed") {
-                const fetch = yield* git(proc, localPath, ["fetch", "--all", "--prune"]).pipe(
+                const fetch = yield* git.fetch(localPath).pipe(
                   Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
                 )
                 if (fetch.exitCode !== 0) {
@@ -182,11 +173,7 @@ export const layer: Layer.Layer<
 
                 if (input.branch) {
                   const requestedBranch = input.branch
-                  const fetchBranch = yield* git(proc, localPath, [
-                    "fetch",
-                    "origin",
-                    `+refs/heads/${requestedBranch}:refs/remotes/origin/${requestedBranch}`,
-                  ]).pipe(
+                  const fetchBranch = yield* git.fetchBranch(localPath, requestedBranch).pipe(
                     Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
                   )
                   if (fetchBranch.exitCode !== 0) {
@@ -196,7 +183,7 @@ export const layer: Layer.Layer<
                     })
                   }
 
-                  const checkout = yield* git(proc, localPath, ["checkout", "-B", requestedBranch, `origin/${requestedBranch}`]).pipe(
+                  const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
                     Effect.mapError((error) =>
                       new CheckoutFailedError({ repository, branch: requestedBranch, message: errorMessage(error) }),
                     ),
@@ -210,7 +197,7 @@ export const layer: Layer.Layer<
                   }
                 }
 
-                const reset = yield* git(proc, localPath, ["reset", "--hard", yield* resetTarget(proc, localPath, input.branch)]).pipe(
+                const reset = yield* git.reset(localPath, yield* resetTarget(git, localPath, input.branch)).pipe(
                   Effect.mapError((error) => new ResetFailedError({ repository, message: errorMessage(error) })),
                 )
                 if (reset.exitCode !== 0) {
@@ -218,15 +205,14 @@ export const layer: Layer.Layer<
                 }
               }
 
-              const head = yield* gitSafe(proc, localPath, ["rev-parse", "HEAD"])
               return {
                 repository,
                 host: input.reference.host,
                 remote: input.reference.remote,
                 localPath,
                 status,
-                head: head?.exitCode === 0 ? head.stdout.trim() || undefined : undefined,
-                branch: yield* branch(proc, localPath),
+                head: yield* git.head(localPath),
+                branch: yield* git.branch(localPath),
               } satisfies Result
             }),
             `repository-cache:${localPath}`,
@@ -244,7 +230,7 @@ export const layer: Layer.Layer<
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(AppProcess.defaultLayer),
+  Layer.provide(Git.defaultLayer),
   Layer.provide(Global.defaultLayer),
 )
 
@@ -262,43 +248,17 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
   return effect.pipe(Effect.mapError((error) => new CacheOperationError({ operation, path: target, message: errorMessage(error) })))
 }
 
-function git(proc: AppProcess.Interface, cwd: string, args: string[]) {
-  return proc.run(
-    ChildProcess.make("git", args, {
-      cwd,
-      extendEnv: true,
-      stdin: "ignore",
-    }),
-  ).pipe(
-    Effect.map((result) => ({
-      exitCode: result.exitCode,
-      stdout: result.stdout.toString("utf8"),
-      stderr: result.stderr.toString("utf8"),
-    })),
-  )
-}
-
-function gitSafe(proc: AppProcess.Interface, cwd: string, args: string[]) {
-  return git(proc, cwd, args).pipe(Effect.catch(() => Effect.succeed(undefined)))
-}
-
-function branch(proc: AppProcess.Interface, cwd: string) {
-  return gitSafe(proc, cwd, ["symbolic-ref", "--quiet", "--short", "HEAD"]).pipe(
-    Effect.map((result) => (result?.exitCode === 0 ? result.stdout.trim() || undefined : undefined)),
-  )
-}
-
-const resetTarget = Effect.fnUntraced(function* (proc: AppProcess.Interface, cwd: string, requestedBranch?: string) {
+const resetTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, requestedBranch?: string) {
   if (requestedBranch) return `origin/${requestedBranch}`
-  const remoteHead = yield* gitSafe(proc, cwd, ["symbolic-ref", "refs/remotes/origin/HEAD"])
-  if (remoteHead?.exitCode === 0 && remoteHead.stdout.trim()) return remoteHead.stdout.trim().replace(/^refs\/remotes\//, "")
-  const currentBranch = yield* branch(proc, cwd)
+  const remoteHead = yield* git.remoteHead(cwd)
+  if (remoteHead) return remoteHead
+  const currentBranch = yield* git.branch(cwd)
   if (currentBranch) return `origin/${currentBranch}`
   return "HEAD"
 })
 
-function resultMessage(result: { stderr: string; stdout: string }, fallback: string) {
-  return result.stderr.trim() || result.stdout.trim() || fallback
+function resultMessage(result: Git.Result, fallback: string) {
+  return result.stderr.trim() || result.text.trim() || fallback
 }
 
 export * as RepositoryCache from "./repository-cache"
