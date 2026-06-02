@@ -13,6 +13,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Portal } from "solid-js/web"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -218,6 +219,10 @@ function join(root: string, ...parts: string[]) {
 
 function file(path: string) {
   return isFilePath(path)
+}
+
+function projectRoots(item: Project) {
+  return Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])].filter((root) => file(root))))
 }
 
 function rel(root: string, path: string) {
@@ -1971,6 +1976,7 @@ export default function ConfigPage() {
     skillSaving: false,
     treeClosed: {} as Record<string, boolean>,
     busy: false,
+    bootstrapping: false,
     reloadingBackend: false,
     workspaceRev: 0,
     skillRev: 0,
@@ -2107,7 +2113,7 @@ export default function ConfigPage() {
   const opened = createMemo(() =>
     Object.values(globalSync.data.projectByDomain)
       .flat()
-      .filter((item): item is Project => !!item)
+      .filter((item): item is Project => !!item && file(item.worktree))
       .filter((item) => !isExtraAgentDirectory(item.worktree))
       .sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
@@ -2179,6 +2185,7 @@ export default function ConfigPage() {
     extra: Omit<SkillItem, "name" | "description" | "location" | "content" | "editable" | "warn">,
   ) => {
     if (!platform.listConfigDirectory || !platform.readConfigFile) return [] as SkillItem[]
+    if (!file(root)) return [] as SkillItem[]
 
     const walk = async (dir: string): Promise<SkillItem[]> => {
       const list = await platform.listConfigDirectory?.(dir).catch(() => [])
@@ -2218,6 +2225,7 @@ export default function ConfigPage() {
     opts?: { code?: boolean },
   ) => {
     if (!platform.listConfigDirectory) return [] as DocItem[]
+    if (!file(root)) return [] as DocItem[]
 
     const walk = async (dir: string): Promise<DocItem[]> => {
       const list = await platform.listConfigDirectory?.(dir).catch(() => [] as ConfigTreeItem[])
@@ -2260,7 +2268,7 @@ export default function ConfigPage() {
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
-          const roots = Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])]))
+          const roots = projectRoots(item)
 
           return Promise.all(
             roots.map(async (dir) => {
@@ -2421,7 +2429,7 @@ export default function ConfigPage() {
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
-          const roots = Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])]))
+          const roots = projectRoots(item)
 
           return Promise.all(
             roots.map(async (dir) => {
@@ -2518,6 +2526,7 @@ export default function ConfigPage() {
 
   const scanPlugins = async (root: string, extra: PluginSource): Promise<PluginItem[]> => {
     if (!platform.listConfigDirectory) return []
+    if (!file(root)) return []
 
     const walk = async (dir: string): Promise<PluginItem[]> => {
       const list = await platform.listConfigDirectory?.(dir).catch(() => [] as ConfigTreeItem[])
@@ -2554,7 +2563,7 @@ export default function ConfigPage() {
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
-          const roots = Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])]))
+          const roots = projectRoots(item)
 
           return Promise.all(
             roots.map(async (dir) => {
@@ -2888,6 +2897,7 @@ export default function ConfigPage() {
 
   async function walk(root: string, depth = 0): Promise<TreeNode[]> {
     if (!platform.listConfigDirectory) return []
+    if (!file(root)) return []
     const skip = new Set([".git", ".DS_Store", "node_modules", "dist", "build", "coverage"])
     return platform
       .listConfigDirectory(root)
@@ -3586,7 +3596,7 @@ export default function ConfigPage() {
 
   async function patchConfig(patch: Partial<Config>) {
     const next = { ...cfg(), ...patch }
-    await globalSDK.client.global.config.update({ config: patch as Config })
+    await globalSync.updateConfig(patch as Config)
     setConfig(next)
     return next
   }
@@ -3806,9 +3816,10 @@ export default function ConfigPage() {
       tasks.push(globalSDK.client.auth.remove({ providerID: id }).catch(() => undefined))
     await Promise.all(tasks)
       .then(() => writeGlobalConfig(next))
-      .then(() => {
+      .then(() => globalSync.updateConfig(next, { refreshProviders: true }))
+      .then((synced) => {
         batch(() => {
-          setConfig(next)
+          setConfig(synced)
           if (prev && prev !== id) globalSync.provider.remove(prev)
           setState("pick", `provider:${id}`)
           setState("customID", id)
@@ -3839,9 +3850,10 @@ export default function ConfigPage() {
       .remove({ providerID: id })
       .catch(() => undefined)
       .then(() => writeGlobalConfig(next))
-      .then(() => {
+      .then(() => globalSync.updateConfig(next, { refreshProviders: true }))
+      .then((synced) => {
         batch(() => {
-          setConfig(next)
+          setConfig(synced)
           globalSync.provider.remove(id)
           createCustomProvider()
         })
@@ -3859,7 +3871,8 @@ export default function ConfigPage() {
   function isConfigCustom(id: string) {
     const provider = cfg().provider?.[id]
     if (!provider) return false
-    if (provider.npm !== "@ai-sdk/openai-compatible") return false
+    // 任何在配置文件中定义的供应商都被认为是自定义的
+    // 不再限制必须使用 @ai-sdk/openai-compatible
     if (!provider.models || Object.keys(provider.models).length === 0) return false
     return true
   }
@@ -3867,7 +3880,7 @@ export default function ConfigPage() {
   function toggleProviderConfig(id: string, enabled: boolean) {
     const prev = cfg().disabled_providers ?? []
     const next = enabled ? prev.filter((item) => item !== id) : Array.from(new Set([...prev, id]))
-    void update({ disabled_providers: next })
+    return update({ disabled_providers: next })
   }
 
   async function disconnectProvider(item: ProviderItem) {
@@ -3877,16 +3890,18 @@ export default function ConfigPage() {
       const prev = cfg().disabled_providers ?? []
       const next = prev.includes(item.id) ? prev : [...prev, item.id]
       await patchConfig({ disabled_providers: next })
-      await globalSDK.client.global.dispose()
       return
     }
     await globalSDK.client.auth.remove({ providerID: item.id })
-    await globalSDK.client.global.dispose()
+    await globalSync.provider.refresh(mainDomain)
   }
 
   function toggleProvider(item: ProviderItem, enabled: boolean) {
     if (item.custom) {
-      toggleProviderConfig(item.id, enabled)
+      // Prevent duplicate calls during bootstrap
+      if (state.bootstrapping) return
+      setState("bootstrapping", true)
+      void toggleProviderConfig(item.id, enabled).finally(() => setState("bootstrapping", false))
       return
     }
     if (enabled) {
@@ -3894,7 +3909,10 @@ export default function ConfigPage() {
       return
     }
     if (item.source === "env") return
+    // Prevent duplicate calls during bootstrap
+    if (state.bootstrapping) return
     setState("providerBusy", item.id)
+    setState("bootstrapping", true)
     void disconnectProvider(item)
       .then(() => {
         showToast({ variant: "success", title: t("common.disconnect"), description: item.name })
@@ -3905,7 +3923,10 @@ export default function ConfigPage() {
           description: err instanceof Error ? err.message : String(err),
         })
       })
-      .finally(() => setState("providerBusy", ""))
+      .finally(() => {
+        setState("providerBusy", "")
+        setState("bootstrapping", false)
+      })
   }
 
   function togglePlugin(item: PluginItem, enabled: boolean) {
@@ -3921,6 +3942,25 @@ export default function ConfigPage() {
 
   return (
     <div class="size-full overflow-hidden bg-background-base">
+      <Portal>
+        <Show when={state.bootstrapping}>
+          <div
+            class="fixed inset-0 flex items-center justify-center"
+            style={{
+              "z-index": "9999",
+              "background-color": "rgba(0, 0, 0, 0.45)",
+              "backdrop-filter": "blur(8px)",
+            }}
+          >
+            <div class="rounded-lg bg-surface-base px-6 py-4 shadow-lg">
+              <div class="flex items-center gap-3">
+                <Spinner />
+                <span class="text-14-medium text-text-strong">正在更新配置...</span>
+              </div>
+            </div>
+          </div>
+        </Show>
+      </Portal>
       <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.03),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)] xl:flex-row">
         <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
