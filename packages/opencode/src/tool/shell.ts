@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -26,6 +26,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const POST_EXIT_OUTPUT_IDLE_TIMEOUT = "500 millis"
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -438,11 +439,18 @@ export const ShellTool = Tool.define(
       let last = ""
       const list: Chunk[] = []
       let used = 0
+      let processed = 0
+      let processing = false
       let file = ""
       let sink: ReturnType<typeof createWriteStream> | undefined
       let cut = false
       let expired = false
       let aborted = false
+
+      const markOutputProcessed = Effect.sync(() => {
+        processing = false
+        processed++
+      })
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -481,8 +489,9 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const output = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
+              processing = true
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
               used += size
@@ -517,16 +526,19 @@ export const ShellTool = Tool.define(
                         },
                       }),
                     ),
+                    Effect.ensuring(markOutputProcessed),
                   )
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                  description: input.description,
-                },
-              })
+              return ctx
+                .metadata({
+                  metadata: {
+                    output: last,
+                    description: input.description,
+                  },
+                })
+                .pipe(Effect.ensuring(markOutputProcessed))
             }),
           )
 
@@ -552,6 +564,19 @@ export const ShellTool = Tool.define(
           if (exit.kind === "timeout") {
             expired = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+          }
+
+          if (exit.kind === "exit") {
+            // Ordinary commands reach EOF immediately; outliving children can keep stdio open.
+            // After exit, stop waiting once processed output stays quiet across a 500ms check.
+            const settle = Effect.gen(function* () {
+              let seen = -1
+              while (processing || processed !== seen) {
+                seen = processed
+                yield* Effect.sleep(POST_EXIT_OUTPUT_IDLE_TIMEOUT)
+              }
+            })
+            yield* Effect.raceAll([Fiber.join(output).pipe(Effect.ignore), settle])
           }
 
           return exit.kind === "exit" ? exit.code : null

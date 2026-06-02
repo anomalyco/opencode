@@ -58,6 +58,26 @@ async function gone(pid: number, timeout = 5_000) {
   return !alive(pid)
 }
 
+async function readPid(file: string, timeout = 5_000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await fs.readFile(file, "utf-8").catch(() => undefined)
+    if (value) return Number(value)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`Process did not write its pid to ${file}`)
+}
+
+function stubbornDescendant(pidFile: string, parent: string, opts?: ChildProcess.CommandOptions) {
+  const code = [
+    'const cp = require("node:child_process")',
+    'const fs = require("node:fs")',
+    'cp.spawn(process.execPath, ["-e", "const fs = require(\\"node:fs\\"); process.on(\\"SIGTERM\\", () => {}); fs.writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)", process.argv[1]], { stdio: "inherit" })',
+    parent,
+  ].join("\n")
+  return ChildProcess.make(process.execPath, ["-e", code, pidFile], opts)
+}
+
 describe("cross-spawn spawner", () => {
   describe("basic spawning", () => {
     fx.effect(
@@ -194,7 +214,7 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures stdout via .all when no stderr",
       Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
+        const handle = yield* ChildProcess.make(process.execPath, ["-e", 'process.stdout.write("hello from stdout")'])
         const all = yield* decodeByteStream(handle.all)
         expect(all).toBe("hello from stdout")
       }),
@@ -275,6 +295,151 @@ describe("cross-spawn spawner", () => {
       }),
     )
 
+    fx.live(
+      "forceKillAfter escalates when the parent exits before a stubborn descendant",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "stubborn-child.pid")
+        const handle = yield* stubbornDescendant(pidFile, "setInterval(() => {}, 1000)")
+        const pid = yield* Effect.promise(() => readPid(pidFile))
+
+        yield* handle.kill({ forceKillAfter: 100 }).pipe(Effect.ignore)
+        const terminated = yield* Effect.promise(() => gone(pid, 1_000))
+        if (!terminated) {
+          yield* Effect.sync(() => process.kill(pid, "SIGKILL"))
+        }
+        expect(terminated).toBe(true)
+      }),
+      10_000,
+    )
+
+    fx.live(
+      "scope cleanup escalates after a failed parent leaves a stubborn descendant",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "failed-parent-child.pid")
+        const pid = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* stubbornDescendant(
+              pidFile,
+              "const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(42) } }, 10)",
+              { forceKillAfter: 100 },
+            )
+            expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(42))
+            return yield* Effect.promise(() => readPid(pidFile))
+          }),
+        )
+
+        const terminated = yield* Effect.promise(() => gone(pid, 1_000))
+        if (!terminated) {
+          yield* Effect.sync(() => process.kill(pid, "SIGKILL"))
+        }
+        expect(terminated).toBe(true)
+      }),
+      10_000,
+    )
+
+    fx.live(
+      "scope cleanup does not hang when a failed parent leaves a descendant holding stdio",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "failed-parent-no-force.pid")
+
+        // No forceKillAfter, matching how the shell tool spawns. The descendant
+        // ignores SIGTERM and keeps the inherited stdio open, so the parent's
+        // "close" never fires. Closing the scope must not block on it; the test
+        // timeout below is the regression guard against an unbounded teardown.
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* stubbornDescendant(
+              pidFile,
+              "const ready = setInterval(() => { if (fs.existsSync(process.argv[1])) { clearInterval(ready); process.exit(7) } }, 10)",
+            )
+            expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(7))
+          }),
+        )
+
+        // Reap the descendant so it does not leak across the test run.
+        const pid = yield* Effect.promise(() => readPid(pidFile).catch(() => 0))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          })
+        }
+      }),
+      10_000,
+    )
+
+    fx.live(
+      "kill escalation does not hang when a stubborn descendant escapes the process group",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "escaped-descendant.pid")
+
+        // The parent stays alive and spawns a detached (own session) child that
+        // inherits stdio. SIGKILL to the parent's group never reaches the escaped
+        // child, so the parent's "close" never fires. kill() must escalate to
+        // SIGKILL and still return instead of waiting on "close" forever.
+        const code = [
+          'const cp = require("node:child_process")',
+          'const fs = require("node:fs")',
+          'const child = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "inherit" })',
+          "child.unref()",
+          "fs.writeFileSync(process.argv[1], String(child.pid))",
+          'process.on("SIGTERM", () => {})',
+          "setInterval(() => {}, 1000)",
+        ].join("\n")
+
+        const outcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* ChildProcess.make(process.execPath, ["-e", code, pidFile])
+            yield* Effect.promise(() => readPid(pidFile))
+            return yield* handle
+              .kill({ forceKillAfter: 100 })
+              .pipe(
+                Effect.as("returned" as const),
+                Effect.timeoutOrElse({ duration: "4 seconds", orElse: () => Effect.succeed("hung" as const) }),
+              )
+          }),
+        )
+
+        // Reap the escaped descendant so it does not leak across the test run.
+        const pid = yield* Effect.promise(() => readPid(pidFile).catch(() => 0))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          })
+        }
+
+        expect(outcome).toBe("returned")
+      }),
+      15_000,
+    )
+
     fx.effect(
       "isRunning reflects process state",
       Effect.gen(function* () {
@@ -283,6 +448,54 @@ describe("cross-spawn spawner", () => {
         const running = yield* handle.isRunning
         expect(running).toBe(false)
       }),
+    )
+  })
+
+  describe("detached children (issue #24731)", () => {
+    fx.live(
+      "exitCode resolves when the main process exits even if a detached child keeps stdio open",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "daemon.pid")
+
+        // Mimics playwright-cli / a backgrounded web server: spawn a long-lived
+        // detached child that inherits stdio (keeping the parent's stdout pipe's
+        // write end open), then exit the main process immediately.
+        const code = [
+          'const cp = require("node:child_process")',
+          'const fs = require("node:fs")',
+          'const daemon = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "inherit" })',
+          "daemon.unref()",
+          "fs.writeFileSync(process.argv[1], String(daemon.pid))",
+          'process.stdout.write("started")',
+          "process.exit(0)",
+        ].join("\n")
+
+        const handle = yield* ChildProcess.make(process.execPath, ["-e", code, pidFile])
+
+        const result = yield* Effect.raceAll([
+          handle.exitCode.pipe(Effect.map((exit) => ({ kind: "exit" as const, code: exit }))),
+          Effect.sleep("5 seconds").pipe(Effect.as({ kind: "timeout" as const, code: null })),
+        ])
+
+        // Reap the detached daemon so it does not leak and so the spawner's
+        // "close" can fire during scope teardown.
+        const pid = Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf-8").catch(() => "0")))
+        if (pid) {
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid)
+            } catch {}
+          })
+        }
+
+        expect(result.kind).toBe("exit")
+        expect(result.code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+      15_000,
     )
   })
 

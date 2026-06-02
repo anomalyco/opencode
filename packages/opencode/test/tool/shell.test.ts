@@ -1,6 +1,6 @@
 import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
@@ -15,6 +15,7 @@ import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
@@ -32,6 +33,40 @@ const shellLayer = Layer.mergeAll(
   testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)
+const encoder = new TextEncoder()
+const delayedPipeLayer = Layer.mergeAll(
+  Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make(
+      Effect.fnUntraced(function* () {
+        const all = Stream.make(encoder.encode("STARTED")).pipe(
+          Stream.concat(Stream.fromEffect(Effect.sleep("250 millis").pipe(Effect.as(encoder.encode("LATE"))))),
+          Stream.concat(Stream.never),
+        )
+        return ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(0),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: { [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") } as any,
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          all,
+          getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        })
+      }),
+    ),
+  ),
+  AppFileSystem.defaultLayer,
+  Plugin.defaultLayer,
+  Truncate.defaultLayer,
+  Config.defaultLayer,
+  Agent.defaultLayer,
+  RuntimeFlags.defaultLayer,
+)
+const drainIt = testEffect(delayedPipeLayer)
 type ShellTestServices =
   | (typeof shellLayer extends Layer.Layer<infer ROut, infer _E, infer _RIn> ? ROut : never)
   | InstanceStore.Service
@@ -1160,6 +1195,70 @@ describe("tool.shell abort", () => {
       }),
     ),
   )
+
+  it.live(
+    "returns promptly when a command leaves a detached child holding stdio open",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const dir = yield* tmpdirScoped()
+        const pidFile = path.join(dir, "daemon.pid")
+        // Spawn a long-lived detached child that inherits stdio (keeps the shell's
+        // stdout pipe open), record its pid, print output, then exit immediately.
+        const code =
+          'const cp=require("node:child_process");const fs=require("node:fs");' +
+          'const d=cp.spawn(process.execPath,["-e","setTimeout(()=>{},60000)"],{detached:true,stdio:"inherit"});' +
+          'd.unref();fs.writeFileSync(Bun.argv[1],String(d.pid));process.stdout.write("STARTED");process.exit(0)'
+        const command = `${bin} -e ${squote(code)} ${squote(pidFile)}`
+
+        const start = Date.now()
+        const result = yield* runIn(projectRoot, run({ command, description: "Detached child", timeout: 30_000 }))
+        const elapsed = Date.now() - start
+
+        // Reap the detached daemon so the pipe closes and it does not leak.
+        const fsvc = yield* AppFileSystem.Service
+        const pid = Number(yield* fsvc.readFileString(pidFile).pipe(Effect.catch(() => Effect.succeed("0"))))
+        if (pid)
+          yield* Effect.sync(() => {
+            try {
+              process.kill(pid)
+            } catch {}
+          })
+
+        expect(result.output).toContain("STARTED")
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).not.toContain("exceeding timeout")
+        // Returned after a bounded post-exit idle window, not by waiting on the daemon's
+        // inherited pipe (60s) or the command timeout (30s).
+        expect(elapsed).toBeLessThan(10_000)
+      }),
+    40_000,
+  )
+
+  drainIt.live("keeps inherited output arriving within the idle check", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        let outputAt = 0
+        const result = yield* run(
+          { command: "ignored", description: "Delayed inherited output" },
+          {
+            ...ctx,
+            metadata: (input) =>
+              Effect.sync(() => {
+                const output = (input.metadata as { output?: string }).output
+                if (!outputAt && output?.includes("STARTED")) outputAt = Date.now()
+              }),
+          },
+        )
+        const elapsed = Date.now() - outputAt
+        expect(outputAt).toBeGreaterThan(0)
+        expect(result.output).toContain("STARTED")
+        expect(result.output).toContain("LATE")
+        expect(elapsed).toBeLessThan(1_400)
+      }),
+    ),
+  )
 })
 
 describe("tool.shell truncation", () => {
@@ -1228,6 +1327,35 @@ describe("tool.shell truncation", () => {
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
+      }),
+    ),
+  )
+
+  it.live("saves all fast output while metadata processing is delayed", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const byteCount = 1_000_000
+        let delayed = false
+        const result = yield* run(
+          {
+            command: fill("bytes", byteCount),
+            description: "Generate fast output with delayed metadata",
+          },
+          {
+            ...ctx,
+            metadata: (input) => {
+              const output = (input.metadata as { output?: string })?.output
+              if (!output || delayed) return Effect.void
+              delayed = true
+              return Effect.sleep("1200 millis")
+            },
+          },
+        )
+        const filepath = (result.metadata as { outputPath?: string }).outputPath
+        expect(filepath).toBeTruthy()
+        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
+        expect(saved.length).toBe(byteCount)
       }),
     ),
   )
