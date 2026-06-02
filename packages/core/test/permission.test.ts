@@ -22,7 +22,7 @@ const current = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
 const events = EventV2.layer.pipe(Layer.provide(database))
-const sessions = SessionV2.layer.pipe(Layer.provide(database))
+const sessions = SessionV2.layer.pipe(Layer.provide(events), Layer.provide(database))
 const saved = PermissionSaved.layer.pipe(Layer.provide(database))
 const layer = PermissionV2.locationLayer.pipe(
   Layer.provideMerge(database),

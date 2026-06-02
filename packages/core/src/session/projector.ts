@@ -429,7 +429,7 @@ export const layer = Layer.effectDiscard(
     //       .pipe(Effect.orDie)
     //   }),
     // )
-    // yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
+    yield* events.project(SessionEvent.Prompted, (event) => run(db, event))
     // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     // yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     // yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))

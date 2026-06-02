@@ -9,6 +9,7 @@ import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import type { Prompt } from "./session/prompt"
+import { SessionEvent } from "./session/event"
 import { EventV2 } from "./event"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
@@ -182,6 +183,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
+    const events = yield* EventV2.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -312,7 +314,24 @@ export const layer = Layer.effect(
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
-        return yield* Effect.fail(new OperationUnavailableError({ operation: "prompt" }))
+        // TODO: Accept a Session-scoped application idempotency key. Exact retries must return the original message;
+        // conflicting payload reuse must fail without using the application key as OpenCode's internal event id.
+        const event = yield* events.publish(
+          SessionEvent.Prompted,
+          { sessionID: input.sessionID, timestamp: yield* DateTime.now, prompt: input.prompt },
+          { id: input.id },
+        )
+        const row = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, event.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row) return yield* Effect.die("Prompt projection was not stored")
+        const message = yield* decode(row).pipe(Effect.orDie)
+        if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
+        // TODO: Enqueue Session execution after admission without making prompt wait for the model loop.
+        return message
       }),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),
@@ -334,8 +353,11 @@ export const layer = Layer.effect(
   }),
 )
 
+const DefaultDatabase = Database.defaultLayer
+const DefaultEvents = EventV2.layer.pipe(Layer.provide(DefaultDatabase))
+const DefaultProjector = SessionProjector.layer.pipe(Layer.provide(DefaultEvents), Layer.provide(DefaultDatabase))
+
 export const defaultLayer = layer.pipe(
-  Layer.provide(SessionProjector.defaultLayer),
-  Layer.provide(Database.defaultLayer),
+  Layer.provide(Layer.mergeAll(DefaultDatabase, DefaultEvents, DefaultProjector)),
   Layer.orDie,
 )
