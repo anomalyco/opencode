@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -84,10 +84,6 @@ export function fromRow(row: Row): Info {
     sandboxes: row.sandboxes,
     commands: row.commands ?? undefined,
   }
-}
-
-function mergePermissionRules<T extends readonly unknown[]>(oldRules: T, newRules: T): T {
-  return [...new Map([...oldRules, ...newRules].map((rule) => [JSON.stringify(rule), rule])).values()] as unknown as T
 }
 
 export const UpdateInput = Schema.Struct({
@@ -201,36 +197,6 @@ export const layer = Layer.effect(
                   .run()
               }
 
-              const oldPermission = yield* d
-                .select()
-                .from(PermissionTable)
-                .where(eq(PermissionTable.project_id, oldID))
-                .get()
-              const newPermission = yield* d
-                .select()
-                .from(PermissionTable)
-                .where(eq(PermissionTable.project_id, newID))
-                .get()
-              if (oldPermission && newPermission) {
-                yield* d
-                  .update(PermissionTable)
-                  .set({
-                    data: mergePermissionRules(oldPermission.data, newPermission.data),
-                    time_created: Math.min(oldPermission.time_created, newPermission.time_created),
-                    time_updated: Date.now(),
-                  })
-                  .where(eq(PermissionTable.project_id, newID))
-                  .run()
-                yield* d.delete(PermissionTable).where(eq(PermissionTable.project_id, oldID)).run()
-              }
-              if (oldPermission && !newPermission) {
-                yield* d
-                  .update(PermissionTable)
-                  .set({ project_id: newID })
-                  .where(eq(PermissionTable.project_id, oldID))
-                  .run()
-              }
-
               yield* d
                 .update(SessionTable)
                 .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
@@ -297,7 +263,7 @@ export const layer = Layer.effect(
         .insert(ProjectTable)
         .values({
           id: result.id,
-          worktree: result.worktree,
+          worktree: AbsolutePath.make(result.worktree),
           vcs: result.vcs ?? null,
           name: result.name,
           icon_url: result.icon?.url,
@@ -306,13 +272,13 @@ export const layer = Layer.effect(
           time_created: result.time.created,
           time_updated: result.time.updated,
           time_initialized: result.time.initialized,
-          sandboxes: result.sandboxes,
+          sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
           commands: result.commands,
         })
         .onConflictDoUpdate({
           target: ProjectTable.id,
           set: {
-            worktree: result.worktree,
+            worktree: AbsolutePath.make(result.worktree),
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
@@ -320,7 +286,7 @@ export const layer = Layer.effect(
             icon_color: result.icon?.color,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes,
+            sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
             commands: result.commands,
           },
         })
@@ -451,8 +417,9 @@ export const layer = Layer.effect(
     const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectV2.ID, directory: string) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
+      const sandbox = AbsolutePath.make(directory)
       const sboxes = [...row.sandboxes]
-      if (!sboxes.includes(directory)) sboxes.push(directory)
+      if (!sboxes.includes(sandbox)) sboxes.push(sandbox)
       const result = yield* db
         .update(ProjectTable)
         .set({ sandboxes: sboxes, time_updated: Date.now() })
@@ -467,7 +434,8 @@ export const layer = Layer.effect(
     const removeSandbox = Effect.fn("Project.removeSandbox")(function* (id: ProjectV2.ID, directory: string) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sboxes = row.sandboxes.filter((s) => s !== directory)
+      const sandbox = AbsolutePath.make(directory)
+      const sboxes = row.sandboxes.filter((s) => s !== sandbox)
       const result = yield* db
         .update(ProjectTable)
         .set({ sandboxes: sboxes, time_updated: Date.now() })

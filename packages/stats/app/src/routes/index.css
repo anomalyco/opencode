@@ -1648,6 +1648,7 @@
     [data-section="leaderboard"],
     [data-section="market-share"],
     [data-section="token-cost"],
+    [data-section="cache-ratio"],
     [data-section="session-cost"]
   ) {
   position: relative;
@@ -2122,7 +2123,8 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-component="token-cost"] {
+[data-page="stats"] [data-component="token-cost"],
+[data-page="stats"] [data-component="cache-ratio"] {
   position: relative;
   display: grid;
   gap: 8px;
@@ -2611,6 +2613,7 @@
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="token-cost"],
+  [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"] {
     padding: 64px 32px;
   }
@@ -2742,6 +2745,7 @@
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="token-cost"],
+  [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"] {
     padding: 48px 24px;
   }
