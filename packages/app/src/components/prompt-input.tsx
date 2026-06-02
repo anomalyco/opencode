@@ -1803,7 +1803,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               local.agent.set(value)
                               restoreFocus()
                             }}
-                            class="capitalize max-w-[160px] text-text-base"
+                            class="max-w-[160px] text-text-base"
                             valueClass="truncate text-13-regular text-text-base"
                             triggerStyle={control()}
                             triggerProps={{ "data-action": "prompt-agent" }}
