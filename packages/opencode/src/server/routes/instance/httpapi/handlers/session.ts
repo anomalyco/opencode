@@ -272,13 +272,61 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof SummarizePayload.Type
     }) {
-      yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
-      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
+      const sessionID = ctx.params.sessionID
+      yield* revertSvc.cleanup(yield* requireSession(sessionID))
+      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID }))
       const defaultAgent = yield* agentSvc.defaultAgent()
       const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
+      const state = yield* compactSvc.state(sessionID)
 
-      yield* compactSvc.create({
-        sessionID: ctx.params.sessionID,
+      if (state.type === "active") {
+        yield* compactSvc.markResume(sessionID)
+        if (state.messageID) yield* promptSvc.loop({ sessionID })
+        yield* compactSvc.waitForIdle(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        return true
+      }
+
+      if (state.type === "pending") {
+        yield* compactSvc.markResume(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        yield* compactSvc.waitForIdle(sessionID)
+        return true
+      }
+
+      const beforeCancel = yield* compactSvc.state(sessionID)
+      if (beforeCancel.type === "active") {
+        yield* compactSvc.markResume(sessionID)
+        if (beforeCancel.messageID) yield* promptSvc.loop({ sessionID })
+        yield* compactSvc.waitForIdle(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        return true
+      }
+      if (beforeCancel.type === "pending") {
+        yield* compactSvc.markResume(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        yield* compactSvc.waitForIdle(sessionID)
+        return true
+      }
+
+      yield* promptSvc.cancelOrdinary(sessionID)
+      const afterCancel = yield* compactSvc.state(sessionID)
+      if (afterCancel.type === "active") {
+        yield* compactSvc.markResume(sessionID)
+        if (afterCancel.messageID) yield* promptSvc.loop({ sessionID })
+        yield* compactSvc.waitForIdle(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        return true
+      }
+      if (afterCancel.type === "pending") {
+        yield* compactSvc.markResume(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        yield* compactSvc.waitForIdle(sessionID)
+        return true
+      }
+
+      const result = yield* compactSvc.create({
+        sessionID,
         agent: currentAgent,
         model: {
           providerID: ctx.payload.providerID,
@@ -286,7 +334,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         },
         auto: ctx.payload.auto ?? false,
       })
-      yield* promptSvc.loop({ sessionID: ctx.params.sessionID })
+
+      if (result.type === "joined") {
+        yield* compactSvc.waitForIdle(sessionID)
+        yield* promptSvc.loop({ sessionID })
+        return true
+      }
+
+      yield* promptSvc.loop({ sessionID })
       return true
     })
 

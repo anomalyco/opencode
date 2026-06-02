@@ -3,7 +3,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -35,7 +35,7 @@ import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
@@ -99,6 +99,58 @@ function createTextMessage(sessionID: SessionIDType, text: string) {
       text,
     })
     return { info, part }
+  })
+}
+
+const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> => ({
+  then: (onfulfilled, onrejected) => {
+    Effect.runFork(
+      Deferred.await(deferred).pipe(
+        Effect.match({
+          onFailure: (error) => {
+            onrejected?.(error)
+          },
+          onSuccess: (value) => {
+            onfulfilled?.(value)
+          },
+        }),
+      ),
+    )
+    return deferredAsPromise(deferred) as PromiseLike<never>
+  },
+})
+
+const summarizeBody = JSON.stringify({ providerID: "test", modelID: "test-model" })
+
+function summarizeRequest(sessionID: SessionIDType, headers: Record<string, string>) {
+  return requestJson<boolean>(pathFor(SessionPaths.summarize, { sessionID }), {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: summarizeBody,
+  })
+}
+
+const compactionMarkers = (messages: SessionLegacy.WithParts[]) =>
+  messages.filter((message) => message.info.role === "user" && message.parts.some((part) => part.type === "compaction"))
+
+function createCompactionMarker(sessionID: SessionIDType) {
+  return Effect.gen(function* () {
+    const svc = yield* Session.Service
+    const message = yield* svc.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID,
+      agent: "build",
+      model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test-model") },
+      time: { created: Date.now() },
+    })
+    yield* svc.updatePart({
+      id: PartID.ascending(),
+      sessionID,
+      messageID: message.id,
+      type: "compaction",
+      auto: false,
+    })
   })
 }
 
@@ -431,6 +483,107 @@ describe("session HttpApi", () => {
         cwd: sessionDirectory,
         root: sessionDirectory,
       })
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  )
+
+  it.live("deduplicates concurrent manual summarize requests", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      const gate = yield* Deferred.make<void>()
+      yield* llm.hold("manual summary", deferredAsPromise(gate))
+
+      const directory = yield* tmpdirScoped({ git: true, config: testProviderConfig(llm.url) })
+      const headers = { "x-opencode-directory": directory }
+      const session = yield* createSession({ title: "summarize double" }).pipe(provideInstanceEffect(directory))
+      yield* createTextMessage(session.id, "summarize this conversation").pipe(provideInstanceEffect(directory))
+      const scope = yield* Scope.Scope
+
+      const first = yield* summarizeRequest(session.id, headers).pipe(Effect.forkIn(scope))
+      const second = yield* summarizeRequest(session.id, headers).pipe(Effect.forkIn(scope))
+      yield* awaitWithTimeout(llm.wait(1), "manual summarize did not start compaction")
+      yield* Deferred.succeed(gate, undefined).pipe(Effect.ignore)
+
+      const [firstExit, secondExit] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
+      expect(firstExit).toMatchObject({ _tag: "Success", value: true })
+      expect(secondExit).toMatchObject({ _tag: "Success", value: true })
+      expect(yield* llm.calls).toBe(1)
+
+      const messages = yield* Session.use.messages({ sessionID: session.id }).pipe(provideInstanceEffect(directory))
+      expect(compactionMarkers(messages)).toHaveLength(1)
+      expect(
+        messages.some(
+          (message) =>
+            message.info.role === "assistant" &&
+            message.info.summary === true &&
+            message.parts.some((part) => part.type === "text" && part.text.includes("manual summary")),
+        ),
+      ).toBe(true)
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  )
+
+  it.live("summarize processes an existing pending compaction marker", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      yield* llm.text("pending summary")
+
+      const directory = yield* tmpdirScoped({ git: true, config: testProviderConfig(llm.url) })
+      const headers = { "x-opencode-directory": directory }
+      const session = yield* createSession({ title: "summarize pending" }).pipe(provideInstanceEffect(directory))
+      yield* createTextMessage(session.id, "history before pending marker").pipe(provideInstanceEffect(directory))
+      yield* createCompactionMarker(session.id).pipe(provideInstanceEffect(directory))
+
+      expect(yield* summarizeRequest(session.id, headers)).toBe(true)
+      expect(yield* llm.calls).toBe(1)
+
+      const messages = yield* Session.use.messages({ sessionID: session.id }).pipe(provideInstanceEffect(directory))
+      expect(compactionMarkers(messages)).toHaveLength(1)
+      expect(
+        messages.some(
+          (message) =>
+            message.info.role === "assistant" &&
+            message.info.summary === true &&
+            message.parts.some((part) => part.type === "text" && part.text.includes("pending summary")),
+        ),
+      ).toBe(true)
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  )
+
+  it.live("manual summarize preempts an ordinary in-flight prompt run", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      yield* llm.hang
+      yield* llm.text("summary after preempt")
+
+      const directory = yield* tmpdirScoped({ git: true, config: testProviderConfig(llm.url) })
+      const headers = { "x-opencode-directory": directory }
+      const session = yield* createSession({ title: "summarize preempt" }).pipe(provideInstanceEffect(directory))
+      const scope = yield* Scope.Scope
+      const promptFiber = yield* requestJson<SessionLegacy.WithParts>(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: JSON.stringify({
+          agent: "build",
+          model: { providerID: "test", modelID: "test-model" },
+          parts: [{ type: "text", text: "start an ordinary run" }],
+        }),
+      }).pipe(Effect.exit, Effect.forkIn(scope))
+
+      yield* awaitWithTimeout(llm.wait(1), "ordinary prompt run did not start")
+      expect(yield* summarizeRequest(session.id, headers)).toBe(true)
+      yield* Fiber.await(promptFiber)
+      expect(yield* llm.calls).toBe(2)
+
+      const messages = yield* Session.use.messages({ sessionID: session.id }).pipe(provideInstanceEffect(directory))
+      expect(compactionMarkers(messages)).toHaveLength(1)
+      expect(messages.some((message) => message.info.role === "assistant" && message.info.error)).toBe(true)
+      expect(
+        messages.some(
+          (message) =>
+            message.info.role === "assistant" &&
+            message.info.summary === true &&
+            message.parts.some((part) => part.type === "text" && part.text.includes("summary after preempt")),
+        ),
+      ).toBe(true)
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
   )
 
