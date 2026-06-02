@@ -7969,16 +7969,15 @@ export type V2SessionListData = {
   body?: never
   path?: never
   query?: {
-    directory?: string
     workspace?: string
     limit?: number
     order?: "asc" | "desc"
-    path?: string
-    roots?: boolean | "true" | "false"
-    start?: number
     search?: string
+    directory?: string
+    project?: string
+    subpath?: string
     /**
-     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order or filters.
+     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.
      */
     cursor?: string
   }
