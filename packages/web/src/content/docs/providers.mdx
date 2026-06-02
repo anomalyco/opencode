@@ -1796,6 +1796,101 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### QVAC
+
+You can configure opencode to use local models through [QVAC](https://qvac.com), an open-source runtime for local-first, peer-to-peer AI. QVAC exposes an OpenAI-compatible HTTP server via `qvac serve openai`, and the [`@qvac/ai-sdk-provider`](https://www.npmjs.com/package/@qvac/ai-sdk-provider) package wraps it as a branded provider.
+
+:::tip
+Once QVAC lands in [models.dev](https://models.dev), it appears automatically in the `/connect` list — the manual config below is the explicit equivalent and is useful for pinning models and context limits.
+:::
+
+First, install [`@qvac/cli`](https://www.npmjs.com/package/@qvac/cli) and start a server. Coding agents fire concurrent requests (a main chat completion plus a "title generation" call), and QVAC serializes inference per model file — so preload **two different model files** under aliases that match the model IDs you reference in `opencode.json`:
+
+```json title="qvac.config.json"
+{
+  "serve": {
+    "models": {
+      "qwen3-4b": {
+        "model": "QWEN3_4B_INST_Q4_K_M",
+        "preload": true,
+        "config": {
+          "ctx_size": 16384,
+          "reasoning_budget": 0
+        }
+      },
+      "qwen3-1.7b": {
+        "model": "QWEN3_1_7B_INST_Q4",
+        "preload": true,
+        "config": {
+          "ctx_size": 4096,
+          "reasoning_budget": 0
+        }
+      }
+    }
+  }
+}
+```
+
+```bash
+npm i -g @qvac/cli
+qvac serve openai
+```
+
+Then point opencode at it:
+
+```json title="opencode.json" "qvac" {5, 6, 8, 11-12, 18, 25-26}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "qvac": {
+      "npm": "@qvac/ai-sdk-provider",
+      "name": "QVAC (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1",
+        "apiKey": "qvac"
+      },
+      "models": {
+        "qwen3-4b": {
+          "name": "Qwen3 4B (local)",
+          "limit": {
+            "context": 16384,
+            "output": 8192
+          }
+        },
+        "qwen3-1.7b": {
+          "name": "Qwen3 1.7B (local)",
+          "limit": {
+            "context": 4096,
+            "output": 2048
+          }
+        }
+      }
+    }
+  },
+  "model": "qvac/qwen3-4b",
+  "small_model": "qvac/qwen3-1.7b"
+}
+```
+
+In this example:
+
+- `qvac` is the custom provider ID. This can be any string you want.
+- `npm` specifies the package to use for this provider — `@qvac/ai-sdk-provider`, the branded QVAC wrapper around `@ai-sdk/openai-compatible`.
+- `options.baseURL` is the endpoint for your local `qvac serve` (set this to match your serve port).
+- `options.apiKey` can be any non-empty string — `qvac serve` does not validate it, but some clients refuse to send a request without an `Authorization` header.
+- The model IDs (`qwen3-4b`, `qwen3-1.7b`) must match the **serve aliases** in `qvac.config.json` — those aliases are what the provider sends as the OpenAI `model` field.
+- `model` is the main chat model; `small_model` is the lighter model opencode uses for titles and other utility calls. Pointing them at two different files lets QVAC run both concurrently.
+
+:::note
+QVAC's LLM `ctx_size` defaults to 1024 tokens — too small for an agent's tool definitions and system prompt. Set it explicitly (16k+ for chat) in `qvac.config.json`, and set `reasoning_budget: 0` to suppress `<think>` blocks that opencode would otherwise render verbatim.
+:::
+
+:::tip
+Local tool-calling quality is bounded by the model. Q4-quantized 4B/8B Instruct models can hold a conversation but won't reliably invoke tools; reliable local agent use generally needs ≥14B parameters with coder/agent post-training. See the [QVAC provider README](https://www.npmjs.com/package/@qvac/ai-sdk-provider) for the full agent setup notes.
+:::
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
