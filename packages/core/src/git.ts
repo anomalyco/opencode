@@ -164,9 +164,10 @@ export const layer = Layer.effect(
       repo: Repo,
       args: string[],
       worktreeDirectory?: AbsolutePath,
+      cwd = repo.directory,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make("git", args, { cwd: repo.directory, extendEnv: true, stdin: "ignore" }))
+        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -185,7 +186,7 @@ export const layer = Layer.effect(
     })
 
     const worktreeRemove = Effect.fn("Git.worktreeRemove")(function* (input: { repo: Repo; directory: AbsolutePath }) {
-      yield* worktree("remove", input.repo, ["worktree", "remove", "--force", input.directory], input.directory)
+      yield* worktree("remove", input.repo, ["worktree", "remove", "--force", input.directory], input.directory, input.repo.store)
     })
 
     const worktreeList = Effect.fn("Git.worktreeList")(function* (repo: Repo) {

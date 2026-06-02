@@ -3,8 +3,7 @@ import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { FSUtil } from "../fs-util"
 import { Git } from "../git"
-import { type Copy, type Strategy, type StrategyID } from "./copy"
-import type { DirectoryUnavailableError } from "./copy"
+import { DirectoryUnavailableError, type Copy, type Strategy, type StrategyID } from "./copy"
 
 export function makeStrategies(input: {
   git: Git.Interface
@@ -20,7 +19,9 @@ export function makeStrategies(input: {
       return { directory: yield* input.canonical(options.directory) }
     }),
     remove: Effect.fn("ProjectCopy.GitWorktree.remove")(function* (directory) {
-      yield* input.git.worktreeRemove({ repo: repo(directory), directory })
+      const found = yield* input.git.find(directory)
+      if (!found) return yield* new DirectoryUnavailableError({ directory })
+      yield* input.git.worktreeRemove({ repo: found, directory })
     }),
     list: Effect.fn("ProjectCopy.GitWorktree.list")(function* (directory) {
       const entries = yield* input.git.worktreeList(repo(directory))
