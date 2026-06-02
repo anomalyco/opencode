@@ -19,6 +19,8 @@ import { PermissionSaved } from "./permission/saved"
 import { SessionV2 } from "./session"
 import { FileSystem } from "./filesystem"
 import { Watcher } from "./filesystem/watcher"
+import { ProjectReference } from "./project-reference"
+import { RepositoryCache } from "./repository-cache"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -27,6 +29,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       location,
       Policy.locationLayer,
       Config.locationLayer,
+      ProjectReference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
       AgentV2.locationLayer,
@@ -48,5 +51,6 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     Database.defaultLayer,
     SessionV2.defaultLayer,
     PermissionSaved.defaultLayer,
+    RepositoryCache.defaultLayer,
   ],
 }) {}

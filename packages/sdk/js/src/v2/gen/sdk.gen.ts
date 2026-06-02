@@ -4744,6 +4744,7 @@ export class Fs extends HeyApiClient {
         workspace?: string
       }
       path: string
+      reference?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4754,6 +4755,7 @@ export class Fs extends HeyApiClient {
           args: [
             { in: "query", key: "location" },
             { in: "query", key: "path" },
+            { in: "query", key: "reference" },
           ],
         },
       ],
@@ -4777,6 +4779,7 @@ export class Fs extends HeyApiClient {
         workspace?: string
       }
       path?: string
+      reference?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4787,6 +4790,7 @@ export class Fs extends HeyApiClient {
           args: [
             { in: "query", key: "location" },
             { in: "query", key: "path" },
+            { in: "query", key: "reference" },
           ],
         },
       ],
