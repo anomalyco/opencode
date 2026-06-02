@@ -2531,10 +2531,10 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   )
 }
 
-function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
+function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: unknown }) {
   const { theme } = useTheme()
   const errors = createMemo(() => {
-    const normalized = Filesystem.normalizePath(props.filePath)
+    const normalized = Filesystem.normalizePath(typeof props.filePath === "string" ? props.filePath : "")
     const arr = props.diagnostics?.[normalized] ?? []
     return arr.filter((x) => x.severity === 1).slice(0, 3)
   })
@@ -2563,8 +2563,8 @@ function input(input: Record<string, any>, omit?: string[]): string {
   return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
 }
 
-function filetype(input?: string) {
-  if (!input) return "none"
+function filetype(input?: unknown) {
+  if (typeof input !== "string" || !input) return "none"
   const ext = path.extname(input)
   const language = LANGUAGE_EXTENSIONS[ext]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
