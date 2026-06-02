@@ -1,8 +1,6 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { promisify } from "util"
-import { execFile } from "child_process"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -11,51 +9,13 @@ import { Global } from "@opencode-ai/core/global"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { git, gitRemote } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const exec = promisify(execFile)
 const it = testEffect(Layer.empty)
 
 describe("RepositoryCache", () => {
-  it.live("clones, reuses, and refreshes a managed checkout", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        const cache = yield* RepositoryCache.Service
-        const cloned = yield* cache.ensure({ reference: fixture.reference })
-        const cached = yield* cache.ensure({ reference: fixture.reference })
-
-        expect(cloned.status).toBe("cloned")
-        expect(cached.status).toBe("cached")
-        expect(cached.localPath).toBe(cloned.localPath)
-        expect(yield* read(path.join(cloned.localPath, "README.md"))).toBe("one\n")
-
-        yield* Effect.promise(() => commit(fixture.source, "two\n", "second"))
-        const refreshed = yield* cache.ensure({ reference: fixture.reference, refresh: true })
-
-        expect(refreshed.status).toBe("refreshed")
-        expect(refreshed.head).not.toBe(cloned.head)
-        expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("two\n")
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
-  )
-
-  it.live("fetches and checks out a requested branch", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        const cache = yield* RepositoryCache.Service
-        yield* cache.ensure({ reference: fixture.reference })
-        yield* Effect.promise(() => branch(fixture.source, "feature/docs", "feature\n"))
-
-        const refreshed = yield* cache.ensure({ reference: fixture.reference, branch: "feature/docs" })
-
-        expect(refreshed.status).toBe("refreshed")
-        expect(refreshed.branch).toBe("feature/docs")
-        expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("feature\n")
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
-  )
-
   it.live("replaces a stale cache directory before cloning", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {
@@ -140,55 +100,15 @@ function cacheLayer(root: string) {
   )
 }
 
-function withRemote<A, E, R>(body: (fixture: Awaited<ReturnType<typeof remote>>) => Effect.Effect<A, E, R>) {
+function withRemote<A, E, R>(body: (fixture: Awaited<ReturnType<typeof gitRemote>>) => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
     Effect.promise(async () => {
       const root = await tmpdir()
-      return { root, fixture: await remote(root.path) }
+      return { root, fixture: await gitRemote(root.path) }
     }),
     (input) => body(input.fixture),
     (input) => Effect.promise(() => input.root[Symbol.asyncDispose]()),
   )
-}
-
-async function remote(root: string) {
-  const origin = path.join(root, "origin.git")
-  const source = path.join(root, "source")
-  await git(root, "init", "--bare", origin)
-  await git(root, "init", source)
-  await git(source, "config", "user.email", "test@example.com")
-  await git(source, "config", "user.name", "Test")
-  await fs.writeFile(path.join(source, "README.md"), "one\n")
-  await git(source, "add", "README.md")
-  await git(source, "commit", "-m", "initial")
-  await git(source, "branch", "-M", "main")
-  await git(source, "remote", "add", "origin", pathToFileURL(origin).href)
-  await git(source, "push", "-u", "origin", "main")
-  await git(root, "--git-dir", origin, "symbolic-ref", "HEAD", "refs/heads/main")
-  return {
-    root,
-    source,
-    reference: { ...Repository.parseRemote("owner/repo"), remote: pathToFileURL(origin).href },
-  }
-}
-
-async function commit(source: string, content: string, message: string) {
-  await fs.writeFile(path.join(source, "README.md"), content)
-  await git(source, "add", "README.md")
-  await git(source, "commit", "-m", message)
-  await git(source, "push")
-}
-
-async function branch(source: string, name: string, content: string) {
-  await git(source, "checkout", "-b", name)
-  await fs.writeFile(path.join(source, "README.md"), content)
-  await git(source, "add", "README.md")
-  await git(source, "commit", "-m", name)
-  await git(source, "push", "-u", "origin", name)
-}
-
-async function git(cwd: string, ...args: string[]) {
-  await exec("git", args, { cwd })
 }
 
 function read(file: string) {
