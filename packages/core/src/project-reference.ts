@@ -26,9 +26,21 @@ export type Resolved =
 type Valid = Exclude<Resolved, { kind: "invalid" }>
 
 export type Mention =
-  | { readonly name: string; readonly kind: "reference"; readonly reference: Valid; readonly target?: string; readonly path: string }
+  | {
+      readonly name: string
+      readonly kind: "reference"
+      readonly reference: Valid
+      readonly target?: string
+      readonly path: string
+    }
   | { readonly name: string; readonly kind: "invalid"; readonly target?: string; readonly message: string }
-  | { readonly name: string; readonly kind: "missing"; readonly target: string; readonly path: string; readonly message: string }
+  | {
+      readonly name: string
+      readonly kind: "missing"
+      readonly target: string
+      readonly path: string
+      readonly message: string
+    }
 
 export interface Interface {
   readonly list: () => Effect.Effect<Resolved[]>
@@ -73,7 +85,9 @@ export const layer = Layer.effect(
           repository: reference.repository,
           path: reference.path,
           run: yield* Effect.cached(
-            cache.ensure({ reference: reference.reference, branch: reference.branch, refresh: true }).pipe(Effect.asVoid),
+            cache
+              .ensure({ reference: reference.reference, branch: reference.branch, refresh: true })
+              .pipe(Effect.asVoid),
           ),
         }
       }),
@@ -90,13 +104,12 @@ export const layer = Layer.effect(
           ),
         ),
       { concurrency: 4, discard: true },
-    ).pipe(
-      Effect.forkScoped,
-    )
+    ).pipe(Effect.forkScoped)
 
     const ensurePath = Effect.fn("ProjectReference.ensurePath")(function* (target?: string) {
       const normalized = normalizePath(target)
-      if (!normalized) return yield* Effect.forEach(materializers, (materializer) => materializer.run, { discard: true })
+      if (!normalized)
+        return yield* Effect.forEach(materializers, (materializer) => materializer.run, { discard: true })
       yield* materializers.find((materializer) => contains(materializer.path, normalized))?.run ?? Effect.void
     })
 
@@ -110,7 +123,9 @@ export const layer = Layer.effect(
       ensurePath,
       containsManagedPath: Effect.fn("ProjectReference.containsManagedPath")(function* (target?: string) {
         const normalized = normalizePath(target)
-        return normalized ? references.some((reference) => reference.kind === "git" && contains(reference.path, normalized)) : false
+        return normalized
+          ? references.some((reference) => reference.kind === "git" && contains(reference.path, normalized))
+          : false
       }),
       resolveMention: Effect.fn("ProjectReference.resolveMention")(function* (value: string) {
         const [name, ...rest] = value.split("/")
@@ -122,8 +137,10 @@ export const layer = Layer.effect(
         if (!target) return { name, kind: "reference", reference, path: reference.path }
 
         const resolved = path.resolve(reference.path, target)
-        if (!AppFileSystem.contains(reference.path, resolved)) return { name, kind: "invalid", target, message: "Reference target escapes its root" }
-        if (!(yield* fs.existsSafe(resolved))) return { name, kind: "missing", target, path: resolved, message: "Reference target does not exist" }
+        if (!AppFileSystem.contains(reference.path, resolved))
+          return { name, kind: "invalid", target, message: "Reference target escapes its root" }
+        if (!(yield* fs.existsSafe(resolved)))
+          return { name, kind: "missing", target, path: resolved, message: "Reference target does not exist" }
         return { name, kind: "reference", reference, target, path: resolved }
       }),
     })
@@ -140,7 +157,12 @@ const inert: Interface = {
   containsManagedPath: () => Effect.succeed(false),
 }
 
-export function resolveAll(input: { references: ConfigReference.NormalizedInfo; directory: string; home: string; repos: string }) {
+export function resolveAll(input: {
+  references: ConfigReference.NormalizedInfo
+  directory: string
+  home: string
+  repos: string
+}) {
   const seen = new Map<string, { name: string; branch?: string }>()
   return Object.entries(input.references).map(([name, reference]): Resolved => {
     const resolved = resolve({ name, reference, directory: input.directory, home: input.home, repos: input.repos })
@@ -160,7 +182,13 @@ export function resolveAll(input: { references: ConfigReference.NormalizedInfo; 
   })
 }
 
-export function resolve(input: { name: string; reference: ConfigReference.NormalizedEntry; directory: string; home: string; repos: string }): Resolved {
+export function resolve(input: {
+  name: string
+  reference: ConfigReference.NormalizedEntry
+  directory: string
+  home: string
+  repos: string
+}): Resolved {
   if (input.reference.kind === "invalid") return { name: input.name, kind: "invalid", message: input.reference.message }
   if (input.reference.kind === "local") {
     return { name: input.name, kind: "local", path: localPath(input.directory, input.home, input.reference.path) }
