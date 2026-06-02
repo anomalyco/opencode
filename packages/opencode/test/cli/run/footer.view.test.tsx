@@ -647,9 +647,10 @@ test("direct footer shows editable prompts and additional queued work while runn
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("interrupt · 1 agent · ctrl+x down to view · 1 queued prompt · ctrl+x q")
+    expect(app.captureCharFrame()).toContain("interrupt • 1 agent ctrl+x down • 1 queued ctrl+x q")
     expect(app.captureCharFrame()).toContain("2 queued")
-    expect(app.captureCharFrame()).not.toContain("agent ·  ·")
+    expect(app.captureCharFrame()).not.toContain("to view")
+    expect(app.captureCharFrame()).not.toContain("edit/remove")
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()
