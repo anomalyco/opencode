@@ -521,9 +521,7 @@ function HomeProjectRow(props: {
             aria-label={props.language.t("common.moreOptions")}
           />
           <MenuV2.Portal>
-            <MenuV2.Content
-              class="[--background-bg-layer-01:var(--v2-background-bg-layer-01)] [--elevation-floating:var(--v2-elevation-floating)] [--overlay-simple-overlay-hover:var(--v2-overlay-simple-overlay-hover)] [--text-text-base:var(--v2-text-text-base)] [--text-text-faint:var(--v2-text-text-faint)] [--text-text-muted:var(--v2-text-text-muted)] [--text-text-accent:var(--v2-text-text-accent)] [--icon-icon-base:var(--v2-icon-icon-base)] [--border-border-base:var(--v2-border-border-base)] [--border-border-muted:var(--v2-border-border-muted)]"
-            >
+            <MenuV2.Content>
               <MenuV2.Item onSelect={() => props.openNewSession(props.project.worktree)}>
                 {props.language.t("command.session.new")}
               </MenuV2.Item>
