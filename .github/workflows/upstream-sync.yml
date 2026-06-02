@@ -81,11 +81,13 @@ jobs:
 
       - name: Create sync branch from upstream (for conflict PR)
         if: steps.merge.outputs.result == 'conflict'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Start from upstream's code
           git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}"
+          # Replace .github/workflows/ with ours (can't push upstream's workflow files)
+          git rm -rf .github/workflows/
+          git checkout "origin/$TARGET_BRANCH" -- .github/workflows/
+          git commit -m "chore: restore fork workflow files for sync PR"
           git push origin "$SYNC_BRANCH" --force-with-lease
 
       - name: Run typecheck
