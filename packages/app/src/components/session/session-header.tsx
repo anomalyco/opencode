@@ -559,7 +559,7 @@ type SessionHeaderV2ActionsState = {
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-2">
       <Show when={props.state.agentName}>
         {(agentName) => (
           <div data-component="session-agent-control" class="relative">
