@@ -6,6 +6,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { testRender, useRenderer } from "@opentui/solid"
 import { Global } from "@opencode-ai/core/global"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
+import type { Session } from "@opencode-ai/sdk/v2"
 import { KVProvider } from "../../../src/cli/cmd/tui/context/kv"
 import { ThemeProvider } from "../../../src/cli/cmd/tui/context/theme"
 import { TuiConfigProvider } from "../../../src/cli/cmd/tui/context/tui-config"
@@ -22,6 +23,7 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   >()
   let current = startRoute
   let renderDiff: TuiRouteDefinition["render"] | undefined
+  let vcsDiffInput: unknown
   await mkdir(Global.Path.state, { recursive: true })
   await Bun.write(path.join(Global.Path.state, "kv.json"), "{}")
 
@@ -36,9 +38,19 @@ test("closing the diff viewer returns to the route it opened from", async () => 
     const base = createTuiPluginApi({
       keymap,
       client: {
-        vcs: { diff: async () => ({ data: [] }) },
+        vcs: {
+          diff: async (input: unknown) => {
+            vcsDiffInput = input
+            return { data: [] }
+          },
+        },
         session: { diff: async () => ({ data: [] }) },
       } as unknown as TuiPluginApi["client"],
+      state: {
+        session: {
+          get: () => session,
+        },
+      },
     })
     const api = {
       ...base,
@@ -76,6 +88,7 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   try {
     await waitForCommand(app, commands, "diff.close")
     expect(current).toEqual({ name: "diff", params: { mode: "git", sessionID: "session-1", returnRoute: startRoute } })
+    expect(vcsDiffInput).toEqual({ directory: "/repo/session", mode: "git", context: 12 })
 
     expect(commands.has("diff.close")).toBe(true)
     commands.get("diff.close")!.run?.({} as never)
@@ -84,6 +97,19 @@ test("closing the diff viewer returns to the route it opened from", async () => 
     app.renderer.destroy()
   }
 })
+
+const session = {
+  id: "session-1",
+  slug: "session-1",
+  projectID: "project-1",
+  directory: "/repo/session",
+  title: "Session",
+  version: "1",
+  time: {
+    created: 0,
+    updated: 0,
+  },
+} satisfies Session
 
 async function waitForCommand(
   app: Awaited<ReturnType<typeof testRender>>,
