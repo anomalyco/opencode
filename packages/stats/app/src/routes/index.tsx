@@ -9,6 +9,7 @@ import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import statsUnfurlRankings from "../asset/unfurl-rankings.png?url"
 import {
   getStatsHomeData,
+  type CacheRatioEntry,
   type LeaderboardEntry,
   type MarketDay,
   type StatsHomeData,
@@ -38,8 +39,9 @@ const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
 const headerLinks = [
   { href: "#top-models", label: "Top Models" },
   { href: "#leaderboard", label: "Leaderboard" },
-  { href: "#token-cost", label: "Token Cost" },
   { href: "#session-cost", label: "Session Cost" },
+  { href: "#token-cost", label: "Token Cost" },
+  { href: "#cache-ratio", label: "Cache Ratio" },
   { href: "#market-share", label: "Market Share" },
 ] as const
 const githubLink = {
@@ -160,8 +162,9 @@ export default function StatsHome() {
               <>
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
-                <TokenCostSection data={stats().tokenCost} />
                 <SessionCostSection data={stats().sessionCost} />
+                <TokenCostSection data={stats().tokenCost} />
+                <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
               </>
             )}
@@ -1000,7 +1003,7 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         setInspecting(false)
       }}
     >
-      <SectionBridge label="SESSION COST" href="#session-cost" />
+      <SectionBridge label="CACHE RATIO" href="#cache-ratio" />
       <SectionTitle title="Market Share" description="Compare token share by model author." />
       <Show
         when={activeDay()}
@@ -1280,7 +1283,7 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
 
   return (
     <section id="token-cost" data-section="token-cost">
-      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
+      <SectionBridge label="SESSION COST" href="#session-cost" />
       <SectionTitle title="Token Cost" description="Price per 1M tokens." />
       <Show
         when={visible().length > 0}
@@ -1351,6 +1354,90 @@ function TokenCostChart(props: {
   )
 }
 
+function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
+  const [product, setProduct] = createSignal<TokenProduct>("Go")
+  const [activeIndex, setActiveIndex] = createSignal(2)
+  const data = createMemo(() => props.data[product()])
+  const visible = createMemo(() => data().slice(0, 16))
+  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
+
+  return (
+    <section id="cache-ratio" data-section="cache-ratio">
+      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionTitle title="Cache Ratio" description="Share of input tokens served from cache." />
+      <Show
+        when={visible().length > 0}
+        fallback={
+          <EmptyState title="No cache ratio data" description="No input-token model_stat rows matched this product." />
+        }
+      >
+        <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
+      </Show>
+      <div data-slot="token-footer" hidden>
+        <FilterPills
+          items={tokenProducts}
+          selected={product()}
+          label="Product filter"
+          variant="product"
+          onSelect={setProduct}
+        />
+        <LiveIndicator />
+      </div>
+    </section>
+  )
+}
+
+function CacheRatioChart(props: {
+  data: CacheRatioEntry[]
+  activeIndex: number
+  onActiveIndexChange: (index: number) => void
+}) {
+  const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.ratio)) || 100)
+  const active = createMemo(() => props.data[props.activeIndex] ?? props.data[0])
+
+  return (
+    <div data-component="cache-ratio">
+      <For each={props.data}>
+        {(item, index) => (
+          <button
+            type="button"
+            data-component="token-row"
+            data-active={props.activeIndex === index() ? "true" : undefined}
+            onClick={() => props.onActiveIndexChange(index())}
+            onPointerEnter={() => props.onActiveIndexChange(index())}
+          >
+            <strong>{formatRatio(item.ratio)}</strong>
+            <span>{item.model}</span>
+            <MetricBar value={item.ratio} max={max()} active={props.activeIndex === index()} />
+          </button>
+        )}
+      </For>
+      <Show when={active()}>
+        {(item) => (
+          <div data-component="token-tooltip" style={{ top: `${props.activeIndex * 36 + 2}px` }}>
+            <p>
+              <span>Cache Ratio</span>
+              <strong>{formatRatio(item().ratio)}</strong>
+            </p>
+            <p>
+              <span>Cached</span>
+              <strong>{formatBillions(item().cached)}</strong>
+            </p>
+            <p>
+              <span>Uncached</span>
+              <strong>{formatBillions(item().uncached)}</strong>
+            </p>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+function formatRatio(value: number) {
+  return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
+}
+
 function formatDollars(value: number) {
   return `$${value.toFixed(2)}`
 }
@@ -1378,7 +1465,7 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
 
   return (
     <section id="session-cost" data-section="session-cost">
-      <SectionBridge label="TOKEN COST" href="#token-cost" />
+      <SectionBridge label="LEADERBOARD" href="#leaderboard" />
       <SectionTitle title="Session Cost" description="Average cost per session." />
       <Show
         when={visible().length > 0}
@@ -1635,8 +1722,9 @@ function Footer(props: {
   const modelStats = [
     { href: "#top-models", label: "Top Models" },
     { href: "#leaderboard", label: "Leaderboard" },
-    { href: "#token-cost", label: "Token Cost" },
     { href: "#session-cost", label: "Session Cost" },
+    { href: "#token-cost", label: "Token Cost" },
+    { href: "#cache-ratio", label: "Cache Ratio" },
     { href: "#market-share", label: "Market Share" },
   ]
   const legal = [
