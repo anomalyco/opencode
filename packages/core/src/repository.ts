@@ -182,7 +182,8 @@ function buildRemote(input: { host: string; segments: string[]; remote?: string;
     segments,
     owner: segments.length === 2 ? segments[0] : undefined,
     repo: segments[segments.length - 1],
-    remote: input.remote ?? (host === "github.com" ? githubRemote(repositoryPath) : `https://${host}/${repositoryPath}.git`),
+    remote:
+      input.remote ?? (host === "github.com" ? githubRemote(repositoryPath) : `https://${host}/${repositoryPath}.git`),
     label: host === "github.com" && segments.length === 2 ? repositoryPath : `${host}/${repositoryPath}`,
     protocol: input.protocol,
   } satisfies RemoteReference

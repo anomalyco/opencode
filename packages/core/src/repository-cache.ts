@@ -30,10 +30,13 @@ export class InvalidRepositoryError extends Schema.TaggedErrorClass<InvalidRepos
   },
 ) {}
 
-export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchError>()("RepositoryCacheInvalidBranchError", {
-  branch: Schema.String,
-  message: Schema.String,
-}) {}
+export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchError>()(
+  "RepositoryCacheInvalidBranchError",
+  {
+    branch: Schema.String,
+    message: Schema.String,
+  },
+) {}
 
 export class CloneFailedError extends Schema.TaggedErrorClass<CloneFailedError>()("RepositoryCacheCloneFailedError", {
   repository: Schema.String,
@@ -64,11 +67,14 @@ export class LockFailedError extends Schema.TaggedErrorClass<LockFailedError>()(
   message: Schema.String,
 }) {}
 
-export class CacheOperationError extends Schema.TaggedErrorClass<CacheOperationError>()("RepositoryCacheOperationError", {
-  operation: Schema.String,
-  path: Schema.String,
-  message: Schema.String,
-}) {}
+export class CacheOperationError extends Schema.TaggedErrorClass<CacheOperationError>()(
+  "RepositoryCacheOperationError",
+  {
+    operation: Schema.String,
+    path: Schema.String,
+    message: Schema.String,
+  },
+) {}
 
 export type Error =
   | InvalidRepositoryError
@@ -155,27 +161,35 @@ export const layer: Layer.Layer<
               })
 
               if (status === "cloned") {
-                const result = yield* git.clone({ remote: input.reference.remote, target: localPath, branch: input.branch }).pipe(
-                  Effect.mapError((error) => new CloneFailedError({ repository, message: errorMessage(error) })),
-                )
+                const result = yield* git
+                  .clone({ remote: input.reference.remote, target: localPath, branch: input.branch })
+                  .pipe(Effect.mapError((error) => new CloneFailedError({ repository, message: errorMessage(error) })))
                 if (result.exitCode !== 0) {
-                  return yield* new CloneFailedError({ repository, message: resultMessage(result, `Failed to clone ${repository}`) })
+                  return yield* new CloneFailedError({
+                    repository,
+                    message: resultMessage(result, `Failed to clone ${repository}`),
+                  })
                 }
               }
 
               if (status === "refreshed") {
-                const fetch = yield* git.fetch(localPath).pipe(
-                  Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
-                )
+                const fetch = yield* git
+                  .fetch(localPath)
+                  .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })))
                 if (fetch.exitCode !== 0) {
-                  return yield* new FetchFailedError({ repository, message: resultMessage(fetch, `Failed to refresh ${repository}`) })
+                  return yield* new FetchFailedError({
+                    repository,
+                    message: resultMessage(fetch, `Failed to refresh ${repository}`),
+                  })
                 }
 
                 if (input.branch) {
                   const requestedBranch = input.branch
-                  const fetchBranch = yield* git.fetchBranch(localPath, requestedBranch).pipe(
-                    Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
-                  )
+                  const fetchBranch = yield* git
+                    .fetchBranch(localPath, requestedBranch)
+                    .pipe(
+                      Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
+                    )
                   if (fetchBranch.exitCode !== 0) {
                     return yield* new FetchFailedError({
                       repository,
@@ -183,11 +197,18 @@ export const layer: Layer.Layer<
                     })
                   }
 
-                  const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
-                    Effect.mapError((error) =>
-                      new CheckoutFailedError({ repository, branch: requestedBranch, message: errorMessage(error) }),
-                    ),
-                  )
+                  const checkout = yield* git
+                    .checkout(localPath, requestedBranch)
+                    .pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new CheckoutFailedError({
+                            repository,
+                            branch: requestedBranch,
+                            message: errorMessage(error),
+                          }),
+                      ),
+                    )
                   if (checkout.exitCode !== 0) {
                     return yield* new CheckoutFailedError({
                       repository,
@@ -197,11 +218,14 @@ export const layer: Layer.Layer<
                   }
                 }
 
-                const reset = yield* git.reset(localPath, yield* resetTarget(git, localPath, input.branch)).pipe(
-                  Effect.mapError((error) => new ResetFailedError({ repository, message: errorMessage(error) })),
-                )
+                const reset = yield* git
+                  .reset(localPath, yield* resetTarget(git, localPath, input.branch))
+                  .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: errorMessage(error) })))
                 if (reset.exitCode !== 0) {
-                  return yield* new ResetFailedError({ repository, message: resultMessage(reset, `Failed to reset ${repository}`) })
+                  return yield* new ResetFailedError({
+                    repository,
+                    message: resultMessage(reset, `Failed to reset ${repository}`),
+                  })
                 }
               }
 
@@ -245,7 +269,9 @@ function errorMessage(error: unknown) {
 }
 
 function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: string, target: string) {
-  return effect.pipe(Effect.mapError((error) => new CacheOperationError({ operation, path: target, message: errorMessage(error) })))
+  return effect.pipe(
+    Effect.mapError((error) => new CacheOperationError({ operation, path: target, message: errorMessage(error) })),
+  )
 }
 
 const resetTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, requestedBranch?: string) {

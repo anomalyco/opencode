@@ -42,7 +42,9 @@ describe("Repository", () => {
     expect(reference).toMatchObject({ host: "file", protocol: "file:", label: localPath })
     expect(reference && Repository.isFile(reference)).toBe(true)
     expect(reference && Repository.isRemote(reference)).toBe(false)
-    expect(() => Repository.parseRemote(pathToFileURL(localPath).href)).toThrow(Repository.UnsupportedLocalRepositoryError)
+    expect(() => Repository.parseRemote(pathToFileURL(localPath).href)).toThrow(
+      Repository.UnsupportedLocalRepositoryError,
+    )
   })
 
   test("rejects unsafe remote references and branches with typed errors", () => {

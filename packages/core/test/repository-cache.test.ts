@@ -116,5 +116,10 @@ function read(file: string) {
 }
 
 function exists(file: string) {
-  return Effect.promise(() => fs.stat(file).then(() => true, () => false))
+  return Effect.promise(() =>
+    fs.stat(file).then(
+      () => true,
+      () => false,
+    ),
+  )
 }

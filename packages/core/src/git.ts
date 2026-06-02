@@ -34,7 +34,12 @@ export interface Interface {
   readonly head: (directory: string) => Effect.Effect<string | undefined>
   readonly branch: (directory: string) => Effect.Effect<string | undefined>
   readonly remoteHead: (directory: string) => Effect.Effect<string | undefined>
-  readonly clone: (input: { remote: string; target: string; branch?: string; depth?: number }) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly clone: (input: {
+    remote: string
+    target: string
+    branch?: string
+    depth?: number
+  }) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly fetch: (directory: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly fetchBranch: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly checkout: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
@@ -109,7 +114,10 @@ export const layer = Layer.effect(
     })
 
     const clone = Effect.fn("Git.clone")((input: { remote: string; target: string; branch?: string; depth?: number }) =>
-      execute(path.dirname(input.target), proc)([
+      execute(
+        path.dirname(input.target),
+        proc,
+      )([
         "clone",
         "--depth",
         String(input.depth ?? 100),
@@ -134,7 +142,20 @@ export const layer = Layer.effect(
       execute(directory, proc)(["reset", "--hard", target]),
     )
 
-    return Service.of({ find, remote, roots, origin, head, branch, remoteHead, clone, fetch, fetchBranch, checkout, reset })
+    return Service.of({
+      find,
+      remote,
+      roots,
+      origin,
+      head,
+      branch,
+      remoteHead,
+      clone,
+      fetch,
+      fetchBranch,
+      checkout,
+      reset,
+    })
   }),
 )
 
@@ -150,7 +171,8 @@ export interface Result {
 }
 
 function run(cwd: string, proc: AppProcess.Interface) {
-  return (args: string[]) => execute(cwd, proc)(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
+  return (args: string[]) =>
+    execute(cwd, proc)(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
 }
 
 function execute(cwd: string, proc: AppProcess.Interface) {
@@ -166,7 +188,11 @@ function execute(cwd: string, proc: AppProcess.Interface) {
       .pipe(
         Effect.map(
           (result) =>
-            ({ exitCode: result.exitCode, text: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8") }) satisfies Result,
+            ({
+              exitCode: result.exitCode,
+              text: result.stdout.toString("utf8"),
+              stderr: result.stderr.toString("utf8"),
+            }) satisfies Result,
         ),
       )
 }
