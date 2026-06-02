@@ -28,10 +28,13 @@ export const DefaultDelivery = "immediate" satisfies Delivery
 
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),
-  withStatics((schema) => ({
-    create: () => schema.make("ses_" + Identifier.descending()),
-    descending: (id?: string) => schema.make(id ?? "ses_" + Identifier.descending()),
-  })),
+  withStatics((schema) => {
+    const create = () => schema.make("ses_" + Identifier.descending())
+    return {
+      create,
+      descending: (id?: string) => id === undefined ? create() : schema.make(id),
+    }
+  }),
 )
 export type ID = typeof ID.Type
 

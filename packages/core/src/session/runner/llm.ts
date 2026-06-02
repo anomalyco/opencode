@@ -1,6 +1,6 @@
 import { LLM, LLMClient, LLMEvent } from "@opencode-ai/llm"
 import { eq } from "drizzle-orm"
-import { Effect, Layer, Stream } from "effect"
+import { Deferred, Effect, Layer, Semaphore, Stream } from "effect"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -9,7 +9,7 @@ import { fromRow } from "../info"
 import { SessionContext } from "../context"
 import { SessionSchema } from "../schema"
 import { SessionTable } from "../sql"
-import { Service } from "./index"
+import { Service, StepLimitExceededError, type RunError } from "./index"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { ToolRegistry } from "../../tool-registry"
@@ -25,7 +25,8 @@ import { SessionRunnerModel } from "./model"
  *   - [ ] Acquire one active run for the Session; concurrent resume calls join or observe it.
  *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
- *   - [ ] Bound model steps, provider retries, and repeated identical tool calls.
+ *   - [x] Bound model steps.
+ *   - [ ] Bound provider retries and repeated identical tool calls.
  *
  * - Runtime context assembly
  *   - [x] Load Session placement and chronological projected V2 history.
@@ -55,8 +56,8 @@ import { SessionRunnerModel } from "./model"
  *   - [x] Persist typed success, failure, and provider-executed tool outcomes.
  *   - [ ] Add scoped runtime context, progress updates, output truncation, attachment normalization,
  *     plugins, and cancellation settlement.
- *   - [ ] Reload projected history and start the next explicit provider turn when tool results,
- *     queued user input, compaction, or another continuation condition requires it.
+ *   - [x] Reload projected history and start the next explicit provider turn after local tool results.
+ *   - [ ] Continue for queued user input, compaction, or another continuation condition when required.
  *
  * - Post-run maintenance
  *   - [ ] Settle final status and expose durable output events to replayable consumers.
@@ -67,9 +68,11 @@ import { SessionRunnerModel } from "./model"
  * loops in memory, skipping the durable Session boundaries needed for recovery and routing.
  *
  * The current slice loads V2 history, translates it, resolves a model through a core service, and persists one
- * provider turn. Registry definitions are advertised and local tool calls are settled durably, but
- * intentionally do not start a continuation turn yet.
+ * provider turn. Registry definitions are advertised, local tool calls are settled durably, and a
+ * bounded explicit loop starts the next provider turn after local settlement.
  */
+const MAX_STEPS = 25
+
 export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -78,6 +81,8 @@ export const layer = Layer.effect(
       const llm = yield* LLMClient.Service
       const tools = yield* ToolRegistry.Service
       const models = yield* SessionRunnerModel.Service
+      const active = new Map<SessionSchema.ID, Deferred.Deferred<void, RunError>>()
+      const activeLock = Semaphore.makeUnsafe(1)
 
       const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
@@ -90,6 +95,7 @@ export const layer = Layer.effect(
       })
 
       const runTurn = Effect.fn("SessionRunner.runTurn")(function* (session: SessionSchema.Info) {
+        let settledLocalTool = false
         const model = yield* models.resolve(session)
         const context = yield* getContext(session.id)
         const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
@@ -110,14 +116,38 @@ export const layer = Layer.effect(
               if (event.type !== "tool-call" || event.providerExecuted) return
               const result = yield* tools.execute({ sessionID: session.id, call: event })
               yield* publishLLMEvent(LLMEvent.toolResult({ id: event.id, name: event.name, result }))
+              settledLocalTool = true
             }),
           ),
         )
+        return settledLocalTool
       })
 
       return Service.of({
         run: Effect.fn("SessionRunner.run")(function* (sessionID) {
-          yield* runTurn(yield* getSession(sessionID))
+          const current = yield* activeLock.withPermit(
+            Effect.gen(function* () {
+              const existing = active.get(sessionID)
+              if (existing) return { deferred: existing, owner: false as const }
+              const deferred = yield* Deferred.make<void, RunError>()
+              active.set(sessionID, deferred)
+              return { deferred, owner: true as const }
+            }),
+          )
+          if (!current.owner) return yield* Deferred.await(current.deferred)
+
+          return yield* Effect.gen(function* () {
+            const session = yield* getSession(sessionID)
+            for (let step = 0; step < MAX_STEPS; step++) {
+              if (!(yield* runTurn(session))) return
+            }
+            return yield* new StepLimitExceededError({ sessionID, limit: MAX_STEPS })
+          }).pipe(
+            Effect.exit,
+            Effect.tap((exit) => Deferred.done(current.deferred, exit)),
+            Effect.ensuring(Effect.sync(() => active.delete(sessionID))),
+            Effect.flatten,
+          )
         }),
       })
     }),

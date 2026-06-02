@@ -1,10 +1,18 @@
 export * as SessionRunner from "./index"
 
 import type { LLMError } from "@opencode-ai/llm"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { SessionSchema } from "../schema"
 
-export type RunError = LLMError
+export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExceededError>()(
+  "SessionRunner.StepLimitExceededError",
+  {
+    sessionID: SessionSchema.ID,
+    limit: Schema.Int,
+  },
+) {}
+
+export type RunError = LLMError | StepLimitExceededError
 
 /** Runs one local continuation from already-admitted Session history. */
 export interface Interface {

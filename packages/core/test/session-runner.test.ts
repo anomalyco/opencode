@@ -15,7 +15,7 @@ import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -23,11 +23,21 @@ const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
+let responses: LLMEvent[][] | undefined
+let streamGate: Deferred.Deferred<void> | undefined
+let streamStarted: Deferred.Deferred<void> | undefined
 const client = Layer.succeed(LLMClient.Service, LLMClient.Service.of({
   prepare: () => Effect.die("unused"),
   stream: ((request: LLMRequest) => {
     requests.push(request)
-    return Stream.fromIterable(response)
+    const events = Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
+    if (!streamGate) return events
+    return Stream.unwrap(
+      (streamStarted ? Deferred.succeed(streamStarted, undefined) : Effect.void).pipe(
+        Effect.andThen(Deferred.await(streamGate)),
+        Effect.as(events),
+      ),
+    )
   }) as unknown as LLMClientShape["stream"],
   generate: () => Effect.die("unused"),
 }))
@@ -100,6 +110,9 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }) })
 
       requests.length = 0
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
       response = []
       yield* session.resume(sessionID)
 
@@ -121,6 +134,9 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use tools" }) })
 
       requests.length = 0
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
       response = [
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.reasoningStart({ id: "reasoning-1" }),
@@ -203,7 +219,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("authorizes, executes, and durably settles one local tool call without continuing", () =>
+  it.effect("continues with reloaded history after durably settling one local tool call", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -212,16 +228,29 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       authorizations.length = 0
       executions.length = 0
-      response = [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: "call-echo", name: "echo", input: { text: "hello" } }),
-        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
-        LLMEvent.finish({ reason: "tool-calls" }),
+      streamGate = undefined
+      streamStarted = undefined
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-echo", name: "echo", input: { text: "hello" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
       ]
 
       yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(1)
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
       expect(authorizations).toMatchObject([{ sessionID, call: { id: "call-echo", name: "echo" } }])
       expect(executions).toEqual(["hello"])
       expect(yield* session.context(sessionID)).toMatchObject([
@@ -238,7 +267,73 @@ describe("SessionRunnerLLM", () => {
             },
           ],
         },
+        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-final", text: "Done" }] },
       ])
+    }),
+  )
+
+  it.effect("joins concurrent resume calls into one active provider run", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run once" }) })
+
+      requests.length = 0
+      responses = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-once" }),
+        LLMEvent.textDelta({ id: "text-once", text: "Once" }),
+        LLMEvent.textEnd({ id: "text-once" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      const second = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+
+      expect(requests).toHaveLength(1)
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(first)
+      yield* Fiber.join(second)
+      streamGate = undefined
+      streamStarted = undefined
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Run once" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-once", text: "Once" }] },
+      ])
+    }),
+  )
+
+  it.effect("fails after the bounded number of local tool continuation steps", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Loop forever" }) })
+
+      requests.length = 0
+      authorizations.length = 0
+      executions.length = 0
+      streamGate = undefined
+      streamStarted = undefined
+      responses = Array.from({ length: 25 }, (_, index) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: `call-echo-${index}`, name: "echo", input: { text: `${index}` } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ])
+
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "SessionRunner.StepLimitExceededError", sessionID, limit: 25 })
+      expect(requests).toHaveLength(25)
+      expect(executions).toHaveLength(25)
     }),
   )
 
@@ -249,6 +344,9 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail durably" }) })
 
       requests.length = 0
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
       response = [LLMEvent.stepStart({ index: 0 }), LLMEvent.providerError({ message: "Provider unavailable" })]
 
       yield* session.resume(sessionID)
@@ -267,6 +365,9 @@ describe("SessionRunnerLLM", () => {
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Two blocks" }) })
 
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
       response = [
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "text-1" }),
@@ -298,6 +399,9 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
       response = [LLMEvent.toolInputDelta({ id: "call-1", name: "read", text: "{}" })]
 
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe("Tool input delta before start: call-1")

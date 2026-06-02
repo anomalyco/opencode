@@ -86,8 +86,7 @@ export const layer = (initial: Readonly<Record<string, Entry>> = {}) =>
               ),
             ),
           ),
-          Effect.map((value): ToolResultValue =>
-            ToolResult.is(value) ? value : { type: "json", value }),
+          Effect.map((value): ToolResultValue => ToolResult.make(value)),
           Effect.catchTag("LLM.ToolFailure", (failure) =>
             Effect.succeed({ type: "error" as const, value: failure.message }),
           ),
