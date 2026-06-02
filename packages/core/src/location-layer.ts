@@ -17,6 +17,7 @@ import { Database } from "./database/database"
 import { PermissionV2 } from "./permission"
 import { PermissionSaved } from "./permission/saved"
 import { SessionV2 } from "./session"
+import { LocationFileSystem } from "./location-filesystem"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -30,6 +31,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
       PermissionV2.locationLayer,
+      LocationFileSystem.locationLayer,
     ).pipe(Layer.provideMerge(location), Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
