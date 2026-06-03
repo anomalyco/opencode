@@ -2,7 +2,13 @@ import { Resource } from "sst/resource"
 import type { AthenaData } from "../athena"
 import type { GeoStatAggregate } from "./geo"
 import type { ModelStatAggregate } from "./model"
-import { EXCLUDED_MODELS, MODEL_AUTHOR_RULES, statModel, statProvider } from "./model-normalization"
+import {
+  EXCLUDED_MODELS,
+  MODEL_AUTHOR_RULES,
+  RETIRED_STAT_PROVIDERS,
+  statModel,
+  statProvider,
+} from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
 import { normalizeCountry, normalizeTier, type StatBaseAggregate } from "./stat"
 
@@ -60,6 +66,7 @@ WITH normalized AS (
     model AS raw_model,
     ${statModelSql("model", "provider_model")} AS model,
     COALESCE(NULLIF(provider_model, ''), '') AS provider_model,
+    COALESCE(NULLIF(provider, ''), '') AS raw_provider,
     UPPER(COALESCE(NULLIF(cf_country, ''), 'ZZ')) AS country,
     COALESCE(NULLIF(cf_continent, ''), '') AS continent,
     session,
@@ -95,7 +102,7 @@ WITH normalized AS (
       WHEN raw_model IN ('gpt-5-nano', 'grok-code', 'big-pickle') OR regexp_like(raw_model, '-free(:global)?$') THEN 'Free'
       ELSE 'Paid'
     END AS tier,
-    ${statProviderSql("model", "provider_model")} AS provider,
+    ${statProviderSql("model", "provider_model", "raw_provider")} AS provider,
     provider_model,
     model,
     country,
@@ -241,15 +248,16 @@ function sqlString(value: string) {
 
 function statModelSql(model: string, providerModel: string) {
   return `COALESCE(NULLIF(regexp_replace(CASE
-      WHEN ${model} = 'big-pickle' THEN COALESCE(NULLIF(${providerModel}, ''), ${model})
+      WHEN lower(${model}) = 'big-pickle' THEN NULLIF(${providerModel}, '')
       ELSE ${model}
     END, '(-free|:global)+$', ''), ''), 'unknown')`
 }
 
-function statProviderSql(model: string, providerModel: string) {
+function statProviderSql(model: string, providerModel: string, provider: string) {
   return `CASE
 ${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${providerModel}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
 ${MODEL_AUTHOR_RULES.map((item) => `      WHEN strpos(lower(${model}), ${sqlString(item.match)}) > 0 THEN ${sqlString(item.author)}`).join("\n")}
+      WHEN ${provider} <> '' AND lower(${provider}) NOT IN (${RETIRED_STAT_PROVIDERS.map(sqlString).join(", ")}) THEN ${provider}
       ELSE 'unknown'
     END`
 }

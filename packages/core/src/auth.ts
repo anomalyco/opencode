@@ -5,7 +5,7 @@ import { Effect, Layer, Option, Schema, Context, SynchronizedRef } from "effect"
 import { Identifier } from "./util/identifier"
 import { NonNegativeInt, withStatics } from "./schema"
 import { Global } from "./global"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { EventV2 } from "./event"
 
 export const ID = Schema.String.pipe(
@@ -131,7 +131,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fsys = yield* AppFileSystem.Service
+    const fsys = yield* FSUtil.Service
     const global = yield* Global.Service
     const events = yield* EventV2.Service
     const file = path.join(global.data, "account.json")
@@ -334,7 +334,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Global.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
