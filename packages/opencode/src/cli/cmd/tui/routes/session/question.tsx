@@ -8,11 +8,13 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTuiConfig } from "../../context/tui-config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useProject } from "../../context/project"
 
 const QUESTION_MODE = "question"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
+  const project = useProject()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
@@ -50,12 +52,14 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     void sdk.client.question.reply({
       requestID: props.request.id,
       answers,
+      workspace: project.workspace.current(),
     })
   }
 
   function reject() {
     void sdk.client.question.reject({
       requestID: props.request.id,
+      workspace: project.workspace.current(),
     })
   }
 
@@ -72,6 +76,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       void sdk.client.question.reply({
         requestID: props.request.id,
         answers: [[answer]],
+        workspace: project.workspace.current(),
       })
       return
     }
