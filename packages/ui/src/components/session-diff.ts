@@ -64,7 +64,7 @@ function fileDiffFromPatch(file: string, patch: string) {
   const input = contents ? undefined : patchInput(file, patch)
   const value = contents
     ? fileDiffFromContent(file, contents.before, contents.after)
-    : (input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file)
+    : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
   patchFileDiffCache.set(key, value)
   while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
   return value
