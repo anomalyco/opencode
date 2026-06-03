@@ -111,12 +111,21 @@ export const layer = Layer.effect(
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const output: { status: "ask" | "allow" | "deny" } = { status: "ask" }
-      yield* plugin.trigger("permission.ask", info, output)
+      yield* plugin.trigger("permission.ask", info, output).pipe(
+        Effect.catchCause((cause) => {
+          log.error("Plugin failed during permission.ask hook, falling back to ask", { cause })
+          return Effect.sync(() => {
+            output.status = "ask"
+          })
+        }),
+      )
 
       if (output.status === "allow") {
         return
       }
       if (output.status === "deny") {
+        // When a plugin denies a request, it's not based on the user's config ruleset,
+        // so we intentionally pass an empty array here.
         return yield* new PermissionV1.DeniedError({
           ruleset: [],
         })

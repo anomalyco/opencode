@@ -13,10 +13,22 @@ import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { Plugin } from "../../src/plugin"
 
+import { Context } from "effect"
+
+export interface MockPluginBehaviorInterface {
+  onTrigger?: (name: string, input: any, output: any) => void
+}
+
+export class MockPluginBehavior extends Context.Service<MockPluginBehavior, MockPluginBehaviorInterface>()("MockPluginBehavior") {}
+
 const mockPluginLayer = Layer.succeed(
   Plugin.Service,
   Plugin.Service.of({
     trigger: Effect.fn("Plugin.trigger")(function* (name, input, output) {
+      const behavior = yield* Effect.serviceOption(MockPluginBehavior)
+      if (behavior._tag === "Some" && behavior.value.onTrigger) {
+        behavior.value.onTrigger(name, input, output)
+      }
       return output as any
     }),
     list: Effect.fn("Plugin.list")(function* () {
@@ -570,6 +582,82 @@ test("disabled - specific allow overrides wildcard deny", () => {
 })
 
 // ask tests
+
+it.instance(
+  "ask - resolves immediately when plugin changes status to allow",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(
+        Effect.provideService(MockPluginBehavior, {
+          onTrigger: (name, input, output) => {
+            if (name === "permission.ask") output.status = "allow"
+          },
+        }),
+      )
+      expect(result).toBeUndefined()
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - throws DeniedError when plugin changes status to deny",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(
+        Effect.provideService(MockPluginBehavior, {
+          onTrigger: (name, input, output) => {
+            if (name === "permission.ask") output.status = "deny"
+          },
+        }),
+        Effect.flip,
+      )
+      expect(result).toBeInstanceOf(PermissionV1.DeniedError)
+      expect((result as PermissionV1.DeniedError).ruleset).toEqual([])
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - falls back to normal ask flow when plugin throws an error",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(
+        Effect.provideService(MockPluginBehavior, {
+          onTrigger: (name, input, output) => {
+            if (name === "permission.ask") throw new Error("Plugin crash")
+          },
+        }),
+        Effect.forkScoped,
+      )
+      
+      const pending = yield* waitForPending(1)
+      expect(pending).toHaveLength(1)
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
 
 it.instance(
   "ask - resolves immediately when action is allow",
