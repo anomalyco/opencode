@@ -720,6 +720,71 @@ describe("ProviderTransform.providerOptions", () => {
   })
 })
 
+describe("ProviderTransform.schema - OpenAI pattern sanitization", () => {
+  const schema = {
+    type: "object",
+    properties: {
+      entityRef: {
+        type: "string",
+        pattern: "^(component|system):default/[a-z0-9-]+$",
+      },
+      pattern: {
+        type: "string",
+        pattern: "^literal-pattern-property$",
+      },
+      filters: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            value: {
+              type: "string",
+              pattern: "^[a-z]+$",
+            },
+          },
+        },
+      },
+    },
+    required: ["entityRef", "pattern"],
+  } as any
+
+  test("removes nested pattern constraints for OpenAI models", () => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: "openai",
+        api: {
+          id: "gpt-5.5",
+          npm: "@ai-sdk/openai",
+        },
+      } as any,
+      schema,
+    ) as any
+
+    expect(result.properties.entityRef.pattern).toBeUndefined()
+    expect(result.properties.pattern).toEqual({ type: "string" })
+    expect(result.properties.filters.items.properties.value.pattern).toBeUndefined()
+    expect(result.required).toEqual(["entityRef", "pattern"])
+  })
+
+  test("preserves pattern constraints for Anthropic models", () => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4-5",
+          npm: "@ai-sdk/anthropic",
+        },
+      } as any,
+      schema,
+    ) as any
+
+    expect(result.properties.entityRef.pattern).toBe("^(component|system):default/[a-z0-9-]+$")
+    expect(result.properties.pattern.pattern).toBe("^literal-pattern-property$")
+    expect(result.properties.filters.items.properties.value.pattern).toBe("^[a-z]+$")
+    expect(result.required).toEqual(["entityRef", "pattern"])
+  })
+})
+
 describe("ProviderTransform.schema - gemini array items", () => {
   test("adds missing items for array properties", () => {
     const geminiModel = {
@@ -957,11 +1022,15 @@ describe("ProviderTransform.schema - gemini combiner nodes", () => {
       return
     }
     if (Array.isArray(node)) {
-      node.forEach((item, i) => walk(item, cb, [...path, i]))
+      node.forEach((item, i) => {
+        walk(item, cb, [...path, i])
+      })
       return
     }
     cb(node, path)
-    Object.entries(node).forEach(([key, value]) => walk(value, cb, [...path, key]))
+    Object.entries(node).forEach(([key, value]) => {
+      walk(value, cb, [...path, key])
+    })
   }
 
   test("keeps edits.items.anyOf without adding type", () => {

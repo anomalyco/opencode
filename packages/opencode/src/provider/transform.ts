@@ -1305,6 +1305,32 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
   */
 
+  // The OpenAI Responses/Chat function-schema validator rejects requests whose
+  // tool parameter schemas carry a `pattern` (regex) keyword. A handful are
+  // tolerated, but a tool set heavy with `pattern` constraints (e.g. MCP servers
+  // that validate entity refs) trips the validator and the request fails
+  // mid-stream with a generic server_error. Anthropic and Bedrock accept
+  // `pattern`, so scope the strip to the OpenAI provider. `pattern` is advisory
+  // for function-calling anyway — the model never enforces it — so dropping it
+  // is lossless for tool behavior.
+  if (model.api.npm === "@ai-sdk/openai") {
+    const schemaMapKeys = new Set(["$defs", "definitions", "dependentSchemas", "patternProperties", "properties"])
+    const stripPattern = (obj: unknown, parentKey?: string): unknown => {
+      if (obj === null || typeof obj !== "object") return obj
+      if (Array.isArray(obj)) return obj.map((item) => stripPattern(item, parentKey))
+      return Object.fromEntries(
+        Object.entries(obj as Record<string, unknown>)
+          .filter(([key]) => key !== "pattern" || schemaMapKeys.has(parentKey ?? ""))
+          .map(([key, value]) => [key, stripPattern(value, key)]),
+      )
+    }
+
+    const sanitized = stripPattern(schema)
+    if (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized)) {
+      schema = sanitized as JSONSchema7
+    }
+  }
+
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
     const sanitizeMoonshot = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") return obj
