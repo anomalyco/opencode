@@ -6,7 +6,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { batch, For } from "solid-js"
+import { batch, For, Show } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { FetchProviderModels } from "@/components/fetch-provider-models"
 import { Link } from "@/components/link"
@@ -16,7 +16,9 @@ import { useLanguage } from "@/context/language"
 import {
   OPENAI_COMPATIBLE,
   type FormState,
+  type ModelConfigRow,
   headerRow,
+  modelConfigPlaceholder,
   modelRow,
   validateCustomProvider,
 } from "./dialog-custom-provider-form"
@@ -114,6 +116,18 @@ export function DialogCustomProvider(props: Props) {
       setForm("models", index, key, value)
       setForm("models", index, "err", key, undefined)
     })
+  }
+
+  const setModelConfig = (modelIndex: number, configIndex: number, value: string) => {
+    const key = form.models[modelIndex]?.config[configIndex]?.key
+    batch(() => {
+      setForm("models", modelIndex, "config", configIndex, "value", value)
+      if (key) setForm("models", modelIndex, "err", "config", key, undefined)
+    })
+  }
+
+  const toggleModelConfig = (index: number) => {
+    setForm("models", index, "expanded", (value) => !value)
   }
 
   const setHeader = (index: number, key: "key" | "value", value: string) => {
@@ -257,38 +271,77 @@ export function DialogCustomProvider(props: Props) {
             <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
             <For each={form.models}>
               {(m, i) => (
-                <div class="flex gap-2 items-start" data-row={m.row}>
-                  <div class="flex-1">
-                    <TextField
-                      label={language.t("provider.custom.models.id.label")}
-                      hideLabel
-                      placeholder={language.t("provider.custom.models.id.placeholder")}
-                      value={m.id}
-                      onChange={(v) => setModel(i(), "id", v)}
-                      validationState={m.err.id ? "invalid" : undefined}
-                      error={m.err.id}
+                <div
+                  class="flex flex-col gap-2 rounded-xl border border-border-weak-base bg-background-base/60 p-2"
+                  data-row={m.row}
+                >
+                  <div class="flex gap-2 items-start">
+                    <IconButton
+                      type="button"
+                      icon={m.expanded ? "chevron-down" : "chevron-right"}
+                      variant="ghost"
+                      class="mt-1.5"
+                      onClick={() => toggleModelConfig(i())}
+                      aria-label={
+                        m.expanded
+                          ? language.t("provider.custom.models.config.collapse")
+                          : language.t("provider.custom.models.config.expand")
+                      }
+                    />
+                    <div class="flex-1">
+                      <TextField
+                        label={language.t("provider.custom.models.id.label")}
+                        hideLabel
+                        placeholder={language.t("provider.custom.models.id.placeholder")}
+                        value={m.id}
+                        onChange={(v) => setModel(i(), "id", v)}
+                        validationState={m.err.id ? "invalid" : undefined}
+                        error={m.err.id}
+                      />
+                    </div>
+                    <div class="flex-1">
+                      <TextField
+                        label={language.t("provider.custom.models.name.label")}
+                        hideLabel
+                        placeholder={language.t("provider.custom.models.name.placeholder")}
+                        value={m.name}
+                        onChange={(v) => setModel(i(), "name", v)}
+                        validationState={m.err.name ? "invalid" : undefined}
+                        error={m.err.name}
+                      />
+                    </div>
+                    <IconButton
+                      type="button"
+                      icon="trash"
+                      variant="ghost"
+                      class="mt-1.5"
+                      onClick={() => removeModel(i())}
+                      disabled={form.models.length <= 1}
+                      aria-label={language.t("provider.custom.models.remove")}
                     />
                   </div>
-                  <div class="flex-1">
-                    <TextField
-                      label={language.t("provider.custom.models.name.label")}
-                      hideLabel
-                      placeholder={language.t("provider.custom.models.name.placeholder")}
-                      value={m.name}
-                      onChange={(v) => setModel(i(), "name", v)}
-                      validationState={m.err.name ? "invalid" : undefined}
-                      error={m.err.name}
-                    />
-                  </div>
-                  <IconButton
-                    type="button"
-                    icon="trash"
-                    variant="ghost"
-                    class="mt-1.5"
-                    onClick={() => removeModel(i())}
-                    disabled={form.models.length <= 1}
-                    aria-label={language.t("provider.custom.models.remove")}
-                  />
+                  <Show when={m.expanded}>
+                    <div class="grid grid-cols-[minmax(120px,0.8fr)_minmax(0,1.2fr)] gap-2 border-t border-border-weak-base pt-2">
+                      <For each={m.config}>
+                        {(config: ModelConfigRow, configIndex) => (
+                          <>
+                            <div class="min-w-0 break-all rounded-lg bg-surface-base px-2.5 py-2 font-mono text-[11px] leading-5 text-text-weak">
+                              {config.key}
+                            </div>
+                            <TextField
+                              label={config.key}
+                              hideLabel
+                              placeholder={modelConfigPlaceholder(config, language.t)}
+                              value={config.value}
+                              onChange={(v) => setModelConfig(i(), configIndex(), v)}
+                              validationState={m.err.config?.[config.key] ? "invalid" : undefined}
+                              error={m.err.config?.[config.key]}
+                            />
+                          </>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
               )}
             </For>

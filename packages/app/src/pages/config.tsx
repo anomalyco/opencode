@@ -31,9 +31,12 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import {
   OPENAI_COMPATIBLE,
   headerRow as blankHeaderRow,
+  modelConfig as modelConfigRows,
+  modelConfigPlaceholder,
   modelRow as blankModelRow,
   type FormState,
   type HeaderRow,
+  type ModelConfigRow,
   type ModelRow,
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
@@ -514,12 +517,16 @@ function providerCfg(input: ProviderCfg | undefined): CustomState {
     apiKey: api || env,
     models:
       models.length > 0
-        ? models.map(([id, item]) => ({
-            row: blankModelRow().row,
-            id,
-            name: typeof item?.name === "string" ? item.name : id,
-            err: {},
-          }))
+        ? models.map(([id, item]) => {
+            const row = blankModelRow()
+            return {
+              ...row,
+              id,
+              name: typeof item?.name === "string" ? item.name : id,
+              config: modelConfigRows(item as Record<string, unknown>),
+              err: {},
+            }
+          })
         : [blankModelRow()],
     headers:
       headers && typeof headers === "object" && !Array.isArray(headers) && Object.keys(headers).length > 0
@@ -630,9 +637,7 @@ function SectionButton(props: { current: boolean; title: string; icon: IconProps
         >
           <Icon name={props.icon} size="medium" />
         </div>
-        <div class="truncate text-16-medium text-text-strong transition-colors">
-          {props.title}
-        </div>
+        <div class="truncate text-16-medium text-text-strong transition-colors">{props.title}</div>
       </div>
       <div class="size-2 rounded-full bg-border-strong transition-colors" />
     </button>
@@ -955,7 +960,9 @@ function Editor(props: {
               <Show when={props.reloading}>
                 <Spinner class="size-3" />
               </Show>
-              {props.reloading ? language.t("config.reloadBackend.loading") : language.t("command.server.reloadBackend")}
+              {props.reloading
+                ? language.t("config.reloadBackend.loading")
+                : language.t("command.server.reloadBackend")}
             </Button>
             <Button
               size="small"
@@ -1673,6 +1680,8 @@ function CustomEditor(props: {
   onToggle: (item: ProviderItem, enabled: boolean) => void
   onField: (key: "providerID" | "npm" | "name" | "baseURL" | "apiKey", value: string) => void
   onModel: (index: number, key: "id" | "name", value: string) => void
+  onModelConfig: (modelIndex: number, configIndex: number, value: string) => void
+  onToggleModelConfig: (index: number) => void
   onHeader: (index: number, key: "key" | "value", value: string) => void
   onAddModel: () => void
   onRemoveModel: (index: number) => void
@@ -1749,7 +1758,11 @@ function CustomEditor(props: {
               </Button>
             </Show>
             <SaveButton
-              label={language.t("config.custom.saveProvider")}
+              label={
+                props.form.saving
+                  ? language.t("config.custom.savingProvider")
+                  : language.t("config.custom.saveProvider")
+              }
               onClick={props.onSave}
               disabled={props.busy || props.form.saving || props.form.deleting}
             />
@@ -1836,34 +1849,70 @@ function CustomEditor(props: {
               <div class="flex flex-col gap-3 mb-3">
                 <For each={props.form.models}>
                   {(item, idx) => (
-                    <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" data-row={item.row}>
-                      <TextField
-                        label={language.t("config.custom.models.id")}
-                        hideLabel
-                        placeholder="模型 ID (如: gpt-4o, claude-3-opus)"
-                        value={item.id}
-                        onChange={(value) => props.onModel(idx(), "id", value)}
-                        validationState={item.err.id ? "invalid" : undefined}
-                        error={item.err.id}
-                      />
-                      <TextField
-                        label={language.t("config.custom.models.name")}
-                        hideLabel
-                        placeholder="显示名称 (如: GPT-4o, Claude 3 Opus)"
-                        value={item.name}
-                        onChange={(value) => props.onModel(idx(), "name", value)}
-                        validationState={item.err.name ? "invalid" : undefined}
-                        error={item.err.name}
-                      />
-                      <IconButton
-                        type="button"
-                        icon="trash"
-                        variant="ghost"
-                        class="mt-1.5"
-                        onClick={() => props.onRemoveModel(idx())}
-                        disabled={props.form.models.length <= 1}
-                        aria-label={language.t("config.custom.models.remove")}
-                      />
+                    <div class="rounded-xl border border-border-weak-base bg-surface-base/60 p-2" data-row={item.row}>
+                      <div class="grid gap-2 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                        <IconButton
+                          type="button"
+                          icon={item.expanded ? "chevron-down" : "chevron-right"}
+                          variant="ghost"
+                          class="mt-1.5"
+                          onClick={() => props.onToggleModelConfig(idx())}
+                          aria-label={
+                            item.expanded
+                              ? language.t("provider.custom.models.config.collapse")
+                              : language.t("provider.custom.models.config.expand")
+                          }
+                        />
+                        <TextField
+                          label={language.t("config.custom.models.id")}
+                          hideLabel
+                          placeholder="模型 ID (如: gpt-4o, claude-3-opus)"
+                          value={item.id}
+                          onChange={(value) => props.onModel(idx(), "id", value)}
+                          validationState={item.err.id ? "invalid" : undefined}
+                          error={item.err.id}
+                        />
+                        <TextField
+                          label={language.t("config.custom.models.name")}
+                          hideLabel
+                          placeholder="显示名称 (如: GPT-4o, Claude 3 Opus)"
+                          value={item.name}
+                          onChange={(value) => props.onModel(idx(), "name", value)}
+                          validationState={item.err.name ? "invalid" : undefined}
+                          error={item.err.name}
+                        />
+                        <IconButton
+                          type="button"
+                          icon="trash"
+                          variant="ghost"
+                          class="mt-1.5"
+                          onClick={() => props.onRemoveModel(idx())}
+                          disabled={props.form.models.length <= 1}
+                          aria-label={language.t("config.custom.models.remove")}
+                        />
+                      </div>
+                      <Show when={item.expanded}>
+                        <div class="mt-2 grid grid-cols-[minmax(150px,0.8fr)_minmax(0,1.2fr)] gap-2 border-t border-border-weak-base pt-2">
+                          <For each={item.config}>
+                            {(config: ModelConfigRow, configIndex) => (
+                              <>
+                                <div class="min-w-0 break-all rounded-lg bg-background-base px-2.5 py-2 font-mono text-[11px] leading-5 text-text-weak">
+                                  {config.key}
+                                </div>
+                                <TextField
+                                  label={config.key}
+                                  hideLabel
+                                  placeholder={modelConfigPlaceholder(config, language.t)}
+                                  value={config.value}
+                                  onChange={(value) => props.onModelConfig(idx(), configIndex(), value)}
+                                  validationState={item.err.config?.[config.key] ? "invalid" : undefined}
+                                  error={item.err.config?.[config.key]}
+                                />
+                              </>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
                     </div>
                   )}
                 </For>
@@ -3620,6 +3669,16 @@ export default function ConfigPage() {
     setState("custom", "models", index, "err", key, undefined)
   }
 
+  function setCustomModelConfig(modelIndex: number, configIndex: number, value: string) {
+    const key = state.custom.models[modelIndex]?.config[configIndex]?.key
+    setState("custom", "models", modelIndex, "config", configIndex, "value", value)
+    if (key) setState("custom", "models", modelIndex, "err", "config", key, undefined)
+  }
+
+  function toggleCustomModelConfig(index: number) {
+    setState("custom", "models", index, "expanded", (value) => !value)
+  }
+
   function setCustomHeader(index: number, key: "key" | "value", value: string) {
     setState("custom", "headers", index, key, value)
     setState("custom", "headers", index, "err", key, undefined)
@@ -3932,7 +3991,8 @@ export default function ConfigPage() {
     const prev = cfg().plugin ?? []
     const nextSpec = item.spec ?? (item.path ? spec(item.path) : item.name)
     const key = pluginKey(nextSpec)
-    const keyOf = (entry: string | [string, Record<string, unknown>]) => pluginKey(Array.isArray(entry) ? entry[0] : entry)
+    const keyOf = (entry: string | [string, Record<string, unknown>]) =>
+      pluginKey(Array.isArray(entry) ? entry[0] : entry)
     const next = enabled
       ? Array.from(new Set([...prev.filter((entry) => keyOf(entry) !== key), nextSpec]))
       : prev.filter((entry) => keyOf(entry) !== key)
@@ -4363,7 +4423,8 @@ export default function ConfigPage() {
                               <span
                                 class="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em]"
                                 classList={{
-                                  "border-border-success-base/60 bg-surface-success-base text-text-on-success-base": item.enabled,
+                                  "border-border-success-base/60 bg-surface-success-base text-text-on-success-base":
+                                    item.enabled,
                                   "border-transparent bg-surface-secondary text-text-weak": !item.enabled,
                                 }}
                               >
@@ -4696,6 +4757,8 @@ export default function ConfigPage() {
                     onToggle={toggleProvider}
                     onField={setCustomField}
                     onModel={setCustomModel}
+                    onModelConfig={setCustomModelConfig}
+                    onToggleModelConfig={toggleCustomModelConfig}
                     onHeader={setCustomHeader}
                     onAddModel={addCustomModel}
                     onRemoveModel={removeCustomModel}

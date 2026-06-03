@@ -240,6 +240,10 @@ export const dict = {
   "provider.custom.models.name.placeholder": "显示名称",
   "provider.custom.models.remove": "移除模型",
   "provider.custom.models.add": "添加模型",
+  "provider.custom.models.config.expand": "展开模型配置",
+  "provider.custom.models.config.collapse": "折叠模型配置",
+  "provider.custom.models.config.empty": "留空则不设置",
+  "provider.custom.models.config.placeholder": "类型：{{type}}；示例：{{example}}；留空则不设置",
   "provider.custom.headers.label": "请求头（可选）",
   "provider.custom.headers.key.label": "请求头",
   "provider.custom.headers.key.placeholder": "Header-Name",
@@ -255,6 +259,11 @@ export const dict = {
   "provider.custom.error.baseURL.format": "必须以 http:// 或 https:// 开头",
   "provider.custom.error.required": "必填",
   "provider.custom.error.duplicate": "重复",
+  "provider.custom.error.boolean": "请填写 true 或 false",
+  "provider.custom.error.number": "请填写有限数字",
+  "provider.custom.error.json": "请填写有效 JSON",
+  "provider.custom.error.status": "请填写 active、beta、alpha 或 deprecated",
+  "provider.custom.error.modalities": "请填写 text、audio、image、video 或 pdf",
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} 已断开连接",
   "provider.disconnect.toast.disconnected.description": "{{provider}} 模型已不再可用。",
@@ -487,7 +496,8 @@ export const dict = {
   "toast.file.listFailed.title": "列出文件失败",
   "toast.file.listFailed.openclaw": "OpenClaw 目前不提供项目文件树。你可以继续对话，但浏览文件请切回普通项目。",
   "toast.file.listFailed.generalagent": "GeneralAgent 目前不提供项目文件树。你可以继续对话，但浏览文件请切回普通项目。",
-  "toast.file.listFailed.hermes": "Hermes 目前还不会通过这个 bridge 暴露项目文件树。你可以继续对话，但浏览文件请切回普通项目。",
+  "toast.file.listFailed.hermes":
+    "Hermes 目前还不会通过这个 bridge 暴露项目文件树。你可以继续对话，但浏览文件请切回普通项目。",
   "toast.file.listFailed.genericagent": "GenericAgent 目前不提供项目文件树。你可以继续对话，但浏览文件请切回普通项目。",
   "toast.context.noLineSelection.title": "未选择行",
   "toast.context.noLineSelection.description": "请先在文件标签中选择行范围。",
@@ -1159,7 +1169,8 @@ export const dict = {
   "config.claws.note.hermes": "Hermes Agent API bridge。",
   "config.claws.note.genericagent": "Python GenericAgent 运行时。",
   "config.claws.field.pythonExecutable": "Python 可执行文件",
-  "config.claws.field.pythonExecutableDescription": "覆盖默认 Python 解释器。默认优先使用项目 venv，否则回退到 `python3`。",
+  "config.claws.field.pythonExecutableDescription":
+    "覆盖默认 Python 解释器。默认优先使用项目 venv，否则回退到 `python3`。",
   "config.claws.field.pythonExecutablePlaceholder": "python3",
   "config.claws.field.hermesDir": "Hermes Agent 项目目录",
   "config.claws.field.hermesDirDescription":
@@ -1240,6 +1251,7 @@ export const dict = {
   "config.custom.description":
     "直接在这里编辑自定义提供商配置。这会在需要时更新 `provider`、`disabled_providers` 和 auth。",
   "config.custom.saveProvider": "保存提供商",
+  "config.custom.savingProvider": "正在保存",
   "config.custom.field.providerID": "提供商 ID",
   "config.custom.field.npm": "NPM 包",
   "config.custom.field.name": "名称",
