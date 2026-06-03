@@ -88,7 +88,7 @@ export const DialogFork: Component = () => {
   return (
     <Dialog title={language.t("command.session.fork")}>
       <List
-        class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
+        class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
         search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.fork.empty")}
         key={(x) => x.id}
