@@ -151,6 +151,7 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
           id: message.id,
           session_id: sessionID,
           type: message.type,
+          seq: time,
           time_created: time,
           data: {
             time: { created: time },
@@ -174,6 +175,7 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
           id: SessionMessage.ID.create(),
           session_id: sessionID,
           type: "assistant",
+          seq: time,
           time_created: time,
           data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
         },

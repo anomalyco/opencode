@@ -71,10 +71,14 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const timestamp = DateTime.now
   let assistantMessageID: EventV2.ID | undefined
 
-  const currentAssistantMessageID = () =>
-    assistantMessageID === undefined
-      ? Effect.die("Tool event before assistant step start")
-      : Effect.succeed(assistantMessageID)
+  const startAssistant = Effect.fnUntraced(function* () {
+    if (assistantMessageID !== undefined) return assistantMessageID
+    assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp })).id
+    return assistantMessageID
+  })
+  const currentAssistantMessageID = () => assistantMessageID === undefined
+    ? Effect.die("Tool event before assistant step start")
+    : Effect.succeed(assistantMessageID)
 
   const fragments = (name: string, ended: (id: string, value: string) => Effect.Effect<void>) => {
     const chunks = new Map<string, string[]>()
@@ -173,7 +177,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
     switch (event.type) {
       case "step-start":
-        assistantMessageID = (yield* events.publish(SessionEvent.Step.Started, { ...input, timestamp: yield* timestamp })).id
+        yield* startAssistant()
         return
       case "text-start":
         yield* text.start(event.id)
@@ -326,7 +330,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Step.Failed, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
-          assistantMessageID: yield* currentAssistantMessageID(),
+          assistantMessageID: yield* startAssistant(),
           error: { type: "unknown", message: event.message },
         })
         return

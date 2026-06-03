@@ -12,6 +12,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
@@ -44,10 +45,11 @@ const model = OpenAIChat.route
   .model({ id: "gpt-4o-mini" })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const runner = SessionRunnerLLM.layer.pipe(Layer.provide(store), Layer.provide(events), Layer.provide(client), Layer.provide(registry), Layer.provide(models))
+const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
-  SessionRunner.Service.pipe(Effect.map((runner) => SessionExecution.Service.of({ resume: runner.run }))),
-).pipe(Layer.provide(runner))
+  SessionRunCoordinator.Service.pipe(Effect.map((coordinator) => SessionExecution.Service.of({ resume: coordinator.run, wake: coordinator.wake }))),
+).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
   Layer.provide(events),
   Layer.provide(database),
@@ -55,7 +57,7 @@ const sessions = SessionV2.layer.pipe(
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, store, executor, client, registry, models, runner, execution, sessions))
+const it = testEffect(Layer.mergeAll(database, events, projector, store, executor, client, registry, models, runner, coordinator, execution, sessions))
 const sessionID = SessionV2.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
@@ -89,10 +91,12 @@ describe("SessionRunnerLLM recorded", () => {
           .map((event) => event.type),
       ).toEqual([
         "session.next.prompted.1",
+        "session.next.turn.started.1",
         "session.next.step.started.1",
         "session.next.text.started.1",
         "session.next.text.ended.1",
         "session.next.step.ended.2",
+        "session.next.turn.settled.1",
       ])
     }),
   )

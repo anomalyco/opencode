@@ -32,6 +32,8 @@ export type Payload<D extends Definition = Definition> = {
   readonly id: ID
   readonly type: D["type"]
   readonly data: Data<D>
+  /** Durable aggregate order, populated while synchronized events are projected. */
+  readonly seq?: number
   readonly version?: number
   readonly location?: Location.Ref
   readonly metadata?: Record<string, unknown>
@@ -208,7 +210,7 @@ export const layer = Layer.effect(
             )
           } else {
             const list = projectors.get(event.type) ?? []
-            yield* Effect.uninterruptible(
+            return yield* Effect.uninterruptible(
               Effect.gen(function* () {
                 const committed = yield* db
                   .transaction(
@@ -233,7 +235,7 @@ export const layer = Layer.effect(
                           )
                         }
                         for (const projector of list) {
-                          yield* projector(event as Payload)
+                          yield* projector({ ...event, seq } as Payload)
                         }
                         const encoded = syncRegistry.get(versionedType(definition.type, sync.version))!.encode(event.data)
                         yield* db
@@ -258,12 +260,13 @@ export const layer = Layer.effect(
                           ])
                           .run()
                           .pipe(Effect.orDie)
-                        return aggregateID
+                        return { aggregateID, seq }
                       }),
                     { behavior: "immediate" },
                   )
                   .pipe(Effect.orDie)
-                if (committed) yield* PubSub.publish(synchronized, committed)
+                if (committed) yield* PubSub.publish(synchronized, committed.aggregateID)
+                return committed
               }),
             )
           }
@@ -278,7 +281,8 @@ export const layer = Layer.effect(
           for (const sync of syncHandlers) {
             yield* sync(event as Payload)
           }
-          yield* commitSyncEvent(event as Payload)
+          const committed = yield* commitSyncEvent(event as Payload)
+          if (committed) event = { ...event, seq: committed.seq }
         }
         for (const listener of listeners) {
           yield* listener(event as Payload)
@@ -323,14 +327,15 @@ export const layer = Layer.effect(
             version: definition.sync.version,
             data: definition.decode(event.data),
           } as Payload
-          yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
-          if (options?.publish) {
+          const committed = yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
+          if (committed && options?.publish) {
+            const published = { ...payload, seq: committed.seq }
             for (const listener of listeners) {
-              yield* listener(payload)
+              yield* listener(published)
             }
             const pubsub = typed.get(payload.type)
-            if (pubsub) yield* PubSub.publish(pubsub, payload)
-            yield* PubSub.publish(all, payload)
+            if (pubsub) yield* PubSub.publish(pubsub, published)
+            yield* PubSub.publish(all, published)
           }
         }
       })
@@ -405,6 +410,7 @@ export const layer = Layer.effect(
           id: event.id,
           type: definition.type,
           version: definition.sync.version,
+          seq: event.seq,
           data: definition.decode(event.data),
         },
       }

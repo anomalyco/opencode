@@ -192,6 +192,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
+      "session.next.turn.started": () => Effect.void,
+      "session.next.turn.settled": () => Effect.void,
       "session.next.step.started": (event) => {
         return Effect.gen(function* () {
           const currentAssistant = yield* adapter.getCurrentAssistant()

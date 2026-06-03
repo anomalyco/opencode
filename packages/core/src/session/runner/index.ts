@@ -17,7 +17,8 @@ export type RunError = LLMError | SessionRunnerModel.Error | StepLimitExceededEr
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
-  readonly run: (sessionID: SessionSchema.ID) => Effect.Effect<void, RunError>
+  /** Drains pending durable work. Explicit runs may force one provider attempt. */
+  readonly run: (input: { readonly sessionID: SessionSchema.ID; readonly force?: boolean }) => Effect.Effect<void, RunError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunner") {}

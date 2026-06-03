@@ -171,8 +171,8 @@ export const layer = Layer.effect(
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const scope = yield* Effect.scope
 
-    const enqueueResume = (sessionID: SessionSchema.ID) =>
-      execution.resume(sessionID).pipe(
+    const enqueueWake = (sessionID: SessionSchema.ID) =>
+      execution.wake(sessionID).pipe(
         Effect.tapCause((cause) =>
           Effect.logError("Failed to resume Session").pipe(
             Effect.annotateLogs("sessionID", sessionID),
@@ -372,12 +372,16 @@ export const layer = Layer.effect(
         ).pipe(
           Stream.filter((event): event is EventV2.CursorEvent<SessionEvent.DurableEvent> => isDurableSessionEvent(event.event)),
         ),
-      prompt: Effect.fn("V2Session.prompt")(function* (input) {
+      prompt: Effect.fn("V2Session.prompt")((input) => Effect.uninterruptible(Effect.gen(function* () {
         yield* result.get(input.sessionID)
+        const returnPrompt = Effect.fnUntraced(function* (message: SessionMessage.User) {
+          if (input.resume !== false) yield* enqueueWake(input.sessionID)
+          return message
+        }, Effect.uninterruptible)
         const messageID = input.id ?? SessionMessage.ID.create()
         const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt }
         const existing = yield* findExistingPrompt(expected)
-        if (existing) return existing
+        if (existing) return yield* returnPrompt(existing)
         const projected = yield* events
           .publish(
             SessionEvent.Prompted,
@@ -397,10 +401,8 @@ export const layer = Layer.effect(
               )
             }),
           )
-        if (projected.type === "existing") return projected.message
-        if (input.resume !== false) yield* enqueueResume(input.sessionID)
-        return yield* getProjectedUserMessage(messageID)
-      }),
+        return yield* returnPrompt(projected.type === "existing" ? projected.message : yield* getProjectedUserMessage(messageID))
+      }))),
       shell: Effect.fn("V2Session.shell")(function* () {}),
       skill: Effect.fn("V2Session.skill")(function* () {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* () {}),

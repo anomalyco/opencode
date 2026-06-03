@@ -28,5 +28,6 @@ export const migrations = (
     import("./migration/20260602002951_lowly_union_jack"),
     import("./migration/20260602182828_add_project_directories"),
     import("./migration/20260603001617_session_message_projection_indexes"),
+    import("./migration/20260603040000_session_message_projection_order"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

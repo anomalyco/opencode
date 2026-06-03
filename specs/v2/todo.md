@@ -26,12 +26,16 @@ through legacy `SessionPrompt.loop(...)`:
   tool results, and assistant output
 - a scoped `ToolRegistry` advertises definitions and the first permission-checked
   `read` built-in
-- local continuation reloads projected history and stops after 25 model steps
+- local continuation reloads projected history and stops after 25 provider turns within one local drain activity
 - concurrent resumes for one Session join one process-local run while different
   Sessions remain concurrent
 
-Joining is not queued steering. Add an explicit pending-input continuation rule
-before relying on prompts recorded during an already-active run.
+Default steering now uses durable Session control facts rather than in-memory
+prompt queues: `Prompted` cursors establish input order, `Turn.Started` records
+the consumed-through prompt watermark for one outer provider attempt, and a
+location-scoped `SessionRunCoordinator` coalesces process-local wakeups around
+settlement races. Add explicit `queue` delivery later when a caller needs to
+wait for the current activity to settle before starting fresh work.
 
 Next reviewed slices:
 
@@ -45,7 +49,7 @@ Next reviewed slices:
   remaining one-turn native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
 - expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
-- add compaction, queued steering, interruption, retries, and stale-owner fencing
+- add compaction, queued delivery, interruption, retries, and stale-owner fencing
   only as their slices become concrete
 
 ## Rework compaction - Aiden?

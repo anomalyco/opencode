@@ -115,11 +115,12 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) => decodeMessage({ ...row.data, id: row.id, type: row.type })
     const writeMessage = (message: SessionMessage.Message) => {
+      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
       return db
         .insert(SessionMessageTable)
-        .values([{ id: SessionMessage.ID.make(id), session_id: event.data.sessionID, type, time_created: DateTime.toEpochMillis(message.time.created), data }])
+        .values([{ id: SessionMessage.ID.make(id), session_id: event.data.sessionID, type, seq: event.seq, time_created: DateTime.toEpochMillis(message.time.created), data }])
         .onConflictDoUpdate({ target: SessionMessageTable.id, set: { type, time_created: DateTime.toEpochMillis(message.time.created), data } })
         .run()
         .pipe(Effect.orDie)
@@ -134,7 +135,7 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
             .where(
               and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
             )
-            .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+            .orderBy(desc(SessionMessageTable.seq))
             .limit(1)
             .get()
             .pipe(Effect.orDie)

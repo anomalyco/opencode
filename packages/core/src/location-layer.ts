@@ -29,6 +29,7 @@ import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
+import { SessionRunCoordinator } from "./session/run-coordinator"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -51,7 +52,8 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     ).pipe(Layer.provideMerge(location))
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.layer.pipe(Layer.provide(services), Layer.provide(model))
-    return Layer.mergeAll(services, model, runner, ReadTool.layer.pipe(Layer.provide(services))).pipe(Layer.fresh)
+    const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
+    return Layer.mergeAll(services, model, runner, coordinator, ReadTool.layer.pipe(Layer.provide(services))).pipe(Layer.fresh)
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

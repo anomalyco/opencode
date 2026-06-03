@@ -19,12 +19,17 @@ const events = EventV2.layer.pipe(Layer.provide(database))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
 const executionCalls: SessionV2.ID[] = []
+const wakeCalls: SessionV2.ID[] = []
 const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
     resume: (sessionID) =>
       Effect.sync(() => {
         executionCalls.push(sessionID)
+      }),
+    wake: (sessionID) =>
+      Effect.sync(() => {
+        wakeCalls.push(sessionID)
       }),
   }),
 )
@@ -62,8 +67,10 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       executionCalls.length = 0
+      wakeCalls.length = 0
       yield* session.resume(sessionID)
       expect(executionCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([])
     }),
   )
 
@@ -113,10 +120,12 @@ describe("SessionV2.prompt", () => {
       const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fix the failing tests" }), resume: false })
 
       executionCalls.length = 0
+      wakeCalls.length = 0
       yield* session.resume(sessionID)
 
       expect(yield* session.messages({ sessionID })).toEqual([message])
       expect(executionCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([])
     }),
   )
 
@@ -150,6 +159,26 @@ describe("SessionV2.prompt", () => {
 
       expect(retried).toEqual(first)
       expect(yield* session.messages({ sessionID })).toEqual([first])
+    }),
+  )
+
+  it.effect("wakes execution when an exact prompt retry recovers a committed message", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const input = {
+        sessionID,
+        id: messageID,
+        prompt: new Prompt({ text: "Recover committed prompt" }),
+        resume: false,
+      }
+      const first = yield* session.prompt(input)
+      wakeCalls.length = 0
+
+      const retried = yield* session.prompt({ ...input, resume: true })
+
+      expect(retried).toEqual(first)
+      expect(wakeCalls).toEqual([sessionID])
     }),
   )
 
@@ -221,10 +250,12 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       executionCalls.length = 0
+      wakeCalls.length = 0
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run by default" }) })
 
-      expect(executionCalls).toEqual([sessionID])
+      expect(executionCalls).toEqual([])
+      expect(wakeCalls).toEqual([sessionID])
     }),
   )
 
@@ -233,10 +264,12 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       executionCalls.length = 0
+      wakeCalls.length = 0
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run explicitly" }), resume: true })
 
-      expect(executionCalls).toEqual([sessionID])
+      expect(executionCalls).toEqual([])
+      expect(wakeCalls).toEqual([sessionID])
     }),
   )
 
@@ -245,10 +278,12 @@ describe("SessionV2.prompt", () => {
       yield* setup
       const session = yield* SessionV2.Service
       executionCalls.length = 0
+      wakeCalls.length = 0
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not run" }), resume: false })
 
       expect(executionCalls).toEqual([])
+      expect(wakeCalls).toEqual([])
     }),
   )
 })

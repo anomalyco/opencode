@@ -156,6 +156,31 @@ export namespace Step {
   export type Failed = typeof Failed.Type
 }
 
+/** Durable orchestration facts for one outer `llm.stream(...)` provider attempt. */
+export namespace Turn {
+  export const Started = EventV2.define({
+    type: "session.next.turn.started",
+    ...options,
+    schema: {
+      ...Base,
+      promptCursor: NonNegativeInt.pipe(Schema.optional),
+    },
+  })
+  export type Started = typeof Started.Type
+
+  export const Settled = EventV2.define({
+    type: "session.next.turn.settled",
+    ...options,
+    schema: {
+      ...Base,
+      turnID: EventV2.ID,
+      outcome: Schema.Literals(["completed", "failed", "interrupted"]),
+    },
+  })
+  export type Settled = typeof Settled.Type
+
+}
+
 export namespace Text {
   export const Started = EventV2.define({
     type: "session.next.text.started",
@@ -382,6 +407,8 @@ const DurableDefinitions = [
   Synthetic,
   Shell.Started,
   Shell.Ended,
+  Turn.Started,
+  Turn.Settled,
   Step.Started,
   Step.Ended,
   Step.Failed,

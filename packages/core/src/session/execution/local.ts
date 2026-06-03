@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { LocationServiceMap } from "../../location-layer"
-import { SessionRunner } from "../runner/index"
+import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionStore } from "../store"
 import { SessionExecution } from "../execution"
 
@@ -14,7 +14,14 @@ export const layer = Layer.effect(
       resume: Effect.fn("SessionExecution.resume")(function* (sessionID) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
-        return yield* SessionRunner.Service.use((runner) => runner.run(sessionID)).pipe(
+        return yield* SessionRunCoordinator.Service.use((coordinator) => coordinator.run(sessionID)).pipe(
+          Effect.provide(locations.get(session.location)),
+        )
+      }),
+      wake: Effect.fn("SessionExecution.wake")(function* (sessionID) {
+        const session = yield* store.get(sessionID)
+        if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
+        return yield* SessionRunCoordinator.Service.use((coordinator) => coordinator.wake(sessionID)).pipe(
           Effect.provide(locations.get(session.location)),
         )
       }),

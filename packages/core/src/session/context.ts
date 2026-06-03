@@ -14,7 +14,7 @@ export const load = Effect.fn("SessionContext.load")(function* (db: DatabaseServ
     .select()
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
-    .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+    .orderBy(desc(SessionMessageTable.seq))
     .limit(1)
     .get()
     .pipe(Effect.orDie)
@@ -26,13 +26,12 @@ export const load = Effect.fn("SessionContext.load")(function* (db: DatabaseServ
         eq(SessionMessageTable.session_id, sessionID),
         compaction
           ? or(
-              gt(SessionMessageTable.time_created, compaction.time_created),
-              and(eq(SessionMessageTable.time_created, compaction.time_created), gte(SessionMessageTable.id, compaction.id)),
+              gte(SessionMessageTable.seq, compaction.seq),
             )
           : undefined,
       ),
     )
-    .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
+    .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
   return yield* Effect.forEach(rows, (row) => decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie))
