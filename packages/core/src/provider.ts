@@ -25,14 +25,14 @@ export type ID = typeof ID.Type
 export const ModelID = Schema.String.pipe(Schema.brand("ModelID"))
 export type ModelID = typeof ModelID.Type
 
-const AISDK = Schema.Struct({
+export const AISDK = Schema.Struct({
   type: Schema.Literal("aisdk"),
   package: Schema.String,
   url: Schema.String.pipe(Schema.optional),
   settings: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 })
 
-const Native = Schema.Struct({
+export const Native = Schema.Struct({
   type: Schema.Literal("native"),
   url: Schema.String.pipe(Schema.optional),
   settings: Schema.Record(Schema.String, Schema.Unknown),

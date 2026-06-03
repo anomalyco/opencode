@@ -19300,9 +19300,6 @@
           "id": {
             "type": "string"
           },
-          "apiID": {
-            "type": "string"
-          },
           "providerID": {
             "type": "string"
           },
@@ -19317,6 +19314,9 @@
               {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string"
+                  },
                   "type": {
                     "type": "string",
                     "enum": ["aisdk"]
@@ -19331,12 +19331,15 @@
                     "type": "object"
                   }
                 },
-                "required": ["type", "package"],
+                "required": ["id", "type", "package"],
                 "additionalProperties": false
               },
               {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string"
+                  },
                   "type": {
                     "type": "string",
                     "enum": ["native"]
@@ -19348,7 +19351,7 @@
                     "type": "object"
                   }
                 },
-                "required": ["type", "settings"],
+                "required": ["id", "type", "settings"],
                 "additionalProperties": false
               }
             ]
@@ -19515,7 +19518,6 @@
         },
         "required": [
           "id",
-          "apiID",
           "providerID",
           "name",
           "api",
@@ -22371,9 +22373,6 @@
           "id": {
             "type": "string"
           },
-          "apiID": {
-            "type": "string"
-          },
           "providerID": {
             "type": "string"
           },
@@ -22388,6 +22387,9 @@
               {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string"
+                  },
                   "type": {
                     "type": "string",
                     "enum": ["aisdk"]
@@ -22402,12 +22404,15 @@
                     "type": "object"
                   }
                 },
-                "required": ["type", "package"],
+                "required": ["id", "type", "package"],
                 "additionalProperties": false
               },
               {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string"
+                  },
                   "type": {
                     "type": "string",
                     "enum": ["native"]
@@ -22419,7 +22424,7 @@
                     "type": "object"
                   }
                 },
-                "required": ["type", "settings"],
+                "required": ["id", "type", "settings"],
                 "additionalProperties": false
               }
             ]
@@ -22582,7 +22587,6 @@
         },
         "required": [
           "id",
-          "apiID",
           "providerID",
           "name",
           "api",

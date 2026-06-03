@@ -66,7 +66,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                     request: request({ last: "last", shared: "last" }),
                     models: {
                       chat: {
-                        api_id: "api-chat",
+                        api: { id: "api-chat" },
                         name: "Last",
                         limit: { output: 75 },
                         request: request({ last: "last", shared: "last" }),
@@ -112,7 +112,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(provider.enabled).toEqual({ via: "custom", data: {} })
       expect(provider.api).toEqual({ type: "aisdk", package: "custom-sdk", url: "https://example.test" })
       expect(provider.request.headers).toEqual({ first: "first", shared: "last", last: "last" })
-      expect(model.apiID).toBe(ModelV2.ID.make("api-chat"))
+      expect(model.api.id).toBe(ModelV2.ID.make("api-chat"))
       expect(model.name).toBe("Last")
       expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
       expect(model.enabled).toBe(false)

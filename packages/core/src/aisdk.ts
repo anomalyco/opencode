@@ -164,7 +164,7 @@ export const layer = Layer.effect(
             {},
           )
           .pipe(initError(model.providerID))
-        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.apiID)).pipe(
+        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.api.id)).pipe(
           initError(model.providerID),
         )
         languages.set(key, language)
