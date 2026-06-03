@@ -6,6 +6,7 @@ import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { EventTable } from "../event/sql"
 import { SessionContext } from "./context"
+import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
 import { SessionEvent } from "./event"
 import { SessionSchema } from "./schema"
@@ -14,7 +15,7 @@ import { fromRow } from "./info"
 
 export interface Interface {
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info | undefined>
-  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[]>
+  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: SessionSchema.ID; readonly message: SessionMessage.Message } | undefined>
