@@ -1,6 +1,6 @@
 import { InstanceState } from "@/effect/instance-state"
 import { Identifier } from "@/id/id"
-import { Cause, Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Scope, SynchronizedRef } from "effect"
+import { Cause, Clock, Context, Deferred, Effect, Exit, FiberSet, Layer, Scope, SynchronizedRef } from "effect"
 
 export type Status = "running" | "completed" | "error" | "cancelled"
 
@@ -19,10 +19,10 @@ export type Info = {
 type Active = {
   info: Info
   done: Deferred.Deferred<Info>
-  fibers: Map<number, Fiber.Fiber<void, unknown>>
+  fibers: FiberSet.FiberSet<void, never>
+  pending: number
   next: number
   output?: { sequence: number; text: string }
-  onSettled?: (info: Info) => Effect.Effect<void, unknown>
 }
 
 type State = {
@@ -33,8 +33,7 @@ type State = {
 type FinishResult = {
   info?: Info
   done?: Deferred.Deferred<Info>
-  fibers?: Fiber.Fiber<void, unknown>[]
-  onSettled?: (info: Info) => Effect.Effect<void, unknown>
+  fibers?: FiberSet.FiberSet<void, never>
 }
 
 export type StartInput = {
@@ -43,7 +42,6 @@ export type StartInput = {
   title?: string
   metadata?: Record<string, unknown>
   run: Effect.Effect<string, unknown>
-  onSettled?: (info: Info) => Effect.Effect<void, unknown>
 }
 
 export type ExtendInput = {
@@ -102,19 +100,19 @@ export const layer = Layer.effect(
       exit: Exit.Exit<string, unknown>,
     ) {
       const completed_at = yield* Clock.currentTimeMillis
+      const s = yield* InstanceState.get(state)
       const result = yield* SynchronizedRef.modify(
-        (yield* InstanceState.get(state)).jobs,
+        s.jobs,
         (jobs): readonly [FinishResult, Map<string, Active>] => {
           const job = jobs.get(id)
           if (!job) return [{}, jobs]
           if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
-          const fibers = new Map(job.fibers)
-          fibers.delete(sequence)
+          const pending = job.pending - 1
           const output = Exit.isSuccess(exit) && (!job.output || sequence > job.output.sequence)
             ? { sequence, text: exit.value }
             : job.output
-          if (Exit.isSuccess(exit) && fibers.size > 0) {
-            return [{}, new Map(jobs).set(id, { ...job, fibers, output })]
+          if (Exit.isSuccess(exit) && pending > 0) {
+            return [{}, new Map(jobs).set(id, { ...job, pending, output })]
           }
           const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
             ? "completed"
@@ -123,7 +121,7 @@ export const layer = Layer.effect(
               : "error"
           const next = {
             ...job,
-            fibers: new Map<number, Fiber.Fiber<void, unknown>>(),
+            pending: 0,
             output,
             info: {
               ...job.info,
@@ -134,24 +132,20 @@ export const layer = Layer.effect(
             },
           }
           return [
-            { info: snapshot(next), done: job.done, fibers: Array.from(fibers.values()), onSettled: job.onSettled },
+            { info: snapshot(next), done: job.done, ...(Exit.isFailure(exit) ? { fibers: job.fibers } : {}) },
             new Map(jobs).set(id, next),
           ]
         },
       )
       if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
-      if (result.info && result.onSettled) yield* result.onSettled(result.info).pipe(Effect.ignore)
       if (result.fibers) {
-        yield* Effect.forEach(result.fibers, (fiber) => Fiber.interrupt(fiber), {
-          concurrency: "unbounded",
-          discard: true,
-        })
+        yield* FiberSet.clear(result.fibers).pipe(Effect.forkIn(s.scope, { startImmediately: true }))
       }
       return result.info
     })
 
     const fork = Effect.fn("BackgroundJob.fork")(function* (
-      scope: Scope.Scope,
+      fibers: FiberSet.FiberSet<void, never>,
       id: string,
       sequence: number,
       run: Effect.Effect<string, unknown>,
@@ -162,7 +156,7 @@ export const layer = Layer.effect(
           onFailure: (cause) => settle(id, sequence, Exit.failCause(cause)),
         }),
         Effect.asVoid,
-        Effect.forkIn(scope, { startImmediately: true }),
+        FiberSet.run(fibers, { startImmediately: true }),
       )
     })
 
@@ -190,7 +184,8 @@ export const layer = Layer.effect(
             Effect.fnUntraced(function* (jobs) {
               const existing = jobs.get(id)
               if (existing?.info.status === "running") return [snapshot(existing), jobs] as const
-              const fiber = yield* fork(s.scope, id, 0, restore(input.run))
+              const fibers = yield* FiberSet.make<void, never>().pipe(Effect.provideService(Scope.Scope, s.scope))
+              yield* fork(fibers, id, 0, restore(input.run))
               const job = {
                 info: {
                   id,
@@ -201,9 +196,9 @@ export const layer = Layer.effect(
                   metadata: input.metadata,
                 },
                 done,
-                fibers: new Map([[0, fiber]]),
+                fibers,
+                pending: 1,
                 next: 1,
-                onSettled: input.onSettled,
               }
               return [snapshot(job), new Map(jobs).set(id, job)] as const
             }),
@@ -221,12 +216,12 @@ export const layer = Layer.effect(
             Effect.fnUntraced(function* (jobs) {
               const job = jobs.get(input.id)
               if (!job || job.info.status !== "running") return [false, jobs] as const
-              const fiber = yield* fork(s.scope, input.id, job.next, restore(input.run))
+              yield* fork(job.fibers, input.id, job.next, restore(input.run))
               return [
                 true,
                 new Map(jobs).set(input.id, {
                   ...job,
-                  fibers: new Map(job.fibers).set(job.next, fiber),
+                  pending: job.pending + 1,
                   next: job.next + 1,
                 }),
               ] as const
@@ -257,7 +252,7 @@ export const layer = Layer.effect(
           if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
           const next = {
             ...job,
-            fibers: new Map<number, Fiber.Fiber<void, unknown>>(),
+            pending: 0,
             info: {
               ...job.info,
               status: "cancelled" as const,
@@ -265,17 +260,13 @@ export const layer = Layer.effect(
             },
           }
           return [
-            { info: snapshot(next), done: job.done, fibers: Array.from(job.fibers.values()), onSettled: job.onSettled },
+            { info: snapshot(next), done: job.done, fibers: job.fibers },
             new Map(jobs).set(id, next),
           ]
         },
       )
       if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
-      if (result.info && result.onSettled) yield* result.onSettled(result.info).pipe(Effect.ignore)
-      yield* Effect.forEach(result.fibers ?? [], (fiber) => Fiber.interrupt(fiber), {
-        concurrency: "unbounded",
-        discard: true,
-      })
+      if (result.fibers) yield* FiberSet.clear(result.fibers)
       return result.info
     })
 

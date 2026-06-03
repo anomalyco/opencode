@@ -256,12 +256,17 @@ export const TaskTool = Tool.define(
           title: params.description,
           metadata,
           run: runTask(),
-          onSettled: (info) => {
-            if (info.status === "completed") return inject("completed", info.output ?? "")
-            if (info.status === "error") return inject("error", info.error ?? "")
-            return Effect.void
-          },
         })
+        yield* background
+          .wait({ id: info.id })
+          .pipe(
+            Effect.flatMap((result) => {
+              if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
+              if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+              return Effect.void
+            }),
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
 
         return {
           title: params.description,

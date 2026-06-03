@@ -129,15 +129,21 @@ describe("background.job", () => {
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const interrupted = yield* Deferred.make<void>()
+      const extendedInterrupted = yield* Deferred.make<void>()
       const job = yield* jobs.start({
         type: "test",
         run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
+      })
+      yield* jobs.extend({
+        id: job.id,
+        run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(extendedInterrupted, undefined))),
       })
 
       const cancelled = yield* jobs.cancel(job.id)
 
       expect(cancelled?.status).toBe("cancelled")
       yield* Deferred.await(interrupted).pipe(Effect.timeout("1 second"))
+      yield* Deferred.await(extendedInterrupted).pipe(Effect.timeout("1 second"))
       expect((yield* jobs.get(job.id))?.status).toBe("cancelled")
     }),
   )
