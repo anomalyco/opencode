@@ -364,6 +364,8 @@ describe("FSUtil", () => {
       expect(FSUtil.overlaps("/a/b", "/a/b/c")).toBe(true)
       expect(FSUtil.overlaps("/a/b/c", "/a/b")).toBe(true)
       expect(FSUtil.overlaps("/a", "/b")).toBe(false)
+      expect(FSUtil.overlaps("/a/b", "/a/bad")).toBe(false)
+      if (process.platform === "win32") expect(FSUtil.overlaps("C:\\a", "D:\\b")).toBe(false)
     })
   })
 })
