@@ -1551,6 +1551,67 @@ describe("session.message-v2.fromError", () => {
 
     expect(result.name).toBe("MessageAbortedError")
   })
+
+  test("classifies user-cancelled AbortError as AbortedError when ctx.aborted is true", () => {
+    const err = new DOMException("Aborted", "AbortError")
+    const result = MessageV2.fromError(err, { providerID, aborted: true })
+    expect(result.name).toBe("MessageAbortedError")
+  })
+
+  test("classifies a bare AbortError as a cancel regardless of ctx.aborted", () => {
+    // A bare AbortError only comes from controller.abort() with no reason —
+    // i.e. a user/parent cancel. Transport timeouts surface as their own
+    // specific errors (TimeoutError/HeaderTimeoutError/ResponseStreamError),
+    // so a bare AbortError must NOT be reclassified as retryable — otherwise
+    // a cancel races the failure channel and gets retried.
+    const err = new DOMException("The operation was aborted", "AbortError")
+    const result = MessageV2.fromError(err, { providerID })
+    expect(result.name).toBe("MessageAbortedError")
+  })
+
+  test("classifies TimeoutError DOMException as retryable APIError", () => {
+    // AbortSignal.timeout() in modern fetch surfaces as TimeoutError.
+    const err = new DOMException("The operation timed out", "TimeoutError")
+    const result = MessageV2.fromError(err, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.isRetryable).toBe(true)
+  })
+
+  test.each([
+    ["ETIMEDOUT", "Network error (ETIMEDOUT)"],
+    ["ENOTFOUND", "Network error (ENOTFOUND)"],
+    ["EAI_AGAIN", "Network error (EAI_AGAIN)"],
+    ["ECONNREFUSED", "Network error (ECONNREFUSED)"],
+    ["EHOSTUNREACH", "Network error (EHOSTUNREACH)"],
+    ["ENETUNREACH", "Network error (ENETUNREACH)"],
+    ["EPIPE", "Network error (EPIPE)"],
+  ])("classifies %s SystemError as retryable APIError", (code, expectedMessage) => {
+    const err = Object.assign(new Error(`${code} from test`), { code })
+    const result = MessageV2.fromError(err, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.isRetryable).toBe(true)
+    expect((result as SessionV1.APIError).data.message).toBe(expectedMessage)
+  })
+
+  test.each([
+    "fetch failed",
+    "Failed to fetch",
+    "socket hang up",
+    "SSE read timed out",
+    "network error",
+    "Network request failed",
+    "other side closed",
+    "terminated",
+  ])("classifies '%s' bare Error message as retryable APIError", (message) => {
+    const result = MessageV2.fromError(new Error(message), { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect((result as SessionV1.APIError).data.isRetryable).toBe(true)
+  })
+
+  test("leaves unrelated Error messages classified as Unknown", () => {
+    const result = MessageV2.fromError(new Error("Some unrelated bug"), { providerID })
+    expect(result.name).toBe("UnknownError")
+  })
 })
 
 describe("session.message-v2.latest", () => {

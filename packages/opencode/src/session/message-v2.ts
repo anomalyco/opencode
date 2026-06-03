@@ -611,17 +611,52 @@ export function latest(msgs: WithParts[]) {
   return { user, assistant, finished, tasks }
 }
 
+// System-level error codes that mean the transport failed in a way that's
+// safe to retry. ECONNRESET is by far the most common one, but a wifi blip
+// or DNS hiccup can produce any of these and they're all transient.
+const TRANSIENT_SYS_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+])
+
+// Message-level patterns produced by fetch / undici / our SSE chunk-timeout
+// wrapper when the transport fails without a SystemError code. These come
+// through as bare Errors and the only signal we have is the message text.
+const TRANSIENT_MSG_RE =
+  /fetch failed|Failed to fetch|socket hang up|SSE read timed out|network ?error|Network request failed|other side closed|terminated|connect( |_)?error/i
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
+  const sysCode = (e as SystemError)?.code
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":
-      return new AbortedError(
-        { message: e.message },
-        {
-          cause: e,
-        },
+      // A *bare* AbortError only ever originates from `controller.abort()`
+      // with no reason — i.e. a user/parent cancel (see provider.ts fetch
+      // wrapper + processor onInterrupt). Every transport timeout we control
+      // aborts with a *specific* reason and therefore surfaces as its own
+      // identifiable error instead: AbortSignal.timeout() -> "TimeoutError"
+      // DOMException (next case), the header-timeout -> HeaderTimeoutError,
+      // and the SSE chunk-timeout -> ResponseStreamError ("SSE read timed
+      // out"). Those are all classified retryable on their own below, so we
+      // do NOT need to second-guess a bare AbortError here. Classifying by
+      // error identity (rather than the externally-set `ctx.aborted` flag,
+      // which races the abort propagating through the failure channel) keeps
+      // a genuine cancel from being retried.
+      return new AbortedError({ message: e.message }, { cause: e }).toObject()
+    case e instanceof DOMException && e.name === "TimeoutError":
+      // Modern fetch surfaces AbortSignal.timeout() as a DOMException with
+      // name "TimeoutError" rather than "AbortError". Always retryable.
+      return new APIError(
+        { message: e.message || "Request timed out", isRetryable: true, metadata: { code: "TimeoutError" } },
+        { cause: e },
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
@@ -633,13 +668,13 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case (e as SystemError)?.code === "ECONNRESET":
+    case typeof sysCode === "string" && TRANSIENT_SYS_CODES.has(sysCode):
       return new APIError(
         {
-          message: "Connection reset by server",
+          message: sysCode === "ECONNRESET" ? "Connection reset by server" : `Network error (${sysCode})`,
           isRetryable: true,
           metadata: {
-            code: (e as SystemError).code ?? "",
+            code: sysCode ?? "",
             syscall: (e as SystemError).syscall ?? "",
             message: (e as SystemError).message ?? "",
           },
@@ -708,6 +743,15 @@ export function fromError(
           responseBody: parsed.responseBody,
           metadata: parsed.metadata,
         },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && TRANSIENT_MSG_RE.test(e.message):
+      // Bare Error from fetch/undici/wrapSSE where no SystemError code or
+      // structured fields are attached. Sniffing the message is the best we
+      // can do; getting these into SessionRetry.retryable lets a session
+      // recover from a network blip instead of hard-failing.
+      return new APIError(
+        { message: e.message, isRetryable: true, metadata: { code: "NETWORK_ERROR", message: e.message } },
         { cause: e },
       ).toObject()
     case e instanceof Error:
