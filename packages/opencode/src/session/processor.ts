@@ -14,6 +14,7 @@ import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
+import { SessionStreamRecovery } from "./stream-recovery"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import { ProviderError } from "@/provider/error"
@@ -953,34 +954,31 @@ export const layer = Layer.effect(
             error instanceof ProviderError.ResponseStreamError
               ? { message: error.message }
               : SessionRetry.retryable(parse(error), input.model.providerID)
-          if (!retryable) return error
 
-          if (error instanceof ProviderError.ResponseStreamError && unsafeTerminalFailure(error)) return error
+          const plan = SessionStreamRecovery.plan({
+            error,
+            retryable,
+            blocked: ctx.blocked,
+            attemptHasToolActivity: ctx.attemptHasToolActivity,
+            requestHasCommittedToolBoundary: ctx.requestHasCommittedToolBoundary,
+            attemptCommitted: ctx.attemptCommitted,
+            hasAttemptParts: ctx.attemptPartIDs.length > 0,
+          })
 
-          if (ctx.blocked) {
-            return new StopAfterBlockedToolBoundary(retryable.message, { cause: error })
+          switch (plan.type) {
+            case "fail":
+              return plan.error
+            case "stop-blocked":
+              return new StopAfterBlockedToolBoundary(plan.message, { cause: plan.cause })
+            case "stop-unsafe-tool":
+              return new StopAfterUnsafeToolActivity(plan.message, { cause: plan.cause })
+            case "rollback-resume":
+              yield* rollbackCurrentAttempt()
+              return new ResumeFromPromptLoop(plan.message, { cause: plan.cause })
+            case "rollback-stream-retry":
+              yield* rollbackCurrentAttempt()
+              return SessionStreamRecovery.markAutoReplaySafe(plan.error)
           }
-
-          if (ctx.attemptHasToolActivity) {
-            return new StopAfterUnsafeToolActivity(retryable.message, { cause: error })
-          }
-
-          if (ctx.requestHasCommittedToolBoundary) {
-            yield* rollbackCurrentAttempt()
-            return new ResumeFromPromptLoop(retryable.message, { cause: error })
-          }
-
-          if (!(error instanceof ProviderError.ResponseStreamError)) return error
-          if (error.info.autoReplaySafe) return error
-          if (ctx.attemptCommitted) return error
-          if (ctx.attemptPartIDs.length === 0) return error
-
-          yield* rollbackCurrentAttempt()
-          return new ProviderError.ResponseStreamError(
-            error.message,
-            { ...error.info, autoReplaySafe: true },
-            { cause: error },
-          )
         }).pipe(
           Effect.catchCause((cause) => {
             const rollbackError = Cause.squash(cause)
@@ -1104,10 +1102,6 @@ export const layer = Layer.effect(
     return Service.of({ create })
   }),
 )
-
-function unsafeTerminalFailure(error: ProviderError.ResponseStreamError) {
-  return error.info.terminalEvent === "response.failed" && !error.info.autoReplaySafe
-}
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
