@@ -1,14 +1,16 @@
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
 import { modelStat } from "../database/schema"
+import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalization"
 import {
   chunks,
   collapseRows,
   inserted,
   rankBy,
   statPeriodKey,
+  statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
@@ -39,6 +41,7 @@ export declare namespace ModelStatRepo {
   export interface Service {
     readonly listDaily: () => Effect.Effect<ModelStatMetric[], DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -120,7 +123,34 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         )
       })
 
-      return ModelStatRepo.of({ listDaily, upsert })
+      const deleteRetiredDimensions = Effect.fn("ModelStatRepo.deleteRetiredDimensions")(function* (
+        rows: ModelStatRow[],
+      ) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(modelStat)
+              .where(
+                and(
+                  inArray(modelStat.grain, scope.grains),
+                  inArray(modelStat.period_key, scope.periodKeys),
+                  inArray(modelStat.dataset, scope.datasets),
+                  inArray(modelStat.client, scope.clients),
+                  inArray(modelStat.source, scope.sources),
+                  or(
+                    inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
+                    inArray(modelStat.model, RETIRED_STAT_MODELS),
+                  ),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
+      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions })
     }),
   )
 }

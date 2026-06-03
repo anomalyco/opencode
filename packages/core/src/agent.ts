@@ -3,7 +3,7 @@ export * as AgentV2 from "./agent"
 import { Array, Context, Effect, Layer, Schema, Scope } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { ModelV2 } from "./model"
-import { PermissionV2 } from "./permission"
+import { PermissionSchema } from "./permission/schema"
 import { ProviderV2 } from "./provider"
 import { PositiveInt } from "./schema"
 import { State } from "./state"
@@ -26,7 +26,7 @@ export class Info extends Schema.Class<Info>("AgentV2.Info")({
   hidden: Schema.Boolean,
   color: Color.pipe(Schema.optional),
   steps: PositiveInt.pipe(Schema.optional),
-  permissions: PermissionV2.Ruleset,
+  permissions: PermissionSchema.Ruleset,
 }) {
   static empty(id: ID) {
     return new Info({
