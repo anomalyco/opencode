@@ -348,7 +348,7 @@ export const layer = Layer.effect(
     const scan = Effect.fn("File.scan")(function* () {
       const ctx = yield* InstanceState.context
       if (ctx.directory === path.parse(ctx.directory).root) return
-      const isGlobalHome = ctx.directory === Global.Path.home && ctx.project.id === "global"
+      const isGlobalHome = ctx.directory === Global.Path.home
       const next: Entry = { files: [], dirs: [] }
 
       if (isGlobalHome) {

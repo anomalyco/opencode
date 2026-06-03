@@ -651,6 +651,62 @@ it.instance(
 )
 
 it.instance(
+  "ask - normalizes patch-file array metadata",
+  () =>
+    Effect.gen(function* () {
+      const files = [
+        {
+          filePath: "/tmp/example.txt",
+          relativePath: "example.txt",
+          type: "update",
+          patch: "Index: example.txt",
+          additions: 1,
+          deletions: 0,
+        },
+      ]
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "edit",
+        patterns: ["example.txt"],
+        metadata: files as unknown as Record<string, unknown>,
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items).toHaveLength(1)
+      expect(items[0].metadata).toEqual({ files })
+
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - normalizes other array metadata",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: ["legacy"] as unknown as Record<string, unknown>,
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items).toHaveLength(1)
+      expect(items[0].metadata).toEqual({ value: ["legacy"] })
+
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
   "ask - publishes asked event",
   () =>
     Effect.gen(function* () {

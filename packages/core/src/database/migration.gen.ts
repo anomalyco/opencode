@@ -23,5 +23,7 @@ export const migrations = (
     import("./migration/20260510033149_session_usage"),
     import("./migration/20260511000411_data_migration_state"),
     import("./migration/20260511173437_session-metadata"),
+    import("./migration/20260601195148_square_moondragon"),
+    import("./migration/20260603000000_ui_settings"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

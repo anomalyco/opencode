@@ -246,6 +246,39 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptErrors,
   TuiSubmitPromptResponses,
+  UiProjectViewGetErrors,
+  UiProjectViewGetResponses,
+  UiProjectViewLastProjectInput,
+  UiProjectViewLastProjectSetErrors,
+  UiProjectViewLastProjectSetResponses,
+  UiProjectViewOpenProjectInput,
+  UiProjectViewOpenProjectsCloseErrors,
+  UiProjectViewOpenProjectsCloseResponses,
+  UiProjectViewOpenProjectsOpenErrors,
+  UiProjectViewOpenProjectsOpenResponses,
+  UiProjectViewOpenProjectsReplaceErrors,
+  UiProjectViewOpenProjectsReplaceResponses,
+  UiProjectViewOpenProjectsUpdateErrors,
+  UiProjectViewOpenProjectsUpdateResponses,
+  UiProjectViewReplaceOpenProjectsInput,
+  UiProjectViewUpdateOpenProjectInput,
+  UiSettingsAppSettings,
+  UiSettingsAppUpdateErrors,
+  UiSettingsAppUpdateResponses,
+  UiSettingsGetErrors,
+  UiSettingsGetResponses,
+  UiSettingsKeybindsInput,
+  UiSettingsKeybindsReplaceErrors,
+  UiSettingsKeybindsReplaceResponses,
+  UiSettingsModelPreferenceInput,
+  UiSettingsModelsRecentReplaceErrors,
+  UiSettingsModelsRecentReplaceResponses,
+  UiSettingsModelsUpdateErrors,
+  UiSettingsModelsUpdateResponses,
+  UiSettingsModelsVariantUpdateErrors,
+  UiSettingsModelsVariantUpdateResponses,
+  UiSettingsModelVariantInput,
+  UiSettingsRecentModelsInput,
   V2ModelListErrors,
   V2ModelListResponses,
   V2ProviderGetErrors,
@@ -5021,6 +5054,542 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class OpenProjects extends HeyApiClient {
+  /**
+   * Open project
+   *
+   * Open a project by project ID or directory in the shared UI project view.
+   */
+  public open<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      uiProjectViewOpenProjectInput?: UiProjectViewOpenProjectInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiProjectViewOpenProjectInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      UiProjectViewOpenProjectsOpenResponses,
+      UiProjectViewOpenProjectsOpenErrors,
+      ThrowOnError
+    >({
+      url: "/ui/project-view/open-projects",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Replace opened projects
+   *
+   * Replace the ordered opened-project list for the shared UI project view.
+   */
+  public replace<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      uiProjectViewReplaceOpenProjectsInput?: UiProjectViewReplaceOpenProjectsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiProjectViewReplaceOpenProjectsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      UiProjectViewOpenProjectsReplaceResponses,
+      UiProjectViewOpenProjectsReplaceErrors,
+      ThrowOnError
+    >({
+      url: "/ui/project-view/open-projects",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Close project
+   *
+   * Close a project in the shared UI project view without deleting project metadata.
+   */
+  public close<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      UiProjectViewOpenProjectsCloseResponses,
+      UiProjectViewOpenProjectsCloseErrors,
+      ThrowOnError
+    >({
+      url: "/ui/project-view/open-projects/{projectID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update opened project
+   *
+   * Update expanded state or position for an opened project.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+      uiProjectViewUpdateOpenProjectInput?: UiProjectViewUpdateOpenProjectInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiProjectViewUpdateOpenProjectInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      UiProjectViewOpenProjectsUpdateResponses,
+      UiProjectViewOpenProjectsUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/ui/project-view/open-projects/{projectID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class LastProject extends HeyApiClient {
+  /**
+   * Set last project
+   *
+   * Set the last selected project by project ID or directory for the shared UI project view.
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      uiProjectViewLastProjectInput?: UiProjectViewLastProjectInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiProjectViewLastProjectInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      UiProjectViewLastProjectSetResponses,
+      UiProjectViewLastProjectSetErrors,
+      ThrowOnError
+    >({
+      url: "/ui/project-view/last-project",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class ProjectView extends HeyApiClient {
+  /**
+   * Get UI project view
+   *
+   * Get opened projects and last project for the shared UI project view.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UiProjectViewGetResponses, UiProjectViewGetErrors, ThrowOnError>({
+      url: "/ui/project-view",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _openProjects?: OpenProjects
+  get openProjects(): OpenProjects {
+    return (this._openProjects ??= new OpenProjects({ client: this.client }))
+  }
+
+  private _lastProject?: LastProject
+  get lastProject(): LastProject {
+    return (this._lastProject ??= new LastProject({ client: this.client }))
+  }
+}
+
+export class App2 extends HeyApiClient {
+  /**
+   * Update UI app settings
+   *
+   * Replace typed shared UI app settings.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      uiSettingsAppSettings?: UiSettingsAppSettings
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiSettingsAppSettings", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<UiSettingsAppUpdateResponses, UiSettingsAppUpdateErrors, ThrowOnError>({
+      url: "/ui/settings/app",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Keybinds extends HeyApiClient {
+  /**
+   * Replace UI keybinds
+   *
+   * Replace shared UI keybind overrides.
+   */
+  public replace<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      uiSettingsKeybindsInput?: UiSettingsKeybindsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiSettingsKeybindsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      UiSettingsKeybindsReplaceResponses,
+      UiSettingsKeybindsReplaceErrors,
+      ThrowOnError
+    >({
+      url: "/ui/settings/keybinds",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Recent extends HeyApiClient {
+  /**
+   * Replace recent UI models
+   *
+   * Replace the ordered shared recent-model list.
+   */
+  public replace<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      uiSettingsRecentModelsInput?: UiSettingsRecentModelsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiSettingsRecentModelsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      UiSettingsModelsRecentReplaceResponses,
+      UiSettingsModelsRecentReplaceErrors,
+      ThrowOnError
+    >({
+      url: "/ui/settings/models/recent",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Variant extends HeyApiClient {
+  /**
+   * Update UI model variant
+   *
+   * Set or clear the shared selected variant for a model.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      uiSettingsModelVariantInput?: UiSettingsModelVariantInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiSettingsModelVariantInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      UiSettingsModelsVariantUpdateResponses,
+      UiSettingsModelsVariantUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/ui/settings/models/{providerID}/{modelID}/variant",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Models extends HeyApiClient {
+  /**
+   * Update UI model preference
+   *
+   * Update shared visibility or favorite preference for a model.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      uiSettingsModelPreferenceInput?: UiSettingsModelPreferenceInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "uiSettingsModelPreferenceInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      UiSettingsModelsUpdateResponses,
+      UiSettingsModelsUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/ui/settings/models/{providerID}/{modelID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _recent?: Recent
+  get recent(): Recent {
+    return (this._recent ??= new Recent({ client: this.client }))
+  }
+
+  private _variant?: Variant
+  get variant(): Variant {
+    return (this._variant ??= new Variant({ client: this.client }))
+  }
+}
+
+export class Settings extends HeyApiClient {
+  /**
+   * Get UI settings
+   *
+   * Get shared UI app settings, keybinds, and model preferences.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UiSettingsGetResponses, UiSettingsGetErrors, ThrowOnError>({
+      url: "/ui/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _app?: App2
+  get app(): App2 {
+    return (this._app ??= new App2({ client: this.client }))
+  }
+
+  private _keybinds?: Keybinds
+  get keybinds(): Keybinds {
+    return (this._keybinds ??= new Keybinds({ client: this.client }))
+  }
+
+  private _models?: Models
+  get models(): Models {
+    return (this._models ??= new Models({ client: this.client }))
+  }
+}
+
+export class Ui extends HeyApiClient {
+  private _projectView?: ProjectView
+  get projectView(): ProjectView {
+    return (this._projectView ??= new ProjectView({ client: this.client }))
+  }
+
+  private _settings?: Settings
+  get settings(): Settings {
+    return (this._settings ??= new Settings({ client: this.client }))
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -5162,5 +5731,10 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _ui?: Ui
+  get ui(): Ui {
+    return (this._ui ??= new Ui({ client: this.client }))
   }
 }

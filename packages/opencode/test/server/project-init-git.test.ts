@@ -1,7 +1,10 @@
 import { afterEach, describe, expect } from "bun:test"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { Effect, Layer } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
+import fs from "fs/promises"
 import path from "path"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
@@ -28,6 +31,8 @@ const it = testEffect(
   Layer.mergeAll(AppFileSystem.defaultLayer, Snapshot.defaultLayer, testInstanceStore, httpApiLayer),
 )
 
+type ProjectBody = { id: ProjectV2.ID; vcs?: "git"; worktree: string; sandboxes: string[] }
+
 function request(directory: string, url: string, init: RequestInit = {}) {
   return requestInDirectory(url, directory, init)
 }
@@ -50,6 +55,12 @@ function collectGlobalEvents() {
   )
 }
 
+function localProjectID(store: string) {
+  return Effect.promise(() => fs.realpath(store)).pipe(
+    Effect.map((realStore) => ProjectV2.ID.make(Hash.fast(`git-local:${realStore}`))),
+  )
+}
+
 const disposedEvents = (seen: GlobalEvent[], dir: string) =>
   seen.filter((evt) => evt.directory === dir && evt.payload.type === "server.instance.disposed").length
 
@@ -63,23 +74,27 @@ describe("project.initGit endpoint", () => {
       const init = yield* request(tmp.directory, "/project/git/init", {
         method: "POST",
       })
-      const body = yield* json(init)
+      const body = yield* json<ProjectBody>(init)
+      const expectedProjectID = yield* localProjectID(path.join(tmp.directory, ".git"))
       expect(init.status).toBe(200)
       expect(body).toMatchObject({
-        id: "global",
+        id: expectedProjectID,
         vcs: "git",
         worktree: tmp.directory,
+        sandboxes: [],
       })
+      expect(body.id).not.toBe(ProjectV2.ID.global)
       // Reload behavior: bus emits exactly one server.instance.disposed for the directory.
       expect(disposedEvents(events.seen, tmp.directory)).toBe(1)
-      expect(yield* fs.exists(path.join(tmp.directory, ".git", "opencode"))).toBe(false)
+      expect(yield* fs.exists(path.join(tmp.directory, ".git", "opencode"))).toBe(true)
 
       const current = yield* request(tmp.directory, "/project/current")
       expect(current.status).toBe(200)
-      expect(yield* json(current)).toMatchObject({
-        id: "global",
+      expect(yield* json<ProjectBody>(current)).toMatchObject({
+        id: expectedProjectID,
         vcs: "git",
         worktree: tmp.directory,
+        sandboxes: [],
       })
 
       const ctx = yield* InstanceStore.use.reload({ directory: tmp.directory })

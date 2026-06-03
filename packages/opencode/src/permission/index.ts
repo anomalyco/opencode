@@ -49,6 +49,27 @@ export const Request = Schema.Struct({
 }).annotate({ identifier: "PermissionRequest" })
 export type Request = Schema.Schema.Type<typeof Request>
 
+function normalizeMetadata(input: unknown): Record<string, unknown> {
+  if (input === undefined || input === null) return {}
+  if (Array.isArray(input)) {
+    return input.length > 0 && input.every(isPatchFileMetadata) ? { files: input } : { value: input }
+  }
+  if (isRecord(input)) return input
+  return { value: input }
+}
+
+function isPatchFileMetadata(input: unknown) {
+  if (!isRecord(input)) return false
+  if (typeof input.filePath !== "string") return false
+  if (typeof input.relativePath !== "string") return false
+  if (typeof input.type !== "string") return false
+  return typeof input.patch === "string" || typeof input.diff === "string"
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
 export const Reply = Schema.Literals(["once", "always", "reject"])
 export type Reply = Schema.Schema.Type<typeof Reply>
 
@@ -197,7 +218,7 @@ export const layer = Layer.effect(
         sessionID: request.sessionID,
         permission: request.permission,
         patterns: request.patterns,
-        metadata: request.metadata,
+        metadata: normalizeMetadata(request.metadata),
         always: request.always,
         tool: request.tool,
       }
@@ -274,7 +295,10 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Permission.list")(function* () {
       const pending = (yield* InstanceState.get(state)).pending
-      return Array.from(pending.values(), (item) => item.info)
+      return Array.from(pending.values(), (item) => {
+        const metadata = normalizeMetadata(item.info.metadata)
+        return { ...item.info, metadata }
+      })
     })
 
     return Service.of({ ask, reply, list })

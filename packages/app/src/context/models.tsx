@@ -1,10 +1,13 @@
-import { createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, onCleanup } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { useProviders } from "@/hooks/use-providers"
-import { Persist, persisted } from "@/utils/persist"
+import { Persist, removePersisted } from "@/utils/persist"
+import { usePlatform } from "./platform"
+import { useServerSDK } from "./server-sdk"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -26,15 +29,74 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
   name: "Models",
   init: () => {
     const providers = useProviders()
+    const serverSDK = useServerSDK()
+    const platform = usePlatform()
+    const queryClient = useQueryClient()
 
-    const [store, setStore, _, ready] = persisted(
-      Persist.global("model", ["model.v1"]),
-      createStore<Store>({
-        user: [],
-        recent: [],
-        variant: {},
-      }),
-    )
+    const [store, setStore] = createStore<Store>({
+      user: [],
+      recent: [],
+      variant: {},
+    })
+    const queryKey = () => ["ui", "settings", "models", serverSDK.url] as const
+
+    const query = useQuery(() => ({
+      queryKey: queryKey(),
+      queryFn: () => serverSDK.client.ui.settings.get().then((x) => x.data?.model ?? { user: [], recent: [], variant: {} }),
+    }))
+
+    const applyServerModel = (model: Store | undefined) => {
+      if (!model) return
+      queryClient.setQueryData<Store>(queryKey(), model)
+      setStore(reconcile(model))
+    }
+
+    const refetch = () => {
+      void queryClient.invalidateQueries({ queryKey: queryKey() })
+    }
+
+    const visibilityMutation = useMutation(() => ({
+      mutationFn: (input: { model: ModelKey; visibility: Visibility }) =>
+        serverSDK.client.ui.settings.models.update({
+          providerID: input.model.providerID,
+          modelID: input.model.modelID,
+          uiSettingsModelPreferenceInput: { visibility: input.visibility },
+        }),
+      onSuccess: (result) => applyServerModel(result.data?.model),
+      onError: refetch,
+    }))
+
+    const recentMutation = useMutation(() => ({
+      mutationFn: () => serverSDK.client.ui.settings.models.recent.replace({ uiSettingsRecentModelsInput: { models: store.recent } }),
+      onSuccess: (result) => applyServerModel(result.data?.model),
+      onError: refetch,
+    }))
+
+    const variantMutation = useMutation(() => ({
+      mutationFn: (input: { model: ModelKey; variant: string | undefined }) =>
+        serverSDK.client.ui.settings.models.variant.update({
+          providerID: input.model.providerID,
+          modelID: input.model.modelID,
+          uiSettingsModelVariantInput: { variant: input.variant },
+        }),
+      onSuccess: (result) => applyServerModel(result.data?.model),
+      onError: refetch,
+    }))
+
+    let cleanedLegacy = false
+    createEffect(() => {
+      applyServerModel(query.data)
+      if (!query.data || cleanedLegacy) return
+      cleanedLegacy = true
+      removePersisted(Persist.global("model", ["model.v1"]), platform)
+    })
+
+    const unsub = serverSDK.event.on("global", (event) => {
+      if (event.type !== "ui.settings.updated") return
+      if (event.properties.profileID !== "default") return
+      refetch()
+    })
+    onCleanup(unsub)
 
     const available = createMemo(() =>
       providers.connected().flatMap((p) =>
@@ -123,13 +185,16 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     }
 
     const setVisibility = (model: ModelKey, state: boolean) => {
-      update(model, state ? "show" : "hide")
+      const visibility = state ? "show" : "hide"
+      update(model, visibility)
+      visibilityMutation.mutate({ model, visibility })
     }
 
     const push = (model: ModelKey) => {
       const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}`)
       if (uniq.length > RECENT_LIMIT) uniq.pop()
       setStore("recent", uniq)
+      recentMutation.mutate()
     }
 
     const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
@@ -139,13 +204,15 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       const key = variantKey(model)
       if (!store.variant) {
         setStore("variant", { [key]: value })
+        variantMutation.mutate({ model, variant: value })
         return
       }
       setStore("variant", key, value)
+      variantMutation.mutate({ model, variant: value })
     }
 
     return {
-      ready,
+      ready: createMemo(() => !query.isLoading),
       list,
       find,
       visible,

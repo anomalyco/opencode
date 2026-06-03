@@ -590,6 +590,8 @@ export const dict = {
   "session.header.open.ariaLabel": "Відкрити в {{app}}",
   "session.header.open.menu": "Параметри відкриття",
   "session.header.open.copyPath": "Копіювати шлях",
+  "session.header.agent.label": "Агент",
+  "session.header.agent.active": "Активний агент: @{{agent}}",
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "Провідник файлів",
   "session.header.open.fileManager": "Файловий менеджер",

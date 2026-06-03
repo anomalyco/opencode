@@ -495,6 +495,8 @@ export const dict = {
   "session.header.open.ariaLabel": "Otwórz w {{app}}",
   "session.header.open.menu": "Opcje otwierania",
   "session.header.open.copyPath": "Kopiuj ścieżkę",
+  "session.header.agent.label": "Agent",
+  "session.header.agent.active": "Aktywny agent: @{{agent}}",
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Konfiguracje serwerów",
   "status.popover.tab.servers": "Serwery",
