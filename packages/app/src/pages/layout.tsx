@@ -89,6 +89,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { runUpdateAndRestart } from "./layout/update"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -183,11 +184,7 @@ export default function Layout(props: ParentProps) {
     return updateQuery.data.version ?? ""
   }
   const installUpdate = () => {
-    if (!platform.updateAndRestart) return
-    setUpdate("installing", true)
-    void platform.updateAndRestart().catch(() => {
-      setUpdate("installing", false)
-    })
+    runUpdateAndRestart(platform.updateAndRestart, (installing) => setUpdate("installing", installing))
   }
   const titlebarUpdate: TitlebarUpdate = {
     version: updateVersion,

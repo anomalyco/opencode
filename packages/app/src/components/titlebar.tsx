@@ -707,7 +707,9 @@ type TitlebarV2RightState = {
 function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
   return (
     <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
-      <TitlebarUpdateIconButton state={props.state.update} />
+      <Show when={props.state.update.visible}>
+        <TitlebarUpdateIconButton state={props.state.update} />
+      </Show>
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>
   )
