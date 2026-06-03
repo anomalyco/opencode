@@ -1,7 +1,7 @@
 export * as Git from "./git"
 
 import path from "path"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
@@ -26,6 +26,13 @@ export interface Repo {
   readonly store: AbsolutePath
 }
 
+export class WorktreeError extends Schema.TaggedErrorClass<WorktreeError>()("Git.WorktreeError", {
+  operation: Schema.Literals(["create", "remove", "list"]),
+  message: Schema.String,
+  directory: Schema.optional(AbsolutePath),
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
 export interface Interface {
   readonly find: (input: AbsolutePath) => Effect.Effect<Repo | undefined>
   readonly remote: (repo: Repo, name?: string) => Effect.Effect<string | undefined>
@@ -45,6 +52,9 @@ export interface Interface {
   readonly fetchBranch: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly checkout: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly reset: (directory: string, target: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly worktreeCreate: (input: { repo: Repo; directory: AbsolutePath }) => Effect.Effect<void, WorktreeError>
+  readonly worktreeRemove: (input: { repo: Repo; directory: AbsolutePath }) => Effect.Effect<void, WorktreeError>
+  readonly worktreeList: (repo: Repo) => Effect.Effect<AbsolutePath[], WorktreeError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/GitV2") {}
@@ -149,6 +159,43 @@ export const layer = Layer.effect(
       execute(directory, proc)(["reset", "--hard", target]),
     )
 
+    const worktree = Effect.fnUntraced(function* (
+      operation: "create" | "remove" | "list",
+      repo: Repo,
+      args: string[],
+      worktreeDirectory?: AbsolutePath,
+      cwd = repo.directory,
+    ) {
+      const result = yield* proc
+        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .pipe(
+          Effect.mapError(
+            (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
+          ),
+        )
+      if (result.exitCode === 0) return result.stdout.toString("utf8")
+      return yield* new WorktreeError({
+        operation,
+        directory: worktreeDirectory,
+        message: result.stderr.toString("utf8").trim() || result.stdout.toString("utf8").trim() || "Git failed",
+      })
+    })
+
+    const worktreeCreate = Effect.fn("Git.worktreeCreate")(function* (input: { repo: Repo; directory: AbsolutePath }) {
+      yield* worktree("create", input.repo, ["worktree", "add", "--detach", input.directory, "HEAD"], input.directory)
+    })
+
+    const worktreeRemove = Effect.fn("Git.worktreeRemove")(function* (input: { repo: Repo; directory: AbsolutePath }) {
+      yield* worktree("remove", input.repo, ["worktree", "remove", "--force", input.directory], input.directory, input.repo.store)
+    })
+
+    const worktreeList = Effect.fn("Git.worktreeList")(function* (repo: Repo) {
+      return (yield* worktree("list", repo, ["worktree", "list", "--porcelain"]))
+        .split("\n")
+        .filter((line) => line.startsWith("worktree "))
+        .map((line) => AbsolutePath.make(resolvePath(repo.directory, line.slice("worktree ".length).trim())))
+    })
+
     return Service.of({
       find,
       remote,
@@ -163,6 +210,9 @@ export const layer = Layer.effect(
       fetchBranch,
       checkout,
       reset,
+      worktreeCreate,
+      worktreeRemove,
+      worktreeList,
     })
   }),
 )

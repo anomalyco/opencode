@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -14,6 +14,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -139,6 +140,7 @@ export const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
+    const projectCopy = yield* ProjectCopy.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const { db } = yield* Database.Service
@@ -213,6 +215,38 @@ export const layer = Layer.effect(
           { behavior: "immediate" },
         )
         .pipe(Effect.orDie)
+    })
+
+    const saveProjectDirectory = Effect.fn("Project.saveProjectDirectory")(function* (input: {
+      projectID: ProjectV2.ID
+      directory: string
+    }) {
+      if (input.projectID === ProjectV2.ID.global) return
+      const opened = AbsolutePath.make(FSUtil.resolve(input.directory))
+      const type = yield* projectCopy.detect({ directory: opened })
+
+      yield* db
+        .transaction(
+          (d) =>
+            Effect.gen(function* () {
+              const hasMain = yield* d
+                .select({ directory: ProjectDirectoryTable.directory })
+                .from(ProjectDirectoryTable)
+                .where(and(eq(ProjectDirectoryTable.project_id, input.projectID), eq(ProjectDirectoryTable.type, "main")))
+                .get()
+              yield* d
+                .insert(ProjectDirectoryTable)
+                .values({ directory: opened, project_id: input.projectID, type: type ?? (hasMain ? "root" : "main") })
+                .onConflictDoNothing()
+                .run()
+            }),
+          { behavior: "immediate" },
+        )
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => log.warn("project directory persistence failed", { projectID: input.projectID, cause })),
+          ),
+        )
     })
 
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
@@ -301,6 +335,11 @@ export const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }
+
+      yield* saveProjectDirectory({
+        projectID,
+        directory: data.directory,
+      })
 
       yield* emitUpdated(result)
       if (projectID !== ProjectV2.ID.global && data.vcs?.type === "git") {
@@ -466,6 +505,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
+  Layer.provide(ProjectCopy.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
