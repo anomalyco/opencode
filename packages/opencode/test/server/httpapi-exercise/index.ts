@@ -195,6 +195,7 @@ const scenarios: Scenario[] = [
     object(settings.general)
     check(settings.general.autoSave === true, "default settings should enable autosave")
     check(settings.general.followup === "steer", "default settings should normalize followup to steer")
+    check(settings.general.newLayoutDesigns === true, "default settings should enable v2 layout designs")
     object(body.settings.keybinds)
     object(body.model)
     const model = body.model
@@ -250,6 +251,88 @@ const scenarios: Scenario[] = [
       check(settings.general.showFileTree === true, "app settings update should store booleans")
       check(settings.appearance.fontSize === 15, "app settings update should store font size")
       check(settings.permissions.autoApprove === true, "app settings update should store permissions")
+    }),
+  http.protected
+    .put("/ui/settings/app", "ui.settings.app.update.preserve-v1-layout")
+    .mutating()
+    .seeded((ctx) =>
+      ctx.api({
+        method: "PUT",
+        path: "/ui/settings/app",
+        headers: ctx.headers(),
+        body: {
+          general: {
+            autoSave: true,
+            releaseNotes: true,
+            followup: "steer",
+            showFileTree: false,
+            showNavigation: false,
+            showSearch: false,
+            showStatus: false,
+            showTerminal: false,
+            showReasoningSummaries: false,
+            shellToolPartsExpanded: false,
+            editToolPartsExpanded: false,
+            showSessionProgressBar: true,
+            showCustomAgents: false,
+            newLayoutDesigns: false,
+          },
+          updates: { startup: true },
+          appearance: { fontSize: 14, mono: "", sans: "", terminal: "" },
+          permissions: { autoApprove: false },
+          notifications: { agent: true, permissions: true, errors: false },
+          sounds: {
+            agentEnabled: true,
+            agent: "staplebops-01",
+            permissionsEnabled: true,
+            permissions: "staplebops-02",
+            errorsEnabled: true,
+            errors: "nope-03",
+          },
+        },
+      }),
+    )
+    .at((ctx) => ({
+      path: "/ui/settings/app",
+      headers: ctx.headers(),
+      body: {
+        general: {
+          autoSave: false,
+          releaseNotes: true,
+          followup: "steer",
+          showFileTree: false,
+          showNavigation: false,
+          showSearch: false,
+          showStatus: false,
+          showTerminal: false,
+          showReasoningSummaries: false,
+          shellToolPartsExpanded: false,
+          editToolPartsExpanded: false,
+          showSessionProgressBar: true,
+          showCustomAgents: false,
+          newLayoutDesigns: false,
+        },
+        updates: { startup: true },
+        appearance: { fontSize: 14, mono: "", sans: "", terminal: "" },
+        permissions: { autoApprove: false },
+        notifications: { agent: true, permissions: true, errors: false },
+        sounds: {
+          agentEnabled: true,
+          agent: "staplebops-01",
+          permissionsEnabled: true,
+          permissions: "staplebops-02",
+          errorsEnabled: true,
+          errors: "nope-03",
+        },
+      },
+    }))
+    .json(200, (body) => {
+      object(body)
+      object(body.settings)
+      const settings = body.settings
+      object(settings.general)
+      check(settings.general.autoSave === false, "unrelated app settings update should store changed field")
+      check(settings.general.newLayoutDesigns === false, "unrelated app settings update should preserve v1 fallback")
     }),
   http.protected
     .put("/ui/settings/keybinds", "ui.settings.keybinds.replace")

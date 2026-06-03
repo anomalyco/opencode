@@ -1,7 +1,6 @@
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
-import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import {
   UiAppSettingsTable,
@@ -15,7 +14,6 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { GlobalBus } from "@/bus/global"
 
 const defaultProfileID = "default"
-const newLayoutDesignsDefault = InstallationChannel !== "prod"
 
 const Visibility = Schema.Literals(["show", "hide"])
 export type Visibility = Schema.Schema.Type<typeof Visibility>
@@ -136,7 +134,7 @@ export const defaultAppSettings = {
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
     showCustomAgents: false,
-    newLayoutDesigns: newLayoutDesignsDefault,
+    newLayoutDesigns: true,
   },
   updates: {
     startup: true,
