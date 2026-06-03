@@ -9,9 +9,10 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, createResource, onCleanup, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
+import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
@@ -190,13 +191,13 @@ export function DialogSelectServer() {
 export function useServerManagementController(options: { onSelect?: () => void } = {}) {
   const navigate = useNavigate()
   const server = useServer()
+  const global = useGlobal()
   const platform = usePlatform()
   const language = useLanguage()
   const { defaultKey, canDefault, setDefault } = useDefaultServer()
   const { previewStatus } = useServerPreview()
   const checkServerHealth = useCheckServerHealth()
   const [store, setStore] = createStore({
-    status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
       name: "",
@@ -346,31 +347,15 @@ export function useServerManagementController(options: { onSelect?: () => void }
     return list.slice().sort((a, b) => {
       if (a === active) return -1
       if (b === active) return 1
-      const diff = rank(store.status[ServerConnection.key(a)]) - rank(store.status[ServerConnection.key(b)])
+      const diff =
+        rank(global.servers.health[ServerConnection.key(a)]) - rank(global.servers.health[ServerConnection.key(b)])
       if (diff !== 0) return diff
       return (order.get(a) ?? 0) - (order.get(b) ?? 0)
     })
   })
 
-  async function refreshHealth() {
-    const results: Record<ServerConnection.Key, ServerHealth> = {}
-    await Promise.all(
-      items().map(async (conn) => {
-        results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
-      }),
-    )
-    setStore("status", reconcile(results))
-  }
-
-  createEffect(() => {
-    items()
-    void refreshHealth()
-    const interval = setInterval(refreshHealth, 10_000)
-    onCleanup(() => clearInterval(interval))
-  })
-
   async function select(conn: ServerConnection.Any, persist?: boolean) {
-    if (!persist && store.status[ServerConnection.key(conn)]?.healthy === false) return
+    if (!persist && global.servers.health[ServerConnection.key(conn)]?.healthy === false) return
     options.onSelect?.()
     if (persist && conn.type === "http") {
       server.add(conn)
@@ -477,7 +462,7 @@ export function useServerManagementController(options: { onSelect?: () => void }
       username: conn.http.username ?? "",
       password: conn.http.password ?? "",
       error: "",
-      status: store.status[ServerConnection.key(conn)]?.healthy,
+      status: global.servers.health[ServerConnection.key(conn)]?.healthy,
     })
   }
 
@@ -527,7 +512,7 @@ export function useServerManagementController(options: { onSelect?: () => void }
     canDefault,
     current,
     sortedItems,
-    status: () => store.status,
+    status: () => global.servers.health,
     isFormMode,
     isAddMode,
     formTitle,
@@ -684,7 +669,7 @@ export function ServerConnectionForm(props: { controller: ReturnType<typeof useS
         onSubmit={props.controller.submitForm}
         onBack={props.controller.resetForm}
       />
-      <div class="shrink-0">
+      <div class="shrink-0 pb-5">
         <Button
           variant="primary"
           size="large"
