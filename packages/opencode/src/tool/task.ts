@@ -1,6 +1,7 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
@@ -9,15 +10,16 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { ModelID, ProviderID } from "../provider/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Database } from "@opencode-ai/core/database/database"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
-  prompt(input: SessionPrompt.PromptInput): Effect.Effect<MessageV2.WithParts>
+  prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
 }
 
 const id = "task"
@@ -72,6 +74,17 @@ function backgroundOutput(sessionID: SessionID) {
   ].join("\n")
 }
 
+function backgroundUpdateOutput(sessionID: SessionID) {
+  return [
+    `<task id="${sessionID}" state="running">`,
+    "<summary>Background task updated</summary>",
+    "<task_result>",
+    "Additional context sent to the background task.",
+    "</task_result>",
+    "</task>",
+  ].join("\n")
+}
+
 function backgroundMessage(input: {
   sessionID: SessionID
   description: string
@@ -98,7 +111,7 @@ function errorText(error: unknown) {
   return String(error)
 }
 
-function parseModelOverride(model: string): Effect.Effect<{ modelID: ModelID; providerID: ProviderID }, Error> {
+function parseModelOverride(model: string): Effect.Effect<{ modelID: ProviderV2.ModelID; providerID: ProviderV2.ID }, Error> {
   const slash = model.indexOf("/")
   if (slash <= 0 || slash === model.length - 1) {
     return Effect.fail(
@@ -106,8 +119,8 @@ function parseModelOverride(model: string): Effect.Effect<{ modelID: ModelID; pr
     )
   }
   return Effect.succeed({
-    providerID: ProviderID.make(model.slice(0, slash)),
-    modelID: ModelID.make(model.slice(slash + 1)),
+    providerID: ProviderV2.ID.make(model.slice(0, slash)),
+    modelID: ProviderV2.ModelID.make(model.slice(slash + 1)),
   })
 }
 
@@ -120,6 +133,7 @@ export const TaskTool = Tool.define(
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
+    const database = yield* Database.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -194,7 +208,10 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.orDie,
+      )
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
       const model = overrideModel ?? next.model ?? {
@@ -261,9 +278,16 @@ export const TaskTool = Tool.define(
           .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
       })
 
-      const existing = yield* background.get(nextSession.id)
-      if (existing?.status === "running") {
-        return yield* Effect.fail(new Error(`Task ${nextSession.id} is already running.`))
+      if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
+        return {
+          title: params.description,
+          metadata: {
+            ...metadata,
+            background: true,
+            jobId: nextSession.id,
+          },
+          output: backgroundUpdateOutput(nextSession.id),
+        }
       }
 
       if (runInBackground) {
@@ -272,16 +296,16 @@ export const TaskTool = Tool.define(
           type: id,
           title: params.description,
           metadata,
-          run: runTask().pipe(
-            Effect.tap((text) => inject("completed", text).pipe(Effect.ignore)),
-            Effect.catchCause((cause) =>
-              (Cause.hasInterruptsOnly(cause)
-                ? Effect.void
-                : inject("error", errorText(Cause.squash(cause))).pipe(Effect.ignore)
-              ).pipe(Effect.andThen(Effect.failCause(cause))),
-            ),
-          ),
+          run: runTask(),
         })
+        yield* background.wait({ id: info.id }).pipe(
+          Effect.flatMap((result) => {
+            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
+            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+            return Effect.void
+          }),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
 
         return {
           title: params.description,

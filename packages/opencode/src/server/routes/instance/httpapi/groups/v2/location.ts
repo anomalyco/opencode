@@ -1,6 +1,9 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { PermissionV2 } from "@opencode-ai/core/permission"
+import { ProjectReference } from "@opencode-ai/core/project-reference"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Effect, Layer, Schema } from "effect"
@@ -34,7 +37,12 @@ export const locationQueryOpenApi = OpenApi.annotations({
 export class V2LocationMiddleware extends HttpApiMiddleware.Service<
   V2LocationMiddleware,
   {
-    provides: Catalog.Service | PluginBoot.Service
+    provides:
+      | Catalog.Service
+      | PluginBoot.Service
+      | PermissionV2.Service
+      | ProjectReference.Service
+      | FileSystem.Service
   }
 >()("@opencode/ExperimentalHttpApiV2Location") {}
 
@@ -59,4 +67,4 @@ export const layer = Layer.effect(
       }),
     )
   }),
-).pipe(Layer.provide(LocationServiceMap.layer))
+)

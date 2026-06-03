@@ -212,31 +212,7 @@ function normalizeMessages(
       return msg
     })
   }
-  if (["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
-    // Anthropic rejects assistant turns where tool_use blocks are followed by non-tool
-    // content, e.g. [tool_use, tool_use, text], with:
-    // `tool_use` ids were found without `tool_result` blocks immediately after...
-    //
-    // Reorder that invalid shape into [text] + [tool_use, tool_use]. Consecutive
-    // assistant messages are later merged by the provider/SDK, so preserving the
-    // original [tool_use...] then [text] order still produces the invalid payload.
-    //
-    // The root cause appears to be somewhere upstream where the stream is originally
-    // processed. We were unable to locate an exact narrower reproduction elsewhere,
-    // so we keep this transform in place for the time being.
-    msgs = msgs.flatMap((msg) => {
-      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return [msg]
 
-      const parts = msg.content
-      const first = parts.findIndex((part) => part.type === "tool-call")
-      if (first === -1) return [msg]
-      if (!parts.slice(first).some((part) => part.type !== "tool-call")) return [msg]
-      return [
-        { ...msg, content: parts.filter((part) => part.type !== "tool-call") },
-        { ...msg, content: parts.filter((part) => part.type === "tool-call") },
-      ]
-    })
-  }
   if (
     model.providerID === "mistral" ||
     model.api.id.toLowerCase().includes("mistral") ||
@@ -597,10 +573,12 @@ function openaiCompatibleReasoningEfforts(id: string) {
 }
 
 function anthropicOpus47OrLater(apiId: string) {
-  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)/i.exec(apiId)
+  // Matches "opus-4.7" (Anthropic/Bedrock/Vertex) and "claude-4.7-opus" (SAP AI Core inverted).
+  // Greedy \d+ correctly extends to multi-digit majors (e.g. "claude-10.0-opus") for forward compatibility.
+  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(apiId)
   if (!version) return false
-  const major = Number(version[1])
-  const minor = Number(version[2])
+  const major = Number(version[1] ?? version[3])
+  const minor = Number(version[2] ?? version[4])
   return major > 4 || (major === 4 && minor >= 7)
 }
 
@@ -608,7 +586,11 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   if (anthropicOpus47OrLater(apiId)) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
-  if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
+  if (
+    ["opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus", "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet"].some((v) =>
+      apiId.includes(v),
+    )
+  ) {
     return ["low", "medium", "high", "max"]
   }
   return null
@@ -697,6 +679,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               {
                 thinking: {
                   type: "adaptive",
+                  // Opus 4.7+ flips the API default for `display` to "omitted", which
+                  // returns empty thinking blocks. Force "summarized" so summaries
+                  // survive (4.6/Sonnet 4.6 already default to "summarized").
+                  ...(adaptiveOpus ? { display: "summarized" } : {}),
                 },
                 effort,
               },
@@ -796,10 +782,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
       if (id === "o1-mini") return {}
       return Object.fromEntries(
-        (GPT5_FAMILY_RE.test(id) && gpt5Version(id) === undefined
-          ? ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
-          : WIDELY_SUPPORTED_EFFORTS
-        ).map((effort) => [
+        openaiReasoningEfforts(id, model.release_date).map((effort) => [
           effort,
           {
             reasoningEffort: effort,
@@ -995,6 +978,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               {
                 thinking: {
                   type: "adaptive",
+                  ...(adaptiveOpus ? { display: "summarized" } : {}),
                 },
                 effort,
               },

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
-import { Policy } from "@opencode-ai/core/policy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -33,7 +33,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...paid.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBe("public")
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(false)
       }),
     ),
@@ -54,7 +54,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...free.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBe("public")
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("free"))).enabled).toBe(true)
       }),
     ),
@@ -75,7 +75,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...outputOnly.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBe("public")
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("output-only"))).enabled).toBe(true)
       }),
     ),
@@ -96,7 +96,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...paid.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBeUndefined()
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
       }),
     ),
@@ -119,7 +119,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...paid.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBeUndefined()
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
       }),
     ),
@@ -134,24 +134,20 @@ describe("OpencodePlugin", () => {
         const transform = yield* catalog.transform()
         yield* transform((catalog) => {
           const item = provider("opencode", {
-            options: {
+            request: {
               headers: {},
-              body: {},
-              aisdk: {
-                provider: { apiKey: "configured" },
-                request: {},
-              },
+              body: { apiKey: "configured" },
             },
           })
           catalog.provider.update(item.id, (draft) => {
-            draft.options = item.options
+            draft.request = item.request
           })
           const paid = model("opencode", "paid", { cost: cost(1) })
           catalog.model.update(item.id, paid.id, (draft) => {
             draft.cost = [...paid.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBe("configured")
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("configured")
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
       }),
     ),
@@ -174,7 +170,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...paid.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).options.aisdk.provider.apiKey).toBeUndefined()
+        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
         expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
       }),
     ),
@@ -195,7 +191,7 @@ describe("OpencodePlugin", () => {
             draft.cost = [...paid.cost]
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.openai)).options.aisdk.provider.apiKey).toBeUndefined()
+        expect((yield* catalog.provider.get(ProviderV2.ID.openai)).request.body.apiKey).toBeUndefined()
         expect((yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("paid"))).enabled).toBe(true)
       }),
     ),
@@ -227,7 +223,7 @@ describe("OpencodePlugin", () => {
 
       expect(Option.getOrUndefined(selected)?.id).toBe(ModelV2.ID.make("gpt-5-nano"))
     }).pipe(
-      Effect.provide(Catalog.defaultLayer.pipe(Layer.provide(Policy.defaultLayer), Layer.provide(locationLayer))),
+      Effect.provide(Catalog.locationLayer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(locationLayer))),
     ),
   )
 })

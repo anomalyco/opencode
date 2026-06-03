@@ -1,93 +1,11 @@
-import { WorkspaceID } from "@/control-plane/schema"
-import { SessionV2 } from "@/v2/session"
-import { DateTime, Effect, Option, Schema } from "effect"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { DateTime, Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
-import {
-  InvalidCursorError,
-  InvalidRequestError,
-  ServiceUnavailableError,
-  SessionNotFoundError,
-  UnknownError,
-} from "../../errors"
+import { SessionsCursor } from "../../groups/v2/session"
+import { InvalidCursorError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
 
 const DefaultSessionsLimit = 50
-
-const SessionCursor = Schema.Struct({
-  id: SessionV2.Info.fields.id,
-  time: Schema.Finite,
-  order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
-  direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
-  directory: Schema.String.pipe(Schema.optional),
-  path: Schema.String.pipe(Schema.optional),
-  workspaceID: WorkspaceID.pipe(Schema.optional),
-  roots: Schema.Boolean.pipe(Schema.optional),
-  start: Schema.Finite.pipe(Schema.optional),
-  search: Schema.String.pipe(Schema.optional),
-})
-type SessionCursor = typeof SessionCursor.Type
-
-const decodeCursor = Schema.decodeUnknownSync(SessionCursor)
-
-function hasCursorFilter(query: {
-  readonly order?: unknown
-  readonly path?: unknown
-  readonly roots?: unknown
-  readonly start?: unknown
-  readonly search?: unknown
-}) {
-  return (
-    query.order !== undefined ||
-    query.path !== undefined ||
-    query.roots !== undefined ||
-    query.start !== undefined ||
-    query.search !== undefined
-  )
-}
-
-function hasCursorRoutingMismatch(
-  query: { readonly directory?: string; readonly workspace?: string },
-  decoded: SessionCursor | undefined,
-) {
-  if (!decoded) return false
-  if (query.directory !== undefined && query.directory !== decoded.directory) return true
-  return query.workspace !== undefined && query.workspace !== decoded.workspaceID
-}
-
-const sessionCursor = {
-  encode(
-    session: SessionV2.Info,
-    order: "asc" | "desc",
-    direction: "previous" | "next",
-    filters: Pick<SessionCursor, "directory" | "path" | "workspaceID" | "roots" | "start" | "search">,
-  ) {
-    return Buffer.from(
-      JSON.stringify({
-        ...filters,
-        id: session.id,
-        time: DateTime.toEpochMillis(session.time.updated),
-        order,
-        direction,
-      }),
-    ).toString("base64url")
-  },
-  decode(input: string) {
-    return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
-  },
-}
-
-function decodeWorkspaceID(input: string | undefined) {
-  if (input === undefined) return Effect.succeed(undefined)
-  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(input)
-  if (Option.isSome(workspaceID)) return Effect.succeed(workspaceID.value)
-  return Effect.fail(
-    new InvalidRequestError({
-      message: "Invalid workspace query parameter",
-      kind: "Query",
-      field: "workspace",
-    }),
-  )
-}
 
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session", (handlers) =>
   Effect.gen(function* () {
@@ -97,41 +15,42 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "sessions",
         Effect.fn(function* (ctx) {
-          if (ctx.query.cursor && hasCursorFilter(ctx.query))
-            return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order or filters" })
-          const decoded = yield* Effect.try({
-            try: () => (ctx.query.cursor ? sessionCursor.decode(ctx.query.cursor) : undefined),
-            catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
-          })
-          if (hasCursorRoutingMismatch(ctx.query, decoded))
-            return yield* new InvalidCursorError({ message: "Cursor does not match requested directory or workspace" })
-          const order = decoded?.order ?? ctx.query.order ?? "desc"
-          const filters = decoded ?? {
-            directory: ctx.query.directory,
-            path: ctx.query.path,
-            workspaceID: yield* decodeWorkspaceID(ctx.query.workspace),
-            roots: ctx.query.roots,
-            start: ctx.query.start,
-            search: ctx.query.search,
-          }
+          const query =
+            ctx.query.cursor !== undefined
+              ? yield* SessionsCursor.parse(ctx.query.cursor).pipe(
+                  Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
+                )
+              : ctx.query
           const sessions = yield* session.list({
+            ...query,
+            workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
-            order,
-            directory: filters.directory,
-            path: filters.path,
-            workspaceID: filters.workspaceID,
-            roots: filters.roots,
-            start: filters.start,
-            search: filters.search,
-            cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
           })
           const first = sessions[0]
           const last = sessions.at(-1)
           return {
             items: sessions,
             cursor: {
-              previous: first ? sessionCursor.encode(first, order, "previous", filters) : undefined,
-              next: last ? sessionCursor.encode(last, order, "next", filters) : undefined,
+              previous: first
+                ? SessionsCursor.make({
+                    ...query,
+                    anchor: {
+                      id: first.id,
+                      time: DateTime.toEpochMillis(first.time.created),
+                      direction: "previous",
+                    },
+                  })
+                : undefined,
+              next: last
+                ? SessionsCursor.make({
+                    ...query,
+                    anchor: {
+                      id: last.id,
+                      time: DateTime.toEpochMillis(last.time.created),
+                      direction: "next",
+                    },
+                  })
+                : undefined,
             },
           }
         }),
@@ -168,7 +87,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "compact",
         Effect.fn(function* (ctx) {
-          yield* session.compact(ctx.params.sessionID).pipe(
+          yield* session.compact({ sessionID: ctx.params.sessionID }).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
                 new SessionNotFoundError({

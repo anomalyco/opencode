@@ -103,58 +103,52 @@ export const Plugin = PluginV2.define({
     const location = yield* Location.Service
     const worktree = location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
-    const readonlyExternalDirectory = rules({
-      external_directory: {
-        "*": "ask",
-        ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-      },
-    })
-    const defaults = rules({
-      "*": "allow",
-      doom_loop: "ask",
-      external_directory: {
-        "*": "ask",
-        ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-      },
-      question: "deny",
-      plan_enter: "deny",
-      plan_exit: "deny",
-      repo_clone: "deny",
-      repo_overview: "deny",
-      read: {
-        "*": "allow",
-        "*.env": "ask",
-        "*.env.*": "ask",
-        "*.env.example": "allow",
-      },
-    })
+    const readonlyExternalDirectory: PermissionV2.Ruleset = [
+      { action: "external_directory", resource: "*", effect: "ask" },
+      ...whitelistedDirs.map(
+        (resource): PermissionV2.Rule => ({ action: "external_directory", resource, effect: "allow" }),
+      ),
+    ]
+    const defaults: PermissionV2.Ruleset = [
+      { action: "*", resource: "*", effect: "allow" },
+      ...readonlyExternalDirectory,
+      { action: "question", resource: "*", effect: "deny" },
+      { action: "plan_enter", resource: "*", effect: "deny" },
+      { action: "plan_exit", resource: "*", effect: "deny" },
+      { action: "read", resource: "*", effect: "allow" },
+      { action: "read", resource: "*.env", effect: "ask" },
+      { action: "read", resource: "*.env.*", effect: "ask" },
+      { action: "read", resource: "*.env.example", effect: "allow" },
+    ]
 
     yield* agent.update((editor) => {
       editor.update(AgentV2.ID.make("build"), (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ question: "allow", plan_enter: "allow" })))
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "question", resource: "*", effect: "allow" },
+            { action: "plan_enter", resource: "*", effect: "allow" },
+          ]),
+        )
       })
 
       editor.update(AgentV2.ID.make("plan"), (item) => {
         item.description = "Plan mode. Disallows all edit tools."
         item.mode = "primary"
         item.permissions.push(
-          ...PermissionV2.merge(
-            defaults,
-            rules({
-              question: "allow",
-              plan_exit: "allow",
-              external_directory: {
-                [path.join(Global.Path.data, "plans", "*")]: "allow",
-              },
-              edit: {
-                "*": "deny",
-                [path.join(".opencode", "plans", "*.md")]: "allow",
-                [path.relative(worktree, path.join(Global.Path.data, "plans", "*.md"))]: "allow",
-              },
-            }),
-          ),
+          ...PermissionV2.merge(defaults, [
+            { action: "question", resource: "*", effect: "allow" },
+            { action: "plan_exit", resource: "*", effect: "allow" },
+            { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
+            { action: "edit", resource: "*", effect: "deny" },
+            { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
+            {
+              action: "edit",
+              resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
+              effect: "allow",
+            },
+          ]),
         )
       })
 
@@ -162,7 +156,7 @@ export const Plugin = PluginV2.define({
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ todowrite: "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "todowrite", resource: "*", effect: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("explore"), (item) => {
@@ -173,16 +167,16 @@ export const Plugin = PluginV2.define({
         item.permissions.push(
           ...PermissionV2.merge(
             defaults,
-            rules({
-              "*": "deny",
-              grep: "allow",
-              glob: "allow",
-              list: "allow",
-              bash: "allow",
-              webfetch: "allow",
-              websearch: "allow",
-              read: "allow",
-            }),
+            [
+              { action: "*", resource: "*", effect: "deny" },
+              { action: "grep", resource: "*", effect: "allow" },
+              { action: "glob", resource: "*", effect: "allow" },
+              { action: "list", resource: "*", effect: "allow" },
+              { action: "bash", resource: "*", effect: "allow" },
+              { action: "webfetch", resource: "*", effect: "allow" },
+              { action: "websearch", resource: "*", effect: "allow" },
+              { action: "read", resource: "*", effect: "allow" },
+            ],
             readonlyExternalDirectory,
           ),
         )
@@ -192,29 +186,22 @@ export const Plugin = PluginV2.define({
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_COMPACTION
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ "*": "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("title"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ "*": "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
       editor.update(AgentV2.ID.make("summary"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY
-        item.permissions.push(...PermissionV2.merge(defaults, rules({ "*": "deny" })))
+        item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
     })
   }),
 })
-
-function rules(input: Record<string, PermissionV2.Action | Record<string, PermissionV2.Action>>) {
-  return Object.entries(input).flatMap(([permission, value]) => {
-    if (typeof value === "string") return [{ permission, pattern: "*", action: value }]
-    return Object.entries(value).map(([pattern, action]) => ({ permission, pattern, action }))
-  })
-}

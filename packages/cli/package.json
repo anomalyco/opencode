@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/cli",
-  "version": "1.15.12",
+  "version": "1.15.13",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -9,11 +9,13 @@
     "opencode": "./src/index.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "dev": "bun run src/index.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
+    "@opencode-ai/core": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -265,7 +265,9 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>MiMo-V2.5</li>
             <li>MiniMax M2.5</li>
             <li>MiniMax M2.7</li>
+            <li>MiniMax M3</li>
             <li>Qwen3.6 Plus</li>
+            <li>Qwen3.7 Plus</li>
             <li>Qwen3.7 Max</li>
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>

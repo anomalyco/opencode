@@ -1,16 +1,18 @@
 import { Effect, Scope, Stream } from "effect"
-import { AccountV2 } from "../account"
 import { EventV2 } from "../event"
 import { PluginV2 } from "../plugin"
+import { Auth } from "../auth"
 
+// Depending on what account is active, enable matching providers for that
+// service
 export const AccountPlugin = PluginV2.define({
   id: PluginV2.ID.make("account"),
   effect: Effect.gen(function* () {
-    const accounts = yield* AccountV2.Service
+    const accounts = yield* Auth.Service
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
 
-    yield* events.subscribe(AccountV2.Event.Switched).pipe(
+    yield* events.subscribe(Auth.Event.Switched).pipe(
       Stream.runForEach((event) =>
         PluginV2.Service.use((plugin) => plugin.trigger("account.switched", event.data, {})).pipe(Effect.asVoid),
       ),
@@ -19,8 +21,10 @@ export const AccountPlugin = PluginV2.define({
 
     return {
       "catalog.transform": Effect.fn(function* (evt) {
+        const active = yield* accounts.activeAll().pipe(Effect.orDie)
+        if (active.size === 0) return
         for (const item of evt.provider.list()) {
-          const account = yield* accounts.active(AccountV2.ServiceID.make(item.provider.id)).pipe(Effect.orDie)
+          const account = active.get(Auth.ServiceID.make(item.provider.id))
           if (!account) continue
           evt.provider.update(item.provider.id, (provider) => {
             provider.enabled = {
@@ -28,10 +32,10 @@ export const AccountPlugin = PluginV2.define({
               service: account.serviceID,
             }
             if (account.credential.type === "api") {
-              provider.options.aisdk.provider.apiKey = account.credential.key
-              Object.assign(provider.options.aisdk.provider, account.credential.metadata ?? {})
+              provider.request.body.apiKey = account.credential.key
+              Object.assign(provider.request.body, account.credential.metadata ?? {})
             }
-            if (account.credential.type === "oauth") provider.options.aisdk.provider.apiKey = account.credential.access
+            if (account.credential.type === "oauth") provider.request.body.apiKey = account.credential.access
           })
         }
       }),

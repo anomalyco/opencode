@@ -1,5 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
@@ -13,7 +15,7 @@ import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { Filesystem } from "@/util/filesystem"
 import { LLMEvent, LLMResponse } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
@@ -25,6 +27,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
 
@@ -41,7 +44,7 @@ const replayOpenAIOAuth = {
 type RecordedScenario = {
   readonly id: string
   readonly name: string
-  readonly providerID: ProviderID
+  readonly providerID: ProviderV2.ID
   readonly modelID: string
   readonly cassette: string
   readonly protocol: string
@@ -50,7 +53,7 @@ type RecordedScenario = {
   readonly recordAuth?: () => Auth.Info | undefined
   readonly replayAuth?: Auth.Info
   readonly stableID?: string
-  readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<Config.Info>
+  readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<ConfigV1.Info>
 }
 
 const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
@@ -58,9 +61,9 @@ const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const { experimental, ...rest } = cloned
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The config schema accepts the same model shape except object-valued experimental metadata.
   if (typeof experimental === "boolean")
-    return cloned as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+    return cloned as NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Dropping non-boolean experimental metadata makes the fixture model match config input.
-  return rest as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+  return rest as NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 }
 
 const envValue = (...names: string[]) => names.map((name) => process.env[name]).find(Boolean)
@@ -88,14 +91,14 @@ function decodeRecordOpenAIOAuth() {
 }
 
 const providerConfig = (input: {
-  readonly providerID: ProviderID
+  readonly providerID: ProviderV2.ID
   readonly name: string
   readonly env: string[]
   readonly npm: string
   readonly api: string
   readonly model: ModelsDev.Provider["models"][string]
   readonly options: Record<string, unknown>
-}): Partial<Config.Info> => ({
+}): Partial<ConfigV1.Info> => ({
   enabled_providers: [input.providerID],
   provider: {
     [input.providerID]: {
@@ -113,7 +116,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "openai-api-key",
     name: "OpenAI API key",
-    providerID: ProviderID.openai,
+    providerID: ProviderV2.ID.openai,
     modelID: "gpt-4.1-mini",
     cassette: "session/native-openai-tool-loop",
     protocol: "openai-responses",
@@ -121,7 +124,7 @@ const RECORDED_SCENARIOS = [
     canRecord: () => Boolean(envValue("OPENCODE_RECORD_OPENAI_API_KEY", "OPENAI_API_KEY")),
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.openai,
+        providerID: ProviderV2.ID.openai,
         name: "OpenAI",
         env: ["OPENAI_API_KEY"],
         npm: "@ai-sdk/openai",
@@ -136,7 +139,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "openai-oauth",
     name: "OpenAI OAuth",
-    providerID: ProviderID.openai,
+    providerID: ProviderV2.ID.openai,
     modelID: "gpt-5.5",
     cassette: "session/native-openai-oauth-tool-loop",
     protocol: "openai-responses",
@@ -147,7 +150,7 @@ const RECORDED_SCENARIOS = [
     stableID: "openai-oauth",
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.openai,
+        providerID: ProviderV2.ID.openai,
         name: "OpenAI",
         env: ["OPENAI_API_KEY"],
         npm: "@ai-sdk/openai",
@@ -159,7 +162,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "opencode-proxy",
     name: "OpenCode proxy",
-    providerID: ProviderID.opencode,
+    providerID: ProviderV2.ID.opencode,
     modelID: "gpt-5.2-codex",
     cassette: "session/native-zen-tool-loop",
     protocol: "openai-responses",
@@ -167,7 +170,7 @@ const RECORDED_SCENARIOS = [
     canRecord: () => Boolean(process.env.OPENCODE_RECORD_CONSOLE_TOKEN && process.env.OPENCODE_RECORD_ZEN_ORG_ID),
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.opencode,
+        providerID: ProviderV2.ID.opencode,
         name: "OpenCode Zen",
         env: ["OPENCODE_CONSOLE_TOKEN"],
         npm: "@ai-sdk/openai-compatible",
@@ -182,7 +185,7 @@ const RECORDED_SCENARIOS = [
   {
     id: "anthropic-api-key",
     name: "Anthropic API key",
-    providerID: ProviderID.anthropic,
+    providerID: ProviderV2.ID.anthropic,
     modelID: "claude-haiku-4-5-20251001",
     cassette: "session/native-anthropic-tool-loop",
     protocol: "anthropic-messages",
@@ -190,7 +193,7 @@ const RECORDED_SCENARIOS = [
     canRecord: () => Boolean(envValue("OPENCODE_RECORD_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")),
     config: (model) =>
       providerConfig({
-        providerID: ProviderID.anthropic,
+        providerID: ProviderV2.ID.anthropic,
         name: "Anthropic",
         env: ["ANTHROPIC_API_KEY"],
         npm: "@ai-sdk/anthropic",
@@ -270,7 +273,7 @@ const modelsFixture = Filesystem.readJson<Record<string, ModelsDev.Provider>>(
 function recordedNativeLLMLayer(scenario: RecordedScenario) {
   const auth = authLayer(scenario)
   const provider = Provider.layer.pipe(
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(Env.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(auth),
@@ -373,7 +376,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
 
     const stableID = scenario.stableID ?? scenario.providerID
     const sessionID = SessionID.make(`session-recorded-${stableID}-loop`)
-    const modelID = ModelID.make(model.id)
+    const modelID = ProviderV2.ModelID.make(model.id)
     const agent = {
       name: "test",
       mode: "primary",
@@ -394,7 +397,7 @@ const driveToolLoop = (scenario: RecordedScenario) =>
         time: { created: 0 },
         agent: agent.name,
         model: { providerID: scenario.providerID, modelID },
-      } satisfies MessageV2.User,
+      } satisfies SessionV1.User,
       sessionID,
       model: resolved,
       agent,

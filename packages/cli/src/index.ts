@@ -3,10 +3,18 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import * as Effect from "effect/Effect"
-import * as Command from "effect/unstable/cli/Command"
+import { Api } from "./api"
+import { CliBuilder } from "./cli-builder"
 
-const cli = Command.make("opencode", {}, () => Effect.void).pipe(
-  Command.withDescription("OpenCode command line interface"),
+const Handlers = CliBuilder.handlers(Api, {
+  debug: {
+    agents: () => import("./handlers/debug/agents"),
+  },
+  migrate: () => import("./handlers/migrate"),
+})
+
+CliBuilder.run(Api, Handlers, { version: "local" }).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.scoped,
+  NodeRuntime.runMain,
 )
-
-Command.run(cli, { version: "local" }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain)

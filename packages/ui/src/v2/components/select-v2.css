@@ -1,7 +1,21 @@
 @import "./menu-v2.css";
 
-/* Select dropdown: slide down from trigger (no scale-from-corner). */
+/* Above modal dialogs (z-index 50); matches legacy select-content. */
+[data-popper-positioner]:has([data-slot="select-v2-content"]) {
+  z-index: 60;
+}
+
+/* Dropdown surface (Type=menu) — overrides shared menu-v2 defaults for selects only. */
 [data-component="menu-v2-content"][data-slot="select-v2-content"] {
+  padding: 0;
+  min-width: 160px;
+  max-width: 23rem;
+  overflow: hidden;
+  z-index: 60;
+  pointer-events: auto;
+  background: var(--v2-background-bg-layer-01);
+  border-radius: 6px;
+  box-shadow: var(--v2-elevation-floating);
   transform-origin: top center;
   animation: select-v2-content-in 120ms ease-out;
 }
@@ -46,8 +60,9 @@
   border-radius: 6px;
   outline: 1px solid transparent;
   outline-offset: 0;
-  background: linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
-  box-shadow: var(--elevation-button-neutral);
+  background:
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-button-neutral);
   flex: none;
   align-self: stretch;
   transition:
@@ -65,18 +80,24 @@
     [data-expanded]
   ) {
   background:
-    linear-gradient(0deg, var(--overlay-simple-overlay-hover), var(--overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--alpha-light-2) 0%, var(--alpha-light-0) 100%), var(--background-bg-base);
+    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
 }
 
-[data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]),
 [data-component="select-v2"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
-  outline-color: var(--border-border-focus);
+  background:
+    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  outline-color: transparent;
+}
+
+[data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]):not([data-expanded]) {
+  outline-color: var(--v2-border-border-focus);
   box-shadow: none;
 }
 
 [data-component="select-v2"]:where([data-invalid]):not([data-disabled]) {
-  outline-color: var(--state-fg-danger);
+  outline-color: var(--v2-state-fg-danger);
   box-shadow: none;
 }
 
@@ -110,19 +131,18 @@
   background: transparent;
   outline: none;
   text-align: left;
-  font-family: var(--v2-font-family-sans);
   font-style: normal;
   font-weight: 440;
   font-size: 13px;
   line-height: 1;
   letter-spacing: -0.04px;
-  color: var(--text-text-base);
+  color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
   cursor: default;
 }
 
 [data-component="select-v2"] [data-slot="select-v2-value-text"][data-placeholder-shown] {
-  color: var(--text-text-faint);
+  color: var(--v2-text-text-faint);
 }
 
 [data-component="select-v2"][data-numeric] [data-slot="select-v2-value-text"] {
@@ -130,7 +150,7 @@
 }
 
 [data-component="select-v2"]:where([data-invalid]):not([data-disabled]) [data-slot="select-v2-value-text"] {
-  color: var(--state-fg-danger);
+  color: var(--v2-state-fg-danger);
 }
 
 [data-component="select-v2"] [data-slot="select-v2-chevron"] {
@@ -147,7 +167,7 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--icon-icon-muted);
+  color: var(--v2-icon-icon-muted);
   pointer-events: none;
 }
 
@@ -162,6 +182,49 @@
   transform: rotate(0deg);
 }
 
+/* Compact trigger for settings rows and similar inline contexts. */
+[data-component="select-v2"][data-appearance="inline"] {
+  width: fit-content;
+  max-width: 100%;
+  height: 24px;
+  padding: 4px 4px 4px 8px;
+  gap: 4px;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  align-self: auto;
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where(:hover):not([data-disabled], [data-invalid]):not(
+    :focus-within
+  ):not([data-expanded]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
+  box-shadow: none;
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where(:active):not([data-disabled], [data-invalid]):not(
+    [data-expanded]
+  ) {
+  background: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="select-v2"][data-appearance="inline"] [data-slot="select-v2-value-text"] {
+  padding: 0;
+  font-weight: 530;
+}
+
+[data-component="select-v2"][data-appearance="inline"] [data-slot="select-v2-chevron"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
 /* Listbox inside menu surface */
 [data-component="menu-v2-content"][data-slot="select-v2-content"] [data-slot="select-v2-listbox"] {
   box-sizing: border-box;
@@ -169,13 +232,39 @@
   flex-direction: column;
   align-items: stretch;
   margin: 0;
-  padding: 0;
+  padding: 4px;
   list-style: none;
   min-width: 0;
   width: 100%;
-  max-height: min(320px, 70vh);
+  max-height: 12rem;
+  overflow-x: hidden;
   overflow-y: auto;
   outline: none;
+  white-space: nowrap;
+
+  &:focus {
+    outline: none;
+  }
+
+  > *:not([role="presentation"]) + *:not([role="presentation"]) {
+    margin-top: 2px;
+  }
+}
+
+[data-slot="select-v2-listbox"] [data-component="menu-v2-item"],
+[data-slot="select-v2-listbox"] [data-slot="menu-v2-group-label"] {
+  flex: none;
+}
+
+[data-slot="select-v2-listbox"] [data-component="menu-v2-item"] {
+  --menu-v2-fg: var(--v2-text-text-base);
+  --menu-v2-fg-muted: var(--v2-text-text-faint);
+  --menu-v2-fg-subtle: var(--v2-text-text-muted);
+  --menu-v2-icon: var(--v2-icon-icon-base);
+  --menu-v2-accent: var(--v2-text-text-accent);
+  --menu-v2-badge-bg: var(--v2-background-bg-layer-02);
+  --menu-v2-badge-border: var(--v2-border-border-base);
+  --menu-v2-hover: var(--v2-overlay-simple-overlay-hover);
 }
 
 /* Listbox uses data-selected; menu item CSS uses data-checked — mirror accent */
