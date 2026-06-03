@@ -76,6 +76,7 @@ import {
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
+  collectOpenSessionDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
 } from "./layout/deep-links"
@@ -130,6 +131,7 @@ export default function Layout(props: ParentProps) {
   const newDesign = createMemo(() => settings.general.newLayoutDesigns())
   const initialDirectory = decode64(params.dir)
   const location = useLocation()
+  let pendingLaunchDeepLinks: string[] = []
   const route = createMemo(() => {
     const slug = params.dir
     if (!slug) return { slug, dir: "" }
@@ -1368,11 +1370,23 @@ export default function Layout(props: ParentProps) {
     if (navigate) return navigateToProject(directory)
   }
 
-  const handleDeepLinks = (urls: string[]) => {
-    if (!server.isLocal()) return
-
+  const processDeepLinks = (urls: string[]) => {
     for (const directory of collectOpenProjectDeepLinks(urls)) {
       void openProject(directory)
+    }
+
+    for (const sessionID of collectOpenSessionDeepLinks(urls)) {
+      void serverSDK.client.session
+        .get({ sessionID })
+        .then((x) => x.data)
+        .catch(() => undefined)
+        .then((session) => {
+          if (session?.directory) {
+            navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+          } else {
+            showToast({ title: "Session not found", description: "Could not open the requested session." })
+          }
+        })
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
@@ -1385,6 +1399,23 @@ export default function Layout(props: ParentProps) {
       navigateWithSidebarReset(href)
     }
   }
+
+  const handleDeepLinks = (urls: string[]) => {
+    if (urls.length === 0) return
+    if (!server.isLocal()) {
+      pendingLaunchDeepLinks = [...pendingLaunchDeepLinks, ...urls]
+      return
+    }
+    processDeepLinks(urls)
+  }
+
+  createEffect(() => {
+    if (!server.isLocal()) return
+    if (pendingLaunchDeepLinks.length === 0) return
+    const urls = pendingLaunchDeepLinks
+    pendingLaunchDeepLinks = []
+    processDeepLinks(urls)
+  })
 
   onMount(() => {
     const handler = (event: Event) => {

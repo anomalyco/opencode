@@ -19,6 +19,13 @@ export const parseDeepLink = (input: string) => {
   return directory
 }
 
+export const parseOpenSessionDeepLink = (input: string) => {
+  const url = parseUrl(input)
+  if (!url) return
+  if (url.hostname !== "open-session") return
+  return url.pathname.split("/").filter(Boolean)[0]
+}
+
 export const parseNewSessionDeepLink = (input: string) => {
   const url = parseUrl(input)
   if (!url) return
@@ -32,6 +39,9 @@ export const parseNewSessionDeepLink = (input: string) => {
 
 export const collectOpenProjectDeepLinks = (urls: string[]) =>
   urls.map(parseDeepLink).filter((directory): directory is string => !!directory)
+
+export const collectOpenSessionDeepLinks = (urls: string[]) =>
+  urls.map(parseOpenSessionDeepLink).filter((sessionID): sessionID is string => !!sessionID)
 
 export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
