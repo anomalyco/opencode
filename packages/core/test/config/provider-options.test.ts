@@ -197,12 +197,15 @@ describe("ConfigProviderOptionsV1", () => {
     expect(lowerer.request({ reasoningEffort: "high" })).toEqual({ reasoning_effort: "high" })
   })
 
-  test.each(["@ai-sdk/google-vertex", "@ai-sdk/google-vertex/anthropic"])("uses provider family lowering for %s", (packageName) => {
-    const lowerer = ConfigProviderOptionsV1.get(packageName)
+  test.each(["@ai-sdk/google-vertex", "@ai-sdk/google-vertex/anthropic"])(
+    "uses provider family lowering for %s",
+    (packageName) => {
+      const lowerer = ConfigProviderOptionsV1.get(packageName)
 
-    expect(lowerer.provider({ baseURL: "https://example.test", profile: "dev" })).toMatchObject({
-      url: "https://example.test",
-      settings: { profile: "dev" },
-    })
-  })
+      expect(lowerer.provider({ baseURL: "https://example.test", profile: "dev" })).toMatchObject({
+        url: "https://example.test",
+        settings: { profile: "dev" },
+      })
+    },
+  )
 })
