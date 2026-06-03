@@ -12,7 +12,6 @@ import { AbsolutePath } from "./schema"
 import { ConfigAgent } from "./config/agent"
 import { ConfigAttachments } from "./config/attachments"
 import { ConfigCompaction } from "./config/compaction"
-import { ConfigCommand } from "./config/command"
 import { ConfigExperimental } from "./config/experimental"
 import { ConfigFormatter } from "./config/formatter"
 import { ConfigLSP } from "./config/lsp"
@@ -85,9 +84,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   skills: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs to discover skills from",
-  }),
-  commands: Schema.Record(Schema.String, ConfigCommand.Info).pipe(Schema.optional).annotate({
-    description: "Legacy slash commands migrated to skills",
   }),
   instructions: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs supplying ambient instructions",
