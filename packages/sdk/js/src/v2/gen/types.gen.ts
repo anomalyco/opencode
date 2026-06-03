@@ -2685,12 +2685,12 @@ export type EventTuiSessionSelect2 = {
 
 export type ModelV2Info = {
   id: string
-  apiID: string
   providerID: string
   family?: string
   name: string
   api:
     | {
+        id: string
         type: "aisdk"
         package: string
         url?: string
@@ -2699,6 +2699,7 @@ export type ModelV2Info = {
         }
       }
     | {
+        id: string
         type: "native"
         url?: string
         settings: {
@@ -3694,12 +3695,12 @@ export type EventPluginAdded = {
 
 export type ModelV2Info1 = {
   id: string
-  apiID: string
   providerID: string
   family?: string
   name: string
   api:
     | {
+        id: string
         type: "aisdk"
         package: string
         url?: string
@@ -3708,6 +3709,7 @@ export type ModelV2Info1 = {
         }
       }
     | {
+        id: string
         type: "native"
         url?: string
         settings: {

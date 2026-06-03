@@ -92,7 +92,7 @@ export const AmazonBedrockPlugin = PluginV2.define({
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
         const region = typeof evt.options.region === "string" ? evt.options.region : process.env.AWS_REGION
-        evt.language = evt.sdk.languageModel(resolveModelID(evt.model.apiID, region))
+        evt.language = evt.sdk.languageModel(resolveModelID(evt.model.api.id, region))
       }),
     }
   }),

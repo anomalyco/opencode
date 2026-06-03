@@ -60,7 +60,7 @@ type ProviderInput = Partial<Omit<ProviderV2.Info, "api" | "request">> & {
 }
 
 type ModelInput = Partial<Omit<ModelV2.Info, "api" | "request">> & {
-  api?: ProviderV2.Api
+  api?: (ProviderV2.Api & { id?: ModelV2.ID }) | { id: ModelV2.ID }
   request?: ModelV2.Info["request"]
 }
 
@@ -83,12 +83,16 @@ export function provider(providerID: string, options?: ProviderInput) {
 export function model(providerID: string, modelID: string, options?: ModelInput) {
   return new ModelV2.Info({
     ...ModelV2.Info.empty(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
-    apiID: ModelV2.ID.make(modelID),
-    api: options?.api ?? {
-      type: "aisdk",
-      package: "test-provider",
-    },
     ...options,
+    api:
+      options?.api && "type" in options.api
+        ? { id: ModelV2.ID.make(modelID), ...options.api }
+        : {
+            id: ModelV2.ID.make(modelID),
+            ...options?.api,
+            type: "aisdk",
+            package: "test-provider",
+          },
     request: {
       headers: {},
       body: {},

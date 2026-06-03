@@ -158,15 +158,14 @@ describe("DynamicProviderPlugin", () => {
     }),
   )
 
-  itWithAISDK.effect("uses the model apiID for the default language model", () =>
+  itWithAISDK.effect("uses the model api.id for the default language model", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       yield* plugin.add(dynamicPlugin())
       const language = yield* aisdk.language(
         model("custom", "alias", {
-          apiID: ModelV2.ID.make("test-model-api"),
-          api: { type: "aisdk", package: fixtureProvider },
+          api: { id: ModelV2.ID.make("test-model-api"), type: "aisdk", package: fixtureProvider },
         }),
       )
       expect(language).toMatchObject({ modelID: "test-model-api", options: { name: "custom" } })

@@ -82,11 +82,13 @@ export const ModelsDevPlugin = PluginV2.define({
               draft.family = model.family ? ModelV2.Family.make(model.family) : undefined
               draft.api = model.provider?.npm
                 ? {
+                    id: draft.api.id,
                     type: "aisdk",
                     package: model.provider?.npm,
                     url: model.provider.api,
                   }
                 : {
+                    id: draft.api.id,
                     type: "native",
                     url: model.provider?.api,
                     settings: {},

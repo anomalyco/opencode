@@ -61,12 +61,18 @@ describe("CatalogV2", () => {
           }
         })
         catalog.model.update(providerID, modelID, (model) => {
-          model.api = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://model.example.com" }
+          model.api = {
+            id: modelID,
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://model.example.com",
+          }
           model.request.body.baseURL = "https://override.example.com"
         })
       })
 
       expect((yield* catalog.model.get(providerID, modelID)).api).toEqual({
+        id: modelID,
         type: "aisdk",
         package: "@ai-sdk/openai-compatible",
         url: "https://override.example.com",
@@ -94,6 +100,7 @@ describe("CatalogV2", () => {
       })
 
       expect((yield* catalog.model.get(providerID, modelID)).api).toEqual({
+        id: modelID,
         type: "aisdk",
         package: "@ai-sdk/openai-compatible",
         url: "https://provider.example.com",

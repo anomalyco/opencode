@@ -30,11 +30,24 @@ class Limit extends Schema.Class<Limit>("ConfigV2.Model.Limit")({
   output: Schema.Int.pipe(Schema.optional),
 }) {}
 
+const ModelApi = Schema.Union([
+  Schema.Struct({
+    id: ModelV2.ID.pipe(Schema.optional),
+    ...ProviderV2.AISDK.fields,
+  }),
+  Schema.Struct({
+    id: ModelV2.ID.pipe(Schema.optional),
+    ...ProviderV2.Native.fields,
+  }),
+  Schema.Struct({
+    id: ModelV2.ID,
+  }),
+])
+
 class Model extends Schema.Class<Model>("ConfigV2.Model")({
-  api_id: ModelV2.ID.pipe(Schema.optional),
   family: ModelV2.Family.pipe(Schema.optional),
   name: Schema.String.pipe(Schema.optional),
-  api: ProviderV2.Api.pipe(Schema.optional),
+  api: ModelApi.pipe(Schema.optional),
   capabilities: ModelV2.Capabilities.pipe(Schema.optional),
   request: Schema.Struct({
     ...Request.fields,

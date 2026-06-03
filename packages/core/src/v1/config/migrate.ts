@@ -205,12 +205,19 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
       : undefined
   const lowerer = ConfigProviderOptionsV1.get(info.provider?.npm ?? packageName)
   return {
-    api_id: info.id,
     family: info.family,
     name: info.name,
     api: info.provider?.npm
-      ? { type: "aisdk" as const, package: info.provider.npm, url: info.provider.api, settings: {} }
-      : undefined,
+      ? {
+          ...(info.id === undefined ? {} : { id: info.id }),
+          type: "aisdk" as const,
+          package: info.provider.npm,
+          url: info.provider.api,
+          settings: {},
+        }
+      : info.id === undefined
+        ? undefined
+        : { id: info.id },
     capabilities,
     request: (info.headers || info.options) && {
       headers: info.headers,
