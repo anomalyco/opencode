@@ -5,12 +5,15 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
-import { withStatics } from "./schema"
+import { externalID, type ExternalID, withStatics } from "./schema"
 import { Identifier } from "./util/identifier"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Event.ID"),
-  withStatics((schema) => ({ create: () => schema.make("evt_" + Identifier.ascending()) })),
+  withStatics((schema) => ({
+    create: () => schema.make("evt_" + Identifier.ascending()),
+    fromExternal: (input: ExternalID) => schema.make(externalID("evt", input)),
+  })),
 )
 export type ID = typeof ID.Type
 

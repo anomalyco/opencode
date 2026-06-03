@@ -37,6 +37,16 @@ const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
 
 describe("SessionV2.create", () => {
+  it.effect("derives stable namespaced external IDs", () =>
+    Effect.sync(() => {
+      const input = { namespace: "opencord.agent-thread", key: "thread-1" }
+
+      expect(SessionV2.ID.fromExternal(input)).toBe(SessionV2.ID.fromExternal(input))
+      expect(SessionV2.ID.fromExternal(input)).toMatch(/^ses_[a-f0-9]{64}$/)
+      expect(SessionV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(SessionV2.ID.fromExternal(input))
+    }),
+  )
+
   it.effect("creates a fresh projected session when the ID is omitted", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service

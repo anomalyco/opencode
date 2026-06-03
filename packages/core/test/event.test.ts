@@ -82,6 +82,16 @@ const SyncTimestamp = EventV2.define({
 })
 
 describe("EventV2", () => {
+  it.effect("derives stable namespaced external IDs", () =>
+    Effect.sync(() => {
+      const input = { namespace: "opencord.agent-input", key: "input-1" }
+
+      expect(EventV2.ID.fromExternal(input)).toBe(EventV2.ID.fromExternal(input))
+      expect(EventV2.ID.fromExternal(input)).toMatch(/^evt_[a-f0-9]{64}$/)
+      expect(EventV2.ID.fromExternal({ ...input, namespace: "another-app" })).not.toBe(EventV2.ID.fromExternal(input))
+    }),
+  )
+
   it.effect("publishes events with the current location", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
