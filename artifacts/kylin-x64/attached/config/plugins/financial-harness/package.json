@@ -1,0 +1,34 @@
+{
+  "name": "financial-harness",
+  "version": "0.1.0",
+  "description": "Financial Harness Engineering Plugin for OpenCode + OmO",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./index.ts"
+    },
+    "./tui": {
+      "import": "./tui.tsx",
+      "types": "./tui.tsx"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.101",
+    "@opentui/solid": "^0.1.101",
+    "solid-js": "^1.9.11"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "fast-check": "^3.22.0",
+    "typescript": "^5.0.0"
+  }
+}

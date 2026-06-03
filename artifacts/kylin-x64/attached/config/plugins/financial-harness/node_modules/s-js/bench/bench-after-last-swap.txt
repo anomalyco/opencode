@@ -1,0 +1,22 @@
+
+> s-js@0.4.5 bench /Users/aah/Dropbox/Tech Projects/S/dev/S
+> node --allow-natives-syntax bench/bench.js
+
+createDataSignals: 39.32907798886299
+createComputations0to1: 16.412138000130653
+createComputations1to1: 77.99545100331306
+createComputations2to1: 113.75573500990868
+createComputations4to1: 254.5162459909916
+createComputations1000to1: 510.2935969978571
+createComputations1to2: 149.5152460038662
+createComputations1to4: 157.13277599215508
+createComputations1to8: 98.75392200052738
+createComputations1to1000: 65.28642199933529
+---
+updateComputations1to1: 57.45438100397587
+updateComputations2to1: 36.760316997766495
+updateComputations4to1: 37.50587201118469
+updateComputations1000to1: 50.42009900510311
+updateComputations1to2: 45.81215500831604
+updateComputations1to4: 44.71609699726105
+updateComputations1to1000: 81.73081400990486

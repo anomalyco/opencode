@@ -1,0 +1,89 @@
+{
+  "author": "Isaac Z. Schlueter <i@izs.me> (http://blog.izs.me)",
+  "name": "minimatch",
+  "description": "a glob matcher in javascript",
+  "version": "8.0.7",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/isaacs/minimatch.git"
+  },
+  "main": "./dist/cjs/index-cjs.js",
+  "module": "./dist/mjs/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/mjs/index.d.ts",
+        "default": "./dist/mjs/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index-cjs.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "preversion": "npm test",
+    "postversion": "npm publish",
+    "prepublishOnly": "git push origin --follow-tags",
+    "preprepare": "rm -rf dist",
+    "prepare": "tsc -p tsconfig.json && tsc -p tsconfig-esm.json",
+    "postprepare": "bash fixup.sh",
+    "pretest": "npm run prepare",
+    "presnap": "npm run prepare",
+    "test": "c8 tap",
+    "snap": "c8 tap",
+    "format": "prettier --write . --loglevel warn",
+    "benchmark": "node benchmark/index.js",
+    "typedoc": "typedoc --tsconfig tsconfig-esm.json ./src/*.ts"
+  },
+  "prettier": {
+    "semi": false,
+    "printWidth": 80,
+    "tabWidth": 2,
+    "useTabs": false,
+    "singleQuote": true,
+    "jsxSingleQuote": false,
+    "bracketSameLine": true,
+    "arrowParens": "avoid",
+    "endOfLine": "lf"
+  },
+  "engines": {
+    "node": ">=16 || 14 >=14.17"
+  },
+  "dependencies": {
+    "brace-expansion": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/brace-expansion": "^1.1.0",
+    "@types/node": "^18.15.11",
+    "@types/tap": "^15.0.7",
+    "c8": "^7.12.0",
+    "eslint-config-prettier": "^8.6.0",
+    "mkdirp": "1",
+    "prettier": "^2.8.2",
+    "tap": "^16.3.3",
+    "ts-node": "^10.9.1",
+    "typedoc": "^0.23.21",
+    "typescript": "^4.9.3"
+  },
+  "tap": {
+    "coverage": false,
+    "node-arg": [
+      "--no-warnings",
+      "--loader",
+      "ts-node/esm"
+    ],
+    "ts": false
+  },
+  "funding": {
+    "url": "https://github.com/sponsors/isaacs"
+  },
+  "license": "ISC",
+  "publishConfig": {
+    "tag": "legacy-v8"
+  }
+}

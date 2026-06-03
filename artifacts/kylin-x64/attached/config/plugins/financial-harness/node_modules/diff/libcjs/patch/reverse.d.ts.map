@@ -1,0 +1,1 @@
+{"version":3,"file":"reverse.d.ts","sourceRoot":"","sources":["../../src/patch/reverse.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,aAAa,CAAC;AAEnD;;;GAGG;AACH,wBAAgB,YAAY,CAAC,eAAe,EAAE,eAAe,GAAG,eAAe,CAAC;AAChF,wBAAgB,YAAY,CAAC,eAAe,EAAE,eAAe,EAAE,GAAG,eAAe,EAAE,CAAC;AACpF,wBAAgB,YAAY,CAAC,eAAe,EAAE,eAAe,GAAG,eAAe,EAAE,GAAG,eAAe,GAAG,eAAe,EAAE,CAAC"}

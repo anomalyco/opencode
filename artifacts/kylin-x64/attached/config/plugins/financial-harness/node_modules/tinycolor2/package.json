@@ -1,0 +1,35 @@
+{
+  "version": "1.6.0",
+  "name": "tinycolor2",
+  "description": "Fast Color Parsing and Manipulation",
+  "url": "http://bgrins.github.com/TinyColor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bgrins/TinyColor.git"
+  },
+  "keywords": [
+    "color",
+    "parser",
+    "tinycolor"
+  ],
+  "author": "Brian Grinstead <briangrinstead@gmail.com> (http://briangrinstead.com)",
+  "bugs": {
+    "url": "https://github.com/bgrins/TinyColor/issues"
+  },
+  "module": "./esm/tinycolor.js",
+  "main": "./cjs/tinycolor.js",
+  "browser": "./cjs/tinycolor.js",
+  "exports": {
+    ".": {
+      "import": "./esm/tinycolor.js",
+      "require": "./cjs/tinycolor.js"
+    }
+  },
+  "scripts": {
+    "test": "node cjs/test.js && node esm/test.js"
+  },
+  "devDependencies": {
+    "@deno/shim-deno-test": "^0.4.0"
+  }
+}

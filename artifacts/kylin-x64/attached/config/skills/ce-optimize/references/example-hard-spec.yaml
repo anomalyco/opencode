@@ -1,0 +1,64 @@
+# Minimal first-run template for objective metrics.
+# Start here when "better" is a scalar value from the measurement harness.
+
+name: improve-build-latency
+description: Reduce build latency without regressing correctness
+
+metric:
+  primary:
+    type: hard
+    name: build_seconds
+    direction: minimize
+  degenerate_gates:
+    - name: build_passed
+      check: "== 1"
+      description: The build must stay green
+    - name: test_pass_rate
+      check: ">= 1.0"
+      description: Required tests must keep passing
+  diagnostics:
+    - name: artifact_size_mb
+    - name: peak_memory_mb
+
+measurement:
+  command: "python evaluate.py"
+  timeout_seconds: 300
+  working_directory: "tools/eval"
+  stability:
+    mode: repeat
+    repeat_count: 3
+    aggregation: median
+    noise_threshold: 0.05
+
+scope:
+  mutable:
+    - "src/build/"
+    - "config/build.yaml"
+  immutable:
+    - "tools/eval/evaluate.py"
+    - "tests/fixtures/"
+    - "scripts/ci/"
+
+execution:
+  mode: serial
+  backend: worktree
+  max_concurrent: 1
+
+parallel:
+  port_strategy: none
+  shared_files: []
+
+dependencies:
+  approved: []
+
+constraints:
+  - "Keep output artifacts backward compatible"
+  - "Do not skip required validation steps"
+
+stopping:
+  max_iterations: 4
+  max_hours: 1
+  plateau_iterations: 3
+  target_reached: true
+
+max_runner_up_merges_per_batch: 0

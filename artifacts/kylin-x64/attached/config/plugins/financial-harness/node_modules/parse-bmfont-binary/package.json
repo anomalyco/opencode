@@ -1,0 +1,42 @@
+{
+  "name": "parse-bmfont-binary",
+  "version": "1.0.6",
+  "description": "reads a BMFont binary in a Buffer into a JSON object",
+  "main": "index.js",
+  "license": "MIT",
+  "author": {
+    "name": "Matt DesLauriers",
+    "email": "dave.des@gmail.com",
+    "url": "https://github.com/mattdesl"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "tape": "^3.5.0"
+  },
+  "scripts": {
+    "test": "node test/test.js"
+  },
+  "keywords": [
+    "bmfont",
+    "bitmap",
+    "font",
+    "angel",
+    "code",
+    "angelcode",
+    "fonts",
+    "text",
+    "layout",
+    "glyph",
+    "glyphdesigner",
+    "canvas",
+    "webgl"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/Jam3/parse-bmfont-binary.git"
+  },
+  "homepage": "https://github.com/Jam3/parse-bmfont-binary",
+  "bugs": {
+    "url": "https://github.com/Jam3/parse-bmfont-binary/issues"
+  }
+}

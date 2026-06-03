@@ -1,0 +1,231 @@
+# Documentation schema for learnings written by ce-compound
+# Treat this as the canonical frontmatter contract for docs/solutions/.
+#
+# The schema has two tracks based on problem_type:
+#   Bug track  — problem_type is a defect or failure (build_error, test_failure, etc.)
+#   Knowledge track — problem_type is guidance or practice (best_practice, workflow_issue, etc.)
+#
+# Both tracks share the same required core fields. The tracks differ in which
+# additional fields are required vs optional (see track_rules below).
+
+# --- Track classification ---------------------------------------------------
+tracks:
+  bug:
+    description: "Defects, failures, and errors that were diagnosed and fixed"
+    problem_types:
+      - build_error
+      - test_failure
+      - runtime_error
+      - performance_issue
+      - database_issue
+      - security_issue
+      - ui_bug
+      - integration_issue
+      - logic_error
+  knowledge:
+    description: "Practices, patterns, conventions, decisions, workflow improvements, and documentation"
+    problem_types:
+      - best_practice
+      - documentation_gap
+      - workflow_issue
+      - developer_experience
+      - architecture_pattern
+      - design_pattern
+      - tooling_decision
+      - convention
+
+# --- Fields required by BOTH tracks -----------------------------------------
+required_fields:
+  module:
+    type: string
+    description: "Module or area affected"
+
+  date:
+    type: string
+    pattern: '^\d{4}-\d{2}-\d{2}$'
+    description: "Date documented (YYYY-MM-DD)"
+
+  problem_type:
+    type: enum
+    values:
+      - build_error
+      - test_failure
+      - runtime_error
+      - performance_issue
+      - database_issue
+      - security_issue
+      - ui_bug
+      - integration_issue
+      - logic_error
+      - developer_experience
+      - workflow_issue
+      - best_practice
+      - documentation_gap
+      - architecture_pattern
+      - design_pattern
+      - tooling_decision
+      - convention
+    description: "Primary category — determines track (bug vs knowledge). Prefer the narrowest applicable value; best_practice is the fallback when no narrower knowledge-track value fits."
+
+  component:
+    type: enum
+    values:
+      - rails_model
+      - rails_controller
+      - rails_view
+      - service_object
+      - background_job
+      - database
+      - frontend_stimulus
+      - hotwire_turbo
+      - email_processing
+      - brief_system
+      - assistant
+      - authentication
+      - payments
+      - development_workflow
+      - testing_framework
+      - documentation
+      - tooling
+    description: "Component involved"
+
+  severity:
+    type: enum
+    values:
+      - critical
+      - high
+      - medium
+      - low
+    description: "Impact severity"
+
+# --- Track-specific rules ----------------------------------------------------
+track_rules:
+  bug:
+    required:
+      symptoms:
+        type: array[string]
+        min_items: 1
+        max_items: 5
+        description: "Observable symptoms such as errors or broken behavior"
+      root_cause:
+        type: enum
+        values:
+          - missing_association
+          - missing_include
+          - missing_index
+          - wrong_api
+          - scope_issue
+          - thread_violation
+          - async_timing
+          - memory_leak
+          - config_error
+          - logic_error
+          - test_isolation
+          - missing_validation
+          - missing_permission
+          - missing_workflow_step
+          - inadequate_documentation
+          - missing_tooling
+          - incomplete_setup
+        description: "Fundamental technical cause of the problem"
+      resolution_type:
+        type: enum
+        values:
+          - code_fix
+          - migration
+          - config_change
+          - test_fix
+          - dependency_update
+          - environment_setup
+          - workflow_improvement
+          - documentation_update
+          - tooling_addition
+          - seed_data_update
+        description: "Type of fix applied"
+
+  knowledge:
+    optional:
+      applies_when:
+        type: array[string]
+        max_items: 5
+        description: "Conditions or situations where this guidance applies"
+      symptoms:
+        type: array[string]
+        max_items: 5
+        description: "Observable gaps or friction that prompted this guidance (optional for knowledge track)"
+      root_cause:
+        type: enum
+        values:
+          - missing_association
+          - missing_include
+          - missing_index
+          - wrong_api
+          - scope_issue
+          - thread_violation
+          - async_timing
+          - memory_leak
+          - config_error
+          - logic_error
+          - test_isolation
+          - missing_validation
+          - missing_permission
+          - missing_workflow_step
+          - inadequate_documentation
+          - missing_tooling
+          - incomplete_setup
+        description: "Underlying cause, if there is a specific one (optional for knowledge track)"
+      resolution_type:
+        type: enum
+        values:
+          - code_fix
+          - migration
+          - config_change
+          - test_fix
+          - dependency_update
+          - environment_setup
+          - workflow_improvement
+          - documentation_update
+          - tooling_addition
+          - seed_data_update
+        description: "Type of change, if applicable (optional for knowledge track)"
+
+# --- Fields optional for BOTH tracks ----------------------------------------
+optional_fields:
+  related_components:
+    type: array[string]
+    description: "Other components involved"
+
+  tags:
+    type: array[string]
+    max_items: 8
+    description: "Search keywords, lowercase and hyphen-separated"
+
+# --- Fields optional for bug track only -------------------------------------
+bug_optional_fields:
+  rails_version:
+    type: string
+    pattern: '^\d+\.\d+\.\d+$'
+    description: "Rails version in X.Y.Z format. Only relevant for bug-track docs."
+
+# --- Backward compatibility --------------------------------------------------
+# Docs created before the track system was introduced may have bug-track
+# fields (symptoms, root_cause, resolution_type) on knowledge-type
+# problem_types. These are valid legacy docs:
+#   - Bug-track fields present on a knowledge-track doc are harmless. Do not
+#     strip them during refresh unless the doc is being rewritten for other reasons.
+#   - When creating NEW docs, follow the track rules above.
+
+# --- Validation rules --------------------------------------------------------
+validation_rules:
+  - "Determine track from problem_type using the tracks section above"
+  - "All shared required_fields must be present"
+  - "Bug-track required fields (symptoms, root_cause, resolution_type) must be present on bug-track docs"
+  - "Knowledge-track docs have no additional required fields beyond the shared ones"
+  - "Bug-track fields on existing knowledge-track docs are harmless (see backward compatibility note)"
+  - "Track-specific optional fields may be included but are not required"
+  - "Enum fields must match allowed values exactly"
+  - "Array fields must respect min_items/max_items when specified"
+  - "date must match YYYY-MM-DD format"
+  - "rails_version, if provided, must match X.Y.Z format and only applies to bug-track docs"
+  - "tags should be lowercase and hyphen-separated"
+  - "Array-of-strings frontmatter items (symptoms, applies_when, tags, related_components, or any future array field) must be wrapped in double quotes when the value starts with a YAML reserved indicator (`, [, *, &, !, |, >, %, @, ?) or contains the substring `: ` — otherwise strict YAML parsers reject the file"

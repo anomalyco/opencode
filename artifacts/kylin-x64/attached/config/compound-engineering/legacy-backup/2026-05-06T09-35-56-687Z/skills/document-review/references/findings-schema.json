@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Document Review Findings",
+  "description": "Structured output schema for document review persona agents",
+  "type": "object",
+  "required": ["reviewer", "findings", "residual_risks", "deferred_questions"],
+  "properties": {
+    "reviewer": {
+      "type": "string",
+      "description": "Persona name that produced this output (e.g., 'coherence', 'feasibility', 'product-lens')"
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of document review findings. Empty array if no issues found.",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "severity",
+          "section",
+          "why_it_matters",
+          "finding_type",
+          "autofix_class",
+          "confidence",
+          "evidence"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short, specific issue title. 10 words or fewer.",
+            "maxLength": 100
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2", "P3"],
+            "description": "Issue severity level"
+          },
+          "section": {
+            "type": "string",
+            "description": "Document section where the issue appears (e.g., 'Requirements Trace', 'Implementation Unit 3', 'Overview')"
+          },
+          "why_it_matters": {
+            "type": "string",
+            "description": "Impact statement -- not 'what is wrong' but 'what goes wrong if not addressed'"
+          },
+          "autofix_class": {
+            "type": "string",
+            "enum": ["auto", "present"],
+            "description": "How this issue should be handled. auto = one clear correct fix that can be applied silently (terminology, formatting, cross-references, completeness corrections, additions mechanically implied by other content). present = requires individual user judgment."
+          },
+          "finding_type": {
+            "type": "string",
+            "enum": ["error", "omission"],
+            "description": "Whether the finding is a mistake in what the document says (error) or something the document forgot to say (omission). Errors are design tensions, contradictions, or incorrect statements. Omissions are missing mechanical steps, forgotten list entries, or absent details."
+          },
+          "suggested_fix": {
+            "type": ["string", "null"],
+            "description": "Concrete fix text. Omit or null if no good fix is obvious -- a bad suggestion is worse than none."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Reviewer confidence in this finding, calibrated per persona",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "evidence": {
+            "type": "array",
+            "description": "Quoted text from the document that supports this finding. At least 1 item.",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "residual_risks": {
+      "type": "array",
+      "description": "Risks the reviewer noticed but could not confirm as findings (below confidence threshold)",
+      "items": { "type": "string" }
+    },
+    "deferred_questions": {
+      "type": "array",
+      "description": "Questions that should be resolved in a later workflow stage (planning, implementation)",
+      "items": { "type": "string" }
+    }
+  }
+}

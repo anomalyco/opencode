@@ -1,0 +1,35 @@
+import { ASCIIFontRenderable, BoxRenderable, CodeRenderable, InputRenderable, ScrollBoxRenderable, SelectRenderable, TabSelectRenderable, TextRenderable, VRenderable, FrameBufferRenderable, type ASCIIFontOptions, type BoxOptions, type CodeOptions, type TextOptions, type VRenderableOptions, type InputRenderableOptions, type ScrollBoxOptions, type SelectRenderableOptions, type TabSelectRenderableOptions, type FrameBufferOptions } from "..//index.js";
+import { TextNodeRenderable } from "../TextNode.js";
+import { type VChild } from "./vnode.js";
+import type { RGBA } from "../../lib/RGBA.js";
+export declare function Generic(props?: VRenderableOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof VRenderable>;
+export declare function Box(props?: BoxOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof BoxRenderable>;
+export declare function Text(props?: TextOptions & {
+    content?: any;
+}, ...children: VChild[] | TextNodeRenderable[]): import("./vnode.js").ProxiedVNode<typeof TextRenderable>;
+export declare function ASCIIFont(props?: ASCIIFontOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof ASCIIFontRenderable>;
+export declare function Input(props?: InputRenderableOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof InputRenderable>;
+export declare function Select(props?: SelectRenderableOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof SelectRenderable>;
+export declare function TabSelect(props?: TabSelectRenderableOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof TabSelectRenderable>;
+export declare function FrameBuffer(props: FrameBufferOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof FrameBufferRenderable>;
+export declare function Code(props: CodeOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof CodeRenderable>;
+export declare function ScrollBox(props?: ScrollBoxOptions, ...children: VChild[]): import("./vnode.js").ProxiedVNode<typeof ScrollBoxRenderable>;
+export declare const vstyles: {
+    bold: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    italic: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    underline: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    dim: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    blink: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    inverse: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    hidden: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    strikethrough: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    boldItalic: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    boldUnderline: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    italicUnderline: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    boldItalicUnderline: (...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    color: (color: string | RGBA, ...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    bgColor: (bgColor: string | RGBA, ...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    fg: (color: string | RGBA, ...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    bg: (bgColor: string | RGBA, ...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+    styled: (attributes?: number, ...children: (string | TextNodeRenderable)[]) => TextNodeRenderable;
+};

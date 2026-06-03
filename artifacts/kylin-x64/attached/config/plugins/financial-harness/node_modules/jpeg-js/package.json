@@ -1,0 +1,32 @@
+{
+  "name": "jpeg-js",
+  "version": "0.4.4",
+  "description": "A pure javascript JPEG encoder and decoder",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --testMatch=**/test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eugeneware/jpeg-js"
+  },
+  "keywords": [
+    "jpeg",
+    "jpg",
+    "encoder",
+    "decoder",
+    "codec",
+    "image",
+    "javascript",
+    "js"
+  ],
+  "author": "Eugene Ware <eugene@noblesamurai.com>",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/eugeneware/jpeg-js/issues"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "jest": "^25.4.0"
+  }
+}

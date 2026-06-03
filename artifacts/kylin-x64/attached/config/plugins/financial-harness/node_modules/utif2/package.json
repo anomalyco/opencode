@@ -1,0 +1,27 @@
+{
+  "name": "utif2",
+  "description": "Fast and advanced TIFF decoder",
+  "version": "4.1.0",
+  "homepage": "https://github.com/photopea/UTIF.js",
+  "author": "photopea (https://github.com/photopea)",
+  "contributors": [
+    "Photopea (https://github.com/photopea)",
+    "Jaroslav Bereza (https://github.com/jardicc)",
+    "Scimonster (https://github.com/Scimonster)"
+  ],
+  "license": "MIT",
+  "repository": "github:photopea/UTIF.js",
+  "bugs": {
+    "url": "https://github.com/photopea/UTIF.js/issues"
+  },
+  "main": "UTIF",
+  "keywords": [
+    "tif",
+    "tiff",
+    "image",
+    "conversion"
+  ],
+  "dependencies": {
+    "pako": "^1.0.11"
+  }
+}

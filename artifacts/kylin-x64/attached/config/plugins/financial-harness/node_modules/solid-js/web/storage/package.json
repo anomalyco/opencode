@@ -1,0 +1,15 @@
+{
+  "name": "solid-js/web/storage",
+  "main": "./dist/storage.cjs",
+  "module": "./dist/storage.js",
+  "types": "./types/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/storage.js",
+      "require": "./dist/storage.cjs"
+    }
+  }
+}
