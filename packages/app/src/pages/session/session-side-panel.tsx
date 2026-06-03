@@ -144,6 +144,10 @@ export function SessionSidePanel(props: {
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
+  const sessionRunning = createMemo(() => {
+    if (!params.id) return false
+    return sync.data.session_working(params.id)
+  })
 
   const fileTreeTab = () => layout.fileTree.tab()
 
@@ -283,7 +287,9 @@ export function SessionSidePanel(props: {
                           </Tabs.Trigger>
                         </Show>
                         <SortableProvider ids={openedTabs()}>
-                          <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
+                          <For each={openedTabs()}>
+                            {(tab) => <SortableTab tab={tab} running={sessionRunning()} onTabClose={tabs().close} />}
+                          </For>
                         </SortableProvider>
                         <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
                           <TooltipKeybind

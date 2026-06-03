@@ -10,7 +10,10 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 
-export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
+export function FileVisual(props: { path: string; active?: boolean; running?: boolean }): JSX.Element {
+  const language = useLanguage()
+  const runningLabel = () => language.t("session.tab.running")
+
   return (
     <div class="flex items-center gap-x-1.5 min-w-0">
       <Show
@@ -23,11 +26,23 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
         </span>
       </Show>
       <span class="text-14-medium truncate">{getFilename(props.path)}</span>
+      <span class="inline-flex w-2 shrink-0 justify-center" aria-hidden={!props.running}>
+        <Show when={props.running}>
+          <span
+            role="img"
+            aria-label={runningLabel()}
+            title={runningLabel()}
+            class="relative inline-flex size-1.5 rounded-full bg-text-interactive-base"
+          >
+            <span class="absolute inset-0 rounded-full bg-text-interactive-base opacity-40 animate-ping motion-reduce:animate-none" />
+          </span>
+        </Show>
+      </span>
     </div>
   )
 }
 
-export function SortableTab(props: { tab: string; onTabClose: (tab: string) => void }): JSX.Element {
+export function SortableTab(props: { tab: string; running?: boolean; onTabClose: (tab: string) => void }): JSX.Element {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
@@ -36,7 +51,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const content = createMemo(() => {
     const value = path()
     if (!value) return
-    return <FileVisual path={value} />
+    return <FileVisual path={value} running={props.running} />
   })
   return (
     <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
