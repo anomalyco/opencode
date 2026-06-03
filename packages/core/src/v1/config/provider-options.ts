@@ -185,7 +185,9 @@ function pick(options: Options, keys: ReadonlyArray<string>) {
 
 function headers(input: unknown) {
   if (!isRecord(input)) return undefined
-  return Object.fromEntries(Object.entries(input).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+  return Object.fromEntries(
+    Object.entries(input).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  )
 }
 
 function compact(input: Record<string, string | undefined>) {

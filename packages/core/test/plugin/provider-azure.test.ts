@@ -60,9 +60,7 @@ describe("AzurePlugin", () => {
           })
           catalog.provider.update(ProviderV2.ID.openai, () => {})
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe(
-          "from-config",
-        )
+        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-config")
         expect((yield* catalog.provider.get(ProviderV2.ID.openai)).request.body.resourceName).toBeUndefined()
       }),
     ),
@@ -103,9 +101,7 @@ describe("AzurePlugin", () => {
               item.api = { type: "aisdk", package: "@ai-sdk/azure" }
             })
           })
-          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe(
-            "from-account",
-          )
+          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-account")
         }),
     ),
   )

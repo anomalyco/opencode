@@ -217,16 +217,14 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
       body: info.options && lowerer.request(info.options),
     },
     variants:
-      info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({ id, body: lowerer.request(options) })),
+      info.variants && Object.entries(info.variants).map(([id, options]) => ({ id, body: lowerer.request(options) })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
-    limit:
-      info.limit && {
-        context: int(info.limit.context),
-        input: info.limit.input === undefined ? undefined : int(info.limit.input),
-        output: int(info.limit.output),
-      },
+    limit: info.limit && {
+      context: int(info.limit.context),
+      input: info.limit.input === undefined ? undefined : int(info.limit.input),
+      output: int(info.limit.output),
+    },
   }
 }
 

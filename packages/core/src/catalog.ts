@@ -104,7 +104,7 @@ export const layer = Layer.effect(
             ? { ...model.api, url: provider.api.url, settings: { ...provider.api.settings, ...model.api.settings } }
             : model.api.type === "aisdk" && provider.api.type === "aisdk"
               ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
-            : model.api
+              : model.api
       const request = {
         headers: {
           ...provider.request.headers,

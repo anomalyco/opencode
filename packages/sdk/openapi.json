@@ -19312,90 +19312,8 @@
           "name": {
             "type": "string"
           },
-          "endpoint": {
+          "api": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["unknown"]
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/responses"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "websocket": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/completions"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "reasoning": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_content"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_details"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["anthropic/messages"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
               {
                 "type": "object",
                 "properties": {
@@ -19408,9 +19326,29 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
                   }
                 },
                 "required": ["type", "package"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["native"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
+                  }
+                },
+                "required": ["type", "settings"],
                 "additionalProperties": false
               }
             ]
@@ -19437,7 +19375,7 @@
             "required": ["tools", "input", "output"],
             "additionalProperties": false
           },
-          "options": {
+          "request": {
             "type": "object",
             "properties": {
               "headers": {
@@ -19449,24 +19387,11 @@
               "body": {
                 "type": "object"
               },
-              "aisdk": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "object"
-                  },
-                  "request": {
-                    "type": "object"
-                  }
-                },
-                "required": ["provider", "request"],
-                "additionalProperties": false
-              },
               "variant": {
                 "type": "string"
               }
             },
-            "required": ["headers", "body", "aisdk"],
+            "required": ["headers", "body"],
             "additionalProperties": false
           },
           "variants": {
@@ -19485,22 +19410,9 @@
                 },
                 "body": {
                   "type": "object"
-                },
-                "aisdk": {
-                  "type": "object",
-                  "properties": {
-                    "provider": {
-                      "type": "object"
-                    },
-                    "request": {
-                      "type": "object"
-                    }
-                  },
-                  "required": ["provider", "request"],
-                  "additionalProperties": false
                 }
               },
-              "required": ["id", "headers", "body", "aisdk"],
+              "required": ["id", "headers", "body"],
               "additionalProperties": false
             }
           },
@@ -19606,9 +19518,9 @@
           "apiID",
           "providerID",
           "name",
-          "endpoint",
+          "api",
           "capabilities",
-          "options",
+          "request",
           "variants",
           "time",
           "cost",
@@ -22237,90 +22149,8 @@
               "type": "string"
             }
           },
-          "endpoint": {
+          "api": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["unknown"]
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/responses"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "websocket": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/completions"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "reasoning": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_content"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_details"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["anthropic/messages"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
               {
                 "type": "object",
                 "properties": {
@@ -22333,14 +22163,34 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
                   }
                 },
                 "required": ["type", "package"],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["native"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
+                  }
+                },
+                "required": ["type", "settings"],
+                "additionalProperties": false
               }
             ]
           },
-          "options": {
+          "request": {
             "type": "object",
             "properties": {
               "headers": {
@@ -22351,26 +22201,13 @@
               },
               "body": {
                 "type": "object"
-              },
-              "aisdk": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "object"
-                  },
-                  "request": {
-                    "type": "object"
-                  }
-                },
-                "required": ["provider", "request"],
-                "additionalProperties": false
               }
             },
-            "required": ["headers", "body", "aisdk"],
+            "required": ["headers", "body"],
             "additionalProperties": false
           }
         },
-        "required": ["id", "name", "enabled", "env", "endpoint", "options"],
+        "required": ["id", "name", "enabled", "env", "api", "request"],
         "additionalProperties": false
       },
       "PermissionV2Request": {
@@ -22546,90 +22383,8 @@
           "name": {
             "type": "string"
           },
-          "endpoint": {
+          "api": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["unknown"]
-                  }
-                },
-                "required": ["type"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/responses"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "websocket": {
-                    "type": "boolean"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["openai/completions"]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "reasoning": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_content"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string",
-                            "enum": ["reasoning_details"]
-                          }
-                        },
-                        "required": ["type"],
-                        "additionalProperties": false
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["anthropic/messages"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
               {
                 "type": "object",
                 "properties": {
@@ -22642,9 +22397,29 @@
                   },
                   "url": {
                     "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
                   }
                 },
                 "required": ["type", "package"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["native"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "settings": {
+                    "type": "object"
+                  }
+                },
+                "required": ["type", "settings"],
                 "additionalProperties": false
               }
             ]
@@ -22671,7 +22446,7 @@
             "required": ["tools", "input", "output"],
             "additionalProperties": false
           },
-          "options": {
+          "request": {
             "type": "object",
             "properties": {
               "headers": {
@@ -22683,24 +22458,11 @@
               "body": {
                 "type": "object"
               },
-              "aisdk": {
-                "type": "object",
-                "properties": {
-                  "provider": {
-                    "type": "object"
-                  },
-                  "request": {
-                    "type": "object"
-                  }
-                },
-                "required": ["provider", "request"],
-                "additionalProperties": false
-              },
               "variant": {
                 "type": "string"
               }
             },
-            "required": ["headers", "body", "aisdk"],
+            "required": ["headers", "body"],
             "additionalProperties": false
           },
           "variants": {
@@ -22719,22 +22481,9 @@
                 },
                 "body": {
                   "type": "object"
-                },
-                "aisdk": {
-                  "type": "object",
-                  "properties": {
-                    "provider": {
-                      "type": "object"
-                    },
-                    "request": {
-                      "type": "object"
-                    }
-                  },
-                  "required": ["provider", "request"],
-                  "additionalProperties": false
                 }
               },
-              "required": ["id", "headers", "body", "aisdk"],
+              "required": ["id", "headers", "body"],
               "additionalProperties": false
             }
           },
@@ -22836,9 +22585,9 @@
           "apiID",
           "providerID",
           "name",
-          "endpoint",
+          "api",
           "capabilities",
-          "options",
+          "request",
           "variants",
           "time",
           "cost",
