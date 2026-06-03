@@ -972,7 +972,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       return {}
 
     case "@jerome-benoit/sap-ai-provider-v2": {
-      if (model.api.id.includes("anthropic")) {
+      if (id.includes("anthropic")) {
         if (adaptiveEfforts) {
           // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
           // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
@@ -993,11 +993,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           max: { thinking: { type: "enabled", budget_tokens: 31999 } },
         })
       }
-      if (model.api.id.includes("gemini") && model.api.id.includes("2.5")) {
+      if (id.includes("gemini") && id.includes("2.5")) {
         return wrapInSapModelParams(googleThinkingVariants(model))
       }
-      if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id)) {
-        const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+      if (id.includes("gpt") || /\bo[1-9]/.test(id)) {
+        const efforts = openaiReasoningEfforts(id, model.release_date)
         return wrapInSapModelParams(
           Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])),
         )
