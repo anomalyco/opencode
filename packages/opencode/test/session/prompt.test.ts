@@ -1227,6 +1227,62 @@ it.instance(
 )
 
 it.instance(
+  "prompt submitted while an active run exits starts another loop pass",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const run = yield* SessionRunState.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id, { finish: "stop" })
+      const stale = (yield* sessions.messages({ sessionID: chat.id })).findLast((msg) => msg.info.role === "assistant")
+      if (!stale) throw new Error("expected seeded assistant")
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+
+      const active = yield* run
+        .ensureRunning(
+          chat.id,
+          Effect.succeed(stale),
+          Deferred.succeed(started, void 0).pipe(Effect.andThen(Deferred.await(release)), Effect.as(stale)),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      yield* llm.text("second")
+
+      const id = MessageID.ascending()
+      const queued = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "second" }],
+        })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        sessions
+          .messages({ sessionID: chat.id })
+          .pipe(Effect.map((msgs) => (msgs.some((msg) => msg.info.id === id) ? true : undefined))),
+        "timed out waiting for queued prompt to save",
+      )
+
+      yield* Deferred.succeed(release, void 0)
+      yield* Fiber.await(active)
+      const exit = yield* Fiber.await(queued)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (!Exit.isSuccess(exit)) return
+      expect(exit.value.info.role).toBe("assistant")
+      if (exit.value.info.role !== "assistant") return
+      expect(exit.value.info.parentID).toBe(id)
+      expect(exit.value.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+      expect(yield* llm.calls).toBe(1)
+    }),
+  3_000,
+)
+
+it.instance(
   "assertNotBusy fails with BusyError when loop running",
   () =>
     Effect.gen(function* () {

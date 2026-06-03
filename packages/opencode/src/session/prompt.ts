@@ -1231,6 +1231,10 @@ export const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
+      const result = yield* loop({ sessionID: input.sessionID })
+      if (result.info.id > message.info.id) return result
+      // The prompt may have joined a loop that was already exiting after its
+      // last message snapshot. Run once more so the saved message is consumed.
       return yield* loop({ sessionID: input.sessionID })
     })
 
