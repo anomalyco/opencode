@@ -372,7 +372,10 @@ describe("Config", () => {
                     permission: { read: "allow" },
                   },
                 },
-                plugin: ["opencode-helicone-session", ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }]],
+                plugin: [
+                  "opencode-helicone-session",
+                  ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }],
+                ],
                 skills: { paths: ["./skills"], urls: ["https://example.com/.well-known/skills/"] },
                 reference: { docs: { path: "../docs" } },
                 attachment: { image: { auto_resize: false, max_width: 1200 } },

@@ -2,11 +2,12 @@ import * as Effect from "effect/Effect"
 import * as Command from "effect/unstable/cli/Command"
 import { CliApi } from "./cli-api"
 
-export type Input<Value> = Value extends CliApi.Node<infer _Name, infer Spec, infer _Commands>
-  ? Input<Spec>
-  : Value extends Command.Command<infer _Name, infer Input, infer _Context, infer _Error, infer _Requirements>
-    ? Input
-    : never
+export type Input<Value> =
+  Value extends CliApi.Node<infer _Name, infer Spec, infer _Commands>
+    ? Input<Spec>
+    : Value extends Command.Command<infer _Name, infer Input, infer _Context, infer _Error, infer _Requirements>
+      ? Input
+      : never
 
 type RuntimeHandler = (input: unknown) => Effect.Effect<void, unknown>
 type Loader<Node extends CliApi.Any> = () => Promise<{ default: (input: Input<Node>) => Effect.Effect<void, any> }>
@@ -21,7 +22,12 @@ interface LazyHandler {
   readonly load: () => Promise<{ default: RuntimeHandler }>
 }
 
-type RuntimeHandlers = (() => Promise<{ default: RuntimeHandler }>) | { readonly $?: () => Promise<{ default: RuntimeHandler }>; readonly [key: string]: RuntimeHandlers | (() => Promise<{ default: RuntimeHandler }>) | undefined }
+type RuntimeHandlers =
+  | (() => Promise<{ default: RuntimeHandler }>)
+  | {
+      readonly $?: () => Promise<{ default: RuntimeHandler }>
+      readonly [key: string]: RuntimeHandlers | (() => Promise<{ default: RuntimeHandler }>) | undefined
+    }
 
 export function handler<const Node extends CliApi.Any, Error>(
   _node: Node,

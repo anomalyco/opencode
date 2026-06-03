@@ -76,9 +76,7 @@ function messageData(
   return rest as DeepMutable<typeof rest>
 }
 
-function partData(
-  part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"],
-): typeof PartTable.$inferInsert.data {
+function partData(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"]): typeof PartTable.$inferInsert.data {
   const { id: _, messageID: __, sessionID: ___, ...rest } = part
   return rest as DeepMutable<typeof rest>
 }

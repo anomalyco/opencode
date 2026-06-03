@@ -29,7 +29,9 @@ export function make<
   return {
     name,
     spec,
-    commands: Object.fromEntries((options.commands ?? []).map((command) => [command.name, command])) as ChildrenOf<Commands>,
+    commands: Object.fromEntries(
+      (options.commands ?? []).map((command) => [command.name, command]),
+    ) as ChildrenOf<Commands>,
   }
 }
 

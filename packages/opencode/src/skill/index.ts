@@ -109,9 +109,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   }).pipe(
     Effect.catch(
       Effect.fnUntraced(function* (err) {
-        const message = FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse skill ${match}`
+        const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse skill ${match}`
         const { Session } = yield* Effect.promise(() => import("@/session/session"))
         yield* events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load skill", { skill: match, err })

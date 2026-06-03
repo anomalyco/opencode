@@ -39,7 +39,10 @@ export function pluginOptions(plugin: ConfigPluginV1.Spec): ConfigPluginV1.Optio
 
 // Path-like specs are resolved relative to the config file that declared them so merges later on do not
 // accidentally reinterpret `./plugin.ts` relative to some other directory.
-export async function resolvePluginSpec(plugin: ConfigPluginV1.Spec, configFilepath: string): Promise<ConfigPluginV1.Spec> {
+export async function resolvePluginSpec(
+  plugin: ConfigPluginV1.Spec,
+  configFilepath: string,
+): Promise<ConfigPluginV1.Spec> {
   const spec = pluginSpecifier(plugin)
   if (!isPathPluginSpec(spec)) return plugin
 

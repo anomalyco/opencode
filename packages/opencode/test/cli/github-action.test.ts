@@ -26,11 +26,7 @@ function createReasoningPart(text: string): SessionV1.Part {
   }
 }
 
-function createToolPart(
-  tool: string,
-  title: string,
-  status: "completed" | "running" = "completed",
-): SessionV1.Part {
+function createToolPart(tool: string, title: string, status: "completed" | "running" = "completed"): SessionV1.Part {
   if (status === "completed") {
     return {
       id: PartID.ascending(),

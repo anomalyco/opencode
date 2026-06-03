@@ -78,9 +78,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
 
-    const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: {
-      messages: SessionV1.WithParts[]
-    }) {
+    const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
       let to: string | undefined
       for (const item of input.messages) {

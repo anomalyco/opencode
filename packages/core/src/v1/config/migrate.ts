@@ -136,19 +136,19 @@ function mcp(info: typeof ConfigV1.Info.Type) {
 
 function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
-  if (info.type === "local") return { type: info.type, command: info.command, environment: info.environment, disabled, timeout: info.timeout }
+  if (info.type === "local")
+    return { type: info.type, command: info.command, environment: info.environment, disabled, timeout: info.timeout }
   return {
     type: info.type,
     url: info.url,
     headers: info.headers,
-    oauth:
-      info.oauth && {
-        client_id: info.oauth.clientId,
-        client_secret: info.oauth.clientSecret,
-        scope: info.oauth.scope,
-        callback_port: info.oauth.callbackPort,
-        redirect_uri: info.oauth.redirectUri,
-      },
+    oauth: info.oauth && {
+      client_id: info.oauth.clientId,
+      client_secret: info.oauth.clientSecret,
+      scope: info.oauth.scope,
+      callback_port: info.oauth.callbackPort,
+      redirect_uri: info.oauth.redirectUri,
+    },
     disabled,
     timeout: info.timeout,
   }
@@ -169,7 +169,9 @@ function migrateProvider(info: ConfigProviderV1.Info) {
       url: info.api ?? (typeof info.options?.baseURL === "string" ? info.options.baseURL : undefined),
     },
     options: info.options && { body: info.options },
-    models: info.models && Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+    models:
+      info.models &&
+      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
   }
 }
 
@@ -202,9 +204,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     endpoint: info.provider?.npm && { type: "aisdk" as const, package: info.provider.npm, url: info.provider.api },
     capabilities,
     options: (info.headers || info.options) && { headers: info.headers, body: info.options },
-    variants:
-      info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({ id, body: options })),
+    variants: info.variants && Object.entries(info.variants).map(([id, options]) => ({ id, body: options })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit,
