@@ -37,14 +37,14 @@ import { SessionInput } from "../input"
  *     nearby nested instructions discovered while files are read.
  *   - [ ] List available skills in the system prompt and expose a tool for loading skill bodies.
  *   - [ ] Resolve referenced files, directories, agents, repositories, MCP resources, and media.
- *   - [ ] Apply steering reminders, queued delivery policy, plugin transforms, and structured-output policy.
+ *   - [ ] Apply steering reminders, plugin transforms, and structured-output policy.
  *   - [ ] Compact or summarize history when context pressure requires it.
  *
  * - One provider turn
  *   - [x] Translate every projected V2 Session message variant into canonical
  *     `@opencode-ai/llm` messages.
  *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
- *   - [x] Persist one outer Turn.Started prompt watermark before provider execution begins.
+ *   - [x] Persist one outer Turn.Started recovery marker before promoting inputs.
  *   - [x] Stream exactly one `llm.stream(request)` provider turn.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
  *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
@@ -59,7 +59,7 @@ import { SessionInput } from "../input"
  *     plugins, and cancellation settlement.
  *   - [x] Reload projected history and start the next explicit provider turn after local tool results.
  *   - [x] Continue for durable user steering accepted during an active provider turn.
- *   - [ ] Continue for queued delivery, compaction, or another continuation condition when required.
+ *   - [ ] Continue for compaction or another continuation condition when required.
  *
  * - Post-run maintenance
  *   - [ ] Settle final status and expose durable output events to replayable consumers.
@@ -97,23 +97,27 @@ export const layer = Layer.effect(
       return yield* store.context(sessionID)
     })
 
-    const hasPendingInput = (sessionID: SessionSchema.ID, deliveries?: ReadonlyArray<SessionInput.Delivery>) =>
-      SessionInput.hasPending(db, sessionID, deliveries)
+    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, never>) =>
+      Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
     const runTurn = Effect.fn("SessionRunner.runTurn")(function* (
       session: SessionSchema.Info,
-      promotion: { readonly steer: boolean; readonly queueThrough?: number },
+      promotion: "steer" | "queue" | undefined,
     ) {
       const model = yield* models.resolve(session)
-      const settlements = yield* FiberSet.make<void, never>()
+      const toolFibers = yield* FiberSet.make<void, never>()
       let needsContinuation = false
-      yield* SessionInput.promote(db, events, session.id, promotion)
-      const context = yield* getContext(session.id)
-      const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
       const turn = yield* events.publish(SessionEvent.Turn.Started, {
         sessionID: session.id,
         timestamp: yield* DateTime.now,
       })
+      if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id)
+      if (promotion === "queue") {
+        yield* SessionInput.promoteNextQueued(db, events, session.id)
+        yield* SessionInput.promoteSteers(db, events, session.id)
+      }
+      const context = yield* getContext(session.id)
+      const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: session.agent ?? "build",
@@ -137,16 +141,15 @@ export const layer = Layer.effect(
                 Effect.succeed({ type: "error" as const, value: String(Cause.squash(cause)) }),
               ),
               Effect.flatMap((result) => publish(LLMEvent.toolResult({ id: event.id, name: event.name, result }))),
-              FiberSet.run(settlements),
+              FiberSet.run(toolFibers),
             )
           }),
         ),
         Effect.ensuring(withPublication(publisher.flush())),
         Effect.exit,
       )
-      const settled = yield* Effect.raceFirst(FiberSet.join(settlements), FiberSet.awaitEmpty(settlements)).pipe(
-        Effect.exit,
-      )
+      if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
+      const settled = yield* awaitToolFibers(toolFibers).pipe(Effect.exit)
       const attempt = stream._tag === "Failure" ? stream : settled
       yield* events.publish(SessionEvent.Turn.Settled, {
         sessionID: session.id,
@@ -164,23 +167,31 @@ export const layer = Layer.effect(
       readonly force?: boolean
     }) {
       const session = yield* getSession(input.sessionID)
-      const pending = yield* hasPendingInput(input.sessionID)
-      const unsettled = input.force !== true && !pending ? (yield* store.attemptState(input.sessionID)).unsettled : false
-      if (input.force !== true && !pending && !unsettled) return
-      const queueThrough = yield* SessionInput.latestPendingQueueSeq(db, input.sessionID)
-      let needsContinuation = input.force === true || pending || unsettled
-      let promotion: { readonly steer: boolean; readonly queueThrough?: number } = {
-        steer: true,
-        ...(queueThrough === undefined ? {} : { queueThrough }),
+      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
+      const unsettled = !hasSteer ? (yield* store.attemptState(input.sessionID)).unsettled : false
+      const hasQueue = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+      if (input.force !== true && !hasSteer && !hasQueue && !unsettled) return
+      let promotion: "steer" | "queue" | undefined = hasSteer
+        ? "steer"
+        : unsettled
+          ? undefined
+          : hasQueue
+            ? "queue"
+            : undefined
+      let openActivity = input.force === true || hasSteer || hasQueue || unsettled
+      while (openActivity) {
+        let needsContinuation = true
+        for (let step = 0; step < MAX_STEPS; step++) {
+          needsContinuation = yield* runTurn(session, promotion)
+          promotion = "steer"
+          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, ["steer"])
+          if (!needsContinuation) break
+        }
+        if (needsContinuation)
+          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
+        openActivity = yield* SessionInput.hasPending(db, input.sessionID, ["queue"])
+        promotion = openActivity ? "queue" : undefined
       }
-      for (let step = 0; step < MAX_STEPS; step++) {
-        if (!needsContinuation) return
-        needsContinuation = yield* runTurn(session, promotion)
-        promotion = { steer: true }
-        if (!needsContinuation) needsContinuation = yield* hasPendingInput(input.sessionID, ["steer"])
-      }
-      if (!needsContinuation) return
-      return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
     })
 
     return Service.of({

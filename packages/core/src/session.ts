@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
+import { Cause, DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -176,10 +176,12 @@ export const layer = Layer.effect(
     const enqueueWake = (sessionID: SessionSchema.ID) =>
       execution.wake(sessionID).pipe(
         Effect.tapCause((cause) =>
-          Effect.logError("Failed to resume Session").pipe(
-            Effect.annotateLogs("sessionID", sessionID),
-            Effect.annotateLogs("cause", cause),
-          ),
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError("Failed to wake Session").pipe(
+                Effect.annotateLogs("sessionID", sessionID),
+                Effect.annotateLogs("cause", cause),
+              ),
         ),
         Effect.ignore,
         Effect.forkIn(scope, { startImmediately: true }),
@@ -204,11 +206,11 @@ export const layer = Layer.effect(
       delivery: SessionInput.Delivery
     }) {
       const stored = yield* SessionInput.find(db, input.messageID)
-      if (!stored) return undefined
+      if (!stored) return yield* SessionInput.reconcileProjected(db, { id: input.messageID, ...input })
       if (!SessionInput.equivalent(stored, input)) {
         return yield* new PromptConflictError({ sessionID: input.sessionID, messageID: input.messageID })
       }
-      return SessionInput.toMessage(stored)
+      return stored
     })
 
     const result = Service.of({
@@ -368,9 +370,9 @@ export const layer = Layer.effect(
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
-            const returnPrompt = Effect.fnUntraced(function* (message: SessionMessage.User) {
+            const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
               if (input.resume !== false) yield* enqueueWake(input.sessionID)
-              return message
+              return SessionInput.toMessage(admitted)
             }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
@@ -383,10 +385,10 @@ export const layer = Layer.effect(
               prompt: input.prompt,
               delivery,
             })
-            if (!admitted) return yield* Effect.die("Prompt admission was not stored")
+            if (!admitted) return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            return yield* returnPrompt(SessionInput.toMessage(admitted))
+            return yield* returnPrompt(admitted)
           }),
         ),
       ),

@@ -129,6 +129,7 @@ export const SessionMessageTable = sqliteTable(
   (table) => [
     index("session_message_session_seq_idx").on(table.session_id, table.seq),
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
+    index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
   ],
 )
@@ -149,5 +150,12 @@ export const SessionInputTable = sqliteTable(
       .notNull()
       .$default(() => Date.now()),
   },
-  (table) => [index("session_input_session_pending_seq_idx").on(table.session_id, table.promoted_seq, table.seq)],
+  (table) => [
+    index("session_input_session_pending_delivery_seq_idx").on(
+      table.session_id,
+      table.promoted_seq,
+      table.delivery,
+      table.seq,
+    ),
+  ],
 )

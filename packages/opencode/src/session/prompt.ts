@@ -1191,6 +1191,7 @@ export const layer = Layer.effect(
         yield* events.publish(SessionEvent.Prompted, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
+          delivery: "steer",
           prompt: new Prompt({
             text: nextPrompt.text.join("\n"),
             files: nextPrompt.files,

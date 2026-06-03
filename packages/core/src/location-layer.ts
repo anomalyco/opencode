@@ -54,7 +54,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.layer.pipe(Layer.provide(services), Layer.provide(model))
     const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
-    return Layer.mergeAll(services, model, runner, coordinator, ReadTool.layer.pipe(Layer.provide(services)), ListTool.layer.pipe(Layer.provide(services))).pipe(Layer.fresh)
+    return Layer.mergeAll(services, model, runner, coordinator, ReadTool.layer.pipe(Layer.provide(services))).pipe(
+      Layer.fresh,
+    )
   },
   idleTimeToLive: "60 minutes",
   dependencies: [

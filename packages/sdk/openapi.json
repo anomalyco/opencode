@@ -8555,11 +8555,11 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "Session.Message",
+            "description": "Session.Message.User",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionMessage"
+                  "$ref": "#/components/schemas/SessionMessageUser"
                 }
               }
             }
@@ -8605,7 +8605,7 @@
             }
           }
         },
-        "description": "Durably record a v2 session message and start agent-loop execution unless resume is false.",
+        "description": "Durably admit one v2 session input and schedule agent-loop execution unless resume is false.",
         "summary": "Send v2 message",
         "requestBody": {
           "content": {
@@ -13753,9 +13753,13 @@
                       },
                       "prompt": {
                         "$ref": "#/components/schemas/Prompt"
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": ["steer", "queue"]
                       }
                     },
-                    "required": ["timestamp", "sessionID", "prompt"],
+                    "required": ["timestamp", "sessionID", "prompt", "delivery"],
                     "additionalProperties": false
                   }
                 },
@@ -20367,9 +20371,13 @@
               },
               "prompt": {
                 "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
               }
             },
-            "required": ["timestamp", "sessionID", "prompt"],
+            "required": ["timestamp", "sessionID", "prompt", "delivery"],
             "additionalProperties": false
           }
         },
@@ -21638,6 +21646,54 @@
         "required": ["id", "projectID", "cost", "tokens", "time", "title", "location"],
         "additionalProperties": false
       },
+      "SessionMessageUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptFileAttachment"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptAgentAttachment"
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptReferenceAttachment"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["user"]
+          }
+        },
+        "required": ["id", "time", "text", "type"],
+        "additionalProperties": false
+      },
       "SessionMessageAgentSwitched": {
         "type": "object",
         "properties": {
@@ -21709,54 +21765,6 @@
           }
         },
         "required": ["id", "time", "type", "model"],
-        "additionalProperties": false
-      },
-      "SessionMessageUser": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "text": {
-            "type": "string"
-          },
-          "files": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptFileAttachment"
-            }
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptAgentAttachment"
-            }
-          },
-          "references": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptReferenceAttachment"
-            }
-          },
-          "type": {
-            "type": "string",
-            "enum": ["user"]
-          }
-        },
-        "required": ["id", "time", "text", "type"],
         "additionalProperties": false
       },
       "SessionMessageSynthetic": {
@@ -23065,9 +23073,13 @@
               },
               "prompt": {
                 "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
               }
             },
-            "required": ["timestamp", "sessionID", "prompt"],
+            "required": ["timestamp", "sessionID", "prompt", "delivery"],
             "additionalProperties": false
           }
         },

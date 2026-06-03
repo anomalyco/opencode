@@ -4570,7 +4570,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Send v2 message
    *
-   * Durably record a v2 session message and start agent-loop execution unless resume is false.
+   * Durably admit one v2 session input and schedule agent-loop execution unless resume is false.
    */
   public prompt<ThrowOnError extends boolean = false>(
     parameters: {

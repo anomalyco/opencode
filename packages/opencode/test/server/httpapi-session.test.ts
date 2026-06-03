@@ -596,7 +596,7 @@ describe("session HttpApi", () => {
         expect(conflict.status).toBe(409)
         expect(yield* responseJson(conflict)).toEqual({
           _tag: "ConflictError",
-          message: "Prompt message ID already exists with a different prompt: evt_http_prompt",
+          message: "Prompt message ID conflicts with an existing durable record: evt_http_prompt",
           resource: "evt_http_prompt",
         })
       }),

@@ -31,10 +31,14 @@ through legacy `SessionPrompt.loop(...)`:
   Sessions remain concurrent
 
 Prompt admission now uses a durable `session_input` inbox rather than immediate
-transcript projection. `steer` inputs promote at the next safe provider-turn
-boundary; `queue` inputs admitted during an active drain wait for the next fresh
-drain. A location-scoped `SessionRunCoordinator` coalesces process-local wakeups
-around settlement races.
+transcript projection. `steer` inputs coalesce into the active activity at the
+next safe provider-turn boundary. `queue` inputs form a FIFO of future activities
+that open one at a time. A location-scoped `SessionRunCoordinator` coalesces process-local wakeups
+around settlement races. Explicit `run` resumes perform at least one provider
+attempt; advisory `wake` notifications call the provider only for eligible inbox
+work or an unsettled durable attempt. Steers coalesce into the active activity at
+safe provider boundaries; queued inputs open later activities one at a time in
+FIFO order.
 
 Next reviewed slices:
 
@@ -48,7 +52,7 @@ Next reviewed slices:
   remaining one-turn native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
 - expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
-- add compaction, queued delivery, interruption, retries, and stale-owner fencing
+- add compaction, interruption, retries, and stale-owner fencing
   only as their slices become concrete
 
 ## Rework compaction - Aiden?

@@ -63,6 +63,10 @@ export class ListTarget extends Schema.Class<ListTarget>("LocationFileSystem.Lis
   resource: Schema.String,
 }) {}
 
+export type ReadPathTarget =
+  | { readonly type: "file"; readonly target: ReadTarget }
+  | { readonly type: "directory"; readonly target: ListTarget }
+
 export class Entry extends Schema.Class<Entry>("LocationFileSystem.Entry")({
   path: RelativePath,
   uri: Schema.String,
@@ -115,6 +119,7 @@ export const Event = {
 
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<Content>
+  readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPathTarget>
   readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
   readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
@@ -216,16 +221,23 @@ export const layer = Layer.effect(
       return [...files, ...dirs]
     })
 
-    const resolveRead = Effect.fn("FileSystem.resolveRead")(function* (input: ReadInput) {
+    const resolveReadPath = Effect.fn("FileSystem.resolveReadPath")(function* (input: ReadInput) {
       const file = yield* resolve(input.path, input.reference)
       const info = yield* fs.stat(file.real).pipe(Effect.orDie)
-      if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
       const relative = path.relative(file.root, file.real).replaceAll("\\", "/")
-      return new ReadTarget({
-        real: file.real,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
-        size: Number(info.size),
-      })
+      const resource = input.reference === undefined ? relative || "." : `${input.reference}:${relative || "."}`
+      if (info.type === "File") {
+        return { type: "file" as const, target: new ReadTarget({ real: file.real, resource, size: Number(info.size) }) }
+      }
+      if (info.type === "Directory") {
+        return { type: "directory" as const, target: new ListTarget({ ...file, resource }) }
+      }
+      return yield* Effect.die(new Error("Path is not a file or directory"))
+    })
+    const resolveRead = Effect.fn("FileSystem.resolveRead")(function* (input: ReadInput) {
+      const resolved = yield* resolveReadPath(input)
+      if (resolved.type !== "file") return yield* Effect.die(new Error("Path is not a file"))
+      return resolved.target
     })
     const content = (target: ReadTarget, bytes: Uint8Array) => Effect.gen(function* () {
       const mime = FSUtil.mimeType(target.real)
@@ -318,6 +330,7 @@ export const layer = Layer.effect(
       read: Effect.fn("FileSystem.read")(function* (input) {
         return yield* readResolved(yield* resolveRead(input))
       }),
+      resolveReadPath,
       resolveRead,
       readResolved,
       list: Effect.fn("FileSystem.list")(function* (input) {

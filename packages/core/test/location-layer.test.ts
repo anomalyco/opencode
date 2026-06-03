@@ -59,17 +59,18 @@ describe("LocationServiceMap", () => {
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
-              return { providers: yield* catalog.provider.all(), tools: yield* (yield* ToolRegistry.Service).definitions() }
+              return {
+                providers: yield* catalog.provider.all(),
+                tools: yield* (yield* ToolRegistry.Service).definitions(),
+              }
             }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
 
-          expect((yield* update(blocked.path)).providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
-            false,
-          )
+          expect(
+            (yield* update(blocked.path)).providers.some((provider) => provider.id === ProviderV2.ID.make("test")),
+          ).toBe(false)
           const allowedState = yield* update(allowed.path)
-          expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
-            true,
-          )
-          expect(allowedState.tools.map((tool) => tool.name)).toEqual(["read", "list"])
+          expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
+          expect(allowedState.tools.map((tool) => tool.name)).toEqual(["read"])
         }),
       ),
     ),

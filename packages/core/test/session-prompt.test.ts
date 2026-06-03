@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -127,10 +128,7 @@ describe("SessionV2.prompt", () => {
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
-      yield* SessionInput.promote(db, events, sessionID, {
-        steer: true,
-        queueThrough: yield* SessionInput.latestPendingQueueSeq(db, sessionID),
-      })
+      yield* SessionInput.promoteSteers(db, events, sessionID)
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(
@@ -300,6 +298,60 @@ describe("SessionV2.prompt", () => {
       expect(messages[1]).toEqual(messages[0])
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(1)
+    }),
+  )
+
+  it.effect("reconciles an existing projected prompt into a promoted inbox receipt", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const prompt = new Prompt({ text: "Historical prompt" })
+      yield* events.publish(
+        SessionEvent.Prompted,
+        { sessionID, timestamp: yield* DateTime.now, prompt, delivery: "steer" },
+        { id: messageID },
+      )
+
+      const retried = yield* session.prompt({ id: messageID, sessionID, prompt, resume: false })
+
+      expect(retried).toMatchObject({ id: messageID, text: "Historical prompt" })
+      expect(yield* admitted(messageID)).toHaveProperty("promotedSeq")
+    }),
+  )
+
+  it.effect("reconciles an existing projected queued prompt with its delivery mode", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const prompt = new Prompt({ text: "Historical queued prompt" })
+      yield* events.publish(
+        SessionEvent.Prompted,
+        { sessionID, timestamp: yield* DateTime.now, prompt, delivery: "queue" },
+        { id: messageID },
+      )
+
+      const retried = yield* session.prompt({ id: messageID, sessionID, prompt, delivery: "queue", resume: false })
+
+      expect(retried).toMatchObject({ id: messageID, text: "Historical queued prompt" })
+      expect(yield* admitted(messageID)).toMatchObject({ delivery: "queue" })
+    }),
+  )
+
+  it.effect("rejects an input ID already used by a durable non-prompt event", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now }, { id: messageID })
+
+      const failure = yield* session
+        .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Collision" }), resume: false })
+        .pipe(Effect.flip)
+
+      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(yield* admitted(messageID)).toBeUndefined()
     }),
   )
 

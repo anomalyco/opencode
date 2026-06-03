@@ -5,8 +5,10 @@ import { SessionRunner } from "./runner/index"
 import { SessionSchema } from "./schema"
 
 export interface Interface {
+  /** Explicitly drain one Session, making at least one provider attempt. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
-  readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Schedule a drain after durable work is recorded. Repeated wakeups may coalesce. */
+  readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */

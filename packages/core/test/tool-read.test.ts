@@ -10,8 +10,12 @@ import { testEffect } from "./lib/effect"
 
 const assertions: PermissionV2.AssertInput[] = []
 const reads: FileSystem.ReadInput[] = []
+const pages: FileSystem.ListTarget[] = []
+const pageInputs: Pick<FileSystem.ListPageInput, "offset" | "limit">[] = []
 let resolvedInput: FileSystem.ReadInput | undefined
 let resolveFailure: unknown
+let listResolveFailure: unknown = new Error("not a directory")
+let listReal = "/project/src"
 let size = 5
 let real = "/project/README.md"
 let afterApproval = () => {}
@@ -19,6 +23,28 @@ const filesystem = Layer.succeed(
   FileSystem.Service,
   FileSystem.Service.of({
     read: () => Effect.die("unused"),
+    resolveReadPath: (input) =>
+      resolveFailure === undefined
+        ? Effect.succeed({
+            type: "file" as const,
+            target: new FileSystem.ReadTarget({
+              real,
+              resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
+              size,
+            }),
+          })
+        : listResolveFailure === undefined
+          ? Effect.succeed({
+              type: "directory" as const,
+              target: new FileSystem.ListTarget({
+                absolute: `/project/${input.path ?? "."}`,
+                real: listReal,
+                directory: "/project",
+                root: "/project",
+                resource: input.path ?? ".",
+              }),
+            })
+          : Effect.die(resolveFailure),
     resolveRead: (input) =>
       Effect.sync(() => {
         resolvedInput = input
@@ -37,14 +63,30 @@ const filesystem = Layer.succeed(
       ),
     readResolved: () =>
       Effect.sync(() => {
-        if (resolvedInput) reads.push(resolvedInput)
+        reads.push({ path: RelativePath.make("README.md") })
         return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
       }),
     list: () => Effect.die("unused"),
-    resolveList: () => Effect.die("unused"),
+    resolveList: (input = {}) =>
+      listResolveFailure === undefined
+        ? Effect.succeed(
+            new FileSystem.ListTarget({
+              absolute: `/project/${input.path ?? "."}`,
+              real: listReal,
+              directory: "/project",
+              root: "/project",
+              resource: input.path ?? ".",
+            }),
+          )
+        : Effect.die(listResolveFailure),
     listResolved: () => Effect.die("unused"),
     listPage: () => Effect.die("unused"),
-    listPageResolved: () => Effect.die("unused"),
+    listPageResolved: (target, page = {}) =>
+      Effect.sync(() => {
+        pages.push(target)
+        pageInputs.push(page)
+        return new FileSystem.ListPage({ entries: [], truncated: false })
+      }),
     find: () => Effect.die("unused"),
     grep: () => Effect.die("unused"),
     isIgnored: () => false,
@@ -78,6 +120,7 @@ describe("ReadTool", () => {
       reads.length = 0
       allow = true
       resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
       afterApproval = () => {}
@@ -102,6 +145,7 @@ describe("ReadTool", () => {
       reads.length = 0
       allow = false
       resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
       afterApproval = () => {}
@@ -118,12 +162,83 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("lists a bounded directory page through read", () =>
+    Effect.gen(function* () {
+      assertions.length = 0
+      pages.length = 0
+      pageInputs.length = 0
+      allow = true
+      resolveFailure = new Error("Path is not a file")
+      listResolveFailure = undefined
+      listReal = "/project/src"
+      afterApproval = () => {}
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: {
+            type: "tool-call",
+            id: "call-read-directory",
+            name: "read",
+            input: { path: "src", offset: 2, limit: 10 },
+          },
+        }),
+      ).toEqual({ type: "json", value: { entries: [], truncated: false } })
+      expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
+      expect(pageInputs).toEqual([{ offset: 2, limit: 10 }])
+    }),
+  )
+
+  it.effect("does not list a directory when permission is denied", () =>
+    Effect.gen(function* () {
+      pages.length = 0
+      allow = false
+      resolveFailure = new Error("Path is not a file")
+      listResolveFailure = undefined
+      listReal = "/project/src"
+      afterApproval = () => {}
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
+        }),
+      ).toEqual({ type: "error", value: "Unable to read src" })
+      expect(pages).toEqual([])
+    }),
+  )
+
+  it.effect("does not list when the directory changes after permission approval", () =>
+    Effect.gen(function* () {
+      pages.length = 0
+      allow = true
+      resolveFailure = new Error("Path is not a file")
+      listResolveFailure = undefined
+      listReal = "/project/src"
+      afterApproval = () => {
+        listReal = "/outside/src"
+      }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-read-directory-swapped", name: "read", input: { path: "src" } },
+        }),
+      ).toEqual({ type: "error", value: "Unable to read src" })
+      expect(pages).toEqual([])
+    }),
+  )
+
   it.effect("authorizes project references with their canonical identity", () =>
     Effect.gen(function* () {
       assertions.length = 0
       reads.length = 0
       allow = true
       resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
       afterApproval = () => {}
@@ -148,6 +263,7 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       resolveFailure = new Error("missing")
+      listResolveFailure = new Error("missing")
       expect(
         yield* registry.execute({
           sessionID,
@@ -156,6 +272,7 @@ describe("ReadTool", () => {
       ).toEqual({ type: "error", value: "Unable to read missing.txt" })
 
       resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
       size = 50 * 1024 + 1
       expect(
         yield* registry.execute({
@@ -173,6 +290,7 @@ describe("ReadTool", () => {
       reads.length = 0
       allow = true
       resolveFailure = undefined
+      listResolveFailure = new Error("not a directory")
       size = 5
       real = "/project/README.md"
       afterApproval = () => {

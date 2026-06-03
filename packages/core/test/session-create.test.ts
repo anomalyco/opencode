@@ -210,7 +210,7 @@ describe("SessionV2.create", () => {
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
       yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
-      yield* SessionInput.promote(db, events, created.id, { steer: true })
+      yield* SessionInput.promoteSteers(db, events, created.id)
 
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),

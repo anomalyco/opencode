@@ -10,13 +10,13 @@ sessions.create({ id?, location, ... })
   -> supplied ID creates the Session when absent
   -> reused ID returns the existing Session identity
 
-sessions.prompt({ id?, sessionID, prompt, resume? })
+sessions.prompt({ id?, sessionID, prompt, delivery?, resume? })
   -> omitted ID generates one internal message ID
   -> supplied ID admits one durable Session input when absent
   -> exact reuse returns the same user-shaped admission receipt
   -> reusing one message ID for another Session, prompt, or delivery mode fails
   -> exact retry schedules another wake unless resume is false
-  -> resume omitted or true schedules execution after recording
+  -> resume omitted or true schedules execution after admission
   -> resume false admits only
 ```
 
@@ -28,14 +28,28 @@ Execution routing starts from only the Session ID:
 SessionExecution.resume(sessionID)
 -> SessionStore.get(sessionID)
 -> LocationServiceMap.get(session.location)
--> SessionRunner.run(sessionID)
+-> SessionRunner.run({ sessionID, force? })
 ```
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
 
-The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started settlement after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns. Inbox delivery is explicit: `steer` inputs promote at the next safe provider-turn boundary; `queue` inputs admitted during an active drain wait for the next fresh drain. `Turn.Started` and `Turn.Settled({ turnID, outcome })` remain durable provider-attempt facts. A location-scoped `SessionRunCoordinator` joins explicit resumes and coalesces inbox wakeups around settlement races. Different Sessions remain concurrent. Automatic startup discovery, durable multi-node ownership, stale-owner fencing, interruption controls, and retry policy remain future work.
+The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant-message ID because provider-local call IDs may repeat across turns.
 
-Inbox promotion currently coalesces eligible rows in durable admission order. Add explicit inbox backlog and promotion-batch limits before exposing broad multi-caller admission or untrusted queue growth.
+Inbox delivery is explicit:
+
+- `steer` inputs promote at the next safe provider-turn boundary, including continuation inside the current drain.
+- `queue` inputs form a FIFO of future activities. When the current activity settles, the runner promotes exactly one queued input to open the next activity. Multiple queued inputs remain separate activities.
+
+Execution has two entry points:
+
+- `run` is an explicit resume. It joins an active drain chain or starts one, and performs at least one provider attempt even when no input is eligible.
+- `wake` reports newly recorded durable work. Repeated wakes coalesce. A wake calls the provider only when it can promote eligible input or recover an unsettled attempt.
+
+Each provider attempt records `Turn.Started` before inbox promotion. `Turn.Settled({ turnID, outcome })` records completion after the provider stream and every started tool fiber settle. A later wake retries when the latest start has no matching settlement, including the crash window after promotion removed the input from the pending inbox but before request assembly completed.
+
+A location-scoped `SessionRunCoordinator` serializes each Session drain chain while allowing different Sessions to drain concurrently. Automatic startup discovery, durable multi-node ownership, stale-owner fencing, interruption controls, and retry policy remain future work.
+
+Inbox promotion coalesces pending steers in durable admission order and opens one queued activity at a time in FIFO order. Add explicit inbox backlog and steering-batch limits before exposing broad multi-caller admission or untrusted queue growth.
 
 Eager local-tool execution is intentionally unbounded in the current local slice. This minimizes tool latency but does not increase SQLite settlement throughput: Session-event publication remains serialized per provider turn. Before broadening exposure, revisit per-turn call limits, output truncation, and operational backpressure using observed workloads. The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets.
 
@@ -49,32 +63,22 @@ Event replay owner claims are separate from clustered Session execution ownershi
 
 `ToolRegistry` is Location-scoped. Contributions are scoped replayable transforms: closing a contribution scope removes its definition and rebuilds the advertised catalog. Execution decodes input, optionally authorizes the call, invokes the retained handler, validates output, and settles failures as typed tool-result errors.
 
-The first built-in contribution is `read`:
+The first built-in contribution is bounded `read`:
 
 ```text
 resolve one path relative to the Location or a named project reference
 -> reject absolute paths, path escapes, and symlink escapes
--> reject files larger than 50 KiB
 -> authorize read against the canonical resource identity
--> return UTF-8 text or base64 binary content
-```
-
-The second built-in contribution is bounded `list`:
-
-```text
-resolve one directory relative to the Location or a named project reference
--> reject absolute paths, path escapes, and symlink escapes
--> authorize list against the canonical directory identity
--> return direct children in directory-first alphabetical order
--> page the structured result with one-based offset and next cursor
+-> for a file: reject content larger than 50 KiB, then return UTF-8 text or base64 binary content
+-> for a directory: return direct children in directory-first alphabetical order
+-> page directory results with one-based offset and next cursor
 ```
 
 ### Current Runner Follow-Ups
 
 - Keep eager structured local-tool settlement: durably record each complete call, start its child execution immediately, await all started settlements after provider-turn consumption, persist every result, and reload history once before continuation.
 - Buffer or coalesce streamed deltas before rewriting growing assistant projections.
-- Add covering indexes for `(session_id, time_created, id)` and `(session_id, type, time_created, id)`.
-- Add `event(aggregate_id, seq)` for ordered replay and history access.
+- Revisit additional covering indexes as larger-history query shapes become concrete.
 - Expose replayable Session events over HTTP and the generated SDK where remote consumers need them.
 - Decide whether UI-facing Session subscriptions should optionally interleave ephemeral deltas while connected without advancing the durable cursor.
 

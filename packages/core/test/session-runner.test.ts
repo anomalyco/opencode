@@ -772,7 +772,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("queues active input until the next fresh drain", () =>
+  it.effect("starts queued input after the active activity settles", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -816,6 +816,148 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(requests[0]!)).toEqual(["Start working"])
       expect(userTexts(requests[1]!)).toEqual(["Start working"])
       expect(userTexts(requests[2]!)).toEqual(["Start working", "Wait until the next activity"])
+    }),
+  )
+
+  it.effect("runs queued active inputs as separate FIFO activities", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Start working" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      streamGate = yield* Deferred.make<void>()
+      streamStarted = yield* Deferred.make<void>()
+
+      const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* Deferred.await(streamStarted)
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Queue first" }), delivery: "queue" })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Queue second" }), delivery: "queue" })
+      yield* Deferred.succeed(streamGate, undefined)
+      yield* Fiber.join(first)
+      streamGate = undefined
+      streamStarted = undefined
+
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[0]!)).toEqual(["Start working"])
+      expect(userTexts(requests[1]!)).toEqual(["Start working", "Queue first"])
+      expect(userTexts(requests[2]!)).toEqual(["Start working", "Queue first", "Queue second"])
+    }),
+  )
+
+  it.effect("opens queued input after idle steering activity settles", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Start steering activity" }), resume: false })
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Queue later activity" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0]!)).toEqual(["Start steering activity"])
+      expect(userTexts(requests[1]!)).toEqual(["Start steering activity", "Queue later activity"])
+    }),
+  )
+
+  it.effect("coalesces steers into the active queued activity before starting the next queued activity", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Start working" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      const firstGate = yield* Deferred.make<void>()
+      const secondGate = yield* Deferred.make<void>()
+      streamGate = firstGate
+
+      const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (requests.length < 1) yield* Effect.yieldNow
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Queue first" }), delivery: "queue" })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Queue second" }), delivery: "queue" })
+      streamGate = secondGate
+      yield* Deferred.succeed(firstGate, undefined)
+      while (requests.length < 2) yield* Effect.yieldNow
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Steer first queued activity" }) })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Also steer first queued activity" }) })
+      yield* Deferred.succeed(secondGate, undefined)
+      yield* Fiber.join(first)
+      streamGate = undefined
+
+      expect(requests).toHaveLength(4)
+      expect(userTexts(requests[0]!)).toEqual(["Start working"])
+      expect(userTexts(requests[1]!)).toEqual(["Start working", "Queue first"])
+      expect(userTexts(requests[2]!)).toEqual([
+        "Start working",
+        "Queue first",
+        "Steer first queued activity",
+        "Also steer first queued activity",
+      ])
+      expect(userTexts(requests[3]!)).toEqual([
+        "Start working",
+        "Queue first",
+        "Steer first queued activity",
+        "Also steer first queued activity",
+        "Queue second",
+      ])
     }),
   )
 
@@ -907,6 +1049,167 @@ describe("SessionRunnerLLM", () => {
       while (requests.length === 0) yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
+    }),
+  )
+
+  it.effect("opens queued input after recovering an unsettled activity", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const recoveringSessionID = SessionV2.ID.make("ses_runner_recover_queue")
+      yield* insertSession(recoveringSessionID)
+      yield* session.prompt({
+        sessionID: recoveringSessionID,
+        prompt: new Prompt({ text: "Recover current activity" }),
+        resume: false,
+      })
+      yield* session.resume(recoveringSessionID)
+      yield* events.publish(SessionEvent.Turn.Started, {
+        sessionID: recoveringSessionID,
+        timestamp: yield* DateTime.now,
+      })
+      yield* session.prompt({
+        sessionID: recoveringSessionID,
+        prompt: new Prompt({ text: "Queue after recovery" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      const coordinator = yield* SessionRunCoordinator.Service
+      yield* coordinator.wake(recoveringSessionID)
+      yield* coordinator.awaitIdle(recoveringSessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0]!)).toEqual(["Recover current activity"])
+      expect(userTexts(requests[1]!)).toEqual(["Recover current activity", "Queue after recovery"])
+    }),
+  )
+
+  it.effect("explicitly resumes an unsettled activity before opening queued input", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const recoveringSessionID = SessionV2.ID.make("ses_runner_explicit_recover_queue")
+      yield* insertSession(recoveringSessionID)
+      yield* session.prompt({
+        sessionID: recoveringSessionID,
+        prompt: new Prompt({ text: "Recover explicit activity" }),
+        resume: false,
+      })
+      yield* session.resume(recoveringSessionID)
+      yield* events.publish(SessionEvent.Turn.Started, {
+        sessionID: recoveringSessionID,
+        timestamp: yield* DateTime.now,
+      })
+      yield* session.prompt({
+        sessionID: recoveringSessionID,
+        prompt: new Prompt({ text: "Queue after explicit recovery" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+      yield* session.resume(recoveringSessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(userTexts(requests[0]!)).toEqual(["Recover explicit activity"])
+      expect(userTexts(requests[1]!)).toEqual(["Recover explicit activity", "Queue after explicit recovery"])
+    }),
+  )
+
+  it.effect("starts the first queued activity when woken while idle", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({
+        sessionID,
+        prompt: new Prompt({ text: "Wait for fresh activity" }),
+        delivery: "queue",
+        resume: false,
+      })
+
+      requests.length = 0
+      yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
+      yield* Effect.yieldNow
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0]!)).toEqual(["Wait for fresh activity"])
+    }),
+  )
+
+  it.effect("does not spend one activity step budget across queued activities", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const queued = Array.from({ length: 26 }, (_, index) => `Queued activity ${index + 1}`)
+      for (const text of queued) {
+        yield* session.prompt({ sessionID, prompt: new Prompt({ text }), delivery: "queue", resume: false })
+      }
+
+      requests.length = 0
+      responses = queued.map(() => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ])
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(queued.length)
+      expect(userTexts(requests.at(-1)!)).toEqual(queued)
+    }),
+  )
+
+  it.effect("recovers input promoted before request assembly from a later wake", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const defect = new Error("fail after prompt promotion")
+      let fail = true
+      yield* events.project(SessionEvent.Prompted, () => (fail ? Effect.die(defect) : Effect.void))
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover promoted input" }), resume: false })
+
+      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
+      fail = false
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+
+      yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
+      while (requests.length === 0) yield* Effect.yieldNow
+
+      expect(userTexts(requests[0]!)).toEqual(["Recover promoted input"])
     }),
   )
 
@@ -1082,6 +1385,29 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("interrupts blocked local tools when the provider turn is interrupted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Interrupt blocked tool" }), resume: false })
+      toolExecutionGate = yield* Deferred.make<void>()
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-before-interrupt", name: "echo", input: { text: "blocked" } }),
+        ]),
+        Stream.never,
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (executions.length === 0) yield* Effect.yieldNow
+      yield* Fiber.interrupt(run)
+      toolExecutionGate = undefined
+
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
     }),
   )
 

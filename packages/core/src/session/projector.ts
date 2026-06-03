@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -9,7 +9,8 @@ import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
-import { MessageTable, PartTable, SessionMessageTable, SessionInputTable, SessionTable } from "./sql"
+import { SessionInput } from "./input"
+import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -334,12 +335,14 @@ export const layer = Layer.effectDiscard(
         if (message.type !== "user") return yield* Effect.die("Prompt projection did not produce a user message")
         if (event.seq === undefined)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
-        yield* db
-          .update(SessionInputTable)
-          .set({ promoted_seq: event.seq })
-          .where(and(eq(SessionInputTable.id, event.id), isNull(SessionInputTable.promoted_seq)))
-          .run()
-          .pipe(Effect.orDie)
+        yield* SessionInput.project(db, {
+          id: SessionMessage.ID.make(event.id),
+          sessionID: event.data.sessionID,
+          prompt: event.data.prompt,
+          delivery: event.data.delivery,
+          timeCreated: event.data.timestamp,
+          promotedSeq: event.seq,
+        })
       }),
     )
     // yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))

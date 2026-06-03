@@ -84,7 +84,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
               Effect.catchTag("Session.PromptConflictError", (error) =>
                 Effect.fail(
                   new ConflictError({
-                    message: `Prompt message ID already exists with a different prompt: ${error.messageID}`,
+                    message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
                     resource: error.messageID,
                   }),
                 ),

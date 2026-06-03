@@ -171,7 +171,6 @@ export const Plugin = PluginV2.define({
               { action: "*", resource: "*", effect: "deny" },
               { action: "grep", resource: "*", effect: "allow" },
               { action: "glob", resource: "*", effect: "allow" },
-              { action: "list", resource: "*", effect: "allow" },
               { action: "bash", resource: "*", effect: "allow" },
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },

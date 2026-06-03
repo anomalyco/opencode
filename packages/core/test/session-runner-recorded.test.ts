@@ -128,10 +128,11 @@ describe("SessionRunnerLLM recorded", () => {
           .select({ type: EventTable.type })
           .from(EventTable)
           .where(eq(EventTable.aggregate_id, sessionID))
+          .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.next.prompted.1",
         "session.next.turn.started.1",
+        "session.next.prompted.1",
         "session.next.step.started.1",
         "session.next.text.started.1",
         "session.next.text.ended.1",

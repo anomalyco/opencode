@@ -71,6 +71,7 @@ export const Prompted = EventV2.define({
   schema: {
     ...Base,
     prompt: Prompt,
+    delivery: Schema.Literals(["steer", "queue"]),
   },
 })
 export type Prompted = typeof Prompted.Type
