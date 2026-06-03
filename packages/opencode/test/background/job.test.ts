@@ -125,6 +125,37 @@ describe("background.job", () => {
     }),
   )
 
+  it.instance("ignores stale settlements after restarting a failed job", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const fail = yield* Deferred.make<void>()
+      const interrupted = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const id = "job_test"
+      yield* jobs.start({
+        id,
+        type: "test",
+        run: Deferred.await(fail).pipe(Effect.andThen(Effect.fail(new Error("boom")))),
+      })
+      yield* jobs.extend({
+        id,
+        run: Effect.never.pipe(
+          Effect.ensuring(Deferred.succeed(interrupted, undefined).pipe(Effect.andThen(Deferred.await(release)))),
+        ),
+      })
+
+      yield* Deferred.succeed(fail, undefined)
+      expect((yield* jobs.wait({ id })).info?.status).toBe("error")
+      yield* Deferred.await(interrupted)
+      yield* jobs.start({ id, type: "test", run: Effect.never })
+
+      yield* Deferred.succeed(release, undefined)
+      yield* Effect.yieldNow
+      expect((yield* jobs.get(id))?.status).toBe("running")
+      yield* jobs.cancel(id)
+    }),
+  )
+
   it.instance("can cancel running jobs", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
