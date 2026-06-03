@@ -153,14 +153,12 @@
   width: 100%;
 }
 
-[data-component="settings-v2-dialog"] [data-component="select"][data-trigger-style="settings-v2"] {
+[data-component="settings-v2-dialog"] [data-component="select-v2-root"] {
   width: fit-content;
   max-width: 100%;
 }
 
-[data-component="settings-v2-dialog"]
-  [data-component="select"][data-trigger-style="settings-v2"]
-  [data-component="button-v2"] {
+[data-component="settings-v2-dialog"] [data-component="button-v2"] {
   width: fit-content;
   max-width: 100%;
 }
