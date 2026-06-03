@@ -3581,7 +3581,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@jerome-benoit/sap-ai-provider-v2", () => {
-    const sapModel = (apiId: string) =>
+    const sapModel = (apiId: string, releaseDate = "2024-01-01") =>
       createMockModel({
         id: `sap-ai-core/${apiId}`,
         providerID: "sap-ai-core",
@@ -3590,6 +3590,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.ai.sap",
           npm: "@jerome-benoit/sap-ai-provider-v2",
         },
+        release_date: releaseDate,
       })
 
     for (const testCase of [
@@ -3597,61 +3598,93 @@ describe("ProviderTransform.variants", () => {
         name: "sonnet 4.6",
         apiIds: ["anthropic--claude-sonnet-4-6"],
         efforts: ["low", "medium", "high", "max"],
-        expectedHigh: { thinking: { type: "adaptive" }, effort: "high" },
+        thinking: { type: "adaptive" },
       },
       {
         name: "opus 4.6",
         apiIds: ["anthropic--claude-4.6-opus", "anthropic--claude-4-6-opus"],
         efforts: ["low", "medium", "high", "max"],
-        expectedHigh: { thinking: { type: "adaptive" }, effort: "high" },
+        thinking: { type: "adaptive" },
       },
       {
         name: "opus 4.7",
         apiIds: ["anthropic--claude-4.7-opus", "anthropic--claude-4-7-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
-        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        thinking: { type: "adaptive", display: "summarized" },
       },
       {
         name: "opus 4.8",
         apiIds: ["anthropic--claude-4.8-opus", "anthropic--claude-4-8-opus"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
-        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+        thinking: { type: "adaptive", display: "summarized" },
       },
     ]) {
       for (const apiId of testCase.apiIds) {
-        test(`${testCase.name} ${apiId} returns adaptive thinking variants`, () => {
+        test(`${testCase.name} ${apiId} returns adaptive thinking variants under modelParams`, () => {
           const result = ProviderTransform.variants(sapModel(apiId))
           expect(Object.keys(result)).toEqual(testCase.efforts)
-          expect(result.high).toEqual(testCase.expectedHigh)
-          if (testCase.efforts.includes("xhigh")) {
-            expect(result.xhigh).toEqual({ ...testCase.expectedHigh, effort: "xhigh" })
+          for (const effort of testCase.efforts) {
+            expect(result[effort]).toEqual({
+              modelParams: {
+                thinking: testCase.thinking,
+                output_config: { effort },
+              },
+            })
           }
         })
       }
     }
 
-    test("anthropic sonnet 4 returns budget-tokens variants", () => {
+    test("anthropic sonnet 4 returns budget_tokens variants under modelParams", () => {
       const result = ProviderTransform.variants(sapModel("anthropic--claude-sonnet-4"))
       expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({ thinking: { type: "enabled", budgetTokens: 16000 } })
-      expect(result.max).toEqual({ thinking: { type: "enabled", budgetTokens: 31999 } })
+      expect(result.high).toEqual({
+        modelParams: { thinking: { type: "enabled", budget_tokens: 16000 } },
+      })
+      expect(result.max).toEqual({
+        modelParams: { thinking: { type: "enabled", budget_tokens: 31999 } },
+      })
     })
 
-    test("gemini 2.5 returns thinkingConfig variants", () => {
-      const result = ProviderTransform.variants(sapModel("gcp--gemini-2.5-pro"))
+    test("gemini 2.5 pro returns thinkingConfig with 32k budget under modelParams", () => {
+      const result = ProviderTransform.variants(sapModel("gemini-2.5-pro"))
       expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } })
-      expect(result.max).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 } })
+      expect(result.high).toEqual({
+        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+      })
+      expect(result.max).toEqual({
+        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32768 } },
+      })
     })
 
-    for (const apiId of ["azure-openai--gpt-4o", "azure-openai--o3-mini"]) {
-      test(`${apiId} returns reasoningEffort variants`, () => {
-        const result = ProviderTransform.variants(sapModel(apiId))
-        expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-        expect(result.low).toEqual({ reasoningEffort: "low" })
-        expect(result.high).toEqual({ reasoningEffort: "high" })
+    test("gemini 2.5 flash returns thinkingConfig with 24k budget under modelParams", () => {
+      const result = ProviderTransform.variants(sapModel("gemini-2.5-flash"))
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.max).toEqual({
+        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 } },
+      })
+    })
+
+    for (const apiId of ["gpt-5", "gpt-5-mini", "gpt-5-nano"]) {
+      test(`${apiId} returns reasoning_effort variants under modelParams with minimal tier`, () => {
+        const result = ProviderTransform.variants(sapModel(apiId, "2025-08-07"))
+        expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
+        expect(result.minimal).toEqual({ modelParams: { reasoning_effort: "minimal" } })
+        expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
       })
     }
+
+    test("gpt-5.4 picks up xhigh tier from openaiReasoningEfforts", () => {
+      const result = ProviderTransform.variants(sapModel("gpt-5.4", "2026-01-15"))
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+      expect(result.xhigh).toEqual({ modelParams: { reasoning_effort: "xhigh" } })
+    })
+
+    test("o-series returns reasoning_effort variants under modelParams", () => {
+      const result = ProviderTransform.variants(sapModel("azure-openai--o3-mini"))
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.high).toEqual({ modelParams: { reasoning_effort: "high" } })
+    })
 
     for (const apiId of ["perplexity--sonar-pro", "mistral--mistral-large"]) {
       test(`${apiId} returns empty object`, () => {

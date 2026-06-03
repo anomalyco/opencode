@@ -635,6 +635,52 @@ function googleThinkingBudgetMax(apiId: string) {
   return 24_576
 }
 
+// SAP's Zod schema drops unknown top-level keys; reasoning controls survive
+// only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
+function wrapInSapModelParams(
+  variants: Record<string, Record<string, any>>,
+): Record<string, Record<string, any>> {
+  return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
+}
+
+function sapAnthropicReasoningParams(
+  adaptiveEfforts: string[] | null,
+  adaptiveOpus: boolean,
+): Record<string, Record<string, any>> {
+  if (adaptiveEfforts) {
+    // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
+    // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
+    return Object.fromEntries(
+      adaptiveEfforts.map((effort) => [
+        effort,
+        {
+          thinking: { type: "adaptive", ...(adaptiveOpus ? { display: "summarized" } : {}) },
+          output_config: { effort },
+        },
+      ]),
+    )
+  }
+  return {
+    high: { thinking: { type: "enabled", budget_tokens: 16000 } },
+    max: { thinking: { type: "enabled", budget_tokens: 31999 } },
+  }
+}
+
+function sapGeminiReasoningParams(model: Provider.Model): Record<string, Record<string, any>> {
+  if (!model.api.id.includes("2.5")) return {}
+  return {
+    high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+    max: {
+      thinkingConfig: { includeThoughts: true, thinkingBudget: googleThinkingBudgetMax(model.api.id) },
+    },
+  }
+}
+
+function sapOpenaiReasoningParams(model: Provider.Model): Record<string, Record<string, any>> {
+  const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+  return Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }]))
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
@@ -997,55 +1043,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       return {}
 
     case "@jerome-benoit/sap-ai-provider-v2":
-      if (model.api.id.includes("anthropic")) {
-        if (adaptiveEfforts) {
-          return Object.fromEntries(
-            adaptiveEfforts.map((effort) => [
-              effort,
-              {
-                thinking: {
-                  type: "adaptive",
-                  ...(adaptiveOpus ? { display: "summarized" } : {}),
-                },
-                effort,
-              },
-            ]),
-          )
-        }
-        return {
-          high: {
-            thinking: {
-              type: "enabled",
-              budgetTokens: 16000,
-            },
-          },
-          max: {
-            thinking: {
-              type: "enabled",
-              budgetTokens: 31999,
-            },
-          },
-        }
-      }
-      if (model.api.id.includes("gemini") && id.includes("2.5")) {
-        return {
-          high: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          },
-          max: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 24576,
-            },
-          },
-        }
-      }
-      if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id)) {
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
-      }
+      if (model.api.id.includes("anthropic"))
+        return wrapInSapModelParams(sapAnthropicReasoningParams(adaptiveEfforts, adaptiveOpus))
+      if (model.api.id.includes("gemini")) return wrapInSapModelParams(sapGeminiReasoningParams(model))
+      if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id))
+        return wrapInSapModelParams(sapOpenaiReasoningParams(model))
       return {}
   }
   return {}
