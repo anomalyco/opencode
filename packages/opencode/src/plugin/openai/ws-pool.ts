@@ -78,6 +78,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     pool.set(key, entry)
 
     if (entry.fallback) {
+      entry.lastUsedAt = Date.now()
       log.debug("http fallback", { key, reason: "fallback_active" })
       return httpFetch(input, httpInit)
     }
@@ -121,6 +122,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
         onConnectionInvalid: (error) => {
           log.warn("websocket invalidated", { key, error: error.message })
           entry.busy = false
+          entry.lastUsedAt = Date.now()
           if (!entry.fallback) recordStreamFailure(entry)
           invalidate(entry)
           resolveFirstEvent(false)
