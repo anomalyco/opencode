@@ -33,6 +33,7 @@ import {
 import { color, printHeader, printResults } from "./report"
 import { coverageResult, parseOptions, routeKey, routeKeys, selectedScenarios } from "./routing"
 import { runScenario } from "./runner"
+import { disposeApps } from "./backend"
 import { runtime } from "./runtime"
 import { type Scenario } from "./types"
 
@@ -1417,7 +1418,7 @@ const llmScenarios = new Set([
 ])
 
 const main = Effect.gen(function* () {
-  yield* Effect.addFinalizer(() => cleanupExercisePaths)
+  yield* Effect.addFinalizer(() => Effect.promise(() => disposeApps()).pipe(Effect.andThen(cleanupExercisePaths)))
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))

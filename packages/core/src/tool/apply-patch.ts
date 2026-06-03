@@ -79,6 +79,8 @@ export const layer = Layer.effectDiscard(
             const prepared: Prepared[] = []
             for (const { hunk, plan } of planned) {
               if (hunk.type === "add") {
+                const target = yield* mutation.revalidate(plan)
+                if (target.exists) return yield* fail(hunk.path, new Error("Target file already exists"))
                 prepared.push({ type: hunk.type, hunk, plan })
                 continue
               }
@@ -93,22 +95,24 @@ export const layer = Layer.effectDiscard(
               prepared.push({ type: hunk.type, hunk, plan, source, content: Patch.joinBom(update.content, update.bom) })
             }
 
-            for (const change of prepared) {
-              yield* Effect.gen(function* () {
-                if (change.type === "add") {
-                  const receipt = yield* files.write({ plan: change.plan, content: change.hunk.contents.endsWith("\n") || change.hunk.contents === "" ? change.hunk.contents : `${change.hunk.contents}\n` })
+            yield* Effect.uninterruptible(
+              Effect.forEach(prepared, (change) =>
+                Effect.gen(function* () {
+                  if (change.type === "add") {
+                    const receipt = yield* files.create({ plan: change.plan, content: change.hunk.contents.endsWith("\n") || change.hunk.contents === "" ? change.hunk.contents : `${change.hunk.contents}\n` })
+                    applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
+                    return
+                  }
+                  if (change.type === "delete") {
+                    const receipt = yield* files.remove({ plan: change.plan })
+                    applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
+                    return
+                  }
+                  const receipt = yield* files.writeIfUnchanged({ plan: change.plan, expected: change.source, content: change.content })
                   applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
-                  return
-                }
-                if (change.type === "delete") {
-                  const receipt = yield* files.remove({ plan: change.plan })
-                  applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
-                  return
-                }
-                const receipt = yield* files.writeIfUnchanged({ plan: change.plan, expected: change.source, content: change.content })
-                applied.push({ type: change.type, resource: receipt.resource, target: receipt.target })
-              }).pipe(Effect.catchCause((cause) => Effect.fail(fail(change.hunk.path, Cause.squash(cause)))))
-            }
+                }).pipe(Effect.catchCause((cause) => Effect.fail(fail(change.hunk.path, Cause.squash(cause))))),
+              { discard: true }),
+            )
             return { applied }
           }).pipe(
             Effect.catchCause((cause) => {

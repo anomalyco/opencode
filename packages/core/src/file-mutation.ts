@@ -1,6 +1,7 @@
 export * as FileMutation from "./file-mutation"
 
 import { Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { dirname } from "path"
 import { FSUtil } from "./fs-util"
 import { LocationMutation } from "./location-mutation"
 
@@ -18,6 +19,10 @@ export interface RemoveInput {
 }
 
 export class StaleContentError extends Schema.TaggedErrorClass<StaleContentError>()("FileMutation.StaleContentError", {
+  path: Schema.String,
+}) {}
+
+export class TargetExistsError extends Schema.TaggedErrorClass<TargetExistsError>()("FileMutation.TargetExistsError", {
   path: Schema.String,
 }) {}
 
@@ -40,6 +45,8 @@ export interface RemoveReceipt {
 }
 
 export interface Interface {
+  /** Commit one planned create only while the target remains absent. */
+  readonly create: (input: WriteInput) => Effect.Effect<WriteReceipt, TargetExistsError | LocationMutation.RevalidationError | FSUtil.Error>
   /** Commit one planned write after immediately re-proving its mutation authority. */
   readonly write: (input: WriteInput) => Effect.Effect<WriteReceipt, LocationMutation.RevalidationError | FSUtil.Error>
   /** Commit only if an existing target still has the expected bytes. */
@@ -84,7 +91,7 @@ export const layer = Layer.effect(
       if (!current) locks.set(target, entry)
       entry.users++
       return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        entry.semaphore.withPermit(effect).pipe(
+        entry.semaphore.withPermit(Effect.uninterruptible(effect)).pipe(
           Effect.ensuring(
             Effect.sync(() => {
               entry.users--
@@ -104,6 +111,24 @@ export const layer = Layer.effect(
             target: target.canonical,
             resource: target.resource,
             existed: target.exists,
+          } satisfies WriteReceipt
+        }),
+      ),
+    )
+
+    const create = Effect.fn("FileMutation.create")((input: WriteInput) =>
+      withTargetLock(input.plan.target.canonical)(
+        Effect.gen(function* () {
+          const target = yield* mutation.revalidate(input.plan)
+          if (target.exists) return yield* new TargetExistsError({ path: target.canonical })
+          yield* fs.makeDirectory(dirname(target.canonical), { recursive: true })
+          if (typeof input.content === "string") yield* fs.writeFileString(target.canonical, input.content, { flag: "wx" })
+          else yield* fs.writeFile(target.canonical, input.content, { flag: "wx" })
+          return {
+            operation: "write",
+            target: target.canonical,
+            resource: target.resource,
+            existed: false,
           } satisfies WriteReceipt
         }),
       ),
@@ -141,7 +166,7 @@ export const layer = Layer.effect(
       ),
     )
 
-    return Service.of({ write, writeIfUnchanged, remove })
+    return Service.of({ create, write, writeIfUnchanged, remove })
   }),
 )
 

@@ -418,7 +418,14 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
     yield* Fiber.interrupt(fiber)
     expect(yield* session.context(sessionID)).toMatchObject([
       { type: "user", text: prompt },
-      { type: "assistant", content: [fixture.expectedContent] },
+      {
+        type: "assistant",
+        content: [
+          kind === "tool input"
+            ? { type: "tool", id: fragmentID(kind, "interrupted"), state: { status: "error" } }
+            : fixture.expectedContent,
+        ],
+      },
     ])
   })
 
@@ -1271,6 +1278,92 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("durably fails hosted tools left running by a prior process before continuing inline", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover interrupted hosted tool" }), resume: false })
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
+      const assistant = yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        agent: "build",
+        model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
+      })
+      yield* events.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID: assistant.id,
+        callID: "call-hosted-interrupted",
+        name: "web_search",
+      })
+      yield* events.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID: assistant.id,
+        callID: "call-hosted-interrupted",
+        text: '{"query":"stale"}',
+      })
+      yield* events.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID: assistant.id,
+        callID: "call-hosted-interrupted",
+        tool: "web_search",
+        input: { query: "stale" },
+        provider: { executed: true },
+      })
+      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+      expect(requests[0]?.messages[1]?.content).toMatchObject([
+        { type: "tool-call", id: "call-hosted-interrupted", providerExecuted: true },
+        { type: "tool-result", id: "call-hosted-interrupted", providerExecuted: true, result: { type: "error" } },
+      ])
+    }),
+  )
+
+  it.effect("durably fails pending tool input left by a prior process before continuing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover interrupted tool input" }), resume: false })
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID)
+      const assistant = yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        agent: "build",
+        model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
+      })
+      yield* events.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID: assistant.id,
+        callID: "call-pending-interrupted",
+        name: "echo",
+      })
+      yield* events.publish(SessionEvent.Turn.Started, { sessionID, timestamp: yield* DateTime.now })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Recover interrupted tool input" },
+        { type: "assistant", content: [{ type: "tool", id: "call-pending-interrupted", state: { status: "error" } }] },
+      ])
+    }),
+  )
+
   it.effect("opens queued input after recovering an unsettled activity", () =>
     Effect.gen(function* () {
       yield* setup
@@ -1921,6 +2014,51 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail before step" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
+      ])
+    }),
+  )
+
+  it.effect("does not continue automatically after a provider error follows a local tool call", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not continue failed provider" }), resume: false })
+
+      requests.length = 0
+      const executionCount = executions.length
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
+        LLMEvent.providerError({ message: "Provider unavailable" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(executions.slice(executionCount)).toEqual(["settled"])
+      expect(yield* turnOutcomes(sessionID)).toEqual(["failed"])
+    }),
+  )
+
+  it.effect("durably fails a hosted tool when its provider errors before returning a result", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail hosted tool durably" }), resume: false })
+
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-hosted-provider-error", name: "web_search", input: { query: "effect" }, providerExecuted: true }),
+        LLMEvent.providerError({ message: "Provider unavailable" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail hosted tool durably" },
+        { type: "assistant", content: [{ type: "tool", id: "call-hosted-provider-error", state: { status: "error" } }] },
       ])
     }),
   )

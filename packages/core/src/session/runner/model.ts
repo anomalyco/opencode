@@ -45,7 +45,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
 const apiKey = (model: ModelV2.Info, provider?: ProviderV2.Info) => {
-  const value = model.request.body.apiKey
+  const value = model.request.body.apiKey ?? model.api.settings?.apiKey
   if (typeof value === "string") return Auth.value(value)
   return provider?.enabled !== false && provider?.enabled.via === "env" ? Auth.config(provider.enabled.name) : undefined
 }
@@ -55,7 +55,9 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) =>
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    http: { body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")) },
+    http: {
+      body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")),
+    },
     limits: { context: model.limit.context, output: model.limit.output },
   })
 

@@ -71,6 +71,7 @@ const filesystem = Layer.succeed(
         return new FileSystem.TextContent({ type: "text", content: "hello", mime: "text/plain" })
       }),
     resolveRoot: () => Effect.die("unused"),
+    revalidateRoot: Effect.succeed,
     list: () => Effect.die("unused"),
     resolveList: (input = {}) =>
       listResolveFailure === undefined

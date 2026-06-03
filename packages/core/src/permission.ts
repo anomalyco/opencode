@@ -201,13 +201,19 @@ export const layer = Layer.effect(
       }
     }
 
-    const create = EffectRuntime.fnUntraced(function* (request: Request) {
-      const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-      const item = { request, deferred }
-      pending.set(request.id, item)
-      yield* events.publish(Event.Asked, request)
-      return item
-    })
+    const create = (request: Request) =>
+      EffectRuntime.uninterruptible(
+        EffectRuntime.gen(function* () {
+          const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+          const item = { request, deferred }
+          if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
+          pending.set(request.id, item)
+          yield* events.publish(Event.Asked, request).pipe(
+            EffectRuntime.onError(() => EffectRuntime.sync(() => pending.delete(request.id))),
+          )
+          return item
+        }),
+      )
 
     const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
@@ -216,28 +222,31 @@ export const layer = Layer.effect(
       return { id: value.id, effect: result.effect }
     })
 
-    const assert = EffectRuntime.fn("PermissionV2.assert")(function* (input: AssertInput) {
-      const result = yield* evaluateInput(input)
-      if (result.effect === "deny") {
-        return yield* new DeniedError({
-          rules: relevant(input, result.rules),
-        })
-      }
-      if (result.effect === "allow") return
-      const item = yield* create(request(input))
-      return yield* Deferred.await(item.deferred).pipe(
-        EffectRuntime.ensuring(
-          EffectRuntime.sync(() => {
-            pending.delete(item.request.id)
-          }),
-        ),
-      )
-    })
+    const assert = EffectRuntime.fn("PermissionV2.assert")((input: AssertInput) =>
+      EffectRuntime.uninterruptibleMask((restore) =>
+        EffectRuntime.gen(function* () {
+          const result = yield* evaluateInput(input)
+          if (result.effect === "deny") {
+            return yield* new DeniedError({
+              rules: relevant(input, result.rules),
+            })
+          }
+          if (result.effect === "allow") return
+          const item = yield* create(request(input))
+          return yield* restore(Deferred.await(item.deferred)).pipe(
+            EffectRuntime.ensuring(
+              EffectRuntime.sync(() => {
+                pending.delete(item.request.id)
+              }),
+            ),
+          )
+        }),
+      ),
+    )
 
-    const reply = EffectRuntime.fn("PermissionV2.reply")(function* (input: ReplyInput) {
+    const reply = EffectRuntime.fn("PermissionV2.reply")((input: ReplyInput) => EffectRuntime.uninterruptible(EffectRuntime.gen(function* () {
       const existing = pending.get(input.requestID)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-      pending.delete(input.requestID)
       yield* events.publish(Event.Replied, {
         sessionID: existing.request.sessionID,
         requestID: existing.request.id,
@@ -249,15 +258,16 @@ export const layer = Layer.effect(
           existing.deferred,
           input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
         )
+        pending.delete(input.requestID)
         for (const [id, item] of pending) {
           if (item.request.sessionID !== existing.request.sessionID) continue
-          pending.delete(id)
           yield* events.publish(Event.Replied, {
             sessionID: item.request.sessionID,
             requestID: item.request.id,
             reply: "reject",
           })
           yield* Deferred.fail(item.deferred, new RejectedError())
+          pending.delete(id)
         }
         return
       }
@@ -270,6 +280,7 @@ export const layer = Layer.effect(
         })
       }
       yield* Deferred.succeed(existing.deferred, undefined)
+      pending.delete(input.requestID)
       if (input.reply !== "always" || !existing.request.save?.length) return
 
       const rememberedRules = yield* savedRules()
@@ -287,15 +298,15 @@ export const layer = Layer.effect(
           )
         )
           continue
-        pending.delete(id)
         yield* events.publish(Event.Replied, {
           sessionID: item.request.sessionID,
           requestID: item.request.id,
           reply: "always",
         })
         yield* Deferred.succeed(item.deferred, undefined)
+        pending.delete(id)
       }
-    })
+    })))
 
     const list = EffectRuntime.fn("PermissionV2.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)

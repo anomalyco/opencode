@@ -8421,7 +8421,7 @@ export type V2SessionListResponses = {
 export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListResponses]
 
 export type V2SessionPromptData = {
-  body?: {
+  body: {
     id?: string
     prompt: Prompt
     delivery?: "steer" | "queue"
@@ -8831,7 +8831,7 @@ export type V2SessionPermissionListResponses = {
 export type V2SessionPermissionListResponse = V2SessionPermissionListResponses[keyof V2SessionPermissionListResponses]
 
 export type V2SessionPermissionReplyData = {
-  body?: {
+  body: {
     reply: PermissionV2Reply
     message?: string
   }
@@ -9039,7 +9039,7 @@ export type V2QuestionRequestListResponses = {
 export type V2QuestionRequestListResponse = V2QuestionRequestListResponses[keyof V2QuestionRequestListResponses]
 
 export type V2SessionQuestionReplyData = {
-  body?: QuestionV2Reply
+  body: QuestionV2Reply
   path: {
     sessionID: string
     requestID: string

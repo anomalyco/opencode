@@ -137,43 +137,55 @@ export const layer = Layer.effect(
       ),
     )
 
-    const ask = Effect.fn("QuestionV2.ask")(function* (input: AskInput) {
-      const id = ID.ascending()
-      const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
-      const request: Request = { id, ...input }
-      pending.set(id, { request, deferred })
-      yield* events.publish(Event.Asked, request)
-      return yield* Deferred.await(deferred).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            pending.delete(id)
-          }),
-        ),
-      )
-    })
+    const ask = Effect.fn("QuestionV2.ask")((input: AskInput) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const id = ID.ascending()
+          const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
+          const request: Request = { id, ...input }
+          pending.set(id, { request, deferred })
+          return yield* events.publish(Event.Asked, request).pipe(
+            Effect.andThen(restore(Deferred.await(deferred))),
+            Effect.ensuring(
+              Effect.sync(() => {
+                pending.delete(id)
+              }),
+            ),
+          )
+        }),
+      ),
+    )
 
-    const reply = Effect.fn("QuestionV2.reply")(function* (input: ReplyInput) {
-      const existing = pending.get(input.requestID)
-      if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-      pending.delete(input.requestID)
-      yield* events.publish(Event.Replied, {
-        sessionID: existing.request.sessionID,
-        requestID: existing.request.id,
-        answers: input.answers.map((answer) => [...answer]),
-      })
-      yield* Deferred.succeed(existing.deferred, input.answers)
-    })
+    const reply = Effect.fn("QuestionV2.reply")((input: ReplyInput) =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const existing = pending.get(input.requestID)
+          if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
+          yield* events.publish(Event.Replied, {
+            sessionID: existing.request.sessionID,
+            requestID: existing.request.id,
+            answers: input.answers.map((answer) => [...answer]),
+          })
+          yield* Deferred.succeed(existing.deferred, input.answers)
+          pending.delete(input.requestID)
+        }),
+      ),
+    )
 
-    const reject = Effect.fn("QuestionV2.reject")(function* (requestID: ID) {
-      const existing = pending.get(requestID)
-      if (!existing) return yield* new NotFoundError({ requestID })
-      pending.delete(requestID)
-      yield* events.publish(Event.Rejected, {
-        sessionID: existing.request.sessionID,
-        requestID: existing.request.id,
-      })
-      yield* Deferred.fail(existing.deferred, new RejectedError())
-    })
+    const reject = Effect.fn("QuestionV2.reject")((requestID: ID) =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const existing = pending.get(requestID)
+          if (!existing) return yield* new NotFoundError({ requestID })
+          yield* events.publish(Event.Rejected, {
+            sessionID: existing.request.sessionID,
+            requestID: existing.request.id,
+          })
+          yield* Deferred.fail(existing.deferred, new RejectedError())
+          pending.delete(requestID)
+        }),
+      ),
+    )
 
     const list = Effect.fn("QuestionV2.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)

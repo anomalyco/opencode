@@ -4541,7 +4541,7 @@ export class Question2 extends HeyApiClient {
     parameters: {
       sessionID: string
       requestID: string
-      questionV2Reply?: QuestionV2Reply
+      questionV2Reply: QuestionV2Reply
     },
     options?: Options<never, ThrowOnError>,
   ) {

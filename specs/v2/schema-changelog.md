@@ -622,3 +622,25 @@ Compatibility:
 
 - This is an additive model-facing V2 tool contract.
 - No database migration, durable-event version, public HTTP, OpenAPI, or generated SDK change is required.
+
+## 2026-06-03: Pre-PR V2 Safety Review
+
+Affected schema:
+
+- V2 OpenAPI request bodies preserve requiredness instead of inheriting legacy optional-body normalization.
+- Existing durable tool-failure and replay-owner schemas are reused without version changes.
+
+Change:
+
+- Fence replay envelopes whose aggregate ID differs from the decoded synchronized payload and persist owner claims when replay first adopts an existing unowned aggregate.
+- Settle abandoned local and provider-executed tools durably before continuation; hosted failures preserve inline provider-executed replay.
+- Give `apply_patch` add hunks create-only semantics, make sequential commits uninterruptible after preflight, and reject malformed patch grammar eagerly.
+- Wait for initial plugin boot before materializing the `skill` built-in, discover conventional config-root skill directories, and resolve current skills again during execution.
+- Sanitize provider and model public API URLs by stripping credentials, queries, and fragments.
+- Restrict default `webfetch` destinations to globally routable literal IP URLs until hostname connections can be pinned to validated DNS results.
+- Keep V2 request bodies required in generated OpenAPI and SDK types.
+
+Compatibility:
+
+- No database migration is required.
+- Pre-launch `session.next.*` databases remain disposable experimental state rather than compatibility targets; reset experimental V2 data when upgrading across incompatible event-schema iterations.

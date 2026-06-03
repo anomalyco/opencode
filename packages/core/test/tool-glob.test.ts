@@ -53,8 +53,10 @@ const filesystem = Layer.succeed(
           resource,
           reference: input.reference,
           type: "directory",
+          dev: 1,
         })
       }),
+    revalidateRoot: Effect.succeed,
     resolveList: () => Effect.die("unused"),
     listResolved: () => Effect.die("unused"),
     listPage: () => Effect.die("unused"),

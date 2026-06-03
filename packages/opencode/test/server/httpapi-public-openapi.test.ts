@@ -16,6 +16,7 @@ type OpenApiOperation = {
     readonly schema?: { readonly type?: string }
   }>
   readonly responses?: Record<string, OpenApiResponse>
+  readonly requestBody?: { readonly required?: boolean }
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
@@ -74,6 +75,18 @@ describe("PublicApi OpenAPI v2 errors", () => {
         required: false,
         schema: { type: "string" },
       })
+    }
+  })
+
+  test("preserves required request bodies for v2 mutations", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of [
+      "/api/session/{sessionID}/prompt",
+      "/api/session/{sessionID}/permission/request/{requestID}/reply",
+      "/api/session/{sessionID}/question/request/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
   })
 

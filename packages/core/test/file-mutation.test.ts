@@ -64,6 +64,21 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("rejects create when a prospective target appears after planning", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "appeared.txt")
+        const plan = yield* (yield* LocationMutation.Service).resolve({ path: "appeared.txt" })
+        yield* Effect.promise(() => fs.writeFile(targetPath, "winner"))
+
+        expect(yield* (yield* FileMutation.Service).create({ plan, content: "replacement" }).pipe(Effect.flip)).toMatchObject({
+          _tag: "LocationMutation.RevalidationError",
+        })
+        expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("winner")
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("removes an existing internal file", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

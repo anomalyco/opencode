@@ -81,11 +81,11 @@ describe("WebFetchTool helpers", () => {
 })
 
 describe("WebFetchTool contribution", () => {
-  it.effect("registers, permits localhost HTTP, and fetches the URL without rewriting it", () =>
+  it.effect("registers and fetches a public HTTP URL without rewriting it", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service
-      const url = "http://127.0.0.1:4318/private"
+      const url = "http://1.1.1.1/public"
 
       expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["webfetch"])
       expect(yield* registry.settle(call({ url, format: "text", timeout: 4 }))).toEqual({
@@ -102,17 +102,66 @@ describe("WebFetchTool contribution", () => {
     }),
   )
 
-  it.effect("permits private and link-local HTTP targets", () =>
+  it.effect("rejects non-public and metadata targets before permission or transport", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* ToolRegistry.Service
-      const urls = ["http://10.0.0.1/private", "http://169.254.169.254/latest/meta-data"]
+      const urls = [
+        "http://127.0.0.1/loopback",
+        "http://10.0.0.1/private",
+        "http://169.254.1.1/link-local",
+        "http://169.254.169.254/latest/meta-data",
+        "http://100.100.100.200/latest/meta-data",
+        "http://224.0.0.1/multicast",
+        "http://100.64.0.1/cgnat",
+        "http://198.18.0.1/benchmark",
+        "http://240.0.0.1/reserved",
+        "http://0.0.0.0/unspecified",
+        "http://[::1]/loopback",
+        "http://[fc00::1]/private",
+        "http://[fe80::1]/link-local",
+        "http://[fec0::1]/site-local",
+        "http://[ff00::1]/multicast",
+        "http://[::127.0.0.1]/compatible-loopback",
+        "http://[::]/unspecified",
+        "http://metadata.google.internal/latest/meta-data",
+      ]
 
       for (const url of urls) {
-        expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({ type: "text", value: "hello" })
+        expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({ type: "error", value: `Unable to fetch ${url}` })
       }
-      expect(requests.map((request) => request.url)).toEqual(urls)
-      expect(assertions.map((assertion) => assertion.resources)).toEqual(urls.map((url) => [url]))
+      expect(requests).toEqual([])
+      expect(assertions).toEqual([])
+    }),
+  )
+
+  it.effect("rejects hostname URLs until validated DNS addresses can be pinned", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* ToolRegistry.Service
+      const url = "http://localhost/private"
+
+      expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({
+        type: "error",
+        value: `Unable to fetch ${url}`,
+      })
+      expect(assertions).toEqual([])
+      expect(requests).toEqual([])
+    }),
+  )
+
+  it.effect("rejects redirects to private destinations", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () => Effect.succeed(new Response("", { status: 302, headers: { location: "http://127.0.0.1/private" } }))
+      const registry = yield* ToolRegistry.Service
+      const url = "https://1.1.1.1/redirect"
+
+      expect(yield* registry.execute(call({ url, format: "text" }))).toEqual({
+        type: "error",
+        value: `Unable to fetch ${url}`,
+      })
+      expect(requests.map((request) => request.url)).toEqual([url])
     }),
   )
 
@@ -141,11 +190,11 @@ describe("WebFetchTool contribution", () => {
         )
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.execute(call({ url: "https://example.com", format: "markdown" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1", format: "markdown" }))).toEqual({
         type: "text",
         value: "# Hello\n\nworld",
       })
-      expect(yield* registry.execute(call({ url: "https://example.com", format: "text" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1", format: "text" }))).toEqual({
         type: "text",
         value: "Helloworld",
       })
@@ -166,7 +215,7 @@ describe("WebFetchTool contribution", () => {
           }),
         })
       const registry = yield* ToolRegistry.Service
-      const settled = yield* registry.settle(call({ url: "https://example.com", format: "html" }, "call-overflow"))
+      const settled = yield* registry.settle(call({ url: "https://1.1.1.1", format: "html" }, "call-overflow"))
 
       expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("tool-output://opaque") })
       expect(settled.output?.structured).toMatchObject({
@@ -187,18 +236,18 @@ describe("WebFetchTool contribution", () => {
             headers: { "content-type": "text/plain", "content-length": String(WebFetchTool.MAX_RESPONSE_BYTES + 1) },
           }),
         )
-      expect(yield* registry.execute(call({ url: "https://example.com/declared", format: "text" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1/declared", format: "text" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://example.com/declared",
+        value: "Unable to fetch https://1.1.1.1/declared",
       })
 
       respond = () =>
         Effect.succeed(
           new Response("x".repeat(WebFetchTool.MAX_RESPONSE_BYTES + 1), { headers: { "content-type": "text/plain" } }),
         )
-      expect(yield* registry.execute(call({ url: "https://example.com/streamed", format: "text" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1/streamed", format: "text" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://example.com/streamed",
+        value: "Unable to fetch https://1.1.1.1/streamed",
       })
     }),
   )
@@ -208,15 +257,15 @@ describe("WebFetchTool contribution", () => {
       reset()
       const registry = yield* ToolRegistry.Service
       respond = () => Effect.succeed(new Response("png", { headers: { "content-type": "image/png" } }))
-      expect(yield* registry.execute(call({ url: "https://example.com/image", format: "html" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://example.com/image",
+        value: "Unable to fetch https://1.1.1.1/image",
       })
 
       respond = () => Effect.succeed(new Response("pdf", { headers: { "content-type": "application/pdf" } }))
-      expect(yield* registry.execute(call({ url: "https://example.com/file", format: "html" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1/file", format: "html" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://example.com/file",
+        value: "Unable to fetch https://1.1.1.1/file",
       })
       expect(truncations).toEqual([])
     }),
@@ -234,7 +283,7 @@ describe("WebFetchTool contribution", () => {
         )
       const registry = yield* ToolRegistry.Service
 
-      expect(yield* registry.execute(call({ url: "https://example.com", format: "text" }))).toEqual({
+      expect(yield* registry.execute(call({ url: "https://1.1.1.1", format: "text" }))).toEqual({
         type: "text",
         value: "ok",
       })
@@ -250,11 +299,11 @@ describe("WebFetchTool contribution", () => {
       respond = () => Effect.never
       const registry = yield* ToolRegistry.Service
       const fiber = yield* registry
-        .execute(call({ url: "https://example.com/slow", format: "text", timeout: 1 }))
+        .execute(call({ url: "https://1.1.1.1/slow", format: "text", timeout: 1 }))
         .pipe(Effect.forkChild)
       yield* TestClock.adjust(Duration.seconds(1))
 
-      expect(yield* Fiber.join(fiber)).toEqual({ type: "error", value: "Unable to fetch https://example.com/slow" })
+      expect(yield* Fiber.join(fiber)).toEqual({ type: "error", value: "Unable to fetch https://1.1.1.1/slow" })
     }),
   )
 })

@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "../fs-util"
+import { PluginBoot } from "../plugin/boot"
 import { SkillV2 } from "../skill"
 import { ToolRegistry } from "../tool-registry"
 
@@ -62,7 +63,9 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
     const fs = yield* FSUtil.Service
+    const boot = yield* PluginBoot.Service
     const skills = yield* SkillV2.Service
+    yield* boot.wait()
     const available = yield* skills.list()
     const definition = Tool.make({
       description: description(available),
@@ -76,8 +79,9 @@ export const layer = Layer.effectDiscard(
         tool: definition,
         execute: ({ parameters, assertPermission }) =>
           Effect.gen(function* () {
-            const skill = available.find((skill) => skill.name === parameters.name)
-            if (!skill) return yield* notFound(parameters.name, available)
+            const current = yield* skills.list()
+            const skill = current.find((skill) => skill.name === parameters.name)
+            if (!skill) return yield* notFound(parameters.name, current)
             return yield* Effect.gen(function* () {
               yield* assertPermission({ action: name, resources: [skill.name], save: [skill.name] })
               const directory = path.dirname(skill.location)

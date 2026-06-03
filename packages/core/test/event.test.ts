@@ -450,6 +450,49 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("replay rejects an envelope aggregate that differs from its payload without mutating the payload aggregate", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const envelopeAggregateID = EventV2.ID.create()
+      const payloadAggregateID = EventV2.ID.create()
+      const received = new Array<EventV2.Payload>()
+      yield* events.publish(SyncMessage, { id: payloadAggregateID, text: "seed" })
+      yield* events.project(SyncMessage, (event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+
+      const exit = yield* events
+        .replay({
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID: envelopeAggregateID,
+          data: { id: payloadAggregateID, text: "replayed" },
+        })
+        .pipe(Effect.exit)
+      const rows = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, payloadAggregateID))
+        .all()
+        .pipe(Effect.orDie)
+      const sequence = yield* db
+        .select({ seq: EventSequenceTable.seq })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, payloadAggregateID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(String(exit)).toContain("Aggregate mismatch")
+      expect(received).toHaveLength(0)
+      expect(rows).toHaveLength(1)
+      expect(sequence).toEqual({ seq: 0 })
+    }),
+  )
+
   it.effect("replay defects on sequence mismatch", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -644,6 +687,81 @@ describe("EventV2", () => {
         .pipe(Effect.orDie)
 
       expect(row).toEqual({ seq: 0, ownerID: "owner-1" })
+    }),
+  )
+
+  it.effect("replay claims an existing unowned sequence before fencing a different owner", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "local" })
+
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "claimed" },
+        },
+        { ownerID: "owner-1" },
+      )
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 2,
+          aggregateID,
+          data: { id: aggregateID, text: "fenced" },
+        },
+        { ownerID: "owner-2" },
+      )
+      const rows = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, aggregateID))
+        .all()
+        .pipe(Effect.orDie)
+      const sequence = yield* db
+        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(rows.map((row) => row.seq)).toEqual([0, 1])
+      expect(sequence).toEqual({ seq: 1, ownerID: "owner-1" })
+    }),
+  )
+
+  it.effect("strict replay rejects an owner conflict instead of silently skipping it", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 0,
+          aggregateID,
+          data: { id: aggregateID, text: "claimed" },
+        },
+        { ownerID: "owner-1" },
+      )
+
+      const exit = yield* events.replay(
+        {
+          id: EventV2.ID.create(),
+          type: EventV2.versionedType(SyncMessage.type, 1),
+          seq: 1,
+          aggregateID,
+          data: { id: aggregateID, text: "conflict" },
+        },
+        { ownerID: "owner-2", strictOwner: true },
+      ).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay owner mismatch")
     }),
   )
 

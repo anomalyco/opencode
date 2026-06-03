@@ -105,6 +105,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               text: event.properties.prompt.text,
               files: event.properties.prompt.files,
               agents: event.properties.prompt.agents,
+              references: event.properties.prompt.references,
               time: { created: event.properties.timestamp },
             })
           })
@@ -244,6 +245,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               input: match.state.input,
               structured: event.properties.structured,
               content: [...event.properties.content],
+              result: event.properties.result,
             }
             match.provider = event.properties.provider
             match.time.completed = event.properties.timestamp
@@ -259,6 +261,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               input: typeof match.state.input === "string" ? {} : match.state.input,
               structured: match.state.status === "running" ? match.state.structured : {},
               content: match.state.status === "running" ? match.state.content : [],
+              result: event.properties.result,
             }
             match.provider = event.properties.provider
             match.time.completed = event.properties.timestamp
@@ -270,6 +273,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               type: "reasoning",
               id: event.properties.reasoningID,
               text: "",
+              providerMetadata: event.properties.providerMetadata,
             })
           })
           break
@@ -282,7 +286,10 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.reasoning.ended":
           update(event.properties.sessionID, (draft) => {
             const match = latestReasoning(activeAssistant(draft), event.properties.reasoningID)
-            if (match) match.text = event.properties.text
+            if (match) {
+              match.text = event.properties.text
+              if (event.properties.providerMetadata !== undefined) match.providerMetadata = event.properties.providerMetadata
+            }
           })
           break
         case "session.next.retried":

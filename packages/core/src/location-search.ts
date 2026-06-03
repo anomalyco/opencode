@@ -121,7 +121,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       files: Effect.fn("LocationSearch.files")(function* (input, approvedRoot) {
-        const root = approvedRoot ?? (yield* filesystem.resolveRoot(input))
+        const root = yield* filesystem.revalidateRoot(approvedRoot ?? (yield* filesystem.resolveRoot(input)))
         if (root.type !== "directory")
           return yield* Effect.die(new globalThis.Error("Files search path must be a directory"))
         const result = yield* ripgrep.files({
@@ -143,7 +143,7 @@ export const layer = Layer.effect(
         })
       }),
       grep: Effect.fn("LocationSearch.grep")(function* (input, approvedRoot) {
-        const root = approvedRoot ?? (yield* filesystem.resolveRoot(input))
+        const root = yield* filesystem.revalidateRoot(approvedRoot ?? (yield* filesystem.resolveRoot(input)))
         const cwd = root.type === "directory" ? root.real : path.dirname(root.real)
         const result = yield* ripgrep.grep({
           cwd,

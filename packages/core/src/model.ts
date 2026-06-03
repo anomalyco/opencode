@@ -151,8 +151,13 @@ export class PublicInfo extends Schema.Class<PublicInfo>("ModelV2.PublicInfo")({
 export function toPublic(info: Info): PublicInfo {
   const api =
     info.api.type === "aisdk"
-      ? { id: info.api.id, type: info.api.type, package: info.api.package, url: info.api.url }
-      : { id: info.api.id, type: info.api.type, url: info.api.url }
+      ? {
+          id: info.api.id,
+          type: info.api.type,
+          package: info.api.package,
+          url: ProviderV2.sanitizePublicUrl(info.api.url),
+        }
+      : { id: info.api.id, type: info.api.type, url: ProviderV2.sanitizePublicUrl(info.api.url) }
   return new PublicInfo({
     id: info.id,
     providerID: info.providerID,

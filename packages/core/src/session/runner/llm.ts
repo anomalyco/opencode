@@ -98,20 +98,20 @@ export const layer = Layer.effect(
       return yield* store.context(sessionID)
     })
 
-    const failInterruptedLocalTools = Effect.fn("SessionRunner.failInterruptedLocalTools")(function* (
+    const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
       sessionID: SessionSchema.ID,
     ) {
       for (const message of yield* getContext(sessionID)) {
         if (message.type !== "assistant") continue
         for (const tool of message.content) {
-          if (tool.type !== "tool" || tool.state.status !== "running" || tool.provider?.executed === true) continue
+          if (tool.type !== "tool" || (tool.state.status !== "pending" && tool.state.status !== "running")) continue
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID,
             timestamp: yield* DateTime.now,
             assistantMessageID: message.id,
             callID: tool.id,
             error: { type: "unknown", message: "Tool execution interrupted" },
-            provider: { executed: false },
+            provider: { executed: tool.provider?.executed === true },
           })
         }
       }
@@ -136,7 +136,7 @@ export const layer = Layer.effect(
         yield* SessionInput.promoteNextQueued(db, events, session.id)
         yield* SessionInput.promoteSteers(db, events, session.id)
       }
-      yield* failInterruptedLocalTools(session.id)
+      yield* failInterruptedTools(session.id)
       const context = yield* getContext(session.id)
       const request = LLM.request({ model, messages: toLLMMessages(context), tools: yield* tools.definitions() })
       const publisher = createLLMEventPublisher(events, {
@@ -193,7 +193,7 @@ export const layer = Layer.effect(
           }
           if (timeoutFailure) {
             yield* FiberSet.clear(toolFibers)
-            yield* withPublication(publisher.failUnsettledLocalTools("Tool execution interrupted"))
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
             yield* withPublication(
               events.publish(SessionEvent.Step.Failed, {
                 sessionID: session.id,
@@ -211,8 +211,9 @@ export const layer = Layer.effect(
             (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
           ) {
             yield* FiberSet.clear(toolFibers)
-            yield* withPublication(publisher.failUnsettledLocalTools("Tool execution interrupted"))
+            yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           }
+          if (publisher.hasProviderError()) yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           yield* events.publish(SessionEvent.Turn.Settled, {
             sessionID: session.id,
             timestamp: yield* DateTime.now,
@@ -227,7 +228,7 @@ export const layer = Layer.effect(
                   : "failed",
           })
           if (attempt._tag === "Failure") return yield* Effect.failCause(attempt.cause)
-          return needsContinuation
+          return !publisher.hasProviderError() && needsContinuation
         }),
       )
     }, Effect.scoped)

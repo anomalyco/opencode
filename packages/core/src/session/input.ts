@@ -126,7 +126,7 @@ export const equivalent = (
 ) => input.delivery === expected.delivery && matchesPrompt(input, expected)
 
 const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
-  input.sessionID === expected.sessionID && Prompt.equivalence(input.prompt, expected.prompt)
+  input.sessionID === expected.sessionID && JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
 
 export const project = Effect.fn("SessionInput.project")(function* (
   db: DatabaseService,

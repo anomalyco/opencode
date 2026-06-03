@@ -144,11 +144,11 @@ export interface Interface {
   readonly project: <D extends Definition>(definition: D, projector: Projector<D>) => Effect.Effect<void>
   readonly replay: (
     event: SerializedEvent,
-    options?: { readonly publish?: boolean; readonly ownerID?: string },
+    options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
   ) => Effect.Effect<void>
   readonly replayAll: (
     events: SerializedEvent[],
-    options?: { readonly publish?: boolean; readonly ownerID?: string },
+    options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
   ) => Effect.Effect<string | undefined>
   readonly remove: (aggregateID: string) => Effect.Effect<void>
   readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
@@ -192,7 +192,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
 
     function commitSyncEvent(
       event: Payload,
-      input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string },
+      input?: { readonly seq: number; readonly aggregateID: string; readonly ownerID?: string; readonly strictOwner?: boolean },
     ) {
       return Effect.gen(function* () {
         const definition = registry.get(event.type)
@@ -215,6 +215,14 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
               }),
             )
           } else {
+            if (input && input.aggregateID !== aggregateID) {
+              yield* Effect.die(
+                new InvalidSyncEventError({
+                  type: event.type,
+                  message: `Aggregate mismatch: expected ${input.aggregateID}, got ${aggregateID}`,
+                }),
+              )
+            }
             const list = projectors.get(event.type) ?? []
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
@@ -230,7 +238,17 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
                           .pipe(Effect.orDie)
                         const latest = row?.seq ?? -1
                         if (input && input.seq <= latest) return
-                        if (input && row?.ownerID && row.ownerID !== input.ownerID) return
+                        if (input && row?.ownerID && row.ownerID !== input.ownerID) {
+                          if (input.strictOwner) {
+                            yield* Effect.die(
+                              new InvalidSyncEventError({
+                                type: event.type,
+                                message: `Replay owner mismatch for aggregate ${aggregateID}: expected ${row.ownerID}, got ${input.ownerID ?? "none"}`,
+                              }),
+                            )
+                          }
+                          return
+                        }
                         const seq = input?.seq ?? latest + 1
                         if (input && seq !== latest + 1) {
                           yield* Effect.die(
@@ -249,7 +267,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
                           .values([{ aggregate_id: aggregateID, seq, owner_id: input?.ownerID }])
                           .onConflictDoUpdate({
                             target: EventSequenceTable.aggregate_id,
-                            set: { seq },
+                            set: { seq, ...(input?.ownerID && row?.ownerID == null ? { owner_id: input.ownerID } : {}) },
                           })
                           .run()
                           .pipe(Effect.orDie)
@@ -325,7 +343,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
       })
     }
 
-    function replay(event: SerializedEvent, options?: { readonly publish?: boolean; readonly ownerID?: string }) {
+    function replay(event: SerializedEvent, options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean }) {
       return Effect.gen(function* () {
         const definition = syncRegistry.get(event.type)
         if (!definition) {
@@ -339,7 +357,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
             version: definition.sync.version,
             data: definition.decode(event.data),
           } as Payload
-          const committed = yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID })
+          const committed = yield* commitSyncEvent(payload, { seq: event.seq, aggregateID: event.aggregateID, ownerID: options?.ownerID, strictOwner: options?.strictOwner })
           if (committed && options?.publish) {
             const published = { ...payload, seq: committed.seq }
             for (const listener of listeners) {
@@ -353,7 +371,7 @@ export const layerWith = (options?: LayerOptions) => Layer.effect(
       })
     }
 
-    function replayAll(events: SerializedEvent[], options?: { readonly publish?: boolean; readonly ownerID?: string }) {
+    function replayAll(events: SerializedEvent[], options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean }) {
       return Effect.gen(function* () {
         const source = events[0]?.aggregateID
         if (!source) return undefined

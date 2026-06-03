@@ -48,4 +48,10 @@ describe("Patch", () => {
       },
     ])
   })
+
+  test("rejects malformed hunk bodies", () => {
+    expect(() => Patch.parse("*** Begin Patch\n*** Add File: add.txt\nmissing plus\n*** End Patch")).toThrow("Invalid add file line")
+    expect(() => Patch.parse("*** Begin Patch\n*** Update File: update.txt\n*** End Patch")).toThrow("expected at least one @@ chunk")
+    expect(() => Patch.parse("*** Begin Patch\n*** Delete File: delete.txt\nunexpected body\n*** End Patch")).toThrow("Invalid patch line")
+  })
 })

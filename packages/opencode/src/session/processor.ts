@@ -594,13 +594,14 @@ export const layer = Layer.effect(
               ]
               const unsupported = content.find((item) => item.type === "file" && item.source.type !== "data")
               if (unsupported?.type === "file") {
+                const error = new Error(`Tool attachment source "${unsupported.source.type}" must be materialized before durable V2 settlement`)
                 yield* events.publish(SessionEvent.Tool.Failed, {
                   sessionID: ctx.sessionID,
                   assistantMessageID,
                   callID: value.id,
                   error: {
                     type: "unknown",
-                    message: `Tool attachment source "${unsupported.source.type}" must be materialized before durable V2 settlement`,
+                    message: error.message,
                   },
                   provider: {
                     executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
@@ -608,6 +609,8 @@ export const layer = Layer.effect(
                   },
                   timestamp: DateTime.makeUnsafe(Date.now()),
                 })
+                yield* failToolCall(value.id, error)
+                return
               } else yield* events.publish(SessionEvent.Tool.Success, {
                 sessionID: ctx.sessionID,
                 assistantMessageID,

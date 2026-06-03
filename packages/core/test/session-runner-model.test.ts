@@ -81,6 +81,33 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        new ModelV2.Info({
+          ...model({
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://compatible.example/v1",
+            settings: { apiKey: "settings-secret", compatibility: "strict" },
+          }),
+          request: { headers: {}, body: {} },
+        }),
+      )
+      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const headers = yield* resolved.route.auth.apply({
+        request,
+        method: "POST",
+        url: "https://compatible.example/v1/chat/completions",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBe("Bearer settings-secret")
+      expect(resolved.route.defaults.http?.body).toEqual({})
+    }),
+  )
+
   it.effect("applies the selected Session variant to request options", () =>
     Effect.gen(function* () {
       const catalog = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }, [

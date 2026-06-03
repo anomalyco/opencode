@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
@@ -21,6 +21,9 @@ let denyAction: string | undefined
 let failRemoveTarget: string | undefined
 let readsBeforeEditApproval = 0
 let editApproved = false
+let blockRemoveTarget: string | undefined
+let removeStarted: Deferred.Deferred<void> | undefined
+let releaseRemove: Deferred.Deferred<void> | undefined
 
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -46,6 +49,9 @@ const reset = () => {
   failRemoveTarget = undefined
   readsBeforeEditApproval = 0
   editApproved = false
+  blockRemoveTarget = undefined
+  removeStarted = undefined
+  releaseRemove = undefined
 }
 
 const filesystem = Layer.effect(
@@ -58,8 +64,12 @@ const filesystem = Layer.effect(
         Effect.sync(() => {
           if (!editApproved) readsBeforeEditApproval++
         }).pipe(Effect.andThen(fs.readFile(target))),
-      remove: (target, options) =>
-        failRemoveTarget && path.basename(target) === failRemoveTarget ? Effect.die("forced remove failure") : fs.remove(target, options),
+      remove: (target, options) => {
+        if (failRemoveTarget && path.basename(target) === failRemoveTarget) return Effect.die("forced remove failure")
+        if (blockRemoveTarget && path.basename(target) === blockRemoveTarget && removeStarted && releaseRemove)
+          return Deferred.succeed(removeStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRemove)), Effect.andThen(fs.remove(target, options)))
+        return fs.remove(target, options)
+      },
     })
   }),
 ).pipe(Layer.provide(FSUtil.defaultLayer))
@@ -202,6 +212,29 @@ describe("ApplyPatchTool", () => {
     ),
   )
 
+  it.live("rejects add hunks targeting an existing file without replacing it", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "existing.txt")
+        return Effect.promise(() => fs.writeFile(target, "sentinel\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* registry.execute(call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch")),
+                ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt" })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("sentinel\n")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("reports earlier sequential applications when a later commit fails", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -223,6 +256,35 @@ describe("ApplyPatchTool", () => {
             ),
           ),
         )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("finishes the sequential commit phase when interrupted after the first mutation", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const first = path.join(tmp.path, "first.txt")
+        const second = path.join(tmp.path, "second.txt")
+        blockRemoveTarget = path.basename(second)
+        return Effect.gen(function* () {
+          removeStarted = yield* Deferred.make<void>()
+          releaseRemove = yield* Deferred.make<void>()
+          yield* Effect.promise(() => Promise.all([fs.writeFile(first, "first"), fs.writeFile(second, "second")]))
+          yield* withTool(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const run = yield* registry.execute(call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch")).pipe(Effect.forkChild)
+              yield* Deferred.await(removeStarted!)
+              const interrupt = yield* Fiber.interrupt(run).pipe(Effect.forkChild)
+              yield* Deferred.succeed(releaseRemove!, undefined)
+              yield* Fiber.join(interrupt)
+              expect(yield* exists(first)).toBe(false)
+              expect(yield* exists(second)).toBe(false)
+            }),
+          )
+        })
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

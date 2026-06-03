@@ -316,8 +316,20 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    yield* events.project(SessionEvent.AgentSwitched, (event) => run(db, event))
-    yield* events.project(SessionEvent.ModelSwitched, (event) => run(db, event))
+    yield* events.project(SessionEvent.AgentSwitched, (event) =>
+      db.update(SessionTable)
+        .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+    )
+    yield* events.project(SessionEvent.ModelSwitched, (event) =>
+      db.update(SessionTable)
+        .set({ model: event.data.model, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+    )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
         const existing = yield* db

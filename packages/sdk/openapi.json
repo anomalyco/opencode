@@ -8631,7 +8631,8 @@
                 "additionalProperties": false
               }
             }
-          }
+          },
+          "required": true
         },
         "x-codeSamples": [
           {
@@ -9525,7 +9526,8 @@
                 "additionalProperties": false
               }
             }
-          }
+          },
+          "required": true
         },
         "x-codeSamples": [
           {
@@ -9970,7 +9972,8 @@
                 "$ref": "#/components/schemas/QuestionV2Reply"
               }
             }
-          }
+          },
+          "required": true
         },
         "x-codeSamples": [
           {
@@ -12212,7 +12215,7 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "integer",
+                "type": "number",
                 "minimum": 0
               }
             },

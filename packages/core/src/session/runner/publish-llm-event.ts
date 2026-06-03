@@ -162,9 +162,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* flushFragments()
   })
 
-  const failUnsettledLocalTools = Effect.fn("SessionRunner.failUnsettledLocalTools")(function* (message: string) {
+  const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(function* (message: string) {
     for (const [callID, tool] of tools) {
-      if (!tool.called || tool.settled || tool.providerExecuted) continue
+      if (tool.settled) continue
       tool.settled = true
       yield* events.publish(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,
@@ -172,7 +172,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         assistantMessageID: tool.assistantMessageID,
         callID,
         error: { type: "unknown", message },
-        provider: { executed: false },
+        provider: { executed: tool.providerExecuted },
       })
     }
   })
@@ -344,5 +344,5 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  return { publish, flush, failUnsettledLocalTools, hasProviderError: () => providerFailed, startAssistant }
+  return { publish, flush, failUnsettledTools, hasProviderError: () => providerFailed, startAssistant }
 }

@@ -26,14 +26,13 @@ function provide(directory: string, projectReferences = inertReferences) {
     Layer.succeed(ProjectReference.Service, projectReferences),
   )
   const filesystem = FileSystem.layer.pipe(Layer.provide(dependencies))
-  return Effect.provide(
-    LocationSearch.layer.pipe(
+  const search = LocationSearch.layer.pipe(
       Layer.provide(filesystem),
       Layer.provide(Ripgrep.layer.pipe(Layer.provide(dependencies))),
       Layer.provide(FSUtil.defaultLayer),
       Layer.provide(dependencies),
-    ),
-  )
+    )
+  return Effect.provide(Layer.merge(filesystem, search))
 }
 
 function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
@@ -221,6 +220,30 @@ describe("LocationSearch", () => {
         expect(
           Exit.isFailure(yield* search.files({ pattern: "*", path: RelativePath.make("escape") }).pipe(Effect.exit)),
         ).toBe(true)
+        yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("rejects an approved root swapped to a symlink before ripgrep traversal", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const source = path.join(directory, "src")
+        const outside = `${directory}-outside`
+        yield* Effect.promise(async () => {
+          await fs.mkdir(source)
+          await fs.mkdir(outside)
+          await fs.writeFile(path.join(outside, "secret.txt"), "secret\n")
+        })
+        const filesystem = yield* FileSystem.Service
+        const approved = yield* filesystem.resolveRoot({ path: RelativePath.make("src") })
+        yield* Effect.promise(async () => {
+          await fs.rmdir(source)
+          await fs.symlink(outside, source)
+        })
+
+        expect(Exit.isFailure(yield* (yield* LocationSearch.Service).files({ pattern: "*" }, approved).pipe(Effect.exit))).toBe(true)
         yield* Effect.promise(() => fs.rm(outside, { recursive: true, force: true }))
       }).pipe(provide(directory)),
     ),

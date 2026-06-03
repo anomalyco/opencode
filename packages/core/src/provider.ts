@@ -122,12 +122,22 @@ export class PublicInfo extends Schema.Class<PublicInfo>("ProviderV2.PublicInfo"
   api: PublicApi,
 }) {}
 
+export function sanitizePublicUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function toPublic(info: Info): PublicInfo {
   const enabled = info.enabled === false || info.enabled.via !== "custom" ? info.enabled : { via: "custom" as const }
   const api =
     info.api.type === "aisdk"
-      ? { type: info.api.type, package: info.api.package, url: info.api.url }
-      : { type: info.api.type, url: info.api.url }
+      ? { type: info.api.type, package: info.api.package, url: sanitizePublicUrl(info.api.url) }
+      : { type: info.api.type, url: sanitizePublicUrl(info.api.url) }
   return new PublicInfo({
     id: info.id,
     name: info.name,

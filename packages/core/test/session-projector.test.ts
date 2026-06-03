@@ -222,6 +222,11 @@ describe("SessionProjector", () => {
         summary: "summary",
         include: "msg-1",
       })
+      expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)).toMatchObject({
+        agent: "build",
+        model,
+        time_updated: DateTime.toEpochMillis(created),
+      })
     }),
   )
 
