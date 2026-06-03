@@ -9,13 +9,14 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { AppFileSystem } from "../src/filesystem"
+import { FSUtil } from "../src/fs-util"
 import { Auth } from "../src/auth"
 import { EventV2 } from "../src/event"
 import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
+import { ProjectReference } from "../src/project-reference"
 
 const it = testEffect(
   LocationServiceMap.layer.pipe(
@@ -26,7 +27,7 @@ const it = testEffect(
         Auth.defaultLayer,
         Npm.defaultLayer,
         ModelsDev.defaultLayer,
-        AppFileSystem.defaultLayer,
+        FSUtil.defaultLayer,
         Global.defaultLayer,
       ),
     ),
@@ -53,6 +54,7 @@ describe("LocationServiceMap", () => {
           const update = (directory: string) =>
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
+              yield* ProjectReference.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))

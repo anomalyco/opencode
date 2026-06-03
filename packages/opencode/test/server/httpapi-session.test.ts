@@ -444,16 +444,26 @@ describe("session HttpApi", () => {
         yield* insertLegacyAssistantMessage(session.id, 1)
         yield* insertLegacyAssistantMessage(session.id, 2)
 
-        const sessionPage = yield* request(`/api/session?limit=1`, { headers })
+        const sessionPage = yield* request(
+          `/api/session?${new URLSearchParams({
+            limit: "1",
+            order: "asc",
+            directory: test.directory,
+            search: "v2",
+          })}`,
+          { headers },
+        )
         const sessionCursor = (yield* json<{ cursor: { next?: string } }>(sessionPage)).cursor.next
         expect(sessionCursor).toBeTruthy()
-
-        const cursorWithFilter = yield* request(`/api/session?cursor=${sessionCursor}&search=v2`, { headers })
-        expect(cursorWithFilter.status).toBe(400)
-        expect(yield* responseJson(cursorWithFilter)).toMatchObject({
-          _tag: "InvalidCursorError",
-          message: "Cursor cannot be combined with order or filters",
+        expect(JSON.parse(Buffer.from(sessionCursor!, "base64url").toString("utf8"))).toMatchObject({
+          order: "asc",
+          directory: test.directory,
+          search: "v2",
+          anchor: { id: session.id, direction: "next" },
         })
+
+        const sessionNextPage = yield* request(`/api/session?cursor=${sessionCursor}`, { headers })
+        expect(sessionNextPage.status).toBe(200)
 
         const invalidSessionCursor = yield* request(`/api/session?cursor=invalid`, { headers })
         expect(invalidSessionCursor.status).toBe(400)
@@ -462,21 +472,11 @@ describe("session HttpApi", () => {
           message: "Invalid cursor",
         })
 
-        const mismatchedRouting = yield* request(`/api/session?cursor=${sessionCursor}&directory=/elsewhere`, {
-          headers,
-        })
-        expect(mismatchedRouting.status).toBe(400)
-        expect(yield* responseJson(mismatchedRouting)).toMatchObject({
-          _tag: "InvalidCursorError",
-          message: "Cursor does not match requested directory or workspace",
-        })
-
         const invalidWorkspace = yield* request(`/api/session?workspace=bad`, { headers })
         expect(invalidWorkspace.status).toBe(400)
         expect(yield* responseJson(invalidWorkspace)).toMatchObject({
           _tag: "InvalidRequestError",
-          message: "Invalid workspace query parameter",
-          field: "workspace",
+          kind: "Query",
         })
 
         const messagePage = yield* request(`/api/session/${session.id}/message?limit=1`, { headers })

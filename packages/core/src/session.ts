@@ -15,7 +15,8 @@ import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
-import { AbsolutePath, RelativePath } from "./schema"
+import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
+import { AgentV2 } from "./agent"
 
 // get project -> project.locations
 //
@@ -26,35 +27,35 @@ import { AbsolutePath, RelativePath } from "./schema"
 //   - by subpath
 // - by workspace (home is special)
 
-export const ListCursor = Schema.Struct({
+export const ListAnchor = Schema.Struct({
   id: SessionSchema.ID,
   time: Schema.Finite,
   direction: Schema.Literals(["previous", "next"]),
 })
-export type ListCursor = typeof ListCursor.Type
+export type ListAnchor = typeof ListAnchor.Type
 
 const ListInputBase = {
   workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
-  limit: Schema.Int.pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
-  cursor: ListCursor.pipe(Schema.optional),
+  anchor: ListAnchor.pipe(Schema.optional),
 }
 
-export const ListInput = Schema.Union([
-  Schema.Struct({
-    ...ListInputBase,
-  }),
-  Schema.Struct({
-    ...ListInputBase,
-    directory: AbsolutePath,
-  }),
-  Schema.Struct({
-    ...ListInputBase,
-    project: ProjectV2.ID,
-    subpath: RelativePath.pipe(Schema.optional),
-  }),
-])
+const ListDirectoryInput = Schema.Struct({
+  ...ListInputBase,
+  directory: AbsolutePath,
+})
+
+const ListProjectInput = Schema.Struct({
+  ...ListInputBase,
+  project: ProjectV2.ID,
+  subpath: RelativePath.pipe(Schema.optional),
+})
+
+const ListAllInput = Schema.Struct(ListInputBase)
+
+export const ListInput = Schema.Union([ListDirectoryInput, ListProjectInput, ListAllInput])
 export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
@@ -141,14 +142,12 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
 function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
-  return new SessionSchema.Info({
+  return SessionSchema.Info.make({
     id: SessionSchema.ID.make(row.id),
     projectID: ProjectV2.ID.make(row.project_id),
-    workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
-    path: row.path ?? "",
-    agent: row.agent ?? undefined,
+    agent: row.agent ? AgentV2.ID.make(row.agent) : undefined,
     model: row.model
       ? {
           id: ModelV2.ID.make(row.model.id),
@@ -166,6 +165,11 @@ function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
         write: row.tokens_cache_write,
       },
     },
+    location: Location.Ref.make({
+      directory: AbsolutePath.make(row.directory),
+      workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
+    }),
+    subpath: row.path ? RelativePath.make(row.path) : undefined,
     time: {
       created: DateTime.makeUnsafe(row.time_created),
       updated: DateTime.makeUnsafe(row.time_updated),
@@ -201,25 +205,25 @@ export const layer = Layer.effect(
         return fromRow(row)
       }),
       list: Effect.fn("V2Session.list")(function* (input = {}) {
-        const direction = input.cursor?.direction ?? "next"
+        const direction = input.anchor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const sortColumn = SessionTable.time_updated
+        const sortColumn = SessionTable.time_created
         const conditions: SQL[] = []
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
-        if (input.cursor) {
+        if (input.anchor) {
           conditions.push(
             order === "asc"
               ? or(
-                  gt(sortColumn, input.cursor.time),
-                  and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
+                  gt(sortColumn, input.anchor.time),
+                  and(eq(sortColumn, input.anchor.time), gt(SessionTable.id, input.anchor.id)),
                 )!
               : or(
-                  lt(sortColumn, input.cursor.time),
-                  and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
+                  lt(sortColumn, input.anchor.time),
+                  and(eq(sortColumn, input.anchor.time), lt(SessionTable.id, input.anchor.id)),
                 )!,
           )
         }

@@ -56,6 +56,7 @@ beforeAll(async () => {
           return options().queryKey?.[1] === "path"
         },
         get data() {
+          if (options().queryKey?.[1] === "path") throw new Error("pending path data read")
           if (options().queryKey?.[1] === "mcp") return options().enabled ? { demo: { status: "disabled" } } : undefined
           if (options().queryKey?.[1] === "lsp") return []
           if (options().queryKey?.[1] === "providers") return provider

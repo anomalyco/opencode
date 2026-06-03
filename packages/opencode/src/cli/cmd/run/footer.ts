@@ -739,7 +739,11 @@ export class RunFooter implements FooterApi {
       return
     }
 
+    const previous = this.currentModel()
     this.setCurrentModel(model)
+    if (!previous || previous.providerID !== model.providerID || previous.modelID !== model.modelID) {
+      this.setCurrentVariant(undefined)
+    }
     void Promise.resolve()
       .then(() => this.options.onModelSelect?.(model))
       .then((result) => {
