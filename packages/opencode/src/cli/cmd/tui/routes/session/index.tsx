@@ -61,6 +61,7 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
+import { DialogCopyMessage } from "./dialog-copy-message"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
@@ -862,45 +863,13 @@ export function Session() {
       run: () => scrollToMessage("prev", dialog),
     },
     {
-      title: "Copy last assistant message",
+      title: "Copy message",
       value: "messages.copy",
       category: "Session",
       run: () => {
-        const revertID = session()?.revert?.messageID
-        const lastAssistantMessage = messages().findLast(
-          (msg) => msg.role === "assistant" && (!revertID || msg.id < revertID),
-        )
-        if (!lastAssistantMessage) {
-          toast.show({ message: "No assistant messages found", variant: "error" })
-          dialog.clear()
-          return
-        }
-
-        const parts = sync.data.part[lastAssistantMessage.id] ?? []
-        const textParts = parts.filter((part) => part.type === "text")
-        if (textParts.length === 0) {
-          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
-          dialog.clear()
-          return
-        }
-
-        const text = textParts
-          .map((part) => part.text)
-          .join("\n")
-          .trim()
-        if (!text) {
-          toast.show({
-            message: "No text content found in last assistant message",
-            variant: "error",
-          })
-          dialog.clear()
-          return
-        }
-
-        Clipboard.copy(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
-        dialog.clear()
+        dialog.replace(() => (
+          <DialogCopyMessage sessionID={route.sessionID} revertID={session()?.revert?.messageID} />
+        ))
       },
     },
     {
