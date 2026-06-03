@@ -15,6 +15,7 @@ describe("acp tool conversion", () => {
     expect(toToolKind("shell")).toBe("execute")
     expect(toToolKind("webfetch")).toBe("fetch")
     expect(toToolKind("edit")).toBe("edit")
+    expect(toToolKind("apply_patch")).toBe("edit")
     expect(toToolKind("patch")).toBe("edit")
     expect(toToolKind("write")).toBe("edit")
     expect(toToolKind("grep")).toBe("search")
