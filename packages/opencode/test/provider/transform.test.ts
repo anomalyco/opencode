@@ -3635,16 +3635,18 @@ describe("ProviderTransform.variants", () => {
       }
     }
 
-    test("anthropic sonnet 4 returns budget_tokens variants under modelParams", () => {
-      const result = ProviderTransform.variants(sapModel("anthropic--claude-sonnet-4"))
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        modelParams: { thinking: { type: "enabled", budget_tokens: 16000 } },
+    for (const apiId of ["anthropic--claude-sonnet-4", "anthropic--claude-4.5-opus"]) {
+      test(`${apiId} returns budget_tokens variants under modelParams`, () => {
+        const result = ProviderTransform.variants(sapModel(apiId))
+        expect(Object.keys(result)).toEqual(["high", "max"])
+        expect(result.high).toEqual({
+          modelParams: { thinking: { type: "enabled", budget_tokens: 16000 } },
+        })
+        expect(result.max).toEqual({
+          modelParams: { thinking: { type: "enabled", budget_tokens: 31999 } },
+        })
       })
-      expect(result.max).toEqual({
-        modelParams: { thinking: { type: "enabled", budget_tokens: 31999 } },
-      })
-    })
+    }
 
     for (const testCase of [
       { apiId: "gemini-2.5-pro", maxBudget: 32768 },

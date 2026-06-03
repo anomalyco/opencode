@@ -1017,7 +1017,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           max: { thinking: { type: "enabled", budget_tokens: 31999 } },
         })
       }
-      if (model.api.id.includes("gemini") && model.api.id.toLowerCase().includes("2.5")) {
+      if (model.api.id.includes("gemini") && model.api.id.includes("2.5")) {
         return wrapInSapModelParams(googleThinkingVariants(model))
       }
       if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id)) {
