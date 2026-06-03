@@ -98,12 +98,14 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
 }
 
 export function completedToolContent(toolName: string, state: CompletedToolState): ToolCallContent[] {
+  const text =
+    toolName.toLocaleLowerCase() === "read" ? (readDisplayText(state.metadata) ?? state.output) : state.output
   const content: ToolCallContent[] = [
     {
       type: "content",
       content: {
         type: "text",
-        text: state.output,
+        text,
       },
     },
   ]
@@ -286,6 +288,18 @@ function diffContent(input: ToolInput): ToolCallContent[] {
       newText,
     },
   ]
+}
+
+function readDisplayText(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return undefined
+  const display = (metadata as Record<string, unknown>).display
+  if (!display || typeof display !== "object") return undefined
+  const info = display as Record<string, unknown>
+  if (info.type === "file") return stringValue(info.text)
+  if (info.type === "directory" && Array.isArray(info.entries)) {
+    return info.entries.filter((item): item is string => typeof item === "string").join("\n")
+  }
+  return undefined
 }
 
 function dataUrlImage(attachment: ToolAttachment) {
