@@ -78,6 +78,9 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
     case "write":
       return locationFrom(input.filePath ?? input.filepath)
 
+    case "external_directory":
+      return locationFrom(input.filePath ?? input.filepath, input.parentDir, input.directories)
+
     case "grep":
     case "glob":
     case "context":
@@ -255,9 +258,19 @@ export const buildDuplicateRunningToolUpdate = duplicateRunningToolUpdate
 export const buildCompletedToolUpdate = completedToolUpdate
 export const buildErrorToolUpdate = errorToolUpdate
 
-function locationFrom(value: unknown): ToolCallLocation[] {
-  const path = stringValue(value)
-  return path ? [{ path }] : []
+function locationFrom(...values: unknown[]): ToolCallLocation[] {
+  return Array.from(
+    new Set(
+      values.flatMap((value): string[] => {
+        if (Array.isArray(value)) {
+          return value.filter((item): item is string => typeof item === "string" && item.length > 0)
+        }
+        const path = stringValue(value)
+        return path ? [path] : []
+      }),
+    ),
+    (path) => ({ path }),
+  )
 }
 
 function diffContent(input: ToolInput): ToolCallContent[] {
