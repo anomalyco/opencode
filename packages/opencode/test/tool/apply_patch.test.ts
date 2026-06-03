@@ -4,7 +4,7 @@ import * as fs from "fs/promises"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { LSP } from "@/lsp/lsp"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -16,7 +16,7 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(
   Layer.mergeAll(
     LSP.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     Format.defaultLayer,
     EventV2Bridge.defaultLayer,
     Truncate.defaultLayer,

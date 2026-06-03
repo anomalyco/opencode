@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Layer } from "effect"
 import path from "path"
 import * as Log from "@opencode-ai/core/util/log"
@@ -18,7 +18,7 @@ const testStateLayer = Layer.effectDiscard(
   ),
 )
 
-const it = testEffect(Layer.mergeAll(testStateLayer, AppFileSystem.defaultLayer, httpApiLayer))
+const it = testEffect(Layer.mergeAll(testStateLayer, FSUtil.defaultLayer, httpApiLayer))
 const projectOptions = { config: { formatter: false, lsp: false } }
 const providerID = "test-oauth-parity"
 const oauthURL = "https://example.com/oauth"
@@ -107,7 +107,7 @@ function requestCallback(input: { providerID: string; method: number; headers: H
 
 function writeProviderAuthPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
 
     yield* fs.writeWithDirs(
@@ -142,7 +142,7 @@ function writeProviderAuthPlugin(dir: string) {
 
 function writeProviderAuthValidationPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
 
     yield* fs.writeWithDirs(
@@ -184,7 +184,7 @@ function writeProviderAuthValidationPlugin(dir: string) {
 
 function writeFunctionOptionsPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
 
     yield* fs.writeWithDirs(
@@ -216,7 +216,7 @@ function writeFunctionOptionsPlugin(dir: string) {
 
 function writeProviderModelsMutationPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
 
     yield* fs.writeWithDirs(
