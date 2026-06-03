@@ -59,6 +59,7 @@ Die aktuelle Liste der Modelle umfasst:
 - **MiMo-V2.5-Pro**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
+- **MiniMax M3**
 - **Qwen3.6 Plus**
 - **Qwen3.7 Max**
 - **DeepSeek V4 Pro**
@@ -88,6 +89,7 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 | Kimi K2.6         | 1,150                  | 2,880              | 5,750              |
 | MiMo-V2.5         | 30,100                 | 75,200             | 150,400            |
 | MiMo-V2.5-Pro     | 3,250                  | 8,150              | 16,300             |
+| MiniMax M3        | 1,400                  | 3,500              | 7,000              |
 | MiniMax M2.7      | 3,400                  | 8,500              | 17,000             |
 | MiniMax M2.5      | 6,300                  | 15,900             | 31,800             |
 | Qwen3.7 Max       | 950                    | 2,390              | 4,770              |
@@ -101,6 +103,7 @@ Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
 - Kimi K2.5/K2.6 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
 - DeepSeek V4 Pro — 750 Input-, 82.000 Cached-, 290 Output-Tokens pro Anfrage
 - DeepSeek V4 Flash — 790 Input-, 68.000 Cached-, 280 Output-Tokens pro Anfrage
+- MiniMax M3 — 810 Input-, 62.000 Cached-, 225 Output-Tokens pro Anfrage
 - MiniMax M2.7/M2.5 — 300 Input-, 55.000 Cached-, 125 Output-Tokens pro Anfrage
 - Qwen3.7 Max — 420 Input-, 66.000 Cached-, 200 Output-Tokens pro Anfrage
 - Qwen3.6 Plus — 500 Input-, 57.000 Cached-, 190 Output-Tokens pro Anfrage
@@ -117,6 +120,7 @@ Die Schätzungen basieren außerdem auf den folgenden Preisen pro 1M Tokens:
 | Kimi K2.5         | $0.60 | $3.00  | $0.10       | -            |
 | MiMo V2.5         | $0.14 | $0.28  | $0.0028     | -            |
 | MiMo V2.5 Pro     | $1.74 | $3.48  | $0.0145     | -            |
+| MiniMax M3        | $0.60 | $2.40  | $0.12       | $0.75        |
 | MiniMax M2.7      | $0.30 | $1.20  | $0.06       | $0.375       |
 | MiniMax M2.5      | $0.30 | $1.20  | $0.06       | $0.375       |
 | Qwen3.7 Max       | $2.50 | $7.50  | $0.50       | $3.125       |
@@ -154,6 +158,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |

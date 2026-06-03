@@ -22,6 +22,10 @@ export const migrations = (
     import("./migration/20260507164347_add_workspace_time"),
     import("./migration/20260510033149_session_usage"),
     import("./migration/20260511000411_data_migration_state"),
-    import("./migration/20260530232709_lovely_romulus"),
+    import("./migration/20260511173437_session-metadata"),
+    import("./migration/20260601010001_normalize_storage_paths"),
+    import("./migration/20260601202201_amazing_prowler"),
+    import("./migration/20260602002951_lowly_union_jack"),
+    import("./migration/20260602182828_add_project_directories"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

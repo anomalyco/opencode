@@ -3,7 +3,7 @@ export * as Config from "./config"
 import path from "path"
 import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { Location } from "./location"
 import { PermissionV2 } from "./permission"
@@ -21,6 +21,8 @@ import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
 import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
+import { ConfigV1 } from "./v1/config/config"
+import { ConfigMigrateV1 } from "./v1/config/migrate"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -127,7 +129,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
@@ -141,10 +143,21 @@ export const layer = Layer.effect(
       const input: unknown = parse(text, errors, { allowTrailingComma: true })
       if (errors.length) return
 
-      // Accept legacy fields while v2 is migrated incrementally; recognized
-      // fields still have to satisfy the v2 schema.
+      const decoded = ConfigMigrateV1.isV1(input)
+        ? Option.map(
+            Schema.decodeUnknownOption(ConfigV1.Info)(input, {
+              errors: "all",
+              onExcessProperty: "ignore",
+              propertyOrder: "original",
+            }),
+            ConfigMigrateV1.migrate,
+          )
+        : Option.some(input)
       const info = Option.getOrUndefined(
-        Schema.decodeUnknownOption(Info)(input, { errors: "all", onExcessProperty: "ignore" }),
+        Option.flatMap(
+          decoded,
+          Schema.decodeUnknownOption(Info, { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" }),
+        ),
       )
       if (!info) return
       return new Loaded({ source: { type: "file", path: filepath }, info })
