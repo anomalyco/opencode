@@ -30,12 +30,16 @@ describe("tui sync", () => {
       expect(kv.get("session_directory_filter_enabled", true)).toBe(true)
       expect(session.at(-1)?.searchParams.get("scope")).toBeNull()
       expect(session.at(-1)?.searchParams.get("path")).toBe("packages/opencode")
+      expect(session.at(-1)?.searchParams.get("roots")).toBe("true")
+      expect(sync.session.query().roots).toBe(true)
 
       kv.set("session_directory_filter_enabled", false)
       await sync.session.refresh()
 
       expect(session.at(-1)?.searchParams.get("scope")).toBe("project")
       expect(session.at(-1)?.searchParams.get("path")).toBeNull()
+      expect(session.at(-1)?.searchParams.get("roots")).toBe("true")
+      expect(sync.session.query().roots).toBe(true)
     } finally {
       app.renderer.destroy()
       Global.Path.state = previous
