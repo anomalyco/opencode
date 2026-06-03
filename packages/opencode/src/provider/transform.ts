@@ -315,6 +315,29 @@ function normalizeMessages(
     })
   }
 
+  if (model.providerID === "cloudflare-workers-ai") {
+    const hasMixedContent = msgs.some((msg) => Array.isArray(msg.content)) && msgs.some((msg) => typeof msg.content === "string")
+    if (hasMixedContent) {
+      const canFlattenToString = msgs.every((msg) => {
+        if (typeof msg.content === "string") return msg.role !== "tool"
+        if (msg.role === "tool") return false
+        if (msg.content.length === 0) return false
+        return msg.content.every((part) => part.type === "text")
+      })
+      if (canFlattenToString) {
+        msgs = msgs.map((msg) => {
+          if (typeof msg.content === "string" || msg.role === "tool") return msg
+          const textParts = msg.content.filter((part): part is { type: "text"; text: string } => part.type === "text")
+          if (textParts.length !== msg.content.length) return msg
+          return {
+            ...msg,
+            content: textParts.map((part) => part.text).join("\n"),
+          }
+        })
+      }
+    }
+  }
+
   return msgs
 }
 
