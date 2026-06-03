@@ -395,6 +395,52 @@ describe("session HttpApi", () => {
     { git: true, config: { formatter: false, lsp: false } },
   )
 
+  it.instance(
+    "backfills legacy-only messages before serving v2 message reads",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "legacy transcript" })
+        yield* createTextMessage(session.id, "hello")
+        yield* createTextMessage(session.id, "world")
+
+        const { db } = yield* Database.Service
+        expect(
+          yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(eq(SessionMessageTable.session_id, session.id))
+            .all()
+            .pipe(Effect.orDie),
+        ).toHaveLength(0)
+
+        const page = yield* requestJson<{ items: SessionMessage.Message[] }>(
+          `/api/session/${session.id}/message?order=asc`,
+          { headers },
+        )
+
+        expect(page.items).toMatchObject([
+          { type: "user", text: "hello" },
+          { type: "user", text: "world" },
+        ])
+        expect(page.items.map((item) => item.id)).toEqual([
+          expect.stringMatching(/^evt_legacy_backfill_m_/),
+          expect.stringMatching(/^evt_legacy_backfill_m_/),
+        ])
+        expect(JSON.stringify(page)).not.toMatch(/(?:msg_|prt_)/)
+        expect(
+          yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(eq(SessionMessageTable.session_id, session.id))
+            .all()
+            .pipe(Effect.orDie),
+        ).toHaveLength(2)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
   it.live("uses the persisted session directory for prompt requests", () =>
     Effect.gen(function* () {
       const llm = yield* TestLLMServer
