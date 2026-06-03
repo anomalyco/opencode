@@ -8,6 +8,7 @@
   "scripts": {
     "db": "bun drizzle-kit",
     "migration": "bun run script/migration.ts",
+    "fix-node-pty": "bun run script/fix-node-pty.ts",
     "test": "bun test",
     "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "typecheck": "tsgo --noEmit"
@@ -23,6 +24,11 @@
       "bun": "./src/database/sqlite.bun.ts",
       "node": "./src/database/sqlite.node.ts",
       "default": "./src/database/sqlite.bun.ts"
+    },
+    "#pty": {
+      "bun": "./src/pty/pty.bun.ts",
+      "node": "./src/pty/pty.node.ts",
+      "default": "./src/pty/pty.bun.ts"
     }
   },
   "devDependencies": {
@@ -69,6 +75,7 @@
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
+    "@lydell/node-pty": "catalog:",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
@@ -80,6 +87,7 @@
     "@parcel/watcher": "2.5.1",
     "@openrouter/ai-sdk-provider": "2.8.1",
     "ai-gateway-provider": "3.1.2",
+    "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
