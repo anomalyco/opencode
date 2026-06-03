@@ -73,6 +73,7 @@ type ToolCall = {
   sessionID: SessionV1.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
   inputEnded: boolean
+  raw: string
 }
 
 interface ProcessorContext extends Input {
@@ -309,6 +310,7 @@ export const layer = Layer.effect(
           messageID: part.messageID,
           sessionID: part.sessionID,
           inputEnded: false,
+          raw: "",
         }
         return { call: ctx.toolcalls[input.id], part }
       })
@@ -365,6 +367,14 @@ export const layer = Layer.effect(
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Reasoning.Delta, {
+                sessionID: ctx.sessionID,
+                reasoningID: value.id,
+                delta: value.text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
@@ -389,8 +399,20 @@ export const layer = Layer.effect(
             return
 
           case "tool-input-delta":
-            // AI SDK emits a final `tool-call` with the parsed `input`; accumulating
-            // delta fragments into `state.raw` is redundant work for no current consumer.
+            {
+              const toolCall = yield* ensureToolCall(value)
+              const assistantMessageID = flags.experimentalEventSystem ? yield* requireV2AssistantMessage(toolCall.call) : undefined
+              if (assistantMessageID) {
+                yield* events.publish(SessionEvent.Tool.Input.Delta, {
+                  sessionID: ctx.sessionID,
+                  assistantMessageID,
+                  callID: value.id,
+                  delta: value.text,
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+              }
+              ctx.toolcalls[value.id] = { ...toolCall.call, raw: toolCall.call.raw + value.text }
+            }
             return
 
           case "tool-input-end": {
@@ -402,7 +424,7 @@ export const layer = Layer.effect(
                 sessionID: ctx.sessionID,
                 assistantMessageID,
                 callID: value.id,
-                text: "",
+                text: toolCall.call.raw,
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
@@ -424,7 +446,7 @@ export const layer = Layer.effect(
                   sessionID: ctx.sessionID,
                   assistantMessageID,
                   callID: value.id,
-                  text: "",
+                  text: toolCall.call.raw,
                   timestamp: DateTime.makeUnsafe(Date.now()),
                 })
               }
@@ -519,18 +541,33 @@ export const layer = Layer.effect(
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
               const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
-              yield* events.publish(SessionEvent.Tool.Success, {
+              const content = [
+                ToolOutput.text({ type: "text", text: output.output }),
+                ...(output.attachments?.map((item: SessionV1.FilePart) =>
+                  ToolOutput.file({ type: "file", source: toolFileSourceFromUri(item.url), mime: item.mime, name: item.filename }),
+                ) ?? []),
+              ]
+              const unsupported = content.find((item) => item.type === "file" && item.source.type !== "data")
+              if (unsupported?.type === "file") {
+                yield* events.publish(SessionEvent.Tool.Failed, {
+                  sessionID: ctx.sessionID,
+                  assistantMessageID,
+                  callID: value.id,
+                  error: {
+                    type: "unknown",
+                    message: `Tool attachment source "${unsupported.source.type}" must be materialized before durable V2 settlement`,
+                  },
+                  provider: {
+                    executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                  },
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+              } else yield* events.publish(SessionEvent.Tool.Success, {
                 sessionID: ctx.sessionID,
                 assistantMessageID,
                 callID: value.id,
                 structured: output.metadata,
-                content: [
-                  ToolOutput.text({ type: "text", text: output.output }),
-                  ...(output.attachments?.map(
-                    (item: SessionV1.FilePart) =>
-                      ToolOutput.file({ type: "file", source: toolFileSourceFromUri(item.url), mime: item.mime, name: item.filename }),
-                  ) ?? []),
-                ],
+                content,
                 provider: {
                   executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
                 },
@@ -677,6 +714,14 @@ export const layer = Layer.effect(
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Text.Delta, {
+                sessionID: ctx.sessionID,
+                textID: value.id,
+                delta: value.text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* session.updatePartDelta({
               sessionID: ctx.currentText.sessionID,
               messageID: ctx.currentText.messageID,

@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LLM } from "@opencode-ai/llm"
+import { LLMClient } from "@opencode-ai/llm/route"
 import { ConfigProvider, DateTime, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -62,9 +63,21 @@ describe("SessionRunnerModel", () => {
         defaults: {
           headers: { "x-test": "header" },
           limits: { context: 100, output: 20 },
-          http: { body: { store: false, apiKey: "secret" } },
+          http: { body: { store: false } },
         },
       })
+    }),
+  )
+
+  it.effect("keeps catalog apiKey credentials out of provider JSON", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+      )
+      const prepared = yield* LLMClient.prepare(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(JSON.stringify(prepared.body)).not.toContain("apiKey")
+      expect(JSON.stringify(prepared.body)).not.toContain("secret")
     }),
   )
 
@@ -96,7 +109,7 @@ describe("SessionRunnerModel", () => {
 
       expect(resolved.route.defaults).toMatchObject({
         headers: { "x-test": "header", "x-variant": "high" },
-        http: { body: { store: false, apiKey: "secret", reasoningEffort: "high" } },
+        http: { body: { store: false, reasoningEffort: "high" } },
       })
     }),
   )

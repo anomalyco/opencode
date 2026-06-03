@@ -13,6 +13,8 @@ import { NonNegativeInt, PositiveInt } from "./schema"
  */
 
 const ERROR_BYTES = 8 * 1024
+export const MAX_RECORD_BYTES = 64 * 1024
+export const MAX_SUBMATCHES = 100
 
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
@@ -156,14 +158,16 @@ export const layer = Layer.effect(
             input.file ?? ".",
           ],
           parse: (line) =>
-            Effect.try({
-              try: () => JSON.parse(line) as unknown,
-              catch: (cause) => failure("Invalid ripgrep JSON output", cause),
-            }).pipe(
+            (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
+              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
+              : Effect.try({
+                  try: () => JSON.parse(line) as unknown,
+                  catch: (cause) => failure("Invalid ripgrep JSON output", cause),
+                })).pipe(
               Effect.flatMap((json) => {
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match") return Effect.succeed(undefined)
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => match.data),
+                  Effect.map((match) => ({ ...match.data, submatches: match.data.submatches.slice(0, MAX_SUBMATCHES) })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),

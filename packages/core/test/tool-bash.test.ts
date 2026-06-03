@@ -239,6 +239,27 @@ describe("BashTool", () => {
     ),
   )
 
+  it.live("requires external-directory approval for absolute command arguments", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        denyAction = "external_directory"
+        const target = path.join(outside.path, "secret.txt")
+        return withTool(active.path, (registry) => registry.execute(call({ command: `cat ${target}` }))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory"])
+              expect(assertions[0]).toMatchObject({ resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")] })
+              expect(runs).toEqual([])
+            }),
+          ),
+        )
+      },
+      ([active, outside]) => Effect.promise(() => Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined)),
+    ),
+  )
+
   it.live("keeps non-zero exits useful and exposes managed overflow by opaque URI", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -283,6 +304,7 @@ describe("BashTool", () => {
             Effect.sync(() => {
               expect(settled.output?.structured).toMatchObject({ truncated: true, stdoutTruncated: true })
               expect(settled.result).toMatchObject({ type: "text", value: expect.stringContaining("stdout capture truncated") })
+              expect(settled.output?.structured).not.toHaveProperty("resource")
             }),
           ),
         )

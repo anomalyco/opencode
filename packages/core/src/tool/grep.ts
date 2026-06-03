@@ -75,7 +75,7 @@ export const layer = Layer.effectDiscard(
                 limit: parameters.limit,
               },
             })
-            return yield* search.grep(parameters)
+            return yield* search.grep(parameters, root)
           }).pipe(
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause)

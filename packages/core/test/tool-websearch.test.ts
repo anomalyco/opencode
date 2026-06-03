@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool-registry"
 import { WebSearchTool } from "@opencode-ai/core/tool/websearch"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 
 const sessionID = SessionV2.ID.make("ses_websearch_test")
@@ -16,6 +17,12 @@ const payload = (text: string) =>
   })
 
 describe("WebSearchTool provider selection", () => {
+  test("rejects out-of-range numeric controls", () => {
+    const decode = Schema.decodeUnknownSync(WebSearchTool.Parameters)
+    expect(() => decode({ query: "x", numResults: 0 })).toThrow()
+    expect(() => decode({ query: "x", numResults: WebSearchTool.MAX_NUM_RESULTS + 1 })).toThrow()
+    expect(() => decode({ query: "x", contextMaxCharacters: WebSearchTool.MAX_CONTEXT_CHARACTERS + 1 })).toThrow()
+  })
   test("selects a stable provider per session", () => {
     expect(WebSearchTool.selectProvider(sessionID)).toBe(WebSearchTool.selectProvider(sessionID))
   })
@@ -103,13 +110,24 @@ const websearchConfig = Layer.succeed(
     },
   }),
 )
+const resources = Layer.succeed(
+  ToolOutputStore.Service,
+  ToolOutputStore.Service.of({
+    limits: () => Effect.die("unused"),
+    write: () => Effect.die("unused"),
+    truncate: (input) => Effect.succeed({ content: input.content, truncated: false }),
+    read: () => Effect.die("unused"),
+    cleanup: () => Effect.die("unused"),
+  }),
+)
 const websearch = WebSearchTool.layer.pipe(
   Layer.provide(registry),
   Layer.provide(permission),
   Layer.provide(http),
   Layer.provide(websearchConfig),
+  Layer.provide(resources),
 )
-const it = testEffect(Layer.mergeAll(registry, permission, http, websearchConfig, websearch))
+const it = testEffect(Layer.mergeAll(registry, permission, http, websearchConfig, resources, websearch))
 
 describe("WebSearchTool contribution", () => {
   it.effect("registers websearch, asserts query permission, and calls Exa", () =>
@@ -226,6 +244,23 @@ describe("WebSearchTool contribution", () => {
           call: { type: "tool-call", id: "call-empty", name: "websearch", input: { query: "nothing" } },
         }),
       ).toEqual({ type: "text", value: WebSearchTool.NO_RESULTS })
+    }),
+  )
+
+  it.effect("rejects oversized MCP response bodies", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      assertions.length = 0
+      responseBody = "x".repeat(WebSearchTool.MAX_RESPONSE_BYTES + 1)
+      config = { provider: "exa", enableExa: false, enableParallel: false }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* registry.execute({
+          sessionID,
+          call: { type: "tool-call", id: "call-large-response", name: "websearch", input: { query: "too much" } },
+        }),
+      ).toEqual({ type: "error", value: "Unable to search the web for too much" })
     }),
   )
 })

@@ -91,4 +91,5 @@ export const locationLayer = layer.pipe(
   Layer.provideMerge(ToolRegistry.layer),
   Layer.provideMerge(FileSystem.locationLayer),
   Layer.provideMerge(PermissionV2.locationLayer),
+  Layer.provideMerge(ToolOutputStore.defaultLayer),
 )

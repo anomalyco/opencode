@@ -55,7 +55,7 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) =>
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
-    http: { body: model.request.body },
+    http: { body: Object.fromEntries(Object.entries(model.request.body).filter(([key]) => key !== "apiKey")) },
     limits: { context: model.limit.context, output: model.limit.output },
   })
 

@@ -5,6 +5,8 @@ import { Cause, Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
+import { PositiveInt } from "../schema"
+import { ToolOutputStore } from "../tool-output-store"
 import { ToolRegistry } from "../tool-registry"
 import { checksum } from "../util/encode"
 
@@ -12,6 +14,9 @@ export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
 export const EXA_URL = "https://mcp.exa.ai/mcp"
 export const PARALLEL_URL = "https://search.parallel.ai/mcp"
+export const MAX_NUM_RESULTS = 20
+export const MAX_CONTEXT_CHARACTERS = 50_000
+export const MAX_RESPONSE_BYTES = 256 * 1024
 
 /**
  * Provider-independent local web search retained in V2 core for launch parity.
@@ -29,7 +34,7 @@ The current year is ${new Date().getFullYear()}. Use this year when searching fo
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
-  numResults: Schema.optional(Schema.Number).annotate({ description: "Number of search results to return (default: 8)" }),
+  numResults: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_NUM_RESULTS))).annotate({ description: `Number of search results to return (default: 8, maximum: ${MAX_NUM_RESULTS})` }),
   livecrawl: Schema.optional(Schema.Literals(["fallback", "preferred"])).annotate({
     description:
       "Live crawl mode - 'fallback': use live crawling as backup if cached unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
@@ -37,8 +42,8 @@ export const Parameters = Schema.Struct({
   type: Schema.optional(Schema.Literals(["auto", "fast", "deep"])).annotate({
     description: "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
   }),
-  contextMaxCharacters: Schema.optional(Schema.Number).annotate({
-    description: "Maximum characters for context string optimized for models (default: 10000)",
+  contextMaxCharacters: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_CONTEXT_CHARACTERS))).annotate({
+    description: `Maximum characters for context string optimized for models (default: 10000, maximum: ${MAX_CONTEXT_CHARACTERS})`,
   }),
 })
 
@@ -154,10 +159,12 @@ const callMcp = <F extends Schema.Struct.Fields>(
         params: { name: tool, arguments: value },
       }),
     )
-    const response = yield* HttpClient.filterStatusOk(http).execute(request).pipe(
-      Effect.timeoutOrElse({ duration: Duration.seconds(25), orElse: () => Effect.die(new Error(`${tool} request timed out`)) }),
-    )
-    return yield* parseResponse(yield* response.text)
+    return yield* Effect.gen(function* () {
+      const response = yield* HttpClient.filterStatusOk(http).execute(request)
+      const body = yield* response.text
+      if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) return yield* Effect.die(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
+      return yield* parseResponse(body)
+    }).pipe(Effect.timeoutOrElse({ duration: Duration.seconds(25), orElse: () => Effect.die(new Error(`${tool} request timed out`)) }))
   })
 
 const Success = Schema.Struct({ provider: Provider, text: Schema.String })
@@ -174,11 +181,12 @@ export const layer = Layer.effectDiscard(
     const registry = yield* ToolRegistry.Service
     const http = yield* HttpClient.HttpClient
     const config = yield* ConfigService
+    const resources = yield* ToolOutputStore.Service
 
     yield* registry.contribute((editor) =>
       editor.set(name, {
         tool: definition,
-        execute: ({ parameters, sessionID, assertPermission }) => {
+        execute: ({ parameters, sessionID, call, assertPermission }) => {
           const provider = selectProvider(sessionID, config, config.provider)
           return Effect.gen(function* () {
             yield* assertPermission({
@@ -212,7 +220,8 @@ export const layer = Layer.effectDiscard(
                     ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
                   },
                 )
-            return { provider, text: text ?? NO_RESULTS }
+            const truncated = yield* resources.truncate({ sessionID, toolCallID: call.id, content: text ?? NO_RESULTS })
+            return { provider, text: truncated.content }
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.fail(new ToolFailure({ message: `Unable to search the web for ${parameters.query}`, error: Cause.squash(cause) })),

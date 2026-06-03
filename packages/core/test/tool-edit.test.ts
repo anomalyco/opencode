@@ -309,6 +309,33 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("rejects an in-place content change while edit approval is pending", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "concurrent.txt")
+        afterAssertion = (input) =>
+          input.action === "edit" ? Effect.promise(() => fs.writeFile(target, "newer\n")) : Effect.void
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              registry.execute(call({ path: "concurrent.txt", oldString: "before", newString: "after" })),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.gen(function* () {
+              expect(result).toEqual({ type: "error", value: "File changed after permission approval. Read it again before editing." })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
+              expect(writes).toEqual([])
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   if (process.platform !== "win32") {
     it.live("delegates post-approval revalidation to FileMutation before writing", () =>
       Effect.acquireUseRelease(

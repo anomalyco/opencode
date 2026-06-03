@@ -13,6 +13,7 @@ const sessionID = SessionV2.ID.make("ses_glob_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
 const resolutions: FileSystem.ListInput[] = []
 const searches: LocationSearch.FilesInput[] = []
+const roots: FileSystem.RootTarget[] = []
 let allow = true
 let result = new LocationSearch.FilesResult({ items: [], truncated: false, partial: false })
 
@@ -67,9 +68,10 @@ const filesystem = Layer.succeed(
 const search = Layer.succeed(
   LocationSearch.Service,
   LocationSearch.Service.of({
-    files: (input) =>
+    files: (input, root) =>
       Effect.sync(() => {
         searches.push(input)
+        if (root) roots.push(root)
         return result
       }),
     grep: () => Effect.die("unused"),
@@ -89,6 +91,7 @@ const reset = () => {
   assertions.length = 0
   resolutions.length = 0
   searches.length = 0
+  roots.length = 0
   allow = true
   result = new LocationSearch.FilesResult({ items: [], truncated: false, partial: false })
 }
@@ -126,6 +129,7 @@ describe("GlobTool", () => {
       ])
       expect(resolutions).toEqual([{ path: RelativePath.make("src"), reference: undefined }])
       expect(searches).toEqual([{ pattern: "**/*.ts", path: RelativePath.make("src"), limit: 12 }])
+      expect(roots).toMatchObject([{ resource: "src" }])
     }),
   )
 

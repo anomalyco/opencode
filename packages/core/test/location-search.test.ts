@@ -163,6 +163,18 @@ describe("LocationSearch", () => {
     ),
   )
 
+  it.live("rejects oversized ripgrep JSON records before durable projection", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "huge.txt"), `needle ${"x".repeat(Ripgrep.MAX_RECORD_BYTES)}\n`))
+        const exit = yield* (yield* LocationSearch.Service).grep({ pattern: "needle" }).pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(String(Cause.squash(exit.cause))).toContain("Ripgrep JSON record exceeded")
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("rejects lexical and symlink escapes through root resolution", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

@@ -97,9 +97,8 @@ describe("ToolOutputStore", () => {
 
         expect(result.truncated).toBe(true)
         if (!result.truncated) throw new Error("expected truncation")
-        expect(result.content).toContain("one")
-        expect(result.content).not.toContain("two")
-        expect(result.content).not.toContain("three")
+        const preview = result.content.split("\n\n... output truncated")[0]
+        expect(preview).toBe("one")
       }),
     ),
   )

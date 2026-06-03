@@ -131,7 +131,8 @@ export const layer = Layer.effectDiscard(
               )
             }
 
-            const source = decodeUtf8(yield* unableToEdit(fs.readFile(plan.target.canonical)))
+            const readable = yield* unableToEdit(mutation.revalidate(plan))
+            const source = decodeUtf8(yield* unableToEdit(fs.readFile(readable.canonical)))
             const ending = detectLineEnding(source.text)
             const oldString = convertToLineEnding(parameters.oldString, ending)
             const newString = convertToLineEnding(parameters.newString, ending)
@@ -155,6 +156,10 @@ export const layer = Layer.effectDiscard(
                 : source.text.replace(oldString, newString)
             const next = splitBom(replaced)
             yield* unableToEdit(assertPermission({ action: "edit", resources: [plan.target.resource], save: ["*"] }))
+            const current = decodeUtf8(yield* unableToEdit(fs.readFile(plan.target.canonical)))
+            if (current.bom !== source.bom || current.text !== source.text) {
+              return yield* new ToolFailure({ message: "File changed after permission approval. Read it again before editing." })
+            }
             const receipt = yield* unableToEdit(
               files.write({ plan, content: joinBom(next.text, source.bom || next.bom) }),
             )

@@ -63,7 +63,7 @@ export const layer = Layer.effectDiscard(
                 limit: parameters.limit,
               },
             })
-            return yield* search.files(parameters)
+            return yield* search.files(parameters, root)
           }).pipe(
             Effect.catchCause((cause) =>
               Effect.fail(new ToolFailure({ message: `Unable to find files matching ${parameters.pattern}`, error: Cause.squash(cause) })),

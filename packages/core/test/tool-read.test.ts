@@ -33,6 +33,7 @@ const filesystem = Layer.succeed(
               real,
               resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
               size,
+              dev: 1,
             }),
           })
         : listResolveFailure === undefined
@@ -58,6 +59,7 @@ const filesystem = Layer.succeed(
                   real,
                   resource: input.reference === undefined ? "README.md" : `${input.reference}:README.md`,
                   size,
+                  dev: 1,
                 }),
               )
             : Effect.die(resolveFailure),

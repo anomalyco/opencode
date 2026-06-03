@@ -50,6 +50,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
  * revalidation narrows the TOCTOU window; path-based filesystem APIs cannot make
  * the proof and final syscall atomic.
  *
+ * TODO: Replace path-based commit mechanics with descriptor-relative no-follow
+ * operations where supported. Current revalidation detects swaps before the
+ * syscall but cannot contain a hostile local process racing the final pathname.
+ *
  * Locks are process-local and scoped to this service layer. They serialize only
  * identical canonical targets, so unrelated files remain independent.
  */

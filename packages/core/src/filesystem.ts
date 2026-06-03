@@ -4,7 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
@@ -40,6 +40,8 @@ export class ReadTarget extends Schema.Class<ReadTarget>("FileSystem.ReadTarget"
   real: Schema.String,
   resource: Schema.String,
   size: NonNegativeInt,
+  dev: Schema.Number,
+  ino: Schema.Number.pipe(Schema.optional),
 }) {}
 
 export const ListInput = Schema.Struct({
@@ -243,7 +245,16 @@ export const layer = Layer.effect(
       const relative = path.relative(file.root, file.real).replaceAll("\\", "/")
       const resource = input.reference === undefined ? relative || "." : `${input.reference}:${relative || "."}`
       if (info.type === "File") {
-        return { type: "file" as const, target: new ReadTarget({ real: file.real, resource, size: Number(info.size) }) }
+        return {
+          type: "file" as const,
+          target: new ReadTarget({
+            real: file.real,
+            resource,
+            size: Number(info.size),
+            dev: info.dev,
+            ino: Option.getOrUndefined(info.ino),
+          }),
+        }
       }
       if (info.type === "Directory") {
         return { type: "directory" as const, target: new ListTarget({ ...file, resource }) }
@@ -278,6 +289,8 @@ export const layer = Layer.effect(
           const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
           const info = yield* file.stat.pipe(Effect.orDie)
           if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
+            return yield* Effect.die(new Error("File changed after permission approval"))
           if (info.size > maximumBytes)
             return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
           const bytes = yield* file.readAlloc(maximumBytes + 1).pipe(Effect.orDie)

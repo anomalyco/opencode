@@ -1,9 +1,11 @@
 export * as BashTool from "./bash"
 
+import path from "path"
 import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
 import { Cause, Duration, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Config } from "../config"
+import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PositiveInt } from "../schema"
@@ -85,6 +87,20 @@ const definition = Tool.make({
 // TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
 // TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
 
+const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
+const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
+const externalCommandDirectories = (command: string, cwd: string) => {
+  const directories = new Set<string>()
+  for (const token of shellTokens(command)) {
+    const value = unquote(token).replace(/[;,|&]+$/, "")
+    if (!path.isAbsolute(value)) continue
+    const resolved = FSUtil.resolve(value)
+    if (FSUtil.contains(cwd, resolved)) continue
+    directories.add(FSUtil.resolve(path.dirname(resolved)))
+  }
+  return [...directories]
+}
+
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* ToolRegistry.Service
@@ -106,6 +122,10 @@ export const layer = Layer.effectDiscard(
                 resources: [external.resource],
                 save: [external.save],
               })
+            }
+            for (const directory of externalCommandDirectories(parameters.command, plan.target.canonical)) {
+              const resource = path.join(directory, "*").replaceAll("\\", "/")
+              yield* assertPermission({ action: "external_directory", resources: [resource], save: [resource] })
             }
             yield* assertPermission({ action: name, resources: [parameters.command], save: [parameters.command] })
 
@@ -158,7 +178,7 @@ export const layer = Layer.effectDiscard(
               truncated: truncated.truncated || result.stdoutTruncated || result.stderrTruncated,
               ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
               ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
-              ...(truncated.truncated ? { resource: truncated.resource } : {}),
+              ...(truncated.truncated && !result.stdoutTruncated && !result.stderrTruncated ? { resource: truncated.resource } : {}),
             }
           }).pipe(
             Effect.catchCause((cause) =>

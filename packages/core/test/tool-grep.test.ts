@@ -22,6 +22,7 @@ import { testEffect } from "./lib/effect"
 
 const assertions: PermissionV2.AssertInput[] = []
 const searches: LocationSearch.GrepInput[] = []
+const roots: FileSystem.RootTarget[] = []
 let allow = true
 let result = new LocationSearch.GrepResult({ items: [], truncated: false, partial: false })
 let searchFailure: Ripgrep.InvalidPatternError | undefined
@@ -59,9 +60,10 @@ const search = Layer.succeed(
   LocationSearch.Service,
   LocationSearch.Service.of({
     files: () => Effect.die("unused"),
-    grep: (input) =>
+    grep: (input, root) =>
       Effect.sync(() => {
         searches.push(input)
+        if (root) roots.push(root)
         if (searchFailure) throw searchFailure
         return result
       }),
@@ -99,6 +101,7 @@ const settle = (input: Record<string, unknown>) =>
 const reset = () => {
   assertions.length = 0
   searches.length = 0
+  roots.length = 0
   allow = true
   searchFailure = undefined
   result = new LocationSearch.GrepResult({ items: [], truncated: false, partial: false })
@@ -158,6 +161,7 @@ describe("GrepTool", () => {
         },
       ])
       expect(searches).toEqual([{ pattern: "needle", path: RelativePath.make("src"), include: "*.ts", limit: 2 }])
+      expect(roots).toMatchObject([{ resource: "src" }])
     }),
   )
 
