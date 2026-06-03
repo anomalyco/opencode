@@ -2685,58 +2685,38 @@ export type EventTuiSessionSelect2 = {
 
 export type ModelV2Info = {
   id: string
-  apiID: string
   providerID: string
   family?: string
   name: string
-  endpoint:
+  api:
     | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
-    | {
+        id: string
         type: "aisdk"
         package: string
         url?: string
+        settings?: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "native"
+        url?: string
+        settings: {
+          [key: string]: unknown
+        }
       }
   capabilities: {
     tools: boolean
     input: Array<string>
     output: Array<string>
   }
-  options: {
+  request: {
     headers: {
       [key: string]: string
     }
     body: {
       [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
     }
     variant?: string
   }
@@ -2747,14 +2727,6 @@ export type ModelV2Info = {
     }
     body: {
       [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
     }
   }>
   time: {
@@ -3640,49 +3612,28 @@ export type ProviderV2Info = {
         }
       }
   env: Array<string>
-  endpoint:
-    | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
+  api:
     | {
         type: "aisdk"
         package: string
         url?: string
+        settings?: {
+          [key: string]: unknown
+        }
       }
-  options: {
+    | {
+        type: "native"
+        url?: string
+        settings: {
+          [key: string]: unknown
+        }
+      }
+  request: {
     headers: {
       [key: string]: string
     }
     body: {
       [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
     }
   }
 }
@@ -3744,58 +3695,38 @@ export type EventPluginAdded = {
 
 export type ModelV2Info1 = {
   id: string
-  apiID: string
   providerID: string
   family?: string
   name: string
-  endpoint:
+  api:
     | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
-    | {
+        id: string
         type: "aisdk"
         package: string
         url?: string
+        settings?: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "native"
+        url?: string
+        settings: {
+          [key: string]: unknown
+        }
       }
   capabilities: {
     tools: boolean
     input: Array<string>
     output: Array<string>
   }
-  options: {
+  request: {
     headers: {
       [key: string]: string
     }
     body: {
       [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
     }
     variant?: string
   }
@@ -3806,14 +3737,6 @@ export type ModelV2Info1 = {
     }
     body: {
       [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
     }
   }>
   time: {
