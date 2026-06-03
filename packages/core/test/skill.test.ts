@@ -55,6 +55,7 @@ describe("SkillV2", () => {
             await fs.mkdir(path.join(second, "review"), { recursive: true })
             await write(first, "review", "First")
             await write(second, "review", "Second")
+            await fs.writeFile(path.join(first, "foo.md"), "---\nslash: true\n---\n# foo")
           })
 
           const skill = yield* SkillV2.Service
@@ -74,6 +75,12 @@ describe("SkillV2", () => {
             { type: "directory", path: AbsolutePath.make(second) },
           ])
           expect(yield* skill.list()).toEqual([
+            new SkillV2.Info({
+              name: "foo",
+              slash: true,
+              location: AbsolutePath.make(path.join(first, "foo.md")),
+              content: "# foo",
+            }),
             {
               name: "review",
               description: "Second",

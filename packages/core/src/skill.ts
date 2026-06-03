@@ -39,6 +39,7 @@ export type Source = typeof Source.Type
 export class Info extends Schema.Class<Info>("SkillV2.Info")({
   name: Schema.String,
   description: Schema.String.pipe(Schema.optional),
+  slash: Schema.Boolean.pipe(Schema.optional),
   location: AbsolutePath,
   content: Schema.String,
 }) {}
@@ -84,17 +85,26 @@ export const layer = Layer.effect(
       const directories = source.type === "directory" ? [source.path] : yield* discovery.pull(source.url)
       for (const directory of directories) {
         const files = yield* fs
-          .glob("**/SKILL.md", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
+          .glob("{*.md,**/SKILL.md}", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
         for (const filepath of files.toSorted()) {
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (!content) continue
           const markdown = ConfigMarkdown.parseOption(content)
-          if (!markdown || typeof markdown.data.name !== "string") continue
+          if (!markdown) continue
+          const name =
+            typeof markdown.data.name === "string"
+              ? markdown.data.name
+              : path.dirname(filepath) === directory
+                ? path.basename(filepath, ".md")
+                : undefined
+          if (!name) continue
           if (markdown.data.description !== undefined && typeof markdown.data.description !== "string") continue
+          if (markdown.data.slash !== undefined && typeof markdown.data.slash !== "boolean") continue
           skills.push(new Info({
-            name: markdown.data.name,
+            name,
             description: markdown.data.description,
+            slash: markdown.data.slash,
             location: AbsolutePath.make(filepath),
             content: markdown.content,
           }))

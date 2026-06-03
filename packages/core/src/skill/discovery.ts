@@ -68,8 +68,8 @@ export const layer = Layer.effect(
 
         return yield* Effect.forEach(
           data.skills.filter((skill) => {
-            if (skill.files.includes("SKILL.md")) return true
-            log.warn("skill entry missing SKILL.md", { url: index, skill: skill.name })
+            if (skill.files.includes("SKILL.md") || skill.files.includes(`${skill.name}.md`)) return true
+            log.warn("skill entry missing Markdown definition", { url: index, skill: skill.name })
             return false
           }),
           (skill) =>
@@ -80,7 +80,8 @@ export const layer = Layer.effect(
                 (file) => download(new URL(file, `${base}${skill.name}/`).href, path.join(root, file)),
                 { concurrency: fileConcurrency, discard: true },
               )
-              return (yield* fs.exists(path.join(root, "SKILL.md")).pipe(Effect.orDie))
+              return (yield* fs.exists(path.join(root, "SKILL.md")).pipe(Effect.orDie)) ||
+                (yield* fs.exists(path.join(root, `${skill.name}.md`)).pipe(Effect.orDie))
                 ? [AbsolutePath.make(root)]
                 : []
             }),
