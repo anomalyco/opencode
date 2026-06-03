@@ -1,10 +1,11 @@
 import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
-import { ModelsDev } from "@opencode-ai/core/models"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
 import { rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
@@ -91,7 +92,8 @@ const buildLayer = (state: Ref.Ref<MockState>) =>
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(ModelsDev.layer).pipe(
     Layer.provide(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(EventV2.defaultLayer),
   )
 
 const writeCache = (data: object, mtimeMs?: number) =>
@@ -136,14 +138,14 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("get() returns bundled snapshot when disk empty and fetch disabled", () =>
+  it.live("get() returns empty catalog when disk empty, fetch disabled, and no bundled snapshot is injected", () =>
     Effect.gen(function* () {
       const state = yield* Ref.make(initialState)
       const result = yield* provided(
         state,
         ModelsDev.Service.use((s) => s.get()),
       )
-      expect(Object.keys(result).length).toBeGreaterThan(0)
+      expect(result).toEqual({})
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),

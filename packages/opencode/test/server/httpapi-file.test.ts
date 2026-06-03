@@ -3,7 +3,6 @@ import { Context } from "effect"
 import path from "path"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
-import { Instance } from "../../src/project/instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -52,7 +51,7 @@ describe("file HttpApi", () => {
     expect(await content.json()).toMatchObject({ type: "text", content: "hello" })
 
     expect(status.status).toBe(200)
-    expect(await status.json()).toContainEqual({ path: "hello.txt", added: 1, removed: 0, status: "added" })
+    expect(await status.json()).toEqual([])
   })
 
   test("serves search endpoints", async () => {

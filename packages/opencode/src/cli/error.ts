@@ -2,16 +2,9 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { errorFormat } from "@/util/error"
 import { isRecord } from "@/util/record"
 
-interface ErrorLike {
-  name?: string
-  _tag?: string
-  message?: string
-  data?: Record<string, unknown>
-}
-
 type ConfigIssue = { message: string; path: string[] }
 
-function isTaggedError(error: unknown, tag: string): boolean {
+function isTaggedError(error: unknown, tag: string): error is Record<string, unknown> {
   return isRecord(error) && error._tag === tag
 }
 
@@ -39,22 +32,27 @@ function configIssues(input: Record<string, unknown>): ConfigIssue[] {
     : []
 }
 
-export function FormatError(input: unknown) {
+export function FormatError(input: unknown): string | undefined {
+  if (input instanceof Error && isRecord(input.cause) && "body" in input.cause) {
+    const formatted = FormatError(input.cause.body)
+    if (formatted) return formatted
+  }
+
   // CliError: domain failure surfaced from an effectCmd handler via fail("...")
   if (isTaggedError(input, "CliError")) {
-    const data = input as ErrorLike & { exitCode?: number }
-    if (data.exitCode != null) process.exitCode = data.exitCode
-    return data.message ?? ""
+    if (typeof input.exitCode === "number") process.exitCode = input.exitCode
+    return stringField(input, "message") ?? ""
   }
 
   // MCPFailed: { name: string }
   if (NamedError.hasName(input, "MCPFailed")) {
-    return `MCP server "${(input as ErrorLike).data?.name}" failed. Note, opencode does not support MCP authentication yet.`
+    const data = isRecord(input) && isRecord(input.data) ? stringField(input.data, "name") : undefined
+    return `MCP server "${data}" failed. Note, opencode does not support MCP authentication yet.`
   }
 
   // AccountServiceError, AccountTransportError: TaggedErrorClass
   if (isTaggedError(input, "AccountServiceError") || isTaggedError(input, "AccountTransportError")) {
-    return (input as ErrorLike).message ?? ""
+    return stringField(input, "message") ?? ""
   }
 
   // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
@@ -64,7 +62,7 @@ export function FormatError(input: unknown) {
       ? providerModelNotFound.suggestions.filter((x) => typeof x === "string")
       : []
     return [
-      `Model not found: ${providerModelNotFound.providerID}/${providerModelNotFound.modelID}`,
+      `Model not found: ${stringField(providerModelNotFound, "providerID")}/${stringField(providerModelNotFound, "modelID")}`,
       ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`opencode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,
@@ -112,6 +110,7 @@ export function FormatError(input: unknown) {
   if (isTaggedError(input, "UICancelledError") || NamedError.hasName(input, "UICancelledError")) {
     return ""
   }
+  return undefined
 }
 
 export function FormatUnknownError(input: unknown): string {

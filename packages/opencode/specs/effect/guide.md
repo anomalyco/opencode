@@ -70,7 +70,7 @@ mutable `Flag` or late `process.env` reads.
 Tests should vary behavior with explicit layer variants:
 
 ```ts
-const it = testEffect(MyService.defaultLayer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalScout: true }))))
+const it = testEffect(MyService.defaultLayer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalReferences: true }))))
 ```
 
 Do not mutate `process.env` or `Flag` after services/layers are built.
@@ -179,7 +179,7 @@ Intentional boundaries:
 In effectified code, yield existing services instead of dropping to ad hoc
 platform APIs.
 
-- Use `AppFileSystem.Service` instead of raw `fs/promises` for app file IO.
+- Use `FSUtil.Service` instead of raw `fs/promises` for app file IO.
 - Use `AppProcess.Service` instead of direct `ChildProcessSpawner.spawn` or
   legacy process helpers.
 - Use `HttpClient.HttpClient` instead of raw `fetch` inside Effect code.
@@ -197,13 +197,9 @@ For background loops, use `Effect.repeat` or `Effect.schedule` with
 
 [`EffectBridge`](../../src/effect/bridge.ts) is the sanctioned helper for
 Promise/callback interop that needs to preserve instance/workspace context.
-Keep it, but reduce its dependency on legacy `Instance.current` /
-`Instance.restore` over time.
-
-`Instance.bind` / `Instance.restore` are transitional legacy tools. Use
-them only for native callbacks that still require legacy ALS context. Do
-not use them for `setTimeout`, `Promise.then`, `EventEmitter.on`, or
-Effect fibers.
+It preserves explicit `InstanceRef` / `WorkspaceRef` context for effects run
+through the bridge. Plain JS callbacks that need instance data should receive
+that data explicitly.
 
 ## Testing
 
