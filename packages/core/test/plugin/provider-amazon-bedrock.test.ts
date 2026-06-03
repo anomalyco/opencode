@@ -19,7 +19,7 @@ function bedrockFetch(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
 }
 
 describe("AmazonBedrockPlugin", () => {
-  it.effect("moves endpoint option to endpoint URL", () =>
+  it.effect("moves endpoint option to api URL", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
@@ -27,25 +27,24 @@ describe("AmazonBedrockPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const bedrock = provider("amazon-bedrock", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
-          options: {
+          api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
+          request: {
             headers: {},
-            body: {},
-            aisdk: { provider: { endpoint: "https://bedrock.example" }, request: {} },
+            body: { endpoint: "https://bedrock.example" },
           },
         })
         catalog.provider.update(bedrock.id, (item) => {
-          item.endpoint = bedrock.endpoint
-          item.options = bedrock.options
+          item.api = bedrock.api
+          item.request = bedrock.request
         })
       })
       const result = yield* catalog.provider.get(ProviderV2.ID.amazonBedrock)
-      expect(result.endpoint).toEqual({
+      expect(result.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
         url: "https://bedrock.example",
       })
-      expect(result.options.aisdk.provider.endpoint).toBeUndefined()
+      expect(result.request.body.endpoint).toBeUndefined()
     }),
   )
 

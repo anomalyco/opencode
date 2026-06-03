@@ -1,4 +1,4 @@
-import { PermissionLegacy } from "@opencode-ai/core/permission/legacy"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -187,7 +187,7 @@ describe("tool.grep", () => {
           [path.join(alias, "*")]: "allow",
         },
       })
-      const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
       const next: Tool.Context = {
         ...ctx,
         ask: (req) =>
@@ -235,7 +235,7 @@ describe("tool.grep", () => {
         yield* appfs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
         yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
 
-        const requests: Array<Omit<PermissionLegacy.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
         const next: Tool.Context = {
           ...ctx,
           ask: (req) =>
