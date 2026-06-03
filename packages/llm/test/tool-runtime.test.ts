@@ -333,10 +333,11 @@ describe("LLMClient tools", () => {
 
   it.effect("does not mistake dynamic tool output fields for dispatcher state", () =>
     Effect.gen(function* () {
+      const callerOwned = { type: "json" as const, value: { ok: true }, events: ["caller-owned"] }
       const eventful = Tool.make({
         description: "Return an events field.",
         jsonSchema: { type: "object", properties: {} },
-        execute: () => Effect.succeed({ type: "json" as const, value: { ok: true }, events: ["caller-owned"] }),
+        execute: () => Effect.succeed(callerOwned),
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
@@ -344,12 +345,12 @@ describe("LLMClient tools", () => {
         LLMEvent.toolCall({ id: "call_1", name: "eventful", input: {} }),
       )
 
-      expect(dispatched.result).toEqual({ type: "json", value: { ok: true }, events: ["caller-owned"] })
+      expect(dispatched.result).toEqual(callerOwned)
       expect(dispatched.events).toEqual([
         LLMEvent.toolResult({
           id: "call_1",
           name: "eventful",
-          result: { type: "json", value: { ok: true }, events: ["caller-owned"] },
+          result: callerOwned,
           output: { structured: { ok: true }, content: [] },
         }),
       ])
