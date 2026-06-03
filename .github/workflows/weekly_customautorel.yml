@@ -34,52 +34,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate custom git patches
+      - name: Validate final personalize patch
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ ! -d patches ]; then
-            echo "ERROR: Missing ./patches"
+          PATCH="patches/FinalPERSONALIZE.patch"
+
+          if [ ! -f "$PATCH" ]; then
+            echo "ERROR: Missing patch:"
+            echo "  $PATCH"
             exit 1
           fi
 
-          echo "All patch files:"
-          find patches -maxdepth 1 -name '*.patch' | sort || true
+          echo "Using patch:"
+          echo "  $PATCH"
 
-          echo ""
-          echo "Git-format patches to apply:"
-          find patches -maxdepth 1 -name '*.patch' | sort | while read -r p; do
-            if grep -qE '^From [0-9a-f]{40} ' "$p" && grep -qE '^Subject: \[PATCH' "$p"; then
-              echo "$p"
-            else
-              echo "SKIP non-git patch: $p"
-            fi
-          done
-
-          count="$(
-            find patches -maxdepth 1 -name '*.patch' | sort | while read -r p; do
-              if grep -qE '^From [0-9a-f]{40} ' "$p" && grep -qE '^Subject: \[PATCH' "$p"; then
-                echo "$p"
-              fi
-            done | wc -l
-          )"
-
-          if [ "$count" -eq 0 ]; then
-            echo "ERROR: No git-format custom patches found."
+          if ! grep -qE '^(diff --git|--- |\+\+\+ )' "$PATCH"; then
+            echo "ERROR: Patch does not look like a git/unified diff:"
+            echo "  $PATCH"
             exit 1
           fi
 
-          echo ""
-          echo "Checking git-format custom patches for literal conflict markers..."
-          find patches -maxdepth 1 -name '*.patch' | sort | while read -r p; do
-            if grep -qE '^From [0-9a-f]{40} ' "$p" && grep -qE '^Subject: \[PATCH' "$p"; then
-              if grep -nE '^(<<<<<<<|=======|>>>>>>>)' "$p"; then
-                echo "ERROR: conflict markers exist inside custom patch: $p"
-                exit 1
-              fi
-            fi
-          done
+          echo "Checking patch for literal conflict markers..."
+          if grep -nE '^(<<<<<<<|=======|>>>>>>>)' "$PATCH"; then
+            echo "ERROR: conflict markers exist inside patch:"
+            echo "  $PATCH"
+            exit 1
+          fi
+
+          echo "Patch validation OK."
 
       - name: Load last successful upstream ref
         id: load_state
@@ -127,18 +111,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          list_git_format_patches() {
-            find ../patches -maxdepth 1 -name '*.patch' | sort | while read -r p; do
-              if grep -qE '^From [0-9a-f]{40} ' "$p" && grep -qE '^Subject: \[PATCH' "$p"; then
-                echo "$p"
-              else
-                echo "SKIP non-git patch: $p" >&2
-              fi
-            done
+          final_patch_file() {
+            echo "../patches/FinalPERSONALIZE.patch"
           }
 
-          auto_resolve_patch_conflict_take_patch_side() {
-            echo "Auto-resolving git-am conflicts by taking PATCH side (--theirs)."
+          auto_resolve_git_apply_conflict_take_patch_side() {
+            echo "Auto-resolving git-apply conflicts by taking PATCH side (--theirs)."
 
             CONFLICT_FILES="$(git diff --name-only --diff-filter=U || true)"
 
@@ -152,60 +130,96 @@ jobs:
 
             while IFS= read -r f; do
               [ -z "$f" ] && continue
-              echo "Taking patch side for: $f"
-              git checkout --theirs -- "$f" || return 1
-              git add "$f" || return 1
+
+              echo ""
+              echo "Resolving conflict by taking patch side:"
+              echo "  $f"
+
+              echo "Index stages:"
+              git ls-files -u -- "$f" || true
+
+              if git ls-files -u -- "$f" | awk '$3 == "3" { found=1 } END { exit found ? 0 : 1 }'; then
+                echo "Patch side exists. Taking --theirs:"
+                git checkout --theirs -- "$f"
+                git add -- "$f"
+              else
+                echo "Patch side has no stage-3 version. Treating as patch-side delete:"
+                git rm -f -- "$f"
+              fi
             done <<< "$CONFLICT_FILES"
 
-            git am --continue
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "ERROR: Unmerged files remain after auto-resolve:"
+              git diff --name-only --diff-filter=U
+              return 1
+            fi
+
+            return 0
           }
 
           apply_custom_git_patches() {
-            APPLIED=0
+            PATCH="$(final_patch_file)"
 
-            while IFS= read -r p; do
-              [ -z "$p" ] && continue
+            echo ""
+            echo "Applying final personalize patch:"
+            echo "  $PATCH"
 
-              echo ""
-              echo "Applying custom git patch: $p"
+            if [ ! -f "$PATCH" ]; then
+              echo "ERROR: Missing patch:"
+              echo "  $PATCH"
+              return 20
+            fi
 
-              if git am --3way "$p"; then
-                echo "Patch applied cleanly: $p"
-                APPLIED=$((APPLIED + 1))
-                continue
-              fi
+            if git apply --3way --index --whitespace=fix "$PATCH"; then
+              echo "Patch applied cleanly:"
+              echo "  $PATCH"
+            else
+              echo "Patch conflicted or failed:"
+              echo "  $PATCH"
 
-              echo "Patch conflicted: $p"
               git status --short || true
 
               echo ""
               echo "Conflict markers before auto-resolve:"
               git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- . || true
 
-              if auto_resolve_patch_conflict_take_patch_side; then
-                echo "Auto-resolved and continued: $p"
-                APPLIED=$((APPLIED + 1))
+              if auto_resolve_git_apply_conflict_take_patch_side; then
+                echo "Auto-resolved by taking patch side."
               else
-                echo "ERROR: auto-resolve failed for: $p"
+                echo "ERROR: auto-resolve failed for:"
+                echo "  $PATCH"
                 git status --short || true
-                git am --abort || true
                 return 20
               fi
+            fi
 
-              echo "Checking for conflict markers after auto-resolve..."
-              if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- .; then
-                echo "ERROR: conflict markers remain after auto-resolve"
-                git am --abort || true
-                return 21
-              fi
-            done < <(list_git_format_patches)
+            echo ""
+            echo "Checking for remaining unmerged index entries..."
+            if git ls-files -u | grep -q .; then
+              echo "ERROR: unmerged index entries remain:"
+              git ls-files -u
+              return 21
+            fi
 
-            if [ "$APPLIED" -eq 0 ]; then
-              echo "ERROR: applied zero custom git patches"
+            echo ""
+            echo "Checking for conflict markers after patch apply..."
+            if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- .; then
+              echo "ERROR: conflict markers remain after auto-resolve"
               return 22
             fi
 
-            echo "Applied custom git patches: $APPLIED"
+            echo ""
+            echo "Patch status:"
+            git status --short
+
+            if git diff --cached --quiet; then
+              echo "ERROR: final patch produced no staged changes"
+              return 23
+            fi
+
+            git commit -m "Apply FinalPERSONALIZE patch"
+
+            echo "Applied final personalize patch."
             return 0
           }
 
