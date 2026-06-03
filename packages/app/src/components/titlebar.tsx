@@ -121,10 +121,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
   const nav = createMemo(() => (useV2Titlebar() ? settings.general.showNavigation() : true))
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
+    const installing = props.update?.installing() ?? false
     const version = props.update?.version()
     return {
-      visible: version !== undefined,
-      installing: props.update?.installing() ?? false,
+      visible: version !== undefined || installing,
+      installing,
       label: "Update",
       ariaLabel: language.t("toast.update.action.installRestart"),
       title: version ? `Update ${version}` : undefined,
@@ -219,9 +220,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   return (
     <header
       classList={{
-        "shrink-0 relative overflow-hidden flex flex-row": true,
-        "h-9 bg-v2-background-bg-deep": useV2Titlebar(),
-        "h-10 bg-background-base": !useV2Titlebar(),
+        "shrink-0 relative flex flex-row": true,
+        "h-9 bg-v2-background-bg-deep overflow-visible": useV2Titlebar(),
+        "h-10 bg-background-base overflow-hidden": !useV2Titlebar(),
       }}
       style={{
         "min-height": minHeight(),
@@ -705,27 +706,39 @@ type TitlebarV2RightState = {
 
 function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
   return (
-    <div class="flex shrink-0 items-center justify-end gap-0">
-      <TitlebarUpdatePill state={props.state.update} />
+    <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
+      <TitlebarUpdateIconButton state={props.state.update} />
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>
   )
 }
 
-function TitlebarUpdatePill(props: { state: TitlebarUpdatePillState }) {
+function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   return (
-    <Show when={props.state.visible}>
+    <div class="relative isolate mr-3 size-5 shrink-0">
       <button
         type="button"
-        class="h-5 shrink-0 rounded-[27px] bg-[var(--v2-background-bg-layer-03)] px-2.5 text-[11px] font-[530] leading-4 tracking-[0.05px] text-[var(--v2-text-text-base)] disabled:opacity-60"
+        class="group absolute right-0 top-0 z-10 flex h-5 w-5 items-center justify-end overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[width,background-color] duration-150 ease-out hover:z-30 hover:w-[68px] hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:z-30 focus-visible:w-[68px] focus-visible:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none"
         onClick={props.state.onInstall}
         disabled={props.state.installing}
+        aria-busy={props.state.installing}
         aria-label={props.state.ariaLabel}
-        title={props.state.title}
       >
-        {props.state.label}
+        <span class="shrink-0 ml-[8px] mr-px text-[11px] text-v2-text-text-accent [font-weight:530] opacity-0 translate-x-2 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 motion-reduce:translate-x-0">
+          Update
+        </span>
+        <span class="flex size-5 shrink-0 items-center justify-center">
+          <Show
+            when={!props.state.installing}
+            fallback={<span data-slot="titlebar-update-loader" aria-hidden="true" />}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M7 11V3M3.5 7.63128L7 11L10.5 7.63128" stroke="currentColor" />
+            </svg>
+          </Show>
+        </span>
       </button>
-    </Show>
+    </div>
   )
 }
 
