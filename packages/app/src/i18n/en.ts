@@ -754,6 +754,12 @@ export const dict = {
     "Choose the shell used for your terminal. Compatible shells are also used for agent tool calls.",
   "settings.general.row.shell.autoDefault": "Auto (Default)",
   "settings.general.row.shell.terminalOnly": "terminal only",
+  "settings.general.row.jsonResponse.title": "JSON output mode",
+  "settings.general.row.jsonResponse.description":
+    "Require final assistant messages to be valid JSON objects without surrounding prose or Markdown",
+  "settings.general.row.jsonResponseKeys.title": "Required JSON keys",
+  "settings.general.row.jsonResponseKeys.description":
+    "Comma-separated top-level keys that must be present when JSON output mode is enabled",
   "settings.general.row.appearance.title": "Appearance",
   "settings.general.row.appearance.description": "Customise how OpenCode looks on your device",
   "settings.general.row.colorScheme.title": "Color scheme",

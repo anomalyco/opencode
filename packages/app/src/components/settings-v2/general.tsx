@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, onMount } from "solid-js"
+import { Component, Show, createEffect, createMemo, createResource, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -209,6 +209,22 @@ export const SettingsGeneralV2: Component = () => {
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
   const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
+  const jsonResponse = createMemo(() => globalSync.data.config.json_response ?? {})
+  const [jsonRequiredInput, setJsonRequiredInput] = createSignal("")
+
+  createEffect(() => {
+    setJsonRequiredInput((jsonResponse().required ?? []).join(", "))
+  })
+
+  const jsonRequiredKeys = (value: string) =>
+    value
+      .split(",")
+      .map((key) => key.trim())
+      .filter((key) => key.length > 0)
+
+  const updateJsonResponse = (patch: { enabled?: boolean; required?: string[] }) =>
+    globalSync.updateConfig({ json_response: { ...jsonResponse(), ...patch } })
+  const commitJsonRequiredInput = () => void updateJsonResponse({ required: jsonRequiredKeys(jsonRequiredInput()) })
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells.latest
@@ -350,6 +366,42 @@ export const SettingsGeneralV2: Component = () => {
               globalSync.updateConfig({ shell: option.value })
             }}
           />
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.jsonResponse.title")}
+          description={language.t("settings.general.row.jsonResponse.description")}
+        >
+          <div data-action="settings-json-response">
+            <Switch
+              checked={jsonResponse().enabled === true}
+              onChange={(checked) => void updateJsonResponse({ enabled: checked })}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.jsonResponseKeys.title")}
+          description={language.t("settings.general.row.jsonResponseKeys.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextInputV2
+              data-action="settings-json-response-keys"
+              type="text"
+              appearance="base"
+              value={jsonRequiredInput()}
+              onInput={(event) => {
+                setJsonRequiredInput(event.currentTarget.value)
+              }}
+              onBlur={commitJsonRequiredInput}
+              placeholder="summary, actions, done"
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              aria-label={language.t("settings.general.row.jsonResponseKeys.title")}
+            />
+          </div>
         </SettingsRowV2>
 
         <SettingsRowV2

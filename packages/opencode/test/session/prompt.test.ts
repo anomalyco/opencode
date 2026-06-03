@@ -296,6 +296,16 @@ function providerCfg(url: string) {
   }
 }
 
+function providerJsonResponseCfg(url: string, required: string[]) {
+  return {
+    ...providerCfg(url),
+    json_response: {
+      enabled: true,
+      required,
+    },
+  }
+}
+
 const writeText = Effect.fn("test.writeText")(function* (file: string, text: string) {
   const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(file, text)
@@ -510,6 +520,113 @@ it.instance("loop calls LLM and returns assistant message", () =>
     const parts = result.parts.filter((p) => p.type === "text")
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+it.instance("json response mode injects instructions and accepts valid JSON", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerJsonResponseCfg(url, ["summary", "actions"]))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "JSON response mode",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text('{"summary":"world","actions":[]}')
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.error).toBeUndefined()
+    expect(result.parts.some((part) => part.type === "text" && part.text === '{"summary":"world","actions":[]}')).toBe(
+      true,
+    )
+    const hits = yield* llm.hits
+    expect(hits).toHaveLength(1)
+    expect(JSON.stringify(hits[0].body)).toContain("JSON response mode is enabled")
+    expect(JSON.stringify(hits[0].body)).toContain("summary, actions")
+  }),
+)
+
+it.instance("json response mode rejects malformed final JSON", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerJsonResponseCfg(url, ["summary"]))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "JSON response mode invalid",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("summary: world")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role !== "assistant") return
+    expect(result.info.error?.name).toBe("StructuredOutputError")
+    expect(JSON.stringify(result.info.error)).toContain("expected exactly one JSON object")
+  }),
+)
+
+it.instance("json response mode allows tool calls before final JSON", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerJsonResponseCfg(url, ["summary"]))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "JSON response mode tools",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.push(reply().tool("first", { value: "first" }).stop())
+    yield* llm.text('{"summary":"second"}')
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(yield* llm.calls).toBe(2)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role !== "assistant") return
+    expect(result.info.error).toBeUndefined()
+    expect(result.parts.some((part) => part.type === "text" && part.text === '{"summary":"second"}')).toBe(true)
+  }),
+)
+
+it.instance("json response mode rejects missing required keys", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig((url) => providerJsonResponseCfg(url, ["summary", "actions"]))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "JSON response mode keys",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text('{"summary":"world"}')
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role !== "assistant") return
+    expect(result.info.error?.name).toBe("StructuredOutputError")
+    expect(JSON.stringify(result.info.error)).toContain("actions")
   }),
 )
 

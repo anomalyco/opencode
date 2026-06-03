@@ -124,6 +124,19 @@ export const Info = Schema.Struct({
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",
   }),
+  json_response: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Require final assistant responses to be valid JSON objects",
+      }),
+      required: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description: "Top-level JSON keys that must be present in final assistant responses",
+      }),
+    }),
+  ).annotate({
+    description:
+      "JSON response mode. When enabled, OpenCode instructs models to return only JSON and rejects malformed final responses.",
+  }),
   enterprise: Schema.optional(
     Schema.Struct({ url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }) }),
   ),

@@ -79,6 +79,52 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+type JsonResponseConfig = {
+  readonly required?: readonly string[]
+}
+
+const jsonResponseRequiredKeys = (input: JsonResponseConfig | undefined) =>
+  (input?.required ?? []).map((key) => key.trim()).filter((key) => key.length > 0)
+
+const jsonResponseSystemPrompt = (required: string[]) =>
+  [
+    "IMPORTANT: JSON response mode is enabled.",
+    "Your final assistant response MUST be exactly one valid JSON object.",
+    "Do not include Markdown, code fences, comments, prose before or after the JSON, or multiple JSON values.",
+    ...(required.length ? [`The object MUST include these top-level keys: ${required.join(", ")}.`] : []),
+    `Example final response: ${JSON.stringify(
+      Object.fromEntries((required.length ? required : ["response"]).map((key) => [key, ""])),
+    )}`,
+  ].join("\n")
+
+function isJsonObject(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
+function jsonResponseText(parts: SessionV1.Part[]) {
+  return parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("")
+    .trim()
+}
+
+function jsonResponseError(text: string, required: string[]) {
+  if (!text) return "JSON response mode expected a final JSON object, but the assistant response was empty."
+  if (!text.startsWith("{") || !text.endsWith("}"))
+    return "JSON response mode expected exactly one JSON object with no surrounding text or code fences."
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return `JSON response mode expected valid JSON, but parsing failed: ${message}`
+  }
+  if (!isJsonObject(parsed)) return "JSON response mode expected a JSON object, not an array or primitive value."
+  const missing = required.filter((key) => !(key in parsed))
+  if (missing.length) return `JSON response mode expected required top-level key(s): ${missing.join(", ")}.`
+  return undefined
+}
+
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
 
@@ -1435,7 +1481,8 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+            const [cfg, skills, env, instructions, modelMsgs] = yield* Effect.all([
+              config.get(),
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
@@ -1443,6 +1490,9 @@ export const layer = Layer.effect(
             ])
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
+            const jsonResponseRequired = jsonResponseRequiredKeys(cfg.json_response)
+            const jsonResponseEnabled = cfg.json_response?.enabled === true && format.type === "text"
+            if (jsonResponseEnabled) system.push(jsonResponseSystemPrompt(jsonResponseRequired))
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
               user: lastUser,
@@ -1473,6 +1523,22 @@ export const layer = Layer.effect(
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const
+              }
+              if (jsonResponseEnabled) {
+                const parts = yield* MessageV2.parts(handle.message.id).pipe(
+                  Effect.provideService(Database.Service, database),
+                )
+                if (!parts.some((part) => part.type === "tool")) {
+                  const error = jsonResponseError(jsonResponseText(parts), jsonResponseRequired)
+                  if (error) {
+                    handle.message.error = new SessionV1.StructuredOutputError({
+                      message: error,
+                      retries: 0,
+                    }).toObject()
+                    yield* sessions.updateMessage(handle.message)
+                    return "break" as const
+                  }
+                }
               }
             }
 

@@ -1337,6 +1337,19 @@ export type Config = {
   tools?: {
     [key: string]: boolean
   }
+  /**
+   * JSON response mode. When enabled, OpenCode instructs models to return only JSON and rejects malformed final responses.
+   */
+  json_response?: {
+    /**
+     * Require final assistant responses to be valid JSON objects
+     */
+    enabled?: boolean
+    /**
+     * Top-level JSON keys that must be present in final assistant responses
+     */
+    required?: Array<string>
+  }
   enterprise?: {
     /**
      * Enterprise URL
