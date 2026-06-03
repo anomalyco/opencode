@@ -64,8 +64,7 @@ const anthropic: Lowerer = {
       delete result.task_budget
     }
     if (isRecord(options.metadata) && options.metadata.userId !== undefined) {
-      result.metadata = { ...options.metadata, user_id: options.metadata.userId }
-      delete (result.metadata as Record<string, unknown>).userId
+      result.metadata = { ...(isRecord(result.metadata) ? result.metadata : {}), user_id: options.metadata.userId }
     }
     return result
   },
