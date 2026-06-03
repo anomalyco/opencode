@@ -666,19 +666,22 @@ function sapAnthropicReasoningParams(
   }
 }
 
-function sapGeminiReasoningParams(model: Provider.Model): Record<string, Record<string, any>> {
-  if (!model.api.id.includes("2.5")) return {}
-  return {
-    high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
-    max: {
-      thinkingConfig: { includeThoughts: true, thinkingBudget: googleThinkingBudgetMax(model.api.id) },
-    },
+function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
+  const id = model.api.id.toLowerCase()
+  if (id.includes("2.5")) {
+    return {
+      high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+      max: {
+        thinkingConfig: { includeThoughts: true, thinkingBudget: googleThinkingBudgetMax(model.api.id) },
+      },
+    }
   }
-}
-
-function sapOpenaiReasoningParams(model: Provider.Model): Record<string, Record<string, any>> {
-  const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
-  return Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }]))
+  return Object.fromEntries(
+    googleThinkingLevelEfforts(model.api.id).map((effort) => [
+      effort,
+      { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } },
+    ]),
+  )
 }
 
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
@@ -786,7 +789,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             max: {
               thinkingConfig: {
                 includeThoughts: true,
-                thinkingBudget: 24576,
+                thinkingBudget: googleThinkingBudgetMax(model.api.id),
               },
             },
           }
@@ -976,34 +979,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
     case "@ai-sdk/google":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
-      if (id.includes("2.5")) {
-        return {
-          high: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          },
-          max: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: googleThinkingBudgetMax(id),
-            },
-          },
-        }
-      }
-
-      return Object.fromEntries(
-        googleThinkingLevelEfforts(id).map((effort) => [
-          effort,
-          {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingLevel: effort,
-            },
-          },
-        ]),
-      )
+      return googleThinkingVariants(model)
 
     case "@ai-sdk/mistral":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
@@ -1042,13 +1018,21 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
       return {}
 
-    case "@jerome-benoit/sap-ai-provider-v2":
-      if (model.api.id.includes("anthropic"))
+    case "@jerome-benoit/sap-ai-provider-v2": {
+      if (model.api.id.includes("anthropic")) {
         return wrapInSapModelParams(sapAnthropicReasoningParams(adaptiveEfforts, adaptiveOpus))
-      if (model.api.id.includes("gemini")) return wrapInSapModelParams(sapGeminiReasoningParams(model))
-      if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id))
-        return wrapInSapModelParams(sapOpenaiReasoningParams(model))
+      }
+      if (model.api.id.includes("gemini")) {
+        return wrapInSapModelParams(googleThinkingVariants(model))
+      }
+      if (model.api.id.includes("gpt") || /\bo[1-9]/.test(model.api.id)) {
+        const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+        return wrapInSapModelParams(
+          Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])),
+        )
+      }
       return {}
+    }
   }
   return {}
 }

@@ -3660,8 +3660,22 @@ describe("ProviderTransform.variants", () => {
     test("gemini 2.5 flash returns thinkingConfig with 24k budget under modelParams", () => {
       const result = ProviderTransform.variants(sapModel("gemini-2.5-flash"))
       expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+      })
       expect(result.max).toEqual({
         modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 } },
+      })
+    })
+
+    test("gemini 3 flash-lite picks up thinkingLevel tiers from googleThinkingLevelEfforts", () => {
+      const result = ProviderTransform.variants(sapModel("gemini-3.1-flash-lite"))
+      expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
+      expect(result.minimal).toEqual({
+        modelParams: { thinkingConfig: { includeThoughts: true, thinkingLevel: "minimal" } },
+      })
+      expect(result.high).toEqual({
+        modelParams: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
       })
     })
 
