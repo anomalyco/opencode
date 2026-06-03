@@ -257,16 +257,14 @@ export const TaskTool = Tool.define(
           metadata,
           run: runTask(),
         })
-        yield* background
-          .wait({ id: info.id })
-          .pipe(
-            Effect.flatMap((result) => {
-              if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
-              if (result.info?.status === "error") return inject("error", result.info.error ?? "")
-              return Effect.void
-            }),
-            Effect.forkIn(scope, { startImmediately: true }),
-          )
+        yield* background.wait({ id: info.id }).pipe(
+          Effect.flatMap((result) => {
+            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
+            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+            return Effect.void
+          }),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
 
         return {
           title: params.description,

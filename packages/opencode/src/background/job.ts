@@ -103,43 +103,38 @@ export const layer = Layer.effect(
     ) {
       const completed_at = yield* Clock.currentTimeMillis
       const s = yield* InstanceState.get(state)
-      const result = yield* SynchronizedRef.modify(
-        s.jobs,
-        (jobs): readonly [FinishResult, Map<string, Active>] => {
-          const job = jobs.get(id)
-          if (!job) return [{}, jobs]
-          if (job.token !== token) return [{}, jobs]
-          if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
-          const pending = job.pending - 1
-          const output = Exit.isSuccess(exit) && (!job.output || sequence > job.output.sequence)
+      const result = yield* SynchronizedRef.modify(s.jobs, (jobs): readonly [FinishResult, Map<string, Active>] => {
+        const job = jobs.get(id)
+        if (!job) return [{}, jobs]
+        if (job.token !== token) return [{}, jobs]
+        if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
+        const pending = job.pending - 1
+        const output =
+          Exit.isSuccess(exit) && (!job.output || sequence > job.output.sequence)
             ? { sequence, text: exit.value }
             : job.output
-          if (Exit.isSuccess(exit) && pending > 0) {
-            return [{}, new Map(jobs).set(id, { ...job, pending, output })]
-          }
-          const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
-            ? "completed"
-            : Cause.hasInterruptsOnly(exit.cause)
-              ? "cancelled"
-              : "error"
-          const next = {
-            ...job,
-            pending: 0,
-            output,
-            info: {
-              ...job.info,
-              status,
-              completed_at,
-              ...(output ? { output: output.text } : {}),
-              ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
-            },
-          }
-          return [
-            { info: snapshot(next), done: job.done, scope: job.scope },
-            new Map(jobs).set(id, next),
-          ]
-        },
-      )
+        if (Exit.isSuccess(exit) && pending > 0) {
+          return [{}, new Map(jobs).set(id, { ...job, pending, output })]
+        }
+        const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
+          ? "completed"
+          : Cause.hasInterruptsOnly(exit.cause)
+            ? "cancelled"
+            : "error"
+        const next = {
+          ...job,
+          pending: 0,
+          output,
+          info: {
+            ...job.info,
+            status,
+            completed_at,
+            ...(output ? { output: output.text } : {}),
+            ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
+          },
+        }
+        return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+      })
       if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
       if (result.scope) {
         yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(s.scope, { startImmediately: true }))
@@ -265,10 +260,7 @@ export const layer = Layer.effect(
               completed_at,
             },
           }
-          return [
-            { info: snapshot(next), done: job.done, scope: job.scope },
-            new Map(jobs).set(id, next),
-          ]
+          return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
         },
       )
       if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
