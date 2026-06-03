@@ -19,6 +19,10 @@ function localID(store: string) {
   return ProjectV2.ID.make(Hash.fast(`git-local:${store}`))
 }
 
+function localDirectoryID(directory: string) {
+  return ProjectV2.ID.make(Hash.fast(`local-directory:${path.resolve(directory)}`))
+}
+
 function abs(value: string) {
   return AbsolutePath.make(value)
 }
@@ -42,7 +46,7 @@ async function rootCommit(dir: string) {
 }
 
 describe("ProjectV2.resolve", () => {
-  it.live("returns global for non-git directory", () =>
+  it.live("returns local directory id for non-git directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir()),
@@ -52,8 +56,22 @@ describe("ProjectV2.resolve", () => {
 
       const result = yield* project.resolve(abs(tmp.path))
 
-      expect(result.id).toBe(ProjectV2.ID.make("global"))
-      expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      expect(result.id).toBe(localDirectoryID(tmp.path))
+      expect(result.directory).toBe(abs(path.resolve(tmp.path)))
+      expect(result.previous).toBeUndefined()
+      expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("returns global for filesystem root", () =>
+    Effect.gen(function* () {
+      const project = yield* ProjectV2.Service
+      const root = path.parse(process.cwd()).root
+
+      const result = yield* project.resolve(abs(root))
+
+      expect(result.id).toBe(ProjectV2.ID.global)
+      expect(result.directory).toBe(abs(root))
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
     }),
