@@ -440,14 +440,25 @@ export const layer = Layer.effect(
             }
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
-            yield* permission.ask({
-              permission: "doom_loop",
-              patterns: [value.name],
-              sessionID: ctx.assistantMessage.sessionID,
-              metadata: { tool: value.name, input },
-              always: [value.name],
-              ruleset: agent.permission,
-            })
+            const res = yield* Effect.exit(
+              permission.ask({
+                permission: "doom_loop",
+                patterns: [value.name],
+                sessionID: ctx.assistantMessage.sessionID,
+                metadata: { tool: value.name, input },
+                always: [value.name],
+                ruleset: agent.permission,
+              }),
+            )
+            if (Exit.isFailure(res)) {
+              const cause = res.cause
+              const error = Cause.squash(cause)
+              if (error instanceof PermissionV1.RejectedError || error instanceof PermissionV1.DeniedError) {
+                ctx.blocked = true
+                return
+              }
+              return yield* Effect.failCause(cause)
+            }
             return
           }
 
