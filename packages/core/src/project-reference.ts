@@ -71,7 +71,12 @@ export const layer = Layer.effect(
     const cache = yield* RepositoryCache.Service
     const references = resolveAll({
       references: ConfigReference.normalize(
-        Object.assign({}, ...(yield* config.get()).map((document) => document.info.references ?? {})),
+        Object.assign(
+          {},
+          ...(yield* config.entries())
+            .filter((entry): entry is Config.Document => entry.type === "document")
+            .map((document) => document.info.references ?? {}),
+        ),
       ),
       directory: location.project.directory,
       home: global.home,

@@ -214,7 +214,7 @@ describe("ProjectReference", () => {
 })
 
 function document(references: ConfigReference.Info) {
-  return new Config.Loaded({ source: { type: "memory" }, info: Schema.decodeUnknownSync(Config.Info)({ references }) })
+  return new Config.Document({ type: "document", info: Schema.decodeUnknownSync(Config.Info)({ references }) })
 }
 
 function result(
@@ -237,7 +237,7 @@ function testLayer(input: {
   directory: string
   project: string
   repos: string
-  documents: Config.Loaded[]
+  documents: Config.Document[]
   ensure: RepositoryCache.Interface["ensure"]
 }) {
   return ProjectReference.layer.pipe(
@@ -256,7 +256,7 @@ function testLayer(input: {
         ),
         Layer.succeed(
           Config.Service,
-          Config.Service.of({ directories: () => Effect.succeed([]), get: () => Effect.succeed(input.documents) }),
+          Config.Service.of({ entries: () => Effect.succeed(input.documents) }),
         ),
         Layer.succeed(RepositoryCache.Service, RepositoryCache.Service.of({ ensure: input.ensure })),
       ),

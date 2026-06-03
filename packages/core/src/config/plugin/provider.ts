@@ -13,7 +13,7 @@ export const Plugin = PluginV2.define({
     const catalog = yield* Catalog.Service
     const config = yield* Config.Service
     const transform = yield* catalog.transform()
-    const files = yield* config.get()
+    const files = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
 
     yield* transform((catalog) => {
       for (const file of files) {
