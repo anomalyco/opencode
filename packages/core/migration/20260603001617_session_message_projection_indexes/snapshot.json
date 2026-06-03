@@ -2,10 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "6a0e33d0-4866-402f-b287-de400200b05e",
-  "prevIds": [
-    "7f4866d3-a95b-4141-bb59-28e31c521605",
-    "80d6efb8-93fd-4ce5-b320-45a05aaebdd7"
-  ],
+  "prevIds": ["80f2378a-ed35-45cb-9d3b-9f4837fac801"],
   "ddl": [
     {
       "name": "workspace",
