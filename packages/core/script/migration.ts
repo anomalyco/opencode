@@ -5,18 +5,28 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
+import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dirname, "../../..")
 const sqlDir = path.join(root, "packages/core/migration")
 const tsDir = path.join(root, "packages/core/src/database/migration")
 const registry = path.join(root, "packages/core/src/database/migration.gen.ts")
+const args = parseArgs({
+  args: process.argv.slice(2),
+  options: {
+    check: { type: "boolean" },
+    name: { type: "string" },
+  },
+})
 
-if (Bun.argv.includes("--check")) {
+if (args.values.check) {
   await check()
   process.exit(0)
 }
 
-await $`bun drizzle-kit generate`.cwd(path.join(root, "packages/core"))
+await $`bun drizzle-kit generate ${args.values.name ? ["--name", args.values.name] : []}`.cwd(
+  path.join(root, "packages/core"),
+)
 
 const sqlMigrations = (await Array.fromAsync(new Bun.Glob("*/migration.sql").scan({ cwd: sqlDir })))
   .map((file) => file.split("/")[0])

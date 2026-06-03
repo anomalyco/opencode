@@ -83,6 +83,10 @@
   background: var(--stats-bg);
 }
 
+[data-page="stats"] [hidden] {
+  display: none !important;
+}
+
 [data-page="stats"] [data-component="content"] {
   color: var(--stats-text);
   font-family:
@@ -1028,6 +1032,8 @@
 
 [data-page="stats"] [data-component="top-models-chart"] {
   --top-models-bar-gap: 12px;
+  --top-models-dot-size: 6px;
+  --top-models-dot-offset: 2px;
   position: relative;
   display: grid;
   grid-template-rows: 34px minmax(0, 1fr);
@@ -1161,17 +1167,27 @@
 
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
-  inset: 0 calc(var(--top-models-bar-gap) / 2);
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: calc(100% - var(--top-models-bar-gap));
+  transform: translateX(-50%);
   content: "";
   background: var(--stats-dot);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: center top;
+  mask-position: var(--top-models-dot-offset) top;
   mask-repeat: repeat;
-  mask-size: 6px 6px;
+  mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: center top;
+  -webkit-mask-position: var(--top-models-dot-offset) top;
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: 6px 6px;
+  -webkit-mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
+}
+
+@supports (width: round(down, 100%, 1px)) {
+  [data-page="stats"] [data-slot="top-models-bar"]::before {
+    width: round(down, calc(100% - var(--top-models-bar-gap)), var(--top-models-dot-size));
+  }
 }
 
 [data-page="stats"] [data-slot="top-models-stack"] {
@@ -1632,6 +1648,7 @@
     [data-section="leaderboard"],
     [data-section="market-share"],
     [data-section="token-cost"],
+    [data-section="cache-ratio"],
     [data-section="session-cost"]
   ) {
   position: relative;
@@ -1706,15 +1723,30 @@
   font-weight: 400;
 }
 
+[data-page="stats"] [data-component="leaderboard"],
+[data-page="stats"] [data-slot="leaderboard-featured"],
+[data-page="stats"] [data-slot="leaderboard-compact"],
+[data-page="stats"] [data-slot="leaderboard-column"],
+[data-page="stats"] [data-slot="leaderboard-mobile"] {
+  display: grid;
+}
+
 [data-page="stats"] [data-component="leaderboard"] {
-  display: block;
+  gap: 0;
   width: 100%;
+  margin-top: 36px;
+  scroll-margin-top: 88px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-featured"],
+[data-page="stats"] [data-slot="leaderboard-compact"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 8px;
 }
 
 [data-page="stats"] [data-slot="leaderboard-pattern"] {
-  scroll-margin-top: 88px;
   height: 16px;
-  margin: 32px 0 16px;
+  margin: 16px 0;
   overflow: hidden;
   background: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
@@ -1727,28 +1759,13 @@
   -webkit-mask-size: 6px 6px;
 }
 
-[data-page="stats"] [data-slot="leaderboard-scroll"] {
-  box-sizing: border-box;
-  display: flex;
+[data-page="stats"] [data-slot="leaderboard-column"] {
   gap: 8px;
-  width: calc(100% + 80px);
-  margin-inline: -40px;
-  padding: 4px 40px 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-padding-inline: 40px;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
+  align-content: start;
 }
 
-[data-page="stats"] [data-slot="leaderboard-scroll"]::-webkit-scrollbar {
+[data-page="stats"] [data-slot="leaderboard-mobile"] {
   display: none;
-}
-
-[data-page="stats"] [data-slot="leaderboard-scroll"] [data-component="leader-card"] {
-  flex: 0 0 clamp(240px, 31vw, 360px);
-  width: clamp(240px, 31vw, 360px);
-  scroll-snap-align: start;
 }
 
 [data-page="stats"] [data-component="leader-card"] {
@@ -2106,7 +2123,8 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-component="token-cost"] {
+[data-page="stats"] [data-component="token-cost"],
+[data-page="stats"] [data-component="cache-ratio"] {
   position: relative;
   display: grid;
   gap: 8px;
@@ -2244,6 +2262,121 @@
 
 [data-page="stats"] [data-component="token-tooltip"] span {
   color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-slot="cache-ratio-heading"] {
+  display: grid;
+  grid-template-columns: 56px minmax(96px, 180px) minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: 18px;
+  padding: 0 12px;
+  color: var(--stats-faint);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-slot="cache-ratio-heading"] b {
+  justify-self: end;
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-slot="cache-ratio-rows"] {
+  display: grid;
+  gap: 8px;
+}
+
+[data-page="stats"] button[data-component="cache-ratio-row"] {
+  display: grid;
+  grid-template-columns: 56px minmax(96px, 180px) minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--stats-text);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: left;
+}
+
+[data-page="stats"] button[data-component="cache-ratio-row"][data-active="true"] {
+  background: #0000000a;
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"] strong {
+  color: var(--stats-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"][data-active="true"] strong {
+  color: var(--stats-accent-text);
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"] > span {
+  overflow: hidden;
+  color: var(--stats-muted);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-component="cache-ratio-marker"] {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 7px;
+  overflow: visible;
+  background:
+    linear-gradient(
+      90deg,
+      transparent calc(20% - 0.5px),
+      var(--stats-line) calc(20% - 0.5px) calc(20% + 0.5px),
+      transparent calc(20% + 0.5px) calc(40% - 0.5px),
+      var(--stats-line) calc(40% - 0.5px) calc(40% + 0.5px),
+      transparent calc(40% + 0.5px) calc(60% - 0.5px),
+      var(--stats-line) calc(60% - 0.5px) calc(60% + 0.5px),
+      transparent calc(60% + 0.5px) calc(80% - 0.5px),
+      var(--stats-line) calc(80% - 0.5px) calc(80% + 0.5px),
+      transparent calc(80% + 0.5px)
+    ),
+    linear-gradient(
+      90deg,
+      var(--stats-line) 0 1px,
+      transparent 1px calc(100% - 1px),
+      var(--stats-line) calc(100% - 1px)
+    ),
+    var(--stats-layer-2);
+  font-style: normal;
+}
+
+[data-page="stats"] [data-component="cache-ratio-marker"] em {
+  position: absolute;
+  top: 50%;
+  left: var(--cache-ratio-fill);
+  display: block;
+  width: 7px;
+  height: 13px;
+  transform: translate(-50%, -50%);
+  background: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"][data-active="true"] [data-component="cache-ratio-marker"] {
+  background: var(--stats-line-strong);
+}
+
+[data-page="stats"] [data-component="cache-ratio-row"][data-active="true"] [data-component="cache-ratio-marker"] em {
+  background: var(--stats-accent);
+}
+
+[data-page="stats"] [data-component="token-tooltip"][data-variant="cache-ratio"] {
+  left: 30%;
 }
 
 [data-page="stats"] [data-slot="token-footer"] {
@@ -2387,6 +2520,13 @@
   [data-slot="leader-watermark"] {
   color: var(--stats-line-strong);
   opacity: 0.78;
+}
+
+[data-page="stats"][data-theme="dark"] button[data-component="cache-ratio-row"][data-active="true"],
+:root[data-stats-theme="dark"]
+  [data-page="stats"]:not([data-theme="light"])
+  button[data-component="cache-ratio-row"][data-active="true"] {
+  background: #ffffff0d;
 }
 
 [data-page="stats"][data-theme="dark"] [data-slot="header-button"][data-variant="neutral"],
@@ -2595,16 +2735,9 @@
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="token-cost"],
+  [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"] {
     padding: 64px 32px;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-scroll"] {
-    width: calc(100% + 64px);
-    margin-inline: -32px;
-    padding-right: 32px;
-    padding-left: 32px;
-    scroll-padding-inline: 32px;
   }
 }
 
@@ -2649,9 +2782,9 @@
     flex-wrap: nowrap;
   }
 
-  [data-page="stats"] [data-slot="leaderboard-scroll"] [data-component="leader-card"] {
-    flex-basis: 280px;
-    width: 280px;
+  [data-page="stats"] [data-slot="leaderboard-featured"],
+  [data-page="stats"] [data-slot="leaderboard-compact"] {
+    grid-template-columns: 1fr;
   }
 
   [data-page="stats"] [data-component="leader-card"][data-size="featured"],
@@ -2734,6 +2867,7 @@
   [data-page="stats"] [data-section="leaderboard"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="token-cost"],
+  [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"] {
     padding: 48px 24px;
   }
@@ -2742,6 +2876,12 @@
   [data-page="stats"] [data-slot="section-title"] {
     margin-bottom: 32px;
     font-size: 16px;
+  }
+
+  [data-page="stats"] [data-slot="cache-ratio-heading"],
+  [data-page="stats"] button[data-component="cache-ratio-row"] {
+    grid-template-columns: 44px minmax(72px, 1fr) minmax(86px, 1.2fr);
+    gap: 8px;
   }
 
   [data-page="stats"] [data-slot="top-models-mobile-controls"] {
@@ -2760,47 +2900,9 @@
   }
 
   [data-page="stats"] [data-slot="leaderboard-featured"],
+  [data-page="stats"] [data-slot="leaderboard-pattern"],
   [data-page="stats"] [data-slot="leaderboard-compact"] {
     display: none;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-pattern"] {
-    margin: 24px 0 12px;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-scroll"] {
-    gap: 12px;
-    width: calc(100% + 48px);
-    margin-inline: -24px;
-    padding-right: 24px;
-    padding-left: 24px;
-    scroll-padding-inline: 24px;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-scroll"] [data-component="leader-card"] {
-    flex: 0 0 240px;
-    width: 240px;
-    min-height: 156px;
-    gap: 32px;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-scroll"] [data-slot="leader-body"] {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-scroll"] [data-slot="leader-avatar"] {
-    width: 28px;
-    height: 28px;
-    padding: 4px;
-    border-radius: 6px;
-  }
-
-  [data-page="stats"] [data-slot="leaderboard-scroll"] [data-slot="leader-watermark"] {
-    right: -68px;
-    width: 240px;
-    height: 240px;
   }
 
   [data-page="stats"] [data-slot="leaderboard-mobile"] {

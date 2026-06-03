@@ -1,5 +1,6 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Provider } from "@/provider/provider"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Log } from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer } from "effect"
@@ -15,7 +16,6 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Wildcard } from "@/util/wildcard"
@@ -33,12 +33,12 @@ const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
 export type StreamInput = {
-  user: SessionLegacy.User
+  user: SessionV1.User
   sessionID: string
   parentSessionID?: string
   model: Provider.Model
   agent: Agent.Info
-  permission?: Permission.Ruleset
+  permission?: PermissionV1.Ruleset
   system: string[]
   messages: ModelMessage[]
   small?: boolean
@@ -165,7 +165,7 @@ const live: Layer.Layer<
             return { approved: true }
           }
 
-          const id = PermissionID.ascending()
+          const id = PermissionV1.ID.ascending()
           let unsub: EventV2.Unsubscribe | undefined
           try {
             unsub = await bridge.promise(
@@ -280,6 +280,8 @@ const live: Layer.Layer<
       return {
         type: "ai-sdk" as const,
         result: streamText({
+          // Copilot returns the authoritative billed amount only in provider-specific response fields.
+          includeRawChunks: input.model.providerID.includes("github-copilot"),
           onError(error) {
             l.error("stream error", {
               error,

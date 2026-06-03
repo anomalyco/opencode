@@ -1,17 +1,18 @@
 import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm/sqlite-core"
+import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
 import type { Snapshot } from "../snapshot"
-import { PermissionV2 } from "../permission"
+import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
-import type { MessageID, PartID, Info as LegacyMessageInfo, Part as LegacyMessagePart } from "./legacy"
+import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
-type LegacyMessageData = Omit<LegacyMessageInfo, "id" | "sessionID">
-type LegacyPartData = Omit<LegacyMessagePart, "id" | "sessionID" | "messageID">
+type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
+type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
 export const SessionTable = sqliteTable(
   "session",
@@ -24,8 +25,8 @@ export const SessionTable = sqliteTable(
     workspace_id: text().$type<WorkspaceV2.ID>(),
     parent_id: text().$type<SessionSchema.ID>(),
     slug: text().notNull(),
-    directory: text().notNull(),
-    path: text(),
+    directory: DatabasePath.directoryColumn().notNull(),
+    path: DatabasePath.pathColumn(),
     title: text().notNull(),
     version: text().notNull(),
     share_url: text(),
@@ -41,7 +42,7 @@ export const SessionTable = sqliteTable(
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
-    permission: text({ mode: "json" }).$type<PermissionV2.Ruleset>(),
+    permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
       id: string
@@ -68,7 +69,7 @@ export const MessageTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<LegacyMessageData>(),
+    data: text({ mode: "json" }).notNull().$type<V1MessageData>(),
   },
   (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
@@ -83,7 +84,7 @@ export const PartTable = sqliteTable(
       .references(() => MessageTable.id, { onDelete: "cascade" }),
     session_id: text().$type<SessionSchema.ID>().notNull(),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<LegacyPartData>(),
+    data: text({ mode: "json" }).notNull().$type<V1PartData>(),
   },
   (table) => [
     index("part_message_id_id_idx").on(table.message_id, table.id),
@@ -128,11 +129,3 @@ export const SessionMessageTable = sqliteTable(
     index("session_message_time_created_idx").on(table.time_created),
   ],
 )
-
-export const PermissionTable = sqliteTable("permission", {
-  project_id: text()
-    .primaryKey()
-    .references(() => ProjectTable.id, { onDelete: "cascade" }),
-  ...Timestamps,
-  data: text({ mode: "json" }).notNull().$type<PermissionV2.Ruleset>(),
-})

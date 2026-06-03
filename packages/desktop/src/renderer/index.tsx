@@ -319,7 +319,7 @@ render(() => {
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
   // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+  const [sidecar] = createResource(() => window.api.awaitInitialization())
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {

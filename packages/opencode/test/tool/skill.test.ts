@@ -1,3 +1,4 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
@@ -67,7 +68,7 @@ Use this skill.
       })).find((tool) => tool.id === SkillTool.id)
       if (!tool) throw new Error("Skill tool not found")
 
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+      const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
       const ctx: Tool.Context = {
         ...baseCtx,
         ask: (req) =>

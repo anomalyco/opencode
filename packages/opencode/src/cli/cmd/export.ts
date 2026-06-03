@@ -1,5 +1,5 @@
 import { Session } from "@/session/session"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { effectCmd, fail } from "../effect-cmd"
@@ -32,7 +32,7 @@ function diff(kind: string, diffs: { file?: string; patch?: string }[] | undefin
   }))
 }
 
-function source(part: SessionLegacy.FilePart) {
+function source(part: SessionV1.FilePart) {
   if (!part.source) return part.source
   if (part.source.type === "symbol") {
     return {
@@ -57,7 +57,7 @@ function source(part: SessionLegacy.FilePart) {
   }
 }
 
-function filepart(part: SessionLegacy.FilePart): SessionLegacy.FilePart {
+function filepart(part: SessionV1.FilePart): SessionV1.FilePart {
   return {
     ...part,
     url: redact("file-url", part.id, part.url),
@@ -66,7 +66,7 @@ function filepart(part: SessionLegacy.FilePart): SessionLegacy.FilePart {
   }
 }
 
-function part(part: SessionLegacy.Part): SessionLegacy.Part {
+function part(part: SessionV1.Part): SessionV1.Part {
   switch (part.type) {
     case "text":
       return {
@@ -160,7 +160,7 @@ function part(part: SessionLegacy.Part): SessionLegacy.Part {
 
 const partFn = part
 
-function sanitize(data: { info: Session.Info; messages: SessionLegacy.WithParts[] }) {
+function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
   return {
     info: {
       ...data.info,

@@ -7,7 +7,8 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
-import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { showToast } from "@/utils/toast"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
@@ -86,6 +87,7 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const permission = usePermission()
   const platform = usePlatform()
+  const dialog = useDialog()
   const params = useParams()
   const settings = useSettings()
 
@@ -407,7 +409,13 @@ export const SettingsGeneral: Component = () => {
           <div data-action="settings-new-layout-designs">
             <Switch
               checked={settings.general.newLayoutDesigns()}
-              onChange={(checked) => settings.general.setNewLayoutDesigns(checked)}
+              onChange={(checked) => {
+                settings.general.setNewLayoutDesigns(checked)
+                if (!checked) return
+                void import("@/components/settings-v2").then((module) => {
+                  dialog.show(() => <module.DialogSettings />)
+                })
+              }}
             />
           </div>
         </SettingsRow>
