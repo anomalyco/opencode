@@ -493,14 +493,14 @@ describe("plugin.openai.ws-pool", () => {
     })
     const fetch = OpenAIWebSocketPool.createWebSocketFetch({
       url: server.url,
-      idleTimeout: 200,
+      idleTimeout: 500,
       streamRetries: 1,
     })
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await new Promise((resolve) => setTimeout(resolve, 250))
     const first = await fetch(server.url, streamRequest())
     expect((await readTextError(first.text())).message).toContain("idle timeout waiting for websocket")
-    await new Promise((resolve) => setTimeout(resolve, 130))
+    await new Promise((resolve) => setTimeout(resolve, 300))
 
     const second = await fetch(server.url, streamRequest())
 
