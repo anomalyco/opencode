@@ -3,6 +3,7 @@ export * as SessionMessageBackfill from "./message-backfill"
 import { createHash } from "crypto"
 import { DateTime } from "effect"
 import { ModelV2 } from "../model"
+import { ToolOutput } from "../tool-output"
 import { SessionEvent } from "./event"
 import { SessionLegacy } from "./legacy"
 import { SessionMessage } from "./message"
@@ -110,7 +111,8 @@ function mapAssistant(
 ) {
   const parts = sortedParts(entry.parts)
   const mappedContentParts = parts.filter(
-    (part): part is SessionLegacy.TextPart | SessionLegacy.ReasoningPart => part.type === "text" || part.type === "reasoning",
+    (part): part is SessionLegacy.TextPart | SessionLegacy.ReasoningPart | SessionLegacy.ToolPart =>
+      part.type === "text" || part.type === "reasoning" || part.type === "tool",
   )
   const content: SessionMessage.AssistantContent[] = mappedContentParts.flatMap((part, contentOrdinal): SessionMessage.AssistantContent[] => {
     if (part.type === "text") {
@@ -127,6 +129,7 @@ function mapAssistant(
         }),
       ]
     }
+    if (part.type === "tool") return [mapToolPart(part, entry, sessionID, messageOrdinal, contentOrdinal, stats)]
     addStat(stats.mapped, part.type, "assistant_reasoning")
     return [
       new SessionMessage.AssistantReasoning({
@@ -141,7 +144,7 @@ function mapAssistant(
   const stepStart = parts.find((part): part is SessionLegacy.StepStartPart => part.type === "step-start" && part.snapshot !== undefined)
 
   parts
-    .filter((part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "step-start" && part.type !== "step-finish")
+    .filter((part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "tool" && part.type !== "step-start" && part.type !== "step-finish")
     .forEach((part) => addUnsupportedPartStat(part, stats))
   if (entry.info.structured !== undefined) addStat(stats.degraded, "assistant", "assistant_structured_schema_missing")
   addStat(stats.degraded, "assistant", "assistant_mode_schema_missing")
@@ -187,6 +190,132 @@ function mapAssistant(
       completed: entry.info.time.completed ? DateTime.makeUnsafe(entry.info.time.completed) : undefined,
     },
   })
+}
+
+function mapToolPart(
+  part: SessionLegacy.ToolPart,
+  entry: { info: SessionLegacy.Assistant },
+  sessionID: SessionSchema.ID | string,
+  messageOrdinal: number,
+  contentOrdinal: number,
+  stats: Stats,
+) {
+  const state = mapToolState(part, stats)
+  addStat(stats.mapped, part.type, `assistant_tool_${part.state.status}`)
+  return new SessionMessage.AssistantTool({
+    type: "tool",
+    id: contentID(sessionID, entry.info.id, part.id, "assistant_tool", messageOrdinal, contentOrdinal),
+    callID: part.callID,
+    name: part.tool,
+    provider: mapToolProvider(part, stats),
+    state,
+    time: mapToolTime(part, entry.info.time.created),
+  })
+}
+
+function mapToolState(part: SessionLegacy.ToolPart, stats: Stats): SessionMessage.ToolState {
+  if (part.state.status === "pending") {
+    if (part.state.raw === "" && Object.keys(part.state.input).length > 0) {
+      addStat(stats.degraded, part.type, "tool_pending_raw_empty_with_structured_input")
+    }
+    return new SessionMessage.ToolStatePending({ status: "pending", input: part.state.raw })
+  }
+  if (part.state.status === "running") {
+    degradeToolStateMetadata(part, stats)
+    if (part.state.title !== undefined) addStat(stats.degraded, part.type, "tool_title_schema_missing")
+    return new SessionMessage.ToolStateRunning({
+      status: "running",
+      input: part.state.input,
+      structured: mapToolStructured(part, stats),
+      content: [],
+    })
+  }
+  if (part.state.status === "completed") {
+    degradeToolStateMetadata(part, stats)
+    addStat(stats.degraded, part.type, "tool_title_schema_missing")
+    return new SessionMessage.ToolStateCompleted({
+      status: "completed",
+      input: part.state.input,
+      structured: mapToolStructured(part, stats),
+      content: [new ToolOutput.TextContent({ type: "text", text: part.state.output }), ...mapToolAttachments(part, stats)],
+    })
+  }
+  degradeToolStateMetadata(part, stats)
+  return new SessionMessage.ToolStateError({
+    status: "error",
+    input: part.state.input,
+    structured: mapToolStructured(part, stats),
+    content: mapToolErrorContent(part, stats),
+    error: { type: "unknown", message: part.state.error },
+  })
+}
+
+function mapToolTime(part: SessionLegacy.ToolPart, created: number) {
+  if (part.state.status === "pending") return { created: DateTime.makeUnsafe(created) }
+  if (part.state.status === "running") return { created: DateTime.makeUnsafe(created), ran: DateTime.makeUnsafe(part.state.time.start) }
+  if (part.state.status === "completed") {
+    return {
+      created: DateTime.makeUnsafe(created),
+      ran: DateTime.makeUnsafe(part.state.time.start),
+      completed: DateTime.makeUnsafe(part.state.time.end),
+      pruned: part.state.time.compacted ? DateTime.makeUnsafe(part.state.time.compacted) : undefined,
+    }
+  }
+  return {
+    created: DateTime.makeUnsafe(created),
+    ran: DateTime.makeUnsafe(part.state.time.start),
+    completed: DateTime.makeUnsafe(part.state.time.end),
+  }
+}
+
+function mapToolProvider(part: SessionLegacy.ToolPart, stats: Stats) {
+  if (!part.metadata) return undefined
+  const metadata = Object.fromEntries(Object.entries(part.metadata).filter(([key]) => key !== "providerExecuted"))
+  if ("providerExecuted" in part.metadata && typeof part.metadata.providerExecuted !== "boolean") {
+    addStat(stats.degraded, part.type, "tool_provider_executed_invalid")
+  }
+  return {
+    executed: part.metadata.providerExecuted === true,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+  }
+}
+
+function mapToolAttachments(part: SessionLegacy.ToolPart, stats: Stats) {
+  if (part.state.status !== "completed") return []
+  return (part.state.attachments ?? []).map((attachment) => {
+    if (attachment.source) addStat(stats.degraded, "file", "file_source_kind_unsupported")
+    addStat(stats.mapped, "file", "tool_file_content")
+    return new ToolOutput.FileContent({ type: "file", uri: attachment.url, mime: attachment.mime, name: attachment.filename })
+  })
+}
+
+function mapToolStructured(part: SessionLegacy.ToolPart, stats: Stats) {
+  if (part.state.status === "pending") return {}
+  if (isRecord(part.state.metadata?.structured)) {
+    addStat(stats.mapped, part.type, "tool_structured_metadata")
+    return part.state.metadata.structured
+  }
+  return {}
+}
+
+function mapToolErrorContent(part: SessionLegacy.ToolPart, stats: Stats) {
+  if (part.state.status !== "error") return []
+  if (typeof part.state.metadata?.output === "string") {
+    addStat(stats.mapped, part.type, "tool_error_output_text")
+    return [new ToolOutput.TextContent({ type: "text", text: part.state.metadata.output })]
+  }
+  if (part.state.metadata && "output" in part.state.metadata) addStat(stats.degraded, part.type, "tool_error_output_not_representable")
+  return []
+}
+
+function degradeToolStateMetadata(part: SessionLegacy.ToolPart, stats: Stats) {
+  if (part.state.status === "pending" || !part.state.metadata) return
+  const unsupportedKeys = Object.keys(part.state.metadata).filter((key) => key !== "structured" && !(part.state.status === "error" && key === "output"))
+  if (unsupportedKeys.length > 0) addStat(stats.degraded, part.type, "tool_state_metadata_schema_missing")
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function mapAssistantError(error: NonNullable<SessionLegacy.Assistant["error"]>, stats: Stats): SessionEvent.AssistantError {

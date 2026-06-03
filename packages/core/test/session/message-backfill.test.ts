@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
 import { SessionMessageBackfill } from "@opencode-ai/core/session/message-backfill"
@@ -103,6 +103,51 @@ function tool(messageID: string, id: string): SessionLegacy.ToolPart {
   }
 }
 
+function runningTool(messageID: string, id: string): SessionLegacy.ToolPart {
+  return {
+    id: SessionLegacy.PartID.make(id),
+    sessionID,
+    messageID: SessionLegacy.MessageID.make(messageID),
+    type: "tool",
+    callID: "call_1",
+    tool: "bash",
+    metadata: { providerExecuted: true, serverToolID: "srv_1" },
+    state: { status: "running", input: { cmd: "pwd" }, title: "Run command", metadata: { note: "legacy" }, time: { start: 11 } },
+  }
+}
+
+function completedTool(messageID: string, id: string): SessionLegacy.ToolPart {
+  return {
+    id: SessionLegacy.PartID.make(id),
+    sessionID,
+    messageID: SessionLegacy.MessageID.make(messageID),
+    type: "tool",
+    callID: "call_1",
+    tool: "bash",
+    state: {
+      status: "completed",
+      input: { cmd: "cat image" },
+      output: "done",
+      title: "Read file",
+      metadata: { structured: { exitCode: 0 } },
+      time: { start: 12, end: 13, compacted: 14 },
+      attachments: [file(messageID, "prt_attachment")],
+    },
+  }
+}
+
+function errorTool(messageID: string, id: string, metadata?: Record<string, unknown>): SessionLegacy.ToolPart {
+  return {
+    id: SessionLegacy.PartID.make(id),
+    sessionID,
+    messageID: SessionLegacy.MessageID.make(messageID),
+    type: "tool",
+    callID: "call_1",
+    tool: "bash",
+    state: { status: "error", input: { cmd: "false" }, error: "failed", metadata, time: { start: 15, end: 16 } },
+  }
+}
+
 function stepFinish(messageID: string, id: string, reasonValue = "stop"): SessionLegacy.StepFinishPart {
   return {
     id: SessionLegacy.PartID.make(id),
@@ -182,6 +227,14 @@ function assertNoLegacyIDs(value: unknown) {
 
 function statCount(stats: SessionMessageBackfill.Stat[], type: string, reason: string) {
   return stats.find((stat) => stat.type === type && stat.reason === reason)?.count ?? 0
+}
+
+function assistantToolContent(message: SessionMessage.Message) {
+  expect(message.type).toBe("assistant")
+  if (message.type !== "assistant") throw new Error("expected assistant message")
+  const content = message.content.find((item): item is SessionMessage.AssistantTool => item.type === "tool")
+  if (!content) throw new Error("expected assistant tool content")
+  return content
 }
 
 describe("SessionMessageBackfill", () => {
@@ -280,13 +333,77 @@ describe("SessionMessageBackfill", () => {
 
     const result = SessionMessageBackfill.mapLegacyMessages([entry], { sessionID })
 
-    expect(statCount(result.stats.skipped, "tool", "tool_mapping_excluded")).toBe(1)
+    expect(statCount(result.stats.mapped, "tool", "assistant_tool_pending")).toBe(1)
+    expect(statCount(result.stats.skipped, "tool", "tool_mapping_excluded")).toBe(0)
     expect(statCount(result.stats.skipped, "patch", "patch_schema_missing")).toBe(1)
     expect(statCount(result.stats.skipped, "retry", "retry_mapping_excluded")).toBe(1)
     expect(statCount(result.stats.skipped, "compaction", "compaction_mapping_excluded")).toBe(1)
     expect(statCount(result.stats.skipped, "subtask", "subtask_schema_missing")).toBe(1)
     expect(statCount(result.stats.degraded, "step-finish", "assistant_finish_conflict")).toBe(1)
     expect(statCount(result.stats.degraded, "assistant", "assistant_mode_schema_missing")).toBe(1)
+  })
+
+  test("maps pending assistant tools with deterministic content IDs and raw input", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_tool_pending", 1, [tool("msg_tool_pending", "prt_tool")])], { sessionID })
+    const content = assistantToolContent(result.messages[0]!)
+
+    expect(content).toMatchObject({ type: "tool", callID: "call_1", name: "bash", state: { status: "pending", input: "{}" } })
+    expect(content.id).toMatch(/^evt_legacy_backfill_c_00000000_00000000_[0-9a-f]{24}$/)
+    assertNoLegacyIDs(encodeMessage(result.messages[0]!))
+  })
+
+  test("maps running assistant tools with ran timing and provider metadata", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_tool_running", 1, [runningTool("msg_tool_running", "prt_tool")])], { sessionID })
+    const content = assistantToolContent(result.messages[0]!)
+
+    expect(content.provider).toEqual({ executed: true, metadata: { serverToolID: "srv_1" } })
+    expect(content.state).toMatchObject({ status: "running", input: { cmd: "pwd" }, structured: {}, content: [] })
+    expect(DateTime.toEpochMillis(content.time.created)).toBe(1)
+    expect(content.time.ran && DateTime.toEpochMillis(content.time.ran)).toBe(11)
+    expect(statCount(result.stats.degraded, "tool", "tool_title_schema_missing")).toBe(1)
+    expect(statCount(result.stats.degraded, "tool", "tool_state_metadata_schema_missing")).toBe(1)
+  })
+
+  test("maps completed tool text and file attachments as tool output content without attachments field", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_tool_completed", 1, [completedTool("msg_tool_completed", "prt_tool")])], { sessionID })
+    const content = assistantToolContent(result.messages[0]!)
+
+    expect(content.state.status).toBe("completed")
+    if (content.state.status !== "completed") return
+    expect(content.state.content).toEqual([
+      { type: "text", text: "done" },
+      { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "image.png" },
+    ])
+    expect(content.state.structured).toEqual({ exitCode: 0 })
+    expect(DateTime.toEpochMillis(content.time.ran!)).toBe(12)
+    expect(DateTime.toEpochMillis(content.time.completed!)).toBe(13)
+    expect(DateTime.toEpochMillis(content.time.pruned!)).toBe(14)
+    expect(JSON.stringify(encodeMessage(result.messages[0]!))).not.toContain("attachments")
+    expect(statCount(result.stats.mapped, "file", "tool_file_content")).toBe(1)
+  })
+
+  test("maps error tools to unknown errors and preserves representable text output", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_tool_error", 1, [errorTool("msg_tool_error", "prt_tool", { output: "partial output", structured: { code: 1 } })])], { sessionID })
+    const content = assistantToolContent(result.messages[0]!)
+
+    expect(content.state.status).toBe("error")
+    if (content.state.status !== "error") return
+    expect(content.state.error).toEqual({ type: "unknown", message: "failed" })
+    expect(content.state.content).toEqual([{ type: "text", text: "partial output" }])
+    expect(content.state.structured).toEqual({ code: 1 })
+    expect(DateTime.toEpochMillis(content.time.ran!)).toBe(15)
+    expect(DateTime.toEpochMillis(content.time.completed!)).toBe(16)
+    expect(statCount(result.stats.mapped, "tool", "tool_error_output_text")).toBe(1)
+  })
+
+  test("records degraded stats for error tool output that cannot be represented", () => {
+    const result = SessionMessageBackfill.mapLegacyMessages([assistant("msg_tool_error_degraded", 1, [errorTool("msg_tool_error_degraded", "prt_tool", { output: { nested: true } })])], { sessionID })
+    const content = assistantToolContent(result.messages[0]!)
+
+    expect(content.state.status).toBe("error")
+    if (content.state.status !== "error") return
+    expect(content.state.content).toEqual([])
+    expect(statCount(result.stats.degraded, "tool", "tool_error_output_not_representable")).toBe(1)
   })
 
   test("maps step-start snapshot to assistant snapshot start", () => {
@@ -369,7 +486,7 @@ describe("SessionMessageBackfill", () => {
     const result = SessionMessageBackfill.mapLegacyMessages(
       [
         user("msg_user_roundtrip", 1, [text("msg_user_roundtrip", "prt_a", "hello")]),
-        assistant("msg_assistant_roundtrip", 2, [text("msg_assistant_roundtrip", "prt_b", "world")]),
+        assistant("msg_assistant_roundtrip", 2, [text("msg_assistant_roundtrip", "prt_b", "world"), completedTool("msg_assistant_roundtrip", "prt_c")]),
       ],
       { sessionID },
     )
