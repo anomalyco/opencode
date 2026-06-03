@@ -518,6 +518,79 @@ describe("tool.task", () => {
     }),
   )
 
+  background.instance("background task completion waits for running updates", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const first = defer<void>()
+      const second = defer<void>()
+      const updated = defer<SessionPrompt.PromptInput>()
+      const injected = defer<SessionPrompt.PromptInput>()
+      let prompts = 0
+      const promptOps: TaskPromptOps = {
+        ...stubOps(),
+        prompt: (input) => {
+          if (input.sessionID === chat.id) {
+            injected.resolve(input)
+            return Effect.succeed(reply(input, "done"))
+          }
+          prompts++
+          if (prompts === 1) return Effect.promise(() => first.promise).pipe(Effect.as(reply(input, "first done")))
+          updated.resolve(input)
+          return Effect.promise(() => second.promise).pipe(Effect.as(reply(input, "second done")))
+        },
+      }
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const started = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        context,
+      )
+      const result = yield* def.execute(
+        {
+          description: "add investigation scope",
+          prompt: "also inspect cancellation",
+          subagent_type: "general",
+          task_id: started.metadata.sessionId,
+        },
+        context,
+      )
+
+      expect((yield* Effect.promise(() => updated.promise)).parts).toEqual([
+        { type: "text", text: "also inspect cancellation" },
+      ])
+      expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
+      expect(result.metadata.background).toBe(true)
+      expect(result.output).toContain("Background task updated")
+      first.resolve()
+      expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
+
+      second.resolve()
+      const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
+      expect(waited.info?.status).toBe("completed")
+      expect(waited.info?.output).toBe("second done")
+      const notification = yield* Effect.promise(() => injected.promise)
+      expect(notification.parts[0]?.type).toBe("text")
+      if (notification.parts[0]?.type === "text") expect(notification.parts[0].text).toContain("second done")
+    }),
+  )
+
   background.instance("background tasks complete through the background job service", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
