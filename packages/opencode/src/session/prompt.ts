@@ -77,6 +77,12 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+const STRUCTURED_OUTPUT_RETRY_REMINDER = [
+  "<system-reminder>",
+  "You did not call the StructuredOutput tool. You MUST call StructuredOutput exactly once with your final answer matching the required JSON schema. Do not respond with plain text.",
+  "</system-reminder>",
+].join("\n")
+
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
   // They are not pending work and must not trigger an assistant-prefill request.
@@ -1136,6 +1142,7 @@ export const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let structuredRetry = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1368,9 +1375,51 @@ export const layer = Layer.effect(
                 return "break" as const
               }
               if (format.type === "json_schema") {
+                const maxRetries = format.retryCount ?? 2
+                if (structuredRetry < maxRetries) {
+                  structuredRetry++
+                  yield* sessions.updateMessage(handle.message)
+                  const reminderMsg: SessionV1.User = {
+                    id: MessageID.ascending(),
+                    sessionID,
+                    role: "user",
+                    time: { created: Date.now() },
+                    agent: lastUser.agent,
+                    model: lastUser.model,
+                    format: lastUser.format,
+                  }
+                  const reminderPart: SessionV1.TextPart = {
+                    id: PartID.ascending(),
+                    messageID: reminderMsg.id,
+                    sessionID,
+                    type: "text",
+                    text: STRUCTURED_OUTPUT_RETRY_REMINDER,
+                    synthetic: true,
+                  }
+                  const parsedInfo = decodeMessageInfo(reminderMsg, { errors: "all", propertyOrder: "original" })
+                  if (Exit.isFailure(parsedInfo)) {
+                    yield* Effect.logError("invalid structured-retry reminder message", {
+                      sessionID,
+                      messageID: reminderMsg.id,
+                      cause: Cause.pretty(parsedInfo.cause),
+                    })
+                  }
+                  const parsedPart = decodeMessagePart(reminderPart, { errors: "all", propertyOrder: "original" })
+                  if (Exit.isFailure(parsedPart)) {
+                    yield* Effect.logError("invalid structured-retry reminder part", {
+                      sessionID,
+                      messageID: reminderMsg.id,
+                      partID: reminderPart.id,
+                      cause: Cause.pretty(parsedPart.cause),
+                    })
+                  }
+                  yield* sessions.updateMessage(reminderMsg)
+                  yield* sessions.updatePart(reminderPart)
+                  return "continue" as const
+                }
                 handle.message.error = new SessionV1.StructuredOutputError({
                   message: "Model did not produce structured output",
-                  retries: 0,
+                  retries: structuredRetry,
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const
