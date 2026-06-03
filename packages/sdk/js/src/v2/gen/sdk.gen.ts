@@ -4579,6 +4579,7 @@ export class Session3 extends HeyApiClient {
       workspace?: string
       id?: string
       prompt?: Prompt
+      delivery?: "steer" | "queue"
       resume?: boolean
     },
     options?: Options<never, ThrowOnError>,
@@ -4593,6 +4594,7 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "id" },
             { in: "body", key: "prompt" },
+            { in: "body", key: "delivery" },
             { in: "body", key: "resume" },
           ],
         },

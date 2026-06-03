@@ -8619,6 +8619,10 @@
                   "prompt": {
                     "$ref": "#/components/schemas/Prompt"
                   },
+                  "delivery": {
+                    "type": "string",
+                    "enum": ["steer", "queue"]
+                  },
                   "resume": {
                     "type": "boolean"
                   }
@@ -14029,10 +14033,6 @@
                       "sessionID": {
                         "type": "string",
                         "pattern": "^ses"
-                      },
-                      "promptCursor": {
-                        "type": "integer",
-                        "minimum": 0
                       }
                     },
                     "required": ["timestamp", "sessionID"],
@@ -20724,10 +20724,6 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
-              },
-              "promptCursor": {
-                "type": "integer",
-                "minimum": 0
               }
             },
             "required": ["timestamp", "sessionID"],
@@ -23349,10 +23345,6 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
-              },
-              "promptCursor": {
-                "type": "integer",
-                "minimum": 0
               }
             },
             "required": ["timestamp", "sessionID"],
