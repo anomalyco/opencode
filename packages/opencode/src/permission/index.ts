@@ -7,6 +7,7 @@ import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Plugin } from "@/plugin"
 
 const log = Log.create({ service: "permission" })
 
@@ -56,6 +57,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const plugin = yield* Plugin.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -107,6 +109,18 @@ export const layer = Layer.effect(
         tool: request.tool,
       }
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
+
+      const output: { status: "ask" | "allow" | "deny" } = { status: "ask" }
+      yield* plugin.trigger("permission.ask", info, output)
+
+      if (output.status === "allow") {
+        return
+      }
+      if (output.status === "deny") {
+        return yield* new PermissionV1.DeniedError({
+          ruleset: [],
+        })
+      }
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
       pending.set(id, { info, deferred })
@@ -225,6 +239,9 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
   )
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(EventV2Bridge.defaultLayer),
+  Layer.provide(Plugin.defaultLayer)
+)
 
 export * as Permission from "."

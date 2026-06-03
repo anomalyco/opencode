@@ -11,11 +11,25 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
+import { Plugin } from "../../src/plugin"
+
+const mockPluginLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    trigger: Effect.fn("Plugin.trigger")(function* (name, input, output) {
+      return output as any
+    }),
+    list: Effect.fn("Plugin.list")(function* () {
+      return []
+    }),
+    init: Effect.fn("Plugin.init")(function* () {}),
+  }),
+)
 
 const events = EventV2Bridge.defaultLayer
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const env = Layer.mergeAll(
-  Permission.layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(events)),
+  Permission.layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(events), Layer.provide(mockPluginLayer)),
   events,
   CrossSpawnSpawner.defaultLayer,
   InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
