@@ -21,17 +21,23 @@ export class UrlSource extends Schema.Class<UrlSource>("SkillV2.UrlSource")({
   url: Schema.String,
 }) {}
 
-export const Source = Schema.Union([DirectorySource, UrlSource]).pipe(
+export class SkillSource extends Schema.Class<SkillSource>("SkillV2.SkillSource")({
+  type: Schema.Literal("skill"),
+  skill: Schema.suspend(() => Info),
+}) {}
+
+export const Source = Schema.Union([DirectorySource, UrlSource, SkillSource]).pipe(
   Schema.toTaggedUnion("type"),
   withStatics(() => ({
-    equals: (a: DirectorySource | UrlSource, b: DirectorySource | UrlSource) => {
+    equals: (a: DirectorySource | UrlSource | SkillSource, b: DirectorySource | UrlSource | SkillSource) => {
       if (a.type !== b.type) return false
       if (a.type === "directory" && b.type === "directory") return a.path === b.path
       if (a.type === "url" && b.type === "url") return a.url === b.url
+      if (a.type === "skill" && b.type === "skill") return a.skill.name === b.skill.name
       return false
     },
-    key: (source: DirectorySource | UrlSource) =>
-      source.type === "directory" ? `directory:${source.path}` : `url:${source.url}`,
+    key: (source: DirectorySource | UrlSource | SkillSource) =>
+      source.type === "directory" ? `directory:${source.path}` : source.type === "url" ? `url:${source.url}` : `skill:${source.skill.name}`,
   })),
 )
 export type Source = typeof Source.Type
@@ -40,6 +46,9 @@ export class Info extends Schema.Class<Info>("SkillV2.Info")({
   name: Schema.String,
   description: Schema.String.pipe(Schema.optional),
   slash: Schema.Boolean.pipe(Schema.optional),
+  subagent: Schema.Boolean.pipe(Schema.optional),
+  agent: Schema.String.pipe(Schema.optional),
+  model: Schema.String.pipe(Schema.optional),
   location: AbsolutePath,
   content: Schema.String,
 }) {}
@@ -48,6 +57,9 @@ const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   slash: Schema.Boolean.pipe(Schema.optional),
+  subagent: Schema.Boolean.pipe(Schema.optional),
+  agent: Schema.String.pipe(Schema.optional),
+  model: Schema.String.pipe(Schema.optional),
 })
 const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
 
@@ -89,6 +101,7 @@ export const layer = Layer.effect(
 
     const load = Effect.fn("SkillV2.load")(function* (source: Source) {
       const skills: Info[] = []
+      if (source.type === "skill") return [source.skill]
       const directories = source.type === "directory" ? [source.path] : yield* discovery.pull(source.url)
       for (const directory of directories) {
         const files = yield* fs
@@ -112,6 +125,9 @@ export const layer = Layer.effect(
             name,
             description: frontmatter.description,
             slash: frontmatter.slash,
+            subagent: frontmatter.subagent,
+            agent: frontmatter.agent,
+            model: frontmatter.model,
             location: AbsolutePath.make(filepath),
             content: markdown.content,
           }))

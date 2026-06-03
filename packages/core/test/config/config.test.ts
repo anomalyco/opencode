@@ -100,6 +100,32 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 commands for slash skill compatibility", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          command: {
+            review: {
+              template: "Review changes",
+              description: "Review code",
+              agent: "reviewer",
+              model: "anthropic/claude",
+              subtask: true,
+            },
+          },
+        }).commands,
+      ).toEqual({
+        review: {
+          template: "Review changes",
+          description: "Review code",
+          agent: "reviewer",
+          model: "anthropic/claude",
+          subtask: true,
+        },
+      })
+    }),
+  )
+
   it.live("returns an empty configuration when directory files do not exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
