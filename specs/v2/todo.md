@@ -44,7 +44,7 @@ Next reviewed slices:
 - remove the public in-memory `@opencode-ai/llm` tool loop after replacing its
   remaining one-turn native-adapter use with a narrow typed dispatcher
 - batch streamed deltas and add covering context indexes
-- add replayable Session event cursors
+- expose replayable Session event cursors over HTTP and the generated SDK where remote consumers need them
 - add compaction, queued steering, interruption, retries, and stale-owner fencing
   only as their slices become concrete
 
@@ -89,8 +89,8 @@ replay-owner claims without relying on the old bus system.
 
 Remaining slices:
 
-- expose a consumer-facing Session cursor API that replays durable history and
-  tails live events without a race
+- expose the embedded consumer-facing Session cursor API over HTTP and the
+  generated SDK where remote consumers need it
 - keep replay-owner claims distinct from future clustered Session execution
   ownership and stale-runtime fencing
 

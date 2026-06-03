@@ -37,7 +37,9 @@ The local runner issues one explicit `llm.stream(request)` per provider turn, pr
 
 Eager local-tool execution is intentionally unbounded in the current local slice. This minimizes tool latency but does not increase SQLite settlement throughput: Session-event publication remains serialized per provider turn. Before broadening exposure, revisit per-turn call limits, output truncation, and operational backpressure using observed workloads. The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets.
 
-Core already persists synchronized Session events and exposes internal replay for projection reconstruction. This is distinct from the missing consumer stream: replay durable events after a cursor, then tail live events without a race.
+Core persists synchronized Session events and exposes internal replay for projection reconstruction. Consumers can use `sessions.events({ sessionID, after? })` to replay durable `session.next.*` events after an aggregate sequence cursor, then tail durable events without a race. Live-only text, reasoning, and tool-input fragments remain available through EventV2 subscriptions for connected renderers; they are intentionally absent from the replayable Session stream.
+
+The first `sessions.events(...)` contract is durable-only during both replay and live tailing. This keeps one cursor equal to one persisted aggregate sequence and is sufficient for reconnect-safe consumers such as Discord publication. A later UI-facing API may optionally interleave live-only deltas while connected, but those fragments must remain explicitly ephemeral: they cannot advance the durable cursor, replay after reconnect, or be mistaken for publication boundaries. Until that contract is designed, connected renderers can combine `sessions.events(...)` with direct EventV2 delta subscriptions.
 
 Event replay owner claims are separate from clustered Session execution ownership. The former already fences synchronized projection reconstruction; the latter still needs distributed active-run acquisition, stale-runtime rejection, interruption, and placement orchestration.
 
@@ -61,7 +63,8 @@ resolve one path relative to the Location or a named project reference
 - Buffer or coalesce streamed deltas before rewriting growing assistant projections.
 - Add covering indexes for `(session_id, time_created, id)` and `(session_id, type, time_created, id)`.
 - Add `event(aggregate_id, seq)` for ordered replay and history access.
-- Add replayable Session events: replay after a cursor, then tail live events without a race.
+- Expose replayable Session events over HTTP and the generated SDK where remote consumers need them.
+- Decide whether UI-facing Session subscriptions should optionally interleave ephemeral deltas while connected without advancing the durable cursor.
 
 ## Remove Dedicated `session.init` Route
 

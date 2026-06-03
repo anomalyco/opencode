@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -12,6 +12,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -175,6 +176,18 @@ describe("SessionV2.create", () => {
       ).toMatchObject({
         data: { sessionID: id },
       })
+    }),
+  )
+
+  it.effect("omits legacy creation rows from the V2 Session event stream", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      yield* session.prompt({ sessionID: created.id, prompt: new Prompt({ text: "Hello" }), resume: false })
+
+      expect(Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect))).toMatchObject([
+        { cursor: 1, event: { type: "session.next.prompted", data: { prompt: { text: "Hello" } } } },
+      ])
     }),
   )
 

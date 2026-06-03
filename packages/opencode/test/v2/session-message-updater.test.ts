@@ -12,10 +12,11 @@ import { ToolOutput } from "@opencode-ai/core/tool-output"
 test.skip("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
+  const assistantMessageID = EventV2.ID.create()
 
   Effect.runSync(
     SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
-      id: EventV2.ID.create(),
+      id: assistantMessageID,
       type: "session.next.step.started",
       data: {
         sessionID,
@@ -37,6 +38,7 @@ test.skip("step snapshots carry over to assistant messages", () => {
       type: "session.next.step.ended",
       data: {
         sessionID,
+        assistantMessageID,
         timestamp: DateTime.makeUnsafe(2),
         finish: "stop",
         cost: 0,

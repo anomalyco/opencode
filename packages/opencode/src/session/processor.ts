@@ -162,6 +162,11 @@ export const layer = Layer.effect(
           ? Effect.die("V2 tool settlement has no owning assistant message")
           : Effect.succeed(toolCall.assistantMessageID)
 
+      const currentV2AssistantMessage = () =>
+        ctx.v2AssistantMessageID === undefined
+          ? Effect.die("V2 step settlement has no owning assistant message")
+          : Effect.succeed(ctx.v2AssistantMessageID)
+
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
         if (!call) return undefined
@@ -592,6 +597,7 @@ export const layer = Layer.effect(
               if (flags.experimentalEventSystem) {
                 yield* events.publish(SessionEvent.Step.Ended, {
                   sessionID: ctx.sessionID,
+                  assistantMessageID: yield* currentV2AssistantMessage(),
                   finish: value.reason,
                   cost: usage.cost,
                   tokens: usage.tokens,
@@ -801,6 +807,7 @@ export const layer = Layer.effect(
           if (flags.experimentalEventSystem) {
             yield* events.publish(SessionEvent.Step.Failed, {
               sessionID: ctx.sessionID,
+              assistantMessageID: yield* currentV2AssistantMessage(),
               error: {
                 type: "unknown",
                 message: errorMessage(e),

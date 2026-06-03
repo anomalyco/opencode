@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Project } from "@opencode-ai/core/project"
@@ -81,6 +81,28 @@ describe("SessionV2.prompt", () => {
       expect(message.type).toBe("user")
       expect(message.text).toBe("Fix the failing tests")
       expect(yield* session.messages({ sessionID })).toContainEqual(message)
+    }),
+  )
+
+  it.effect("streams durable Session events after an aggregate cursor", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const fiber = yield* session.events({ sessionID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+      const streamed = Array.from(yield* Fiber.join(fiber))
+
+      expect(streamed.map((event) => [event.cursor, event.event.type, (event.event.data as { prompt: Prompt }).prompt.text])).toEqual([
+        [0, "session.next.prompted", "First"],
+        [1, "session.next.prompted", "Second"],
+      ])
+      expect(
+        Array.from(yield* session.events({ sessionID, after: streamed[0]!.cursor }).pipe(Stream.take(1), Stream.runCollect))
+          .map((event) => [event.cursor, (event.event.data as { prompt: Prompt }).prompt.text]),
+      ).toEqual([[1, "Second"]])
     }),
   )
 

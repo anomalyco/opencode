@@ -79,6 +79,7 @@ describe("SessionProjector", () => {
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: SessionMessage.ID.make("evt_assistant_2"),
         finish: "stop",
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

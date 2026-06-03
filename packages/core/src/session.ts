@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context } from "effect"
+import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -124,9 +124,14 @@ export interface Interface {
       direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly message: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Message | undefined>
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly events: (input: {
+    sessionID: SessionSchema.ID
+    after?: number
+  }) => Stream.Stream<EventV2.CursorEvent<SessionEvent.DurableEvent>, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly prompt: (input: {
@@ -163,6 +168,7 @@ export const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
+    const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const scope = yield* Effect.scope
 
     const enqueueResume = (sessionID: SessionSchema.ID) =>
@@ -350,10 +356,21 @@ export const layer = Layer.effect(
         )
         return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
       }),
+      message: Effect.fn("V2Session.message")(function* (messageID) {
+        return (yield* store.message(messageID))?.message
+      }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
       }),
+      events: (input) =>
+        Stream.unwrap(
+          result.get(input.sessionID).pipe(
+            Effect.as(events.events({ aggregateID: input.sessionID, after: input.after })),
+          ),
+        ).pipe(
+          Stream.filter((event): event is EventV2.CursorEvent<SessionEvent.DurableEvent> => isDurableSessionEvent(event.event)),
+        ),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
         const messageID = input.id ?? SessionMessage.ID.create()

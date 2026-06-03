@@ -216,33 +216,19 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.step.ended": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.time.completed = event.data.timestamp
-                draft.finish = event.data.finish
-                draft.cost = event.data.cost
-                draft.tokens = event.data.tokens
-                if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, end: event.data.snapshot }
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.time.completed = event.data.timestamp
+          draft.finish = event.data.finish
+          draft.cost = event.data.cost
+          draft.tokens = event.data.tokens
+          if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, end: event.data.snapshot }
         })
       },
       "session.next.step.failed": (event) => {
-        return Effect.gen(function* () {
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
-            yield* adapter.updateAssistant(
-              produce(currentAssistant, (draft) => {
-                draft.time.completed = event.data.timestamp
-                draft.finish = "error"
-                draft.error = event.data.error
-              }),
-            )
-          }
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.time.completed = event.data.timestamp
+          draft.finish = "error"
+          draft.error = event.data.error
         })
       },
       "session.next.text.started": (event) => {

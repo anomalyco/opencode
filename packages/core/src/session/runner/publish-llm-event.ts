@@ -313,6 +313,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
+          assistantMessageID: yield* currentAssistantMessageID(),
           finish: event.reason,
           cost: 0,
           tokens: tokens(event.usage),
@@ -325,6 +326,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Step.Failed, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
+          assistantMessageID: yield* currentAssistantMessageID(),
           error: { type: "unknown", message: event.message },
         })
         return

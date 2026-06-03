@@ -121,6 +121,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: EventV2.ID,
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
@@ -142,6 +143,7 @@ export namespace Step {
     ...options,
     schema: {
       ...Base,
+      assistantMessageID: EventV2.ID,
       error: UnknownError,
     },
   })
@@ -402,5 +404,34 @@ export const All = Schema.Union(
 ).pipe(Schema.toTaggedUnion("type"))
 export type Event = typeof All.Type
 export type Type = Event["type"]
+
+const DurableDefinitions = [
+  AgentSwitched,
+  ModelSwitched,
+  Prompted,
+  Synthetic,
+  Shell.Started,
+  Shell.Ended,
+  Step.Started,
+  Step.Ended,
+  Step.Failed,
+  Text.Started,
+  Text.Ended,
+  Tool.Input.Started,
+  Tool.Input.Ended,
+  Tool.Called,
+  Tool.Progress,
+  Tool.Success,
+  Tool.Failed,
+  Reasoning.Started,
+  Reasoning.Ended,
+  Retried,
+  Compaction.Started,
+  Compaction.Delta,
+  Compaction.Ended,
+] as const
+
+export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" }).pipe(Schema.toTaggedUnion("type"))
+export type DurableEvent = typeof Durable.Type
 
 export * as SessionEvent from "./event"

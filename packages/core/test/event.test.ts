@@ -275,6 +275,54 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("replays durable aggregate events after a cursor and tails new events", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
+      const fiber = yield* events.events({ aggregateID, after: 0 }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "two" })
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
+        [1, { id: aggregateID, text: "one" }],
+        [2, { id: aggregateID, text: "two" }],
+      ])
+    }),
+  )
+
+  it.effect("catches durable aggregate events published during replay handoff", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
+      const fiber = yield* events.events({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, (event.event.data as { text: string }).text])).toEqual([
+        [0, "zero"],
+        [1, "one"],
+      ])
+    }),
+  )
+
+  it.effect("omits live-only events from durable aggregate streams", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = EventV2.ID.create()
+      const fiber = yield* events.events({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* events.publish(Message, { text: "live only" })
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "durable" })
+
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => event.event.type)).toEqual([SyncMessage.type])
+    }),
+  )
+
   it.effect("uses custom sync aggregate field", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
